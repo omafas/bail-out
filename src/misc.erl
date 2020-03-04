@@ -1517,17 +1517,11 @@ localhost() ->
 
 -spec localhost([] | [url]) -> string().
 localhost(Options) ->
-    case is_ipv6() of
-        true ->
-            case Options of
-                [] ->
-                    "::1";
-                [url] ->
-                    "[::1]"
-            end;
-        false ->
-            "127.0.0.1"
-    end.
+    localhost(get_net_family(), Options).
+
+localhost(inet, _Options) -> "127.0.0.1";
+localhost(inet6, [url]) -> "[::1]";
+localhost(inet6, []) -> "::1".
 
 localhost_alias() -> "cb.local".
 
