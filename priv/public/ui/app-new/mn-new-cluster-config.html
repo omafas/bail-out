@@ -1,0 +1,63 @@
+<div
+   class="panel dialog-med dialog dialog-wizard">
+  <!-- mn-spinner="clusterConfigurationCtl.viewLoading || !clusterConfigurationCtl.config.selfConfig" -->
+  <div class="panel-header flex-left">
+    <img
+       src="../cb_logo_bug_white_2.svg"
+       width="32"
+       height="32"
+       class="margin-right-half">
+    <h2>Couchbase &gt; New Cluster / Configure </h2>
+  </div>
+  <form
+     class="forms"
+     [formGroup]="newClusterConfigForm"
+     (ngSubmit)="onSubmit.next()"
+     novalidate>
+    <div class="panel-content">
+      <mn-node-storage-config
+         [group]="newClusterConfigForm.get('clusterStorage')">
+      </mn-node-storage-config>
+      <div class="row formrow">
+        <label>Service Memory Quotas</label>
+        <small class="text-smaller">Per service / per node</small>
+      </div>
+      <div
+         class="error error-form"
+         [hidden]="!(servicesHttp.error | async)">
+        <div *ngFor="let error of (servicesHttp.error | async)">{{error}}</div>
+      </div>
+      <mn-services-config
+         [initDataStream]="memoryQuotasFirst"
+         [group]="newClusterConfigForm.get('services')">
+      </mn-services-config>
+      <div class="content-box text-center margin-top-1">
+        <strong>RAM Available</strong> {{totalRAMMegs | async}}MB &nbsp;
+        <strong>Max Allowed Quota</strong> {{maxRAMMegs | async}}MB
+      </div>
+      <label>Index Storage Setting</label>
+      <mn-storage-mode
+         [indexFlagChanges]="newClusterConfigForm.get('services.flag.index').valueChanges"
+         [control]="newClusterConfigForm.get('storageMode')">
+      </mn-storage-mode>
+      <div class="formrow">
+        <input
+           type="checkbox"
+           id="init-notifications-updates-enabled"
+           formControlName="enableStats"
+           checked="checked">
+        <label for="init-notifications-updates-enabled">
+          Enable software update notifications in the web console
+        </label>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <a
+         uiSref="app.wizard.termsAndConditions"
+         [uiOptions]="{location: false}">&lt; Back</a>
+      <button
+         [disabled]="isButtonDisabled | async"
+         type="submit">Save & Finish</button>
+    </div>
+  </form>
+</div>

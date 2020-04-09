@@ -1,0 +1,288 @@
+<!doctype html>
+<html data-ng-app="app">
+  <head>
+
+    <title ng-bind="mnTitle">Couchbase Console</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+    <link rel="stylesheet" type="text/css" href="app/css/cbui-base.css">
+    <link rel="stylesheet" type="text/css" href="app/css/cbui-components.css">
+    <link rel="stylesheet" type="text/css" href="app/css/cbui-layout.css">
+    <link rel="stylesheet" type="text/css" href="app/css/cbui-responsive.css">
+
+    <link rel="stylesheet" type="text/css" href="app/css/modal.css">
+    <link rel="stylesheet" type="text/css" href="app/css/tooltip.css">
+    <link rel="stylesheet" type="text/css" href="libs/selectize.default.css">
+    <link rel="stylesheet" type="text/css" href="libs/angular-ui-select.css">
+    <link rel="stylesheet" type="text/css" href="libs/codemirror.css">
+    <link rel="stylesheet" type="text/css" href="libs/nv.d3.css">
+
+    <script src="libs/codemirror.js"></script>
+    <script src="libs/codemirror.javascript.js"></script>
+    <script src="libs/chartist.js"></script>
+    <script src="libs/angular.js"></script>
+    <script src="libs/angular-animate.js"></script>
+    <script src="libs/angular-sanitize.js"></script>
+    <script src="libs/angular-messages.js"></script>
+    <script src="libs/angular-ui-router-1.0.0-alpha.1.js"></script>
+    <script src="libs/angular-uib-stackedMap.js"></script>
+    <script src="libs/angular-uib-alert.js"></script>
+    <script src="libs/angular-uib-modal.js"></script>
+    <script src="libs/angular-uib-position.js"></script>
+    <script src="libs/angular-uib-tooltip.js"></script>
+    <script src="libs/angular-uib-spock.js"></script>
+    <script src="libs/angular-ui-select.js"></script>
+    <script src="libs/angular-ui-codemirror.js"></script>
+    <script src="libs/angular-chartist.js"></script>
+
+    <script src="libs/lodash.compat.js"></script>
+    <script src="app/app.js"></script>
+    <script src="app/app_config.js"></script>
+
+    <script src="app/mn_admin/mn_admin_config.js"></script>
+    <script src="app/mn_admin/mn_admin_controller.js"></script>
+
+    <script src="app/mn_admin/mn_lost_connection/mn_lost_connection_config.js"></script>
+    <script src="app/mn_admin/mn_lost_connection/mn_lost_connection_controller.js"></script>
+    <script src="app/mn_admin/mn_lost_connection/mn_lost_connection_service.js"></script>
+
+    <script src="app/mn_admin/mn_internal_settings/mn_internal_settings_controller.js"></script>
+    <script src="app/mn_admin/mn_internal_settings/mn_internal_settings_service.js"></script>
+
+    <script src="app/mn_admin/mn_overview/mn_overview_controller.js"></script>
+    <script src="app/mn_admin/mn_overview/mn_overview_service.js"></script>
+
+    <script src="app/mn_admin/mn_statistics/mn_statistics_service.js"></script>
+    <script src="app/mn_admin/mn_statistics/mn_statistics_controller.js"></script>
+    <script src="app/mn_admin/mn_statistics/chart_builder/mn_statistics_chart_builder_controller.js"></script>
+    <script src="app/mn_admin/mn_statistics/chart_directive/mn_statistics_chart_directive.js"></script>
+
+    <script src="app/mn_admin/mn_analytics/mn_analytics_controller.js"></script>
+    <script src="app/mn_admin/mn_analytics/mn_analytics_list_controller.js"></script>
+    <script src="app/mn_admin/mn_analytics/mn_analytics_list_graph_controller.js"></script>
+    <script src="app/mn_admin/mn_analytics/mn_analytics_service.js"></script>
+
+    <script src="app/mn_admin/mn_servers/mn_servers_controller.js"></script>
+    <script src="app/mn_admin/mn_servers/list/mn_servers_list_controller.js"></script>
+    <script src="app/mn_admin/mn_servers/mn_servers_service.js"></script>
+    <script src="app/mn_admin/mn_servers/details/mn_servers_list_item_details_controller.js"></script>
+    <script src="app/mn_admin/mn_servers/details/mn_servers_list_item_details_service.js"></script>
+    <script src="app/mn_admin/mn_servers/eject_dialog/mn_servers_eject_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_servers/add_dialog/mn_servers_add_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_servers/failover_dialog/mn_servers_failover_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_servers/memory_quota_dialog/memory_quota_dialog_controller.js"></script>
+
+    <script src="app/mn_admin/mn_groups/mn_groups_controller.js"></script>
+    <script src="app/mn_admin/mn_groups/mn_groups_service.js"></script>
+    <script src="app/mn_admin/mn_groups/group_dialog/mn_groups_group_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_groups/delete_dialog/mn_groups_delete_dialog_controller.js"></script>
+
+    <script src="app/mn_admin/mn_buckets/mn_buckets_service.js"></script>
+    <script src="app/mn_admin/mn_buckets/mn_buckets_controller.js"></script>
+    <script src="app/mn_admin/mn_buckets/list/mn_buckets_list_directive.js"></script>
+    <script src="app/mn_admin/mn_buckets/details/mn_buckets_details_controller.js"></script>
+    <script src="app/mn_admin/mn_buckets/details/mn_buckets_details_service.js"></script>
+    <script src="app/mn_admin/mn_buckets/details_dialog/mn_buckets_details_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_buckets/details_dialog/mn_buckets_details_dialog_service.js"></script>
+    <script src="app/mn_admin/mn_buckets/delete_dialog/mn_buckets_delete_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_buckets/flush_dialog/mn_buckets_flush_dialog_controller.js"></script>
+
+    <script src="app/mn_admin/mn_indexes/mn_indexes_config.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_indexes_controller.js"></script>
+
+    <script src="app/mn_admin/mn_indexes/mn_views/mn_views_controller.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_views/list/mn_views_list_service.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_views/list/mn_views_list_controller.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_views/editing/mn_views_editing_service.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_views/editing/mn_views_editing_controller.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_views/editing/mn_views_editing_result_controller.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_views/create_dialog/mn_views_create_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_views/delete_ddoc_dialog/mn_views_delete_ddoc_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_views/delete_view_dialog/mn_views_delete_view_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_views/copy_dialog/mn_views_copy_dialog_controller.js"></script>
+
+    <script src="app/mn_admin/mn_indexes/mn_gsi/mn_gsi_service.js"></script>
+    <script src="app/mn_admin/mn_indexes/mn_gsi/mn_gsi_controller.js"></script>
+
+
+    <script src="app/mn_admin/mn_documents/mn_documents_controller.js"></script>
+    <script src="app/mn_admin/mn_documents/editing/mn_documents_editing_service.js"></script>
+    <script src="app/mn_admin/mn_documents/editing/mn_documents_editing_controller.js"></script>
+    <script src="app/mn_admin/mn_documents/list/mn_documents_list_controller.js"></script>
+    <script src="app/mn_admin/mn_documents/list/mn_documents_control_controller.js"></script>
+    <script src="app/mn_admin/mn_documents/list/mn_documents_list_service.js"></script>
+    <script src="app/mn_admin/mn_documents/create_dialog/mn_documents_create_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_documents/delete_dialog/mn_documents_delete_dialog_controller.js"></script>
+
+    <script src="app/mn_admin/mn_settings/mn_settings_config.js"></script>
+    <script src="app/mn_admin/mn_settings/mn_settings_controller.js"></script>
+    <script src="app/mn_admin/mn_settings/auto_failover/mn_settings_auto_failover_service.js"></script>
+    <script src="app/mn_admin/mn_settings/auto_failover/mn_settings_auto_failover_controller.js"></script>
+    <script src="app/mn_admin/mn_settings/cluster/mn_settings_cluster_service.js"></script>
+    <script src="app/mn_admin/mn_settings/cluster/mn_settings_cluster_controller.js"></script>
+    <script src="app/mn_admin/mn_settings/notifications/mn_settings_notifications_service.js"></script>
+    <script src="app/mn_admin/mn_settings/notifications/mn_settings_notifications_controller.js"></script>
+    <script src="app/mn_admin/mn_settings/alerts/mn_settings_alerts_service.js"></script>
+    <script src="app/mn_admin/mn_settings/alerts/mn_settings_alerts_controller.js"></script>
+    <script src="app/mn_admin/mn_settings/auto_compaction/mn_settings_auto_compaction_service.js"></script>
+    <script src="app/mn_admin/mn_settings/auto_compaction/mn_settings_auto_compaction_controller.js"></script>
+    <script src="app/mn_admin/mn_settings/sample_buckets/mn_settings_sample_buckets_controller.js"></script>
+    <script src="app/mn_admin/mn_settings/sample_buckets/mn_settings_sample_buckets_service.js"></script>
+
+    <script src="app/mn_admin/mn_xdcr/mn_xdcr_service.js"></script>
+    <script src="app/mn_admin/mn_xdcr/mn_xdcr_controller.js"></script>
+    <script src="app/mn_admin/mn_xdcr/settings/mn_xdcr_settings.js"></script>
+    <script src="app/mn_admin/mn_xdcr/reference_dialog/mn_xdcr_reference_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_xdcr/create_dialog/mn_xdcr_create_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_xdcr/delete_reference_dialog/mn_xdcr_delete_reference_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_xdcr/delete_dialog/mn_xdcr_delete_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_xdcr/edit_dialog/mn_xdcr_edit_dialog_controller.js"></script>
+
+    <script src="app/mn_admin/mn_security/mn_security_config.js"></script>
+    <script src="app/mn_admin/mn_security/mn_security_controller.js"></script>
+    <script src="app/mn_admin/mn_security/mn_external_roles/mn_external_roles_service.js"></script>
+    <script src="app/mn_admin/mn_security/mn_external_roles/mn_external_roles_controller.js"></script>
+    <script src="app/mn_admin/mn_security/mn_external_roles/add_dialog/mn_external_roles_add_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_security/mn_external_roles/delete_dialog/mn_external_roles_delete_dialog_controller.js"></script>
+    <script src="app/mn_admin/mn_security/mn_ldap/mn_ldap_service.js"></script>
+    <script src="app/mn_admin/mn_security/mn_ldap/mn_ldap_controller.js"></script>
+    <script src="app/mn_admin/mn_security/mn_audit/mn_audit_service.js"></script>
+    <script src="app/mn_admin/mn_security/mn_audit/mn_audit_controller.js"></script>
+    <script src="app/mn_admin/mn_security/mn_internal_roles/mn_internal_roles_controller.js"></script>
+    <script src="app/mn_admin/mn_security/mn_internal_roles/mn_internal_roles_service.js"></script>
+    <script src="app/mn_admin/mn_security/mn_internal_roles/delete/mn_internal_roles_delete_controller.js"></script>
+    <script src="app/mn_admin/mn_security/mn_internal_roles/reset/mn_internal_roles_reset_controller.js"></script>
+    <script src="app/mn_admin/mn_security/mn_root_certificate/mn_root_certificate_service.js"></script>
+    <script src="app/mn_admin/mn_security/mn_root_certificate/mn_root_certificate_controller.js"></script>
+
+    <script src="app/mn_admin/mn_logs/mn_logs_service.js"></script>
+    <script src="app/mn_admin/mn_logs/mn_logs_controller.js"></script>
+    <script src="app/mn_admin/mn_logs/collect_info/mn_logs_collect_info_service.js"></script>
+    <script src="app/mn_admin/mn_logs/collect_info/mn_logs_collect_info_controller.js"></script>
+    <script src="app/mn_admin/mn_logs/list/mn_logs_list_controller.js"></script>
+
+    <script src="app/mn_admin/mn_poor_mans_alerts/mn_poor_mans_alerts_service.js"></script>
+    <script src="app/mn_admin/mn_poor_mans_alerts/mn_poor_mans_alerts_controller.js"></script>
+
+    <script src="app/mn_wizard/mn_wizard_config.js"></script>
+
+    <script src="app/mn_wizard/welcome/mn_wizard_welcome_controller.js"></script>
+
+    <script src="app/mn_wizard/step1/mn_wizard_step1_controller.js"></script>
+    <script src="app/mn_wizard/step1/mn_wizard_step1_service.js"></script>
+
+    <script src="app/mn_wizard/step2/mn_wizard_step2_controller.js"></script>
+    <script src="app/mn_wizard/step2/mn_wizard_step2_service.js"></script>
+
+    <script src="app/mn_wizard/step3/mn_wizard_step3_controller.js"></script>
+    <script src="app/mn_wizard/step3/mn_wizard_step3_service.js"></script>
+
+    <script src="app/mn_wizard/step4/mn_wizard_step4_controller.js"></script>
+    <script src="app/mn_wizard/step4/mn_wizard_step4_service.js"></script>
+
+    <script src="app/mn_wizard/step5/mn_wizard_step5_controller.js"></script>
+    <script src="app/mn_wizard/step5/mn_wizard_step5_service.js"></script>
+
+    <script src="app/components/directives/mn_bar_usage/mn_bar_usage.js"></script>
+    <script src="app/components/directives/mn_element_crane/mn_element_crane.js"></script>
+    <script src="app/components/directives/mn_buckets_form/mn_buckets_form.js"></script>
+    <script src="app/components/directives/mn_auto_compaction_form/mn_auto_compaction_form.js"></script>
+    <script src="app/components/directives/mn_period/mn_period.js"></script>
+    <script src="app/components/directives/mn_validation/mn_minlength.js"></script>
+    <script src="app/components/directives/mn_validation/mn_maxlength.js"></script>
+    <script src="app/components/directives/mn_validation/mn_equal.js"></script>
+    <script src="app/components/directives/mn_vertical_bar/mn_vertical_bar.js"></script>
+    <script src="app/components/directives/mn_warmup_progress/mn_warmup_progress.js"></script>
+    <script src="app/components/directives/mn_contenteditable.js"></script>
+    <script src="app/components/directives/mn_regex.js"></script>
+    <script src="app/components/directives/mn_focus.js"></script>
+    <script src="app/components/directives/mn_autocomplete_off.js"></script>
+    <script src="app/components/directives/mn_spinner.js"></script>
+    <script src="app/components/directives/mn_plot.js"></script>
+    <script src="app/components/directives/mn_launchpad.js"></script>
+    <script src="app/components/directives/mn_sortable_table.js"></script>
+    <script src="app/components/directives/mn_drag_and_drop.js"></script>
+    <script src="app/components/directives/mn_filter/mn_filter.js"></script>
+
+    <script src="app/components/directives/mn_storage_mode/mn_storage_mode.js"></script>
+    <script src="app/components/directives/mn_memory_quota/mn_memory_quota.js"></script>
+    <script src="app/components/directives/mn_memory_quota/mn_memory_quota_service.js"></script>
+    <script src="app/components/directives/mn_services/mn_services.js"></script>
+
+    <script src="app/components/mn_filters.js"></script>
+    <script src="app/components/mn_jquery.js"></script>
+
+    <script src="app/components/mn_env.js"></script>
+    <script src="app/components/mn_http.js"></script>
+    <script src="app/components/mn_permissions.js"></script>
+    <script src="app/components/mn_pending_query_keeper.js"></script>
+    <script src="app/components/mn_helper.js"></script>
+    <script src="app/components/mn_poll.js"></script>
+    <script src="app/components/mn_promise_helper.js"></script>
+    <script src="app/components/mn_pools.js"></script>
+    <script src="app/components/mn_pool_default.js"></script>
+    <script src="app/components/mn_tasks_details.js"></script>
+    <script src="app/components/mn_buckets_stats.js"></script>
+    <script src="app/components/mn_compaction.js"></script>
+    <script src="app/components/mn_alerts.js"></script>
+    <script src="app/components/mn_exception_reporter.js"></script>
+    <script src="app/components/mn_pluggable_ui_registry.js"></script>
+
+    <script src="app/constants/constants.js"></script>
+
+    <script src="app/mn_auth/mn_auth_config.js"></script>
+    <script src="app/mn_auth/mn_auth_controller.js"></script>
+    <script src="app/mn_auth/mn_auth_service.js"></script>
+
+    <script src="app/mn_about_dialog/mn_about_dialog_controller.js"></script>
+    <script src="app/mn_about_dialog/mn_about_dialog_service.js"></script>
+
+    <script id="template/alert/alert.html" type="text/ng-template">
+      <div
+         class="interim alert"
+         ng-class="{'alert-error': type !== 'success', 'alert-success': type === 'success'}"
+         role="alert">
+        <p>
+          <span ng-transclude></span>
+          <a href="" ng-click="close()">click to dismiss</a>
+        </p>
+      </div>
+    </script>
+    <script id="template/modal/backdrop.html" type="text/ng-template">
+      <div
+         class="modal-backdrop in dialog_overlay dialog_full_screen"
+         ng-class="{in: animate}"
+         ng-style="{'z-index': 1040 + (index && 1 || 0) + index*10}">
+      </div>
+    </script>
+    <script id="template/modal/window.html" type="text/ng-template">
+      <div
+         tabindex="-1"
+         role="dialog"
+         class="row items-center items-top dialog_main_wrapper break-all"
+         ng-class="windowTopClass"
+         ng-style="{'z-index': 1050 + index*10}">
+        <div class="panel dialog">
+          <a
+             class="ui-dialog-titlebar-close modal-close"
+             ng-click="$parent.$dismiss('X')">
+            X
+          </a>
+          <div ng-transclude></div>
+        </div>
+      </div>
+    </script>
+    <script id="template/tooltip/tooltip-popup.html" type="text/ng-template">
+      <div class="tooltip-arrow"></div>
+      <div class="tooltip-inner" ng-bind="content"></div>
+    </script>
+
+<!-- Inject head.frag.html file content for Pluggable UI components here -->
+
+<script src="libs/d3.js"></script>
+<script src="libs/nv.d3.js"></script>
+<script src="libs/angular-nvd3.js"></script>
+
+  </head>
+  <body ui-view=""></body>
+</html>

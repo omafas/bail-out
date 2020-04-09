@@ -1,0 +1,17 @@
+<mn-search-field
+   [hidden]="!(toggleFilter | async)"
+   [mnFormGroup]="mnFormGroup"
+   [mnFocusStream]="mnFocusStream"
+   [mnClearStream]="onHideClick"
+   mnPlaceholder="{{mnPlaceholder}}">
+</mn-search-field>
+<a
+   (click)="onShowClick.next()"
+   [hidden]="(toggleFilter | async)"
+   class="allcaps">filter
+</a>
+<a
+   (click)="onHideClick.next()"
+   [hidden]="!(toggleFilter | async)"
+   class="allcaps">done
+</a>

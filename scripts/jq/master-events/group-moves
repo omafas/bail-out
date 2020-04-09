@@ -1,0 +1,65 @@
+#!/bin/sh
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2019 Couchbase, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# A script that groups master events for a rebalance by bucket and vbucket and
+# adds some information as to how long each move took.
+#
+# Examples.
+#
+#  - For the last bucket that got rebalanced, display the moves sorted
+#    by duration:
+#
+#    $ ./read master_events.log | ./last-rebalance | ./group-moves | \
+#          jq '.[-1].moves | sort_by(.duration)'
+#
+#  - For the last bucket that got rebalance, show individual vbucket
+#    move steps that took longest:
+#
+#    $ ./read master_events.log | ./last-rebalance | ./group-moves | \
+#          jq '.[-1].moves | map(.events) | flatten |
+#              sort_by(.sincePrevEvent) |
+#              map(select(.type != "vbucketMoveStart"))'
+#
+
+exec jq '
+def handle_move_events:
+  length as $n |
+  [range(0, $n-1) as $i |
+   .[$i] +
+   {prevEvent: (if $i == 0 then null else .[$i-1] end),
+    sincePrevEvent: (if $i == 0 then null else .[$i].ts - .[$i-1].ts end)}];
+
+def handle_one_move:
+  select(any(.type == "vbucketMoveStart")) |
+  map(select(.type == "vbucketMoveStart"))[0] as $moveStart |
+  map(select(.type == "vbucketMoveDone"))[0] as $moveDone |
+  {vbucket: $moveStart.vbucket,
+   chainBefore: $moveStart.chainBefore,
+   chainAfter: $moveStart.chainAfter,
+   moveStartTS: $moveStart.ts,
+   moveEndTS: $moveDone.ts,
+   state: (if $moveDone then "done" else "in-flight" end),
+   duration: (if $moveDone then $moveDone.ts - $moveStart.ts else null end),
+   events: handle_move_events};
+
+def handle_moves:
+  group_by(.vbucket) | map(handle_one_move);
+
+map(select(has("bucket") and has("vbucket"))) |
+group_by([.bucket]) |
+map({bucket: .[0].bucket, moves: (. | handle_moves)})
+' "$@"

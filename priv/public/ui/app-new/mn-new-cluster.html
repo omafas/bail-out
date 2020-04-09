@@ -1,0 +1,109 @@
+<div class="panel dialog-med dialog dialog-wizard">
+  <!-- <div class="spinner" [hidden]="!setupNewClusterCtl.viewLoading"></div> -->
+  <div class="panel-header flex-left">
+    <img
+       src="../cb_logo_bug_white_2.svg"
+       width="32"
+       height="32"
+       class="margin-right-half">
+    <h2>Couchbase &gt; New Cluster</h2>
+  </div>
+  <form
+     [formGroup]="newClusterForm"
+     (ngSubmit)="onSubmit.next()"
+     class="forms"
+     novalidate>
+
+    <div class="panel-content">
+      <div class="error error-form">
+        <div
+           [hidden]="!(newClusterForm.get('clusterName').touched || (submitted | async)) ||
+                     !newClusterForm.get('clusterName').errors?.required">
+          Cluster name is required
+        </div>
+        <div
+           [hidden]="!(newClusterForm.get('user.username').touched || (submitted | async)) ||
+                     !newClusterForm.get('user.username').errors?.required">
+          Username is required
+        </div>
+        <div
+           [hidden]="!(newClusterForm.get('user.password').touched || (submitted | async)) ||
+                     !newClusterForm.get('user.password').errors?.required">
+          Password is required
+        </div>
+        <div
+           [hidden]="!(newClusterForm.get('user.passwordVerify').touched || (submitted | async)) ||
+                     !newClusterForm.errors?.passwordMismatch">
+          The password and verify password fields do not match
+        </div>
+        <div
+           [hidden]="!(newClusterForm.get('user.password').touched || (submitted | async)) ||
+                     !newClusterForm.get('user.password').errors?.minlength">
+          A password of at least six characters is required
+        </div>
+      </div>
+      <div
+         class="error error-form"
+         [hidden]="!(authHttp.error | async)">
+         <div *ngFor="let error of (authHttp.error | async)">{{error}}</div>
+      </div>
+      <div class="formrow">
+        <label for="for-cluster-name-field">Cluster Name</label>
+        <input
+           type="text"
+           name="clusterName"
+           formControlName="clusterName"
+           autocorrect="off"
+           spellcheck="false"
+           autocapitalize="off"
+           maxlength="256"
+           id="for-cluster-name-field"
+           [mnFocus]="focusFieldSubject">
+      </div>
+      <div formGroupName="user">
+        <div class="formrow">
+          <label for="secure-username">Create Admin Username</label>
+          <input
+             type="text"
+             name="username"
+             formControlName="username"
+             id="secure-username"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off">
+        </div>
+        <div class="formrow row">
+          <div class="column width-6">
+            <label for="secure-password">Create Password</label>
+            <input
+               type="password"
+               formControlName="password"
+               autocorrect="off"
+               spellcheck="false"
+               id="secure-password"
+               placeholder="6 characters minimum">
+            <!-- mn-autocomplete-off -->
+          </div>
+          <div class="column width-6">
+            <label for="secure-password-verify">Confirm Password</label>
+            <input
+               type="password"
+               autocorrect="off"
+               spellcheck="false"
+               name="passwordVerify"
+               formControlName="passwordVerify"
+               id="secure-password-verify"
+               placeholder="6 characters minimum">
+            <!-- mn-autocomplete-of -->
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <a
+         uiSref="app.wizard.welcome"
+         [uiOptions]="{location: false}">&lt; Back</a>
+      <button type="submit">Next: Accept Terms</button>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,97 @@
+<div [formGroup]="group">
+  <div class="formrow">
+    <div class="row">
+      <label for="setup_hostname">This Node: Host Name/IP Address</label>
+      <small class="text-smaller">Usually localhost or similar</small>
+    </div>
+    <input
+       type="text"
+       autocorrect="off"
+       spellcheck="false"
+       autocapitalize="off"
+       name="hostname"
+       id="setup_hostname"
+       [mnFocus]="focusFieldSubject"
+       formControlName="hostname">
+    <div
+       class="error error-form"
+       [hidden]="!(hostnameHttp.error | async)">
+      <div *ngFor="let error of (hostnameHttp.error | async)">{{error}}</div>
+    </div>
+  </div>
+
+  <div formGroupName="storage">
+    <div class="formrow">
+      <div class="row">
+        <label for="setup_db_path_input">Data Disk Path</label>
+        <small class="text-smaller">Path cannot be changed after setup</small>
+      </div>
+      <mn-path-field
+         [control]="group.get('storage.path')"
+         controlName="setup_db_path_input">
+      </mn-path-field>
+    </div>
+
+    <div
+       class="error error-form"
+       [hidden]="!(diskStorageHttp.error | async)">
+      <div *ngFor="let error of (diskStorageHttp.error | async)">
+        Attention: {{error}}<br>
+      </div>
+    </div>
+
+    <div class="formrow">
+      <div class="row">
+        <label for="setup_index_path_input">Indexes Disk Path</label>
+        <small class="text-smaller">Path cannot be changed after setup</small>
+      </div>
+      <mn-path-field
+         [control]="group.get('storage.index_path')"
+         controlName="setup_index_path_input">
+      </mn-path-field>
+    </div>
+
+    <div class="formrow">
+      <div class="row">
+        <label for="setup_eventing_path_input">Eventing Disk Path</label>
+        <small class="text-smaller">Path cannot be changed after setup</small>
+      </div>
+      <mn-path-field
+         [control]="group.get('storage.eventing_path')"
+         controlName="setup_eventing_path_input">
+      </mn-path-field>
+    </div>
+
+    <div class="formrow" *ngIf="isEnterprise | async">
+      <div class="row">
+        <label for="setup_cbas_path_input0">Analytics Disk Paths</label>
+        <small class="text-smaller">Paths cannot be changed after setup</small>
+      </div>
+      <div formArrayName="cbas_path">
+        <div
+           class="formrow"
+           *ngFor="let control of group.get('storage.cbas_path').controls; index as i">
+          <mn-path-field
+             [control]="control"
+             [controlName]="'setup_cbas_path_input' + i">
+          </mn-path-field>
+        </div>
+      </div>
+    </div>
+
+    <div class="row formrow flex-right margin-top-neg-2" [hidden]="!(isEnterprise | async)">
+      <button
+         class="outline btn-small"
+         title="Add field"
+         (click)="addCbasPathField()"
+         type="button">+</button>
+      <button
+         class="outline btn-small"
+         title="Remove field"
+         [disabled]="group.get('storage.cbas_path').length === 1"
+         (click)="removeCbasPathField()"
+         type="button">-</button>
+    </div>
+
+  </div>
+</div>

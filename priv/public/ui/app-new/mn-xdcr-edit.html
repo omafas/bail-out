@@ -1,0 +1,21 @@
+<div class="dialog-med">
+  <div class="panel-header">
+    <h2>Advanced Settings</h2>
+    <a class="ui-dialog-titlebar-close modal-close" (click)="activeModal.dismiss()">X</a>
+  </div>
+  <form
+    [formGroup]="form.group"
+    (submit)="form.submit.next()"
+    class="forms">
+    <div class="panel-content">
+      <mn-xdcr-settings
+        class="panel-content"
+        [group]="form.group"
+        [type]="replication.replicationType"></mn-xdcr-settings>
+      <div class="panel-footer">
+        <a (click)="activeModal.dismiss()">Cancel</a>
+        <button type="submit">Save</button>
+      </div>
+    </div>
+  </form>
+</div>

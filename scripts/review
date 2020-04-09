@@ -1,0 +1,202 @@
+#!/bin/bash
+#
+# Copyright (c) 2017-2019, Couchbase, Inc.
+# All rights reserved
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -o pipefail
+
+function get_remote() {
+    _branch=$1
+    git config --get branch.${_branch}.remote
+}
+
+function get_review_url() {
+    git config --get-regexp 'remote\..*\.review' | head -n1 | cut -d' ' -f2
+}
+
+function get_review_username() {
+    _url=$1
+    git config --get review.${_url}.username
+}
+
+function get_project() {
+    git config --get-regexp 'remote\..*\.projectname' | head -n1 | cut -d' ' -f2
+}
+
+function get_upstream_branch() {
+    _branch=$1
+    _upstream_ref=$(git config --get branch.${_branch}.merge) || return 1
+    echo ${_upstream_ref#refs/heads/}
+}
+
+function get_diff_commits() {
+    _branch=$1
+    _upstream=$2
+
+    git log --reverse --pretty=tformat:%H ${_upstream}..${_branch}
+}
+
+function get_current_branch() {
+    git rev-parse --abbrev-ref HEAD
+}
+
+function get_commit_oneline() {
+    _commit=$1
+    git show --no-patch --oneline "${_commit}"
+}
+
+function validate_arg() {
+    _arg="$1"
+    _regexp="$2"
+
+    [[ "${_arg}" =~ ^(${_regexp})$ ]]
+}
+
+function error() {
+    cat 1>&2
+}
+
+function fail() {
+    _msg="$1"
+    echo "${_msg}" | error
+    exit 1
+}
+
+function usage() {
+    _name="$0"
+    _len=$(echo -n "${_name}" | wc -c)
+    _spacing=$(printf ' %.0s' $(seq 1 ${_len}))
+
+    _msg="$1"
+    if [ -n "${_msg}" ]; then
+        echo -e "${_msg}\n" | error
+    fi
+
+    echo | error <<EOF
+Usage:
+	${_name} [-b|--branch <branch>] [-u|--upstream <upstream>] [-p|--port <int>]
+	${_spacing} [-v|--verified <-1|0|+1>] [-r|--review <-2|-1|0|+1|+2>]
+	${_spacing} [-s|--submit] [-d|--dry-run] [-R|--raw <gerrit command>]
+	${_spacing} [-I|--ignore-errors]
+EOF
+    exit 1
+}
+
+VERIFIED=
+REVIEW=
+SUBMIT=no
+DRY_RUN=no
+PORT=29418
+BRANCH=
+UPSTREAM=
+RAW=
+IGNORE_ERRORS=
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help) usage ;; # 'usage' will exit the script
+        -d|--dry-run) DRY_RUN=yes ; shift ;;
+        -v|--verified) VERIFIED="$2" ; shift; shift ;;
+        -r|--review) REVIEW="$2" ; shift; shift ;;
+        -s|--submit) SUBMIT=yes ; shift ;;
+        -b|--branch) BRANCH="$2" ; shift; shift ;;
+        -p|--port) PORT=$2 ; shift; shift ;;
+        -u|--upstream) UPSTREAM=$2 ; shift; shift ;;
+        -R|--raw) RAW="$2" ; shift; shift ;;
+        -I|--ignore-errors) IGNORE_ERRORS=yes ; shift ;;
+        *) break ;;
+    esac
+done
+
+if [ $# -ne 0 ]; then
+    usage "Got unexpected argument: \"$1\""
+fi
+
+validate_arg "${PORT}" "[[:digit:]]+" || usage "Invalid value for --port"
+
+FLAGS=""
+if [ -n "${VERIFIED}" ]; then
+    validate_arg "${VERIFIED}" "([-+]1)|0" || usage "Invalid value for --verified"
+    FLAGS="--verified ${VERIFIED}"
+fi
+
+if [ -n "${REVIEW}" ]; then
+    validate_arg "${REVIEW}" "([-+][12])|0" || usage "Invalid value for --review"
+    FLAGS="${FLAGS} --code-review ${REVIEW}"
+fi
+
+if [ "${SUBMIT}" = yes ]; then
+    FLAGS="${FLAGS} --submit"
+fi
+
+if [ -z "${FLAGS}" -a -z "$RAW" ]; then
+    usage "Need at least one of --verified, --review, --submit or --raw"
+fi
+
+if [ -z "${BRANCH}" ]; then
+    BRANCH=$(get_current_branch) || fail "Can't get current branch"
+fi
+
+if [ -z "${UPSTREAM}" ]; then
+    _remote=$(get_remote "${BRANCH}") || fail "Failed to get the remote"
+    _upstream_branch=$(get_upstream_branch "${BRANCH}") || fail "Failed to get upstream branch"
+    UPSTREAM=${_remote}/${_upstream_branch}
+fi
+
+REVIEW_URL=$(get_review_url) || fail "Failed to get the review URL"
+USERNAME=$(get_review_username "${REVIEW_URL}") || fail "Failed to get the username"
+
+if [ -n "${RAW}" ]; then
+    if [ -n "${FLAGS}" ]; then
+        echo "Warning: raw command takes " \
+             "precedence over the other specified options" >&2
+    fi
+
+    GERRIT_CMD="${RAW}"
+else
+    PROJECT=$(get_project) || fail "Failed to get project name"
+    FLAGS="${FLAGS} --project ${PROJECT}"
+
+    GERRIT_CMD="gerrit review ${FLAGS}"
+fi
+
+for commit in $(get_diff_commits "${BRANCH}" "${UPSTREAM}"); do
+    _oneline=$(get_commit_oneline ${commit}) ||
+        fail "Failed to get the commit description"
+    _command="ssh -p ${PORT} \
+                  ${USERNAME}@${REVIEW_URL} -- ${GERRIT_CMD} ${commit}"
+
+    echo -n "${_oneline}"
+
+    if [ "${DRY_RUN}" = yes ]; then
+        echo
+        echo -e "\t" ${_command} "-> OK"
+    else
+        _output=$(${_command} 2>&1)
+        _result=$?
+        if [ $_result -eq 0 ]; then
+            echo " -> OK"
+        else
+            echo " -> FAILED"
+            echo -e "${_output}"
+
+            if [ -z "$IGNORE_ERRORS" ]; then
+                exit 1
+            fi
+
+            echo "Warning: error ignored" >&2
+        fi
+    fi
+done

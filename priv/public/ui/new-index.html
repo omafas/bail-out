@@ -1,0 +1,168 @@
+<!doctype html>
+<html>
+  <head>
+
+    <title ng-bind="mnTitle">Couchbase Console</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png">
+    <link rel="manifest" href="../manifest.json">
+    <link rel="mask-icon" href="../safari-pinned-tab.svg" color="#4287d6">
+    <meta name="apple-mobile-web-app-title" content="Couchbase Server">
+    <meta name="application-name" content="Couchbase Server">
+    <meta name="theme-color" content="#fff">
+
+    <link rel="stylesheet" type="text/css" href="app/css/cbui-base.css">
+    <link rel="stylesheet" type="text/css" href="app/css/cbui-layout.css">
+    <link rel="stylesheet" type="text/css" href="app/css/cbui-components.css">
+    <link rel="stylesheet" type="text/css" href="app/css/cbui-responsive.css">
+
+    <link rel="stylesheet" type="text/css" href="app/css/font-awesome.css">
+    <link rel="stylesheet" type="text/css" href="app/css/modal.css">
+    <link rel="stylesheet" type="text/css" href="app/css/tooltip.css">
+
+    <link rel="stylesheet" type="text/css" href="app-new/styles.css">
+    <link rel="stylesheet" type="text/css" href="libs/selectize.default.css">
+    <link rel="stylesheet" type="text/css" href="libs/angular-ui-select.css">
+    <link rel="stylesheet" type="text/css" href="libs/codemirror.css">
+
+    <script src="libs/lodash.compat.js"></script>
+    <script src="libs/@angular/ramda.js"></script>
+
+    <script src="libs/@angular/reflect-metadata@0.1.10.js"></script>
+    <script src="libs/@angular/rxjs.umd.js"></script>
+    <script src="libs/@angular/zone.js"></script>
+
+    <script src="libs/@angular/core.umd.js"></script>
+    <script src="libs/@angular/common.umd.js"></script>
+    <script src="libs/@angular/common-http.umd.js"></script>
+    <script src="libs/@angular/compiler.umd.js"></script>
+    <script src="libs/@angular/platform-browser.umd.js"></script>
+    <script src="libs/@angular/platform-browser-dynamic.umd.js"></script>
+    <script src="libs/@angular/http.umd.js"></script>
+    <script src="libs/@angular/forms.umd.js"></script>
+    <script src="libs/@angular/router.umd.js"></script>
+    <script src="libs/@angular/animations.umd.js"></script>
+    <script src="libs/@angular/animations-browser.umd.js"></script>
+    <script src="libs/@angular/platform-browser-animations.umd.js"></script>
+
+    <script src="libs/@angular/ng-bootstrap.umd.js"></script>
+
+    <script src="libs/@angular/ui-router-core.js"></script>
+    <script src="libs/@angular/ui-router-rx.js"></script>
+    <script src="libs/@angular/ui-router-ng2.js"></script>
+
+    <script src="app-new/mn-core.js"></script>
+    <script src="app-new/mn-helper.js"></script>
+    <script src="app-new/mn-pipes.js"></script>
+    <script src="app-new/mn-pools-service.js"></script>
+    <script src="app-new/app-service.js"></script>
+    <script src="app-new/mn-alerts-service.js"></script>
+    <script src="app-new/mn-form-service.js"></script>
+    <script src="app-new/mn-gsi-service.js"></script>
+
+    <script src="app-new/mn-exception-handler-service.js"></script>
+
+    <script src="app-new/mn-focus-directive.js"></script>
+    <script src="app-new/mn-draggable-directive.js"></script>
+
+    <script src="app-new/mn-search-component.js"></script>
+    <script src="app-new/mn-search-field-component.js"></script>
+
+    <script src="app-new/mn-admin-service.js"></script>
+    <script src="app-new/mn-servers-service.js"></script>
+    <script src="app-new/mn-groups-service.js"></script>
+
+    <script src="app-new/mn-buckets-service.js"></script>
+    <script src="app-new/mn-permissions-service.js"></script>
+
+    <script src="app-new/mn-buckets-dialog-component.js"></script>
+    <script src="app-new/mn-buckets-component.js"></script>
+    <script src="app-new/mn-buckets-item-component.js"></script>
+
+    <script src="app-new/mn-element-crane.js"></script>
+    <script src="app-new/mn-tasks-service.js"></script>
+
+    <script src="app-new/mn-warmup-progress-component.js"></script>
+
+    <script src="app-new/mn-buckets-item-component.js"></script>
+    <script src="app-new/mn-buckets-item-details-component.js"></script>
+
+    <script src="app-new/mn-bar-usage-component.js"></script>
+
+    <script src="app-new/mn-wizard-service.js"></script>
+
+    <script src="app-new/mn-period-component.js"></script>
+    <script src="app-new/mn-settings-service.js"></script>
+    <script src="app-new/mn-general-settings-component.js"></script>
+    <script src="app-new/mn-auto-compaction-form-component.js"></script>
+    <script src="app-new/mn-services-config-component.js"></script>
+
+    <script src="app-new/mn-shared-module.js"></script>
+
+    <script src="app-new/mn-servers-add-dialog-component.js"></script>
+    <script src="app-new/mn-servers-eject-dialog-component.js"></script>
+    <script src="app-new/mn-servers-failover-component.js"></script>
+    <script src="app-new/mn-servers-stop-reb-conf-component.js"></script>
+    <script src="app-new/mn-servers-failover-conf-component.js"></script>
+    <script src="app-new/mn-servers-item-details-component.js"></script>
+    <script src="app-new/mn-servers-item-component.js"></script>
+    <script src="app-new/mn-servers-component.js"></script>
+
+    <script src="app-new/mn-auth-service.js"></script>
+    <script src="app-new/mn-auth-component.js"></script>
+    <script src="app-new/mn-auth-module.js"></script>
+
+    <script src="app-new/mn-security-service.js"></script>
+    <script src="app-new/mn-user-roles-service.js"></script>
+    <script src="app-new/mn-user-roles-component.js"></script>
+    <script src="app-new/mn-user-roles-item-component.js"></script>
+    <script src="app-new/mn-root-certificate-component.js"></script>
+    <script src="app-new/mn-client-certificate-component.js"></script>
+    <script src="app-new/mn-audit-component.js"></script>
+    <script src="app-new/mn-audit-item-component.js"></script>
+    <script src="app-new/mn-log-redaction-component.js"></script>
+    <script src="app-new/mn-session-component.js"></script>
+    <script src="app-new/mn-session-timeout-dialog-component.js"></script>
+    <script src="app-new/mn-session-service.js"></script>
+
+    <script src="app-new/mn-auto-compaction-component.js"></script>
+    <script src="app-new/mn-email-alerts-component.js"></script>
+
+    <script src="app-new/mn-settings-component.js"></script>
+    <script src="app-new/mn-security-component.js"></script>
+
+    <script src="app-new/mn-xdcr-service.js"></script>
+    <script src="app-new/mn-xdcr-add-reference-component.js"></script>
+    <script src="app-new/mn-xdcr-settings-component.js"></script>
+    <script src="app-new/mn-xdcr-add-replication-component.js"></script>
+    <script src="app-new/mn-xdcr-edit-component.js"></script>
+    <script src="app-new/mn-xdcr-delete-component.js"></script>
+    <script src="app-new/mn-xdcr-delete-reference-component.js"></script>
+    <script src="app-new/mn-xdcr-component.js"></script>
+    <script src="app-new/mn-xdcr-item-component.js"></script>
+
+    <script src="app-new/mn-admin-component.js"></script>
+    <script src="app-new/mn-path-field-component.js"></script>
+    <script src="app-new/mn-node-storage-config-component.js"></script>
+    <script src="app-new/mn-storage-mode-component.js"></script>
+    <script src="app-new/mn-query-settings-config-component.js"></script>
+    <script src="app-new/mn-new-cluster-config-component.js"></script>
+    <script src="app-new/mn-new-cluster-component.js"></script>
+    <script src="app-new/mn-terms-and-conditions-component.js"></script>
+    <script src="app-new/mn-join-cluster-component.js"></script>
+    <script src="app-new/mn-welcome-component.js"></script>
+    <script src="app-new/mn-wizard-module.js"></script>
+
+    <script src="app-new/app.js"></script>
+
+<!-- Inject head.frag.html file content for Pluggable UI components here -->
+
+
+  </head>
+  <body>
+    <ui-view></ui-view>
+  </body>
+</html>

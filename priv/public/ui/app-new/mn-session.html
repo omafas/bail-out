@@ -1,0 +1,37 @@
+<div>  <!-- mn-spinner="sessionCtl.viewLoading || !sessionCtl.state" -->
+  <form
+     [formGroup]="sessionForm"
+     (submit)="onSubmit.next()"
+     class="forms">
+    <div class="formrow">
+      <label>Session Timeout</label>
+      <div class="desc">
+        Minutes until an inactive browser session is closed. <br>Leave empty (or zero) for no timeout.
+      </div>
+      <div class="form-inline">
+        <input
+           id="session-filed"
+           type="number"
+           class="input-short-1"
+           autocorrect="off"
+           spellcheck="false"
+           autocapitalize="off"
+           formControlName="uiSessionTimeout">
+        <small>
+          min
+        </small>
+      </div>
+      <div
+         class="error error-field"
+         [hidden]="!(postSession.error | async)?.error">
+        {{(postSession.error | async)?.error}}
+      </div>
+    </div>
+
+    <button
+       [hidden]="!(securityWrite | async)"
+       type="submit">
+      Save
+    </button>
+  </form>
+</div>

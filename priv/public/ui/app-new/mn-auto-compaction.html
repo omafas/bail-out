@@ -1,0 +1,22 @@
+<div class="margin-bottom-2">
+  <form
+     class="forms"
+     (ngSubmit)="form.submit.next()" [formGroup]="form.group">
+    <!-- mn-spinner="settingsAutoCompactionCtl.viewLoading || !settingsAutoCompactionCtl.autoCompactionSettings" -->
+    <p>
+      Auto-Compaction settings trigger the compaction process.<br>
+      This process compacts databases and their respective view indexes when the following conditions are met.
+    </p>
+    <br>
+    <mn-auto-compaction-form
+       class="margin-bottom-2"
+       [error]="formError"
+       [group]="form.group">
+    </mn-auto-compaction-form>
+
+    <!-- ng-disabled="settingsAutoCompactionCtl.errors" -->
+    <button [hidden]="!(settingsWrite | async)" type="submit">
+      Save
+    </button>
+  </form>
+</div>

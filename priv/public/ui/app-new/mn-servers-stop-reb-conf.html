@@ -1,0 +1,19 @@
+<div class="dialog-med">
+  <div class="panel-header">
+    <h2>Confirm Rebalance Stop</h2>
+    <a class="ui-dialog-titlebar-close modal-close" (click)="activeModal.dismiss()">X</a>
+  </div>
+  <div class="panel-content">
+    <p class="error">
+      Warning: Stopping rebalance is unsafe at this
+      moment since cluster may be in a partitioned state. Continue only if
+      you're perfectly sure that this is not the case.
+    </p>
+  </div>
+  <div class="panel-footer">
+    <a (click)="activeModal.dismiss()">Cancel</a>
+    <button
+      type="button"
+      (click)="activeModal.close()">Stop Rebalance</button>
+  </div>
+</div>

@@ -1,0 +1,61 @@
+<mn-element-cargo depot="alerts">
+  <div
+     class="interim alert alert-warning"
+     [hidden]="!(isRebalancing | async)">
+    <p>Attention: Cannot create, delete or edit buckets while rebalance is running.</p>
+  </div>
+  <div
+     class="interim alert alert-warning"
+     [hidden]="!(maybeHideMaxBucketCountWarning | async)">
+    <p>Attention: Maximum number of buckets has been reached. For optimal performance, no more than {{maxBucketCount | async}} buckets are allowed.</p>
+  </div>
+</mn-element-cargo>
+<mn-element-cargo depot="actions">
+  <div class="header-controls resp-xsml">
+    <a
+       [hidden]="maybeHideAddBucketBuctton | async"
+       (click)="onAddBucketClick.next()">
+      ADD BUCKET
+    </a>
+  </div>
+</mn-element-cargo>
+
+<!-- <div mn-spinner="!buckets.details" min-height="300px"> -->
+<!--   <div -->
+<!--      admin-ctl="adminCtl" -->
+<!--      mn-buckets-list -->
+<!--      buckets="buckets.details" -->
+<!--      pool-default="poolDefault" -->
+<!--      rbac="rbac"> -->
+<!--   </div> -->
+<!-- </div> -->
+
+<div class="cbui-table">
+  <div class="cbui-table-header">
+    <span class="cbui-table-cell flex-grow-3">
+      <span
+         class="sorter"
+         (click)="onSortByClick.next('name')">
+        name
+      </span>
+    </span>
+    <span class="cbui-table-cell">items</span>
+    <span class="cbui-table-cell">resident</span>
+    <span class="cbui-table-cell">ops/sec</span>
+    <span class="cbui-table-cell flex-grow-1-5 resp-hide-sml">RAM used/quota</span>
+    <span class="cbui-table-cell resp-hide-med">disk used</span>
+    <span class="cbui-table-cell flex-grow-1-5 resp-hide-xsml"></span>
+  </div>
+  <div
+     class="zero-content"
+     *ngIf="!(buckets | async)?.length">
+    You have no data buckets. Use "ADD BUCKET" above to create one,
+    or load a <a> <!-- ui-sref="app.admin.settings.sampleBuckets" --> sample bucket</a> with data & indexes.
+  </div>
+  <div
+     *ngFor="let bucket of (buckets | async); trackBy: trackByFn">
+    <!-- orderBy:mnSortableTable.sortableTableProperties.orderBy:mnSortableTable.sortableTableProperties.invert track by bucket.name -->
+    <mn-buckets-item [bucket]="bucket"></mn-buckets-item>
+
+  </div>
+</div>

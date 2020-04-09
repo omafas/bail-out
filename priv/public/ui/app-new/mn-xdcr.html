@@ -1,0 +1,82 @@
+<div [hidden]="!(xdcrRemoteClustersRead | async)">
+  <div class="row margin-bottom-half">
+    <h4>Remote Clusters</h4>
+
+    <button
+      [hidden]="!(xdcrRemoteClustersWrite | async)"
+      (click)="onAddReference.next()">
+      Add Remote Cluster
+    </button>
+  </div>
+
+  <div>
+    <table class="table-stroked">
+      <thead>
+        <tr>
+          <th class="text-left">name</th>
+          <th class="text-left">IP/hostname</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody
+        *ngFor="let row of (references | async); trackBy: trackByFn">
+        <tr>
+          <td class="break-word max-width-4">{{row.name}}</td>
+          <td class="break-word">
+            <a [attr.href]="generateStatisticsLink(row)">{{row.hostname}}</a>
+          </td>
+          <td class="text-right">
+            <a
+              [hidden]="!(xdcrRemoteClustersWrite | async)"
+              (click)="onDeleteReference.next(row)">Delete</a> &nbsp;
+            <a
+              [hidden]="!(xdcrRemoteClustersWrite | async)"
+              (click)="onAddReference.next(row)">Edit</a>
+
+          </td>
+        </tr>
+      </tbody>
+      <tbody *ngIf="!(references | async)?.length">
+        <tr><td colspan="3">No cluster references defined.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Ongoing Replications -->
+<div [hidden]="!(xdcrRemoteClustersRead | async)">
+  <div class="row margin-bottom-half">
+    <h4>Ongoing Replications</h4>
+    <button
+      [hidden]="!((xdcrRemoteClustersRead | async) && (references | async)?.length) ||
+                !(xdcrSettingsRead | async) ||
+                !(xdcrSettingsWrite | async) ||
+                !(xdcrBucketAnyWrite | async)"
+      (click)="onAddReplication.next()">
+      Add Replication
+    </button>
+  </div>
+
+  <div>
+    <table class="table-stroked">
+      <thead>
+        <tr>
+          <th class="text-left">bucket</th>
+          <th class="text-left resp-hide-sml">protocol</th>
+          <th class="text-left resp-hide-sml">from</th>
+          <th class="text-left resp-hide-sml">to</th>
+          <th [hidden]="!(isEnterprise | async)" class="text-left resp-hide-sml">filtered</th>
+          <th class="text-left">status</th>
+          <th class="resp-hide-sml text-left">when</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody *ngFor="let item of (tasksXDCR | async); trackBy: tasksTrackByFn">
+        <tr mn-xdcr-item [item]="item"></tr>
+      </tbody>
+      <tbody *ngIf="!(tasksXDCR | async)?.length">
+        <tr><td colspan="8">There are no replications currently in progress.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>

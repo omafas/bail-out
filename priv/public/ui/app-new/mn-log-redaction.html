@@ -1,0 +1,38 @@
+<form
+   [formGroup]="logRedactionForm"
+   (ngSubmit)="onSubmit.next()"
+   >
+  <div class="formrow margin-bottom-2">
+    <label>Log Redaction <small>default setting for collect info logs</small></label>
+    <input
+       formControlName="logRedactionLevel"
+       type="radio"
+       value="none"
+       id="redaction_none">
+    <label for="redaction_none" class="checkbox">
+      None
+    </label>
+    <br>
+    <input
+       formControlName="logRedactionLevel"
+       type="radio"
+       value="partial"
+       id="redaction_partial">
+    <label for="redaction_partial" class="checkbox margin-right-zero">
+      Partial Redaction
+    </label>
+    <span
+       class="fa-stack icon-info"
+       ngbTooltip="User data such as key/value pairs and usernames will be redacted. Metadata and system data will not be redacted."
+       triggers="click">
+      <span class="icon fa-circle-thin fa-stack-2x"></span>
+      <span class="icon fa-info fa-stack-1x"></span>
+    </span>
+  </div>
+
+  <div class="margin-top-2">
+    <button type="submit" [disabled]="!(securityWrite | async)">
+      Save
+    </button>
+  </div>
+</form>

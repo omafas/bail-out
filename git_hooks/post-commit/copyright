@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2018 Couchbase, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+function fatal() {
+    echo "$@"
+    exit 1
+}
+
+function is_clean_repo() {
+    git diff --quiet HEAD
+
+    local ret=$?
+    case $ret in
+        0|1)
+            return $ret;;
+        *)
+            fatal "git diff failed";;
+    esac
+}
+
+STASHED=
+function maybe_stash() {
+    if is_clean_repo; then
+        return 0
+    fi
+
+    git stash push \
+        --message "git_hooks/post-commit/copyright temporary stash" ||
+        fatal "git stash push failed"
+
+    STASHED="yes"
+}
+
+function maybe_undo_stash() {
+    if [ -n "$STASHED" ]; then
+        git stash pop ||
+            fatal "Failed to undo temporary stash." \
+                  "You'll have to do this yourself."
+    fi
+}
+
+declare -a CHANGED_FILES
+function get_changed_files() {
+    CHANGED_FILES=()
+
+    local file
+    local raw_files
+
+    raw_files=$(git show --pretty="" --name-only HEAD) ||
+        fatal "Failed to get a list of changed files"
+
+    while read -r file; do
+        CHANGED_FILES+=("$file")
+    done <<< "$raw_files"
+}
+
+maybe_stash
+get_changed_files
+
+./scripts/copyright "${CHANGED_FILES[@]}"
+
+if is_clean_repo; then
+    # all good, undoing the stash
+    maybe_undo_stash
+else
+    echo
+    echo "===========================IMPORTANT============================"
+    echo "Looks like copyright headers needed to be updated in some files."
+    echo "We've updated them for you. You need to review the changes"
+    echo "and ammend them to your commit."
+
+    if [ -n "$STASHED" ]; then
+        echo
+        echo "The uncommitted changes were stashed and can be recovered" \
+             "by running 'git stash pop'"
+    fi
+    echo "================================================================"
+fi

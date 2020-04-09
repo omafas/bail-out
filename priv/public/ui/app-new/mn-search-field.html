@@ -1,0 +1,20 @@
+<div
+   [formGroup]="mnFormGroup"
+   class="filter-input-group">
+  <input
+     type="text"
+     [mnFocus]="mnFocusStream"
+     formControlName="searchTerm"
+     maxlength="256"
+     class="filter-input borderless"
+     placeholder="{{mnPlaceholder}}">
+  <span
+     class="icon fa-search-minus"
+     [hidden]="(isSearchPresent | async)">
+  </span>
+  <span
+     class="icon fa-times-circle"
+     [hidden]="!(isSearchPresent | async)"
+     (click)="onClearClick.next()">
+  </span>
+</div>

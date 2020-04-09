@@ -1,0 +1,21 @@
+<div class="panel dialog width-530 text-center">
+  <div class="panel-content">
+    <img
+     src="/cb_logo_red_withtext.svg"
+     height="157"
+     width="373">
+  <div class="text-normal margin-top-1">
+    {{prettyVersion | async}}
+  </div>
+  <button
+     [mnFocus]="focusFieldSubject"
+     class="btn-lg margin-top-2"
+     uiSref="app.wizard.newCluster"
+     [uiOptions]="{location: false}">Setup New Cluster</button><br>
+  <button
+     class="btn-lg margin-bottom-half"
+     style="margin-top: 12px;"
+     uiSref="app.wizard.joinCluster"
+     [uiOptions]="{location: false}">Join Existing Cluster</button>
+  </div>
+</div>

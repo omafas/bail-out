@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Plot a timeline of vbucket moves for a particular bucket. Requires python3
+# and matplotlib python library.
+#
+# Use as:
+#
+#   ./read master_events.log | \
+#      ./last-rebalance | \
+#      ./plot-bucket_rebalance "bucket-name"
+
+DIRNAME="$(dirname "${BASH_SOURCE[0]}")"
+BUCKET="$1"
+
+SCRIPT='
+def handle_move($minTS):
+  (.events | map(select(.type == "backfillPhaseEnded"))[0]) as $backfillEnd |
+  (if (.chainBefore[0] != .chainAfter[0])
+   then "active"
+   else "replica" end) as $moveType |
+  {start: (.moveStartTS - $minTS),
+   duration: (.moveEndTS - .moveStartTS),
+   backfillDuration: ($backfillEnd.ts - .moveStartTS),
+   vbucket: .vbucket,
+   type: $moveType};
+
+(if $bucket == "" then .[-1].bucket else $bucket end) as $bucket |
+map(select(.bucket == $bucket))[0].moves |
+sort_by(.moveStartTS) |
+.[0].moveStartTS as $minTS |
+map(handle_move($minTS)) as $moves |
+{bucket: $bucket,
+ moves: $moves}
+'
+
+"$DIRNAME"/group-moves | \
+    jq --arg bucket "$BUCKET" "$SCRIPT" | \
+    "$DIRNAME"/plot-bucket-rebalance.py

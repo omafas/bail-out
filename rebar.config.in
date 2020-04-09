@@ -1,0 +1,20 @@
+{lib_dirs, ["deps"]}.
+{erl_first_files, ["src/ns_log_categorizing.erl",
+                   "src/supervisor2.erl",
+                   "src/memcached_cfg.erl",
+                   "src/replicated_storage.erl",
+                   "src/json_settings_manager.erl",
+
+                   %% functools and generic modules are used by cut, so they
+                   %% also need to be compiled early
+                   "src/functools.erl", "src/generic.erl",
+                   "src/cut.erl",
+
+                   %% gen_server2 needs to go after cut
+                   "src/gen_server2.erl"]}.
+{erl_opts, [{src_dirs, ["src"]},
+            {i, "@COUCHDB_SRC_DIR@/src/couchdb"},
+            {i, "@COUCHDB_SRC_DIR@/src"},
+            {i, "@NS_SERVER_SRC_DIR@/deps/triq/include"},
+            debug_info, bin_info_opt, nowarn_deprecated_type,
+            {parse_transform, ale_transform}]}.

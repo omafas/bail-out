@@ -1,0 +1,58 @@
+[couchdb]
+max_dbs_open = 10000
+database_dir = @COUCHBASE_DB_DIR@
+view_index_dir = @COUCHBASE_DB_DIR@
+
+
+[httpd]
+db_frontend = capi_frontend
+ip4_bind_address = 0.0.0.0
+ip6_bind_address = ::
+port = 8092
+; this gets us auth support on capi port
+WWW-Authenticate = Basic realm="capi"
+
+[httpd_db_handlers]
+_all_docs = {capi_view, all_docs_db_req}
+
+[httpd_design_handlers]
+_view = {capi_view, handle_view_req}
+_spatial = {capi_spatial, handle_view_req}
+
+[database_compaction]
+doc_buffer_size = 2097152
+checkpoint_after = 20971520
+
+[daemons]
+; Started by ns_server's supervision trees.
+compaction_daemon =
+replication_manager =
+
+; Not using these in couchbase
+stats_aggregator =
+stats_collector =
+
+[compaction_daemon]
+check_interval = 30
+min_file_size = 131072
+
+[httpd_global_handlers]
+_pre_replicate = {capi_replication, handle_pre_replicate}
+_mass_vbopaque_check = {capi_replication, handle_mass_vbopaque_check}
+_commit_for_checkpoint = {capi_replication, handle_commit_for_checkpoint}
+_view_merge = {capi_view, handle_view_merge_req}
+_spatial_merge = {capi_spatial, handle_view_merge_req}
+
+;[compactions]
+;_default = [{db_fragmentation, {"30%", nil}},
+;            {view_fragmentation, {"30%", nil}}]
+;
+
+; * db_fragmentation / view_fragmentation
+;
+; Both expect a tuple of {Ratio, ByteLimit} where Ratio is an integer
+; percentange of old data vs all data, and the ByteLimit is the total size
+; of all data - new data.
+; When fragemnted data is greater than or equal to either of these values,
+; auto compaction is triggered.
+; both values can be nil to ignore the conditions

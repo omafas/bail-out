@@ -1,0 +1,538 @@
+<div>
+  <!-- mn-spinner="settingsClusterCtl.clusterName === undefined || !settingsClusterCtl.memoryQuotaConfig || (rbac.cluster.settings.indexes.read && poolDefault.compat.atLeast40 && !settingsClusterCtl.indexSettings) || (poolDefault.value.isEnterprise && !settingsClusterCtl.certificate)" -->
+  <form
+     (ngSubmit)="onSubmit.next()"
+     [formGroup]="formGroup"
+     class="forms">
+
+    <div class="row flex-left items-stretch resp-flex-column-med margin-bottom-2">
+
+      <div class="width-5">
+        <div class="formrow">
+          <label>Cluster Name</label>
+          <input
+             id="cluster-name-field"
+             type="text"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             maxlength="256"
+             formControlName="clusterName">
+        </div>
+        <!-- ng-disabled="!rbac.cluster.pools.write" -->
+
+        <div>
+          <div class="formrow">
+            <label>Memory Quotas &nbsp;<small>per server node</small></label>
+
+            <p class="desc">Note: Total Couchbase RAM allocation for each node cannot exceed 90% of its available memory.</p>
+          </div>
+          <mn-services-config
+             [initDataStream]="memoryQuotasFirst"
+             [group]="formGroup.get('services')">
+          </mn-services-config>
+          <!-- <div -->
+          <!--    mn-is-enterprise="adminCtl.poolDefault.isEnterprise" -->
+          <!--    rbac="rbac" -->
+          <!--    mn-memory-quota="settingsClusterCtl.memoryQuotaConfig" -->
+          <!--    errors="settingsClusterCtl.memoryQuotaErrors"> -->
+          <!-- </div> -->
+        </div>
+      </div>
+
+      <div style="border-left: 1px solid #d1d1d1; margin: 0 40px; flex-basis: 1;"
+           class="resp-hide-med">&nbsp;</div>
+      <div class="width-6">
+
+        <div class="forms">
+          <p class="text-medium">
+            You are running Couchbase Server {{prettyVersion | async}}
+          </p>
+
+          <div [hidden]="!(getStats | async)?.sendStats">
+            <p
+               [hidden]="(getPhoneHome | async)?.newVersion !== undefined"
+               class="error error-form">
+              Warning: There was a problem with retreiving the update information.
+            </p>
+            <p [hidden]="(getPhoneHome | async)?.newVersion !== false">
+              <em>No updates available.</em>
+            </p>
+            <p [hidden]="!(getPhoneHome | async)?.newVersion" class="text-medium">
+              {{(getPhoneHome | async)?.newVersion}} is available.<br>
+              New features and improvements in this release can be found in the
+              <a [attr.href]="(getPhoneHome | async)?.links.release"
+                 target="_blank">release notes</a>.
+            </p>
+            <div
+               [hidden]="!(getPhoneHome | async)?.newVersion"
+               class="margin-top-1 margin-bottom-2">
+              <a
+                 class="btn outline margin-right-1"
+                 [attr.href]="(getPhoneHome | async)?.links.download"
+                 target="_blank">
+                Download Latest Version
+              </a>
+              <span class="text-small">
+                <a href="https://developer.couchbase.com/documentation/server/5.0/install/upgrade.html" target="_blank">
+                  Upgrade Instructions
+                </a>
+                |
+                <a [attr.href]="(getPhoneHome | async)?.links.release"
+                   target="_blank">
+                  Release Notes
+                </a>
+              </span>
+            </div>
+          </div>
+
+          <div class="formrow">
+            <input
+               type="checkbox"
+               id="for-update-notice-enable"
+               formControlName="sendStats">
+            <!-- ng-disabled="!rbac.cluster.settings.write" -->
+            <label for="for-update-notice-enable" class="margin-right-zero">
+              Enable software update notifications.
+            </label>
+            <span
+               class="fa-stack icon-info"
+               ngbTooltip="Enabling software update notifications allows notification in the Couchbase web console when a new version of Couchbase Server is available. Configuration information transferred in the update check is anonymous and does not include any stored key-value data."
+               tooltip-placement="right">
+              <span class="icon fa-circle-thin fa-stack-2x"></span>
+              <span class="icon fa-info fa-stack-1x"></span>
+            </span>
+          </div>
+        </div>
+
+        <mn-element-cargo depot="alerts">
+          <div
+             class="alert alert-warning"
+             ng-show="settingsAutoFailoverCtl.autoFailoverSettings.count > 0">
+            <p>
+              The maximum number of nodes have been automatically failed over. Auto-failover is disabled until you reset it. &nbsp;
+              <a
+                 ng-click="adminCtl.resetAutoFailOverCount()"
+                 ng-show="rbac.cluster.settings.write">
+                Reset Auto-Failover
+              </a>
+            </p>
+          </div>
+        </mn-element-cargo>
+
+
+        <div formGroupName="autoFailover">
+          <div class="formrow">
+            <label class="inline">Node Availability</label>
+            <span
+               class="fa-stack icon-info"
+               ngbTooltip="After the timeout period set here—and up to the limit of actionable events—an unresponsive
+                           or malfunctioning node will be failed over. Any replica copies of data, indexes, or query engines will
+                           be promoted to active elsewhere in the cluster. Please note that this feature is only available when 3
+                           or more nodes are present in the cluster and that many other factors determine whether or not an auto-failover
+                           will take place. After it has recovered, a failed-over node can be brought back into the cluster with a
+                           rebalance or replaced with a new node."
+               placement="right">
+              <span class="icon fa-circle-thin fa-stack-2x"></span>
+              <span class="icon fa-info fa-stack-1x"></span>
+            </span>
+            <div class="row flex-left text-medium flex-wrap">
+              <input
+                 type="checkbox"
+                 id="for-auto-failover-enable"
+                 formControlName="enabled">
+              <!-- ng-disabled="!rbac.cluster.settings.write" -->
+              <label
+                 for="for-auto-failover-enable"
+                 class="margin-right-zero line-height-1-5">
+                Auto-failover
+              </label>
+              &nbsp;after&nbsp;
+              <input
+                 type="number"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocapitalize="off"
+                 id="auto_failover_timeout"
+                 formControlName="timeout"
+                 class="input-small input-short-1">
+              <!-- ng-disabled="!settingsAutoFailoverCtl.autoFailoverSettings.enabled || !rbac.cluster.settings.write" -->
+              &nbsp;seconds&nbsp;
+              <span [hidden]="!(compatVersion55 | async) || !(isEnterprise | async)"
+                    class="row">
+                for up to&nbsp;
+                <input
+                   type="number"
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   id="auto_failover_maxcount"
+                   formControlName="maxCount"
+                   class="input-small input-short-half">
+                <!-- ng-disabled="!settingsAutoFailoverCtl.autoFailoverSettings.enabled || !rbac.cluster.settings.write" -->
+                &nbsp;event{{formGroup.get('autoFailover.maxCount').value !== 1 ? "s" : ""}}
+              </span>
+            </div>
+            <!-- <div -->
+            <!--    class="error" -->
+            <!--    ng-show="settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors.timeout"> -->
+            <!--   {{settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors.timeout}} -->
+            <!-- </div> -->
+            <!-- <div -->
+            <!--    class="error" -->
+            <!--    ng-show="settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors.maxCount"> -->
+            <!--   {{settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors.maxCount}} -->
+            <!-- </div> -->
+            <div
+               [hidden]="!(compatVersion55 | async) || !(isEnterprise | async)"
+               class="row flex-left text-medium flex-wrap"
+               formGroupName="failoverOnDataDiskIssues">
+              <input
+                 type="checkbox"
+                 id="for-disk-failover-enable"
+                 formControlName="enabled">
+              <!-- ng-disabled="!settingsAutoFailoverCtl.autoFailoverSettings.enabled || !rbac.cluster.settings.write" -->
+              <label
+                 for="for-disk-failover-enable"
+                 class="margin-right-zero line-height-1-5">
+                Auto-failover for sustained data disk read/write failures
+              </label>
+              &nbsp;after&nbsp;
+              <input
+                 type="number"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocapitalize="off"
+                 formControlName="timePeriod"
+                 id="auto_failover_disk_timeout"
+                 class="input-small input-short-1">
+              <!-- ng-disabled="!settingsAutoFailoverCtl.autoFailoverSettings.enabled || !settingsAutoFailoverCtl.autoFailoverSettings.failoverOnDataDiskIssues.enabled || !rbac.cluster.settings.write" -->
+              &nbsp;seconds&nbsp;
+              <!-- <div -->
+              <!--    class="error" -->
+              <!--    ng-show="settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors['failoverOnDataDiskIssues[timePeriod]']"> -->
+              <!--   {{settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors['failoverOnDataDiskIssues[timePeriod]']}} -->
+              <!-- </div> -->
+            </div>
+            <div
+               [hidden]="!(compatVersion55 | async) || !(isEnterprise | async)">
+              <input
+                 type="checkbox"
+                 id="for-group-failover-enable"
+                 formControlName="failoverServerGroup">
+              <!-- ng-disabled="!settingsAutoFailoverCtl.autoFailoverSettings.enabled || !rbac.cluster.settings.write" -->
+              <label for="for-group-failover-enable" class="margin-right-zero">
+                Enable auto-failover of server groups
+              </label>
+              <span
+                 class="icon-info-warning"
+                 ngbTooltip="DO NOT enable this unless you have set up homogenous server groups for failure scenarios
+                             (like racks/zones), have 3 or more server groups, and have the capacity to absorb the load of the failed-over group."
+                 placement="right">
+                <span class="icon fa-warning"></span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="margin-top2 margin-bottom-1">
+          <span
+             class="disclosure text-medium"
+             [ngClass]="{disclosed: (toggleSection | async)}"
+             (click)="onToggleClick.next()">
+            For Ephemeral Buckets
+          </span>
+          <div
+             [hidden]="!(toggleSection | async)"
+             formGroupName="autoReprovision"
+             class="margin-top-half indent-1-5">
+            <div class="row flex-left text-medium flex-wrap">
+              <input
+                 type="checkbox"
+                 formControlName="enabled"
+                 id="for-auto-reprovision-enable">
+              <!-- ng-disabled="!rbac.cluster.settings.write" -->
+              <label for="for-auto-reprovision-enable" class="margin-right-zero">
+                Enable auto-reprovisioning
+              </label>
+              &nbsp;for up to&nbsp;
+              <input
+                 type="number"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocapitalize="off"
+                 id="for-max-nodes"
+                 formControlName="max_nodes"
+                 class="input-small input-short-half">
+              <!-- ng-disabled="!settingsAutoFailoverCtl.reprovisionSettings.enabled || !rbac.cluster.settings.write" -->
+              &nbsp;node{{formGroup.get('autoReprovision.max_nodes').value !== 1 ? "s" : ""}}&nbsp;
+              <span
+                 class="fa-stack icon-info"
+                 ngbTooltip="For an unresponsive node with Ephemeral Buckets, you may choose to have its replicas
+                             promoted to active if it becomes responsive again. This avoids data loss, but leaves
+                             the cluster in an unbalanced state that will require a rebalance."
+                 placement="top">
+                <span class="icon fa-circle-thin fa-stack-2x"></span>
+                <span class="icon fa-info fa-stack-1x"></span>
+              </span>
+              <!-- <div -->
+              <!--    class="error" -->
+              <!--    ng-show="settingsAutoFailoverCtl.postAutoReprovisionSettingsErrors.maxNodes"> -->
+              <!--   {{settingsAutoFailoverCtl.postAutoReprovisionSettingsErrors.maxNodes}} -->
+              <!-- </div> -->
+            </div>
+          </div>
+        </div>
+
+
+        <!-- <div ui-view="autofailover"></div> -->
+
+
+
+
+        <!-- <label -->
+        <!--    [hidden]="!(settingsIndexesRead | async)" -->
+        <!--    class="margin-top-half"> -->
+        <!--   Index Storage Mode -->
+        <!-- </label> -->
+        <!-- <div [hidden]="!(settingsIndexesRead | async)"> -->
+        <!--   <div class="formrow"> -->
+        <!--     <\!-- <mn-storage-mode -\-> -->
+        <!--     <\!--    [control]="formGroup.get('storageMode')"> -\-> -->
+        <!--     <\!-- </mn-storage-mode> -\-> -->
+        <!--   </div> -->
+        <!-- </div> -->
+        <!-- <p -->
+        <!--    class="disclosure" -->
+        <!--    [ngClass]="{disclosed: (toggleIndexSection | async)}" -->
+        <!--    (click)="onToggleIndexClick.next()"> -->
+        <!--   Advanced Index Settings -->
+        <!-- </p> -->
+        <!-- <div [hidden]="!showAdvancedSettings" class="indent-1-5"> -->
+        <!--   <div class="formrow"> -->
+        <!--     <label for="index_settings_thread" class="inline"> -->
+        <!--       Indexer Threads -->
+        <!--     </label> -->
+        <!--     <span -->
+        <!--        class="fa-stack icon-info" -->
+        <!--        ngbTooltip="Number of dedicated threads the indexer uses. On multi-core machines increasing this number will increase the indexer's CPU utilization. Defaults to 0 which instructs the indexer to use all available machine cores." -->
+        <!--        placement="auto right"> -->
+        <!--       <span class="icon fa-circle-thin fa-stack-2x"></span> -->
+        <!--       <span class="icon fa-info fa-stack-1x"></span> -->
+        <!--     </span> -->
+        <!--     <input -->
+        <!--        type="number" -->
+        <!--        formControlName="indexerThreads" -->
+        <!--        id="index_settings_thread" -->
+        <!--        class="input-small input-short-1"> -->
+        <!--     <\!-- ng-disabled="settingsClusterCtl.indexSettings.storageMode === '' || !rbac.cluster.settings.indexes.write" -\-> -->
+        <!--     <\!-- <div class="error error-field" ng-show="settingsClusterCtl.indexSettingsErrors.indexerThreads"> -\-> -->
+        <!--     <\!--   {{settingsClusterCtl.indexSettingsErrors.indexerThreads}} -\-> -->
+        <!--     <\!-- </div> -\-> -->
+        <!--   </div> -->
+        <!--   <div class="formrow" [hidden]="(isEnterprise | async)"> -->
+        <!--     <label for="in_memory_snapshot" class="inline"> -->
+        <!--       Max Rollback Points -->
+        <!--     </label> -->
+        <!--     <span -->
+        <!--        class="fa-stack icon-info" -->
+        <!--        ngbTooltip="The maximum number of committed rollback points." -->
+        <!--        placement="auto right"> -->
+        <!--       <span class="icon fa-circle-thin fa-stack-2x"></span> -->
+        <!--       <span class="icon fa-info fa-stack-1x"></span> -->
+        <!--     </span> -->
+        <!--     <input -->
+        <!--        type="text" -->
+        <!--        formControlName="maxRollbackPoints" -->
+        <!--        id="in_memory_snapshot"> -->
+        <!--     <\!-- ng-disabled="settingsClusterCtl.indexSettings.storageMode === '' || !rbac.cluster.settings.indexes.write" -\-> -->
+        <!--     <\!-- <div class="error error-field" ng-show="settingsClusterCtl.indexSettingsErrors.maxRollbackPoints"> -\-> -->
+        <!--     <\!--   {{settingsClusterCtl.indexSettingsErrors.maxRollbackPoints}} -\-> -->
+        <!--     <\!-- </div> -\-> -->
+        <!--   </div> -->
+        <!--   <div class="formrow"> -->
+        <!--     <label for="indexer_log_level"> -->
+        <!--       Indexer Log Level -->
+        <!--     </label> -->
+        <!--     <div class="simple-select"> -->
+        <!--       <select -->
+        <!--          formControlName="logLevel" -->
+        <!--          name="logLevel" -->
+        <!--          id="indexer_log_level"> -->
+        <!--         <\!-- ng-disabled="settingsClusterCtl.indexSettings.storageMode === '' || !rbac.cluster.settings.indexes.write" -\-> -->
+        <!--         <option value="silent">Silent</option> -->
+        <!--         <option value="fatal">Fatal</option> -->
+        <!--         <option value="error">Error</option> -->
+        <!--         <option value="warn">Warn</option> -->
+        <!--         <option value="info">Info</option> -->
+        <!--         <option value="verbose">Verbose</option> -->
+        <!--         <option value="timing">Timing</option> -->
+        <!--         <option value="debug">Debug</option> -->
+        <!--         <option value="trace">Trace</option> -->
+        <!--       </select> -->
+        <!--     </div> -->
+        <!--     <\!-- <div class="error error-field" ng-show="settingsClusterCtl.indexSettingsErrors.logLevel"> -\-> -->
+        <!--     <\!--   {{settingsClusterCtl.indexSettingsErrors.logLevel}} -\-> -->
+        <!--     <\!-- </div> -\-> -->
+        <!--   </div> -->
+        <!-- </div> -->
+
+        <!--     <div [hidden]="!(compatVersion55 | async) || !(settingsRead | async)" -->
+        <!--          class="margin-top-1-5"> -->
+        <!--       <label>Query Settings</label> -->
+        <!--       <p -->
+        <!--          class="disclosure margin-bottom-half" -->
+        <!--          [ngClass]="{disclosed: showAdvancedN1QLSettings}" -->
+        <!--          (click)="showAdvancedN1QLSettings = !showAdvancedN1QLSettings"> -->
+        <!--         Advanced Query Settings -->
+        <!--       </p> -->
+        <!--       <div [hidden]="!showAdvancedN1QLSettings" class="indent-1-5"> -->
+        <!--         <div class="formrow"> -->
+        <!--           <label>CURL() Function Access</label> -->
+        <!--           <input -->
+        <!--              type="radio" -->
+        <!--              value="false" -->
+        <!--              name="all_access" -->
+        <!--              id="n1ql_curl_access_restricted" -->
+        <!--              formControlName="all_access"> -->
+        <!--           <\!-- ng-disabled="!rbac.cluster.settings.write" -\-> -->
+        <!--           <label for="n1ql_curl_access_restricted" class="checkbox"> -->
+        <!--             Restricted -->
+        <!--           </label> -->
+        <!--           <br> -->
+        <!--           <input -->
+        <!--              type="radio" -->
+        <!--              value="true" -->
+        <!--              name="all_access" -->
+        <!--              id="n1ql_curl_access_unrestricted" -->
+        <!--              formControlName="all_access"> -->
+        <!--           <\!-- ng-disabled="!rbac.cluster.settings.write" -\-> -->
+        <!--           <label for="n1ql_curl_access_unrestricted" class="checkbox"> -->
+        <!--             Unrestricted -->
+        <!--           </label> -->
+        <!--         </div> -->
+        <!--         <div class="formrow margin-bottom-half"> -->
+        <!--           <\!-- ng-if="!settingsClusterCtl.querySettings.queryCurlWhitelist.all_access" -\-> -->
+        <!--           <label>Allowed CURL URLs</label> -->
+        <!--           <div -->
+        <!--              class="margin-bottom-half row" -->
+        <!--              *ngFor="let control of group.get('allowed_urls').controls; index as i;" -->
+        <!--              <input -->
+        <!--                 type="text" -->
+        <!--                 [formControl]="control" -->
+        <!--                 autocorrect="off" -->
+        <!--                 spellcheck="false" -->
+        <!--                 autocapitalize="off"> -->
+        <!--              <\!-- ng-disabled="!rbac.cluster.settings.write" -\-> -->
+        <!--              <button -->
+        <!--                 class="outline btn-small margin-left-half" -->
+        <!--                 title="Remove field" -->
+        <!--                 (click)="group.get(allowed_urls').controls.splice(i, 1);" -->
+        <!--                 type="button">-</button> -->
+        <!--              <\!-- ng-disabled="!rbac.cluster.settings.write || settingsClusterCtl.querySettings.queryCurlWhitelist.allowed_urls.length == 1" -\-> -->
+        <!--         </div> -->
+        <!--         <div class="row flex-right items-top"> -->
+        <!--           <\!-- <div -\-> -->
+        <!--           <\!--    class="error error-form" -\-> -->
+        <!--           <\!--    ng-show="!!settingsClusterCtl.curlWhitelistErrors.allowed_urls"> -\-> -->
+        <!--           <\!--   {{settingsClusterCtl.curlWhitelistErrors.allowed_urls}} -\-> -->
+        <!--           <\!-- </div> -\-> -->
+        <!--           <button -->
+        <!--              class="outline btn-small margin-quarter" -->
+        <!--              title="Add field" -->
+        <!--              type="button">+</button> -->
+        <!--           <\!-- ng-disabled="!rbac.cluster.settings.write" -\-> -->
+        <!--           <\!-- ng-click="settingsClusterCtl.querySettings.queryCurlWhitelist.allowed_urls.push('')" -\-> -->
+        <!--         </div> -->
+        <!--       </div> -->
+        <!--       <div class="formrow"> -->
+        <!--         <\!-- ng-if="!settingsClusterCtl.querySettings.queryCurlWhitelist.all_access" -\-> -->
+        <!--         <label>Disallowed CURL URLs</label> -->
+        <!--         <div -->
+        <!--            class="margin-bottom-half row" -->
+        <!--            *ngFor="let control of group.get('disallowed_urls').controls; index as i;"> -->
+        <!--           <input -->
+        <!--              type="text" -->
+        <!--              autocorrect="off" -->
+        <!--              spellcheck="false" -->
+        <!--              autocapitalize="off" -->
+        <!--              [formControl]="control"> -->
+        <!--           <\!-- ng-disabled="!rbac.cluster.settings.write" -\-> -->
+        <!--           <button -->
+        <!--              class="outline btn-small margin-left-half" -->
+        <!--              title="Remove field" -->
+        <!--              type="button">-</button> -->
+        <!--           <\!-- ng-click="settingsClusterCtl.querySettings.queryCurlWhitelist.disallowed_urls.splice($index, 1);" -\-> -->
+        <!--           <\!-- ng-disabled="!rbac.cluster.settings.write || settingsClusterCtl.querySettings.queryCurlWhitelist.disallowed_urls.length == 1" -\-> -->
+        <!--         </div> -->
+        <!--         <div class="row flex-right items-top"> -->
+        <!--           <\!-- <div -\-> -->
+        <!--           <\!--    class="error error-form" -\-> -->
+        <!--           <\!--    ng-show="!!settingsClusterCtl.curlWhitelistErrors.disallowed_urls"> -\-> -->
+        <!--           <\!--   {{settingsClusterCtl.curlWhitelistErrors.disallowed_urls}} -\-> -->
+        <!--           <\!-- </div> -\-> -->
+        <!--           <button -->
+        <!--              class="outline btn-small margin-quarter" -->
+        <!--              title="Add field" -->
+        <!--              type="button">+</button> -->
+        <!--           <\!-- ng-click="settingsClusterCtl.querySettings.queryCurlWhitelist.disallowed_urls.push('')" -\-> -->
+        <!--           <\!-- ng-disabled="!rbac.cluster.settings.write" -\-> -->
+        <!--         </div> -->
+        <!--       </div> -->
+
+        <!--       <div class="margin-bottom-2"> -->
+        <!--         <div class="row resp-sml"> -->
+        <!--           <div class="column width-9"> -->
+        <!--             <label for="setup_query_temp_input">Query Temp Disk Path</label> -->
+        <!--             <input -->
+        <!--                type="text" -->
+        <!--                autocorrect="off" -->
+        <!--                spellcheck="false" -->
+        <!--                autocapitalize="off" -->
+        <!--                formControlName="queryTmpSpaceDir" -->
+        <!--                id="setup_query_temp_input"> -->
+        <!--             <\!-- ng-disabled="!rbac.cluster.settings.write" -\-> -->
+        <!--           </div> -->
+        <!--           <div class="width-3"> -->
+        <!--             <label for="setup_query_gb_input">Quota</label> -->
+        <!--             <div class="relative"> -->
+        <!--               <div class="inside-label">MB</div> -->
+        <!--               <input -->
+        <!--                  type="text" -->
+        <!--                  autocorrect="off" -->
+        <!--                  spellcheck="false" -->
+        <!--                  autocapitalize="off" -->
+        <!--                  id="setup_query_gb_input" -->
+        <!--                  ng-init="5" -->
+        <!--                  formControlName="queryTmpSpaceSize" -->
+        <!--                  class="input-inside-label"> -->
+        <!--               <\!-- ng-disabled="!rbac.cluster.settings.write" -\-> -->
+        <!--             </div> -->
+        <!--           </div> -->
+        <!--         </div> -->
+        <!--         <\!-- <div -\-> -->
+        <!--         <\!--    class="error error-form" -\-> -->
+        <!--         <\!--    ng-show="!!settingsClusterCtl.querySettingsErrors.queryTmpSpaceDir"> -\-> -->
+        <!--         <\!--   {{settingsClusterCtl.querySettingsErrors.queryTmpSpaceDir}} -\-> -->
+        <!--         <\!-- </div> -\-> -->
+        <!--         <\!-- <div -\-> -->
+        <!--         <\!--    class="error error-form" -\-> -->
+        <!--         <\!--    ng-show="!!settingsClusterCtl.querySettingsErrors.queryTmpSpaceSize"> -\-> -->
+        <!--         <\!--   {{settingsClusterCtl.querySettingsErrors.queryTmpSpaceSize}} -\-> -->
+        <!--         <\!-- </div> -\-> -->
+        <!--       </div> -->
+        <!--     </div> -->
+      </div>
+    </div>
+    <div class="footer-save"
+         [hidden]="!(poolsWrite | async) || !(settingsIndexesWrite | async)">
+      <a class="text-medium margin-right-2">Cancel/Reset</a>
+      <button
+         type="submit"
+         class="margin-right-2">
+        <!-- ng-disabled="!!settingsClusterCtl.indexSettingsErrors || !!settingsClusterCtl.memoryQuotaErrors || !!settingsClusterCtl.saveAutoFailoverSettingsErrors || !!settingsClusterCtl.postAutoReprovisionSettingsErrors" -->
+        Save
+      </button>
+    </div>
+  </form>
+</div>

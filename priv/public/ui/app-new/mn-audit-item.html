@@ -1,0 +1,48 @@
+<section class="audit-module" [ngClass]="{'audit-module-open' : (toggleSection | async)}">
+  <div
+     class="audit-module-header fix-width-6"
+     [ngClass]="{'blue-bg-8': (isThereEnabledField | async) && (isAuditEnabled | async)}">
+    <span
+       class="disclosure inline"
+       [ngClass]="{disclosed: (toggleSection | async)}"
+       (click)="onToggleClick.next()">
+      {{mapNames(moduleName)}}
+    </span>
+    <span
+       class="icon"
+       [hidden]="!(isAuditEnabled | async)"
+       [ngClass]="(isThereEnabledField | async) ? 'fa-check green-3' : 'fa-ban red-4'"></span>
+  </div>
+  <div
+     class="audit-module-body"
+     [hidden]="!(toggleSection | async)">
+    <div class="row flex-left" [formGroup]="formHelper">
+      <label
+         class="toggle-control margin-0"
+         [attr.for]="'thisModule_checkall_' + moduleName">
+        <input
+           formControlName="toggleAll"
+           type="checkbox"
+           [attr.id]="'thisModule_checkall_' + moduleName">
+        <span class="toggle-control-body"></span>
+      </label>
+      <span class="text-smaller">&nbsp; enable all</span>
+    </div>
+    <hr>
+    <div
+       class="row flex-left items-top"
+       [formGroup]="form.group.get('descriptors').get(moduleName)"
+       *ngFor="let desc of (thisDescriptors | async);">
+      <span class="fix-width-5">
+        <input
+           type="checkbox"
+           [attr.id]="'thisModule_' + moduleName + desc.id"
+           [formControlName]="desc.id">
+        <label
+           class="checkbox"
+           [attr.for]="'thisModule_' + moduleName + desc.id">{{desc.name}}</label>
+      </span>
+      <p>{{desc.description}}</p>
+    </div>
+  </div>
+</section>

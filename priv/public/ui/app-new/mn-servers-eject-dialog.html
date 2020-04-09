@@ -1,0 +1,28 @@
+<div class="dialog-med">
+  <div class="panel-header">
+    <h2>Confirm Server Removal</h2>
+    <a class="ui-dialog-titlebar-close modal-close" (click)="activeModal.dismiss()">X</a>
+  </div>
+  <div
+    class="panel-content">
+    <!-- mn-spinner="serversEjectDialogCtl.viewLoading" -->
+    <div class="row flex-left">
+      <span class="icon fa-warning fa-2x red-3"></span>
+      <p>Warning: Removing this server will...</p>
+    </div>
+    <div class="indent-3">
+      <ul class="margin-bottom0">
+        <li [hidden]="!(bucketAnyN1qlIndexRead | async) || !(isThereIndex | async)">Remove indexes from the cluster and may cause queries to fail if there are no replica indexes</li>
+        <li [hidden]="!(bucketAnyN1qlIndexRead | async) || !(isThereIndex | async)">May cause some replica indexes to be lost</li>
+        <li *ngFor="let service of (mnServices | async)" [hidden]="!(readFromStream(service) | async)">
+          Remove the last {{service}} node from the cluster so new {{service}} can’t be run
+        </li>
+        <li [hidden]="!(isKVNode | async)">Reduce cache capacity across all data buckets</li>
+      </ul>
+    </div>
+  </div>
+  <div class="panel-footer">
+    <a (click)="activeModal.dismiss()">Cancel</a>
+    <button (click)="doEjectNode.next()">Remove Server</button>
+  </div>
+</div>

@@ -1,0 +1,96 @@
+<div
+   class="panel dialog-med dialog dialog-wizard"
+   mn-spinner="termsCtl.viewLoading">
+  <div class="panel-header flex-left">
+    <img
+       src="../cb_logo_bug_white_2.svg"
+       width="32"
+       height="32"
+       class="margin-right-half">
+    <h2>Couchbase &gt; New Cluster</h2>
+  </div>
+  <form
+     name="termsCtl.form"
+     class="forms"
+     novalidate
+     ng-submit="termsCtl.onSubmit()">
+    <div class="panel-content">
+      <h4 class="inline">Terms and Conditions&nbsp;</h4>
+      <small ng-show="termsCtl.isEnterprise">Enterprise Edition</small>
+      <div class="formrow text-small" ng-show="termsCtl.isEnterprise">
+        <i>Couchbase Server must be licensed for use in production environments.</i>
+      </div>
+      <small ng-show="!termsCtl.isEnterprise">Community Edition</small>
+
+      <div class="formrow" mn-spinner="termsCtl.viewLoading">
+        <textarea class="text-smaller" rows="10" readonly="readonly">{{termsCtl.license}}</textarea>
+      </div>
+
+      <div
+         class="error error-form"
+         ng-show="termsCtl.form.agree.$error.required">Terms and conditions need to be accepted in order to continue
+      </div>
+      <div
+         class="error error-form"
+         ng-show="termsCtl.errors">
+        {{termsCtl.errors[0]}}
+      </div>
+
+      <div class="row">
+        <div class="formrow">
+          <input
+             type="checkbox"
+             id="for-accept-terms"
+             ng-model="termsCtl.agree"
+             name="agree">
+          <label class="checkbox" for="for-accept-terms">
+            <span ng-show="termsCtl.isEnterprise">
+              I accept the <a href="https://www.couchbase.com/ESLA05242016" target="_blank">terms & conditions</a>
+            </span>
+            <span ng-show="!termsCtl.isEnterprise">
+              I accept the <a href="https://www.couchbase.com/community" target="_blank">terms & conditions</a>
+            </span>
+          </label>
+        </div>
+      </div>
+      
+      <div>
+        <h4 class="inline">Software Updates & Sharing Usage Information With Couchbase&nbsp;</h4>
+        <div>
+          <div class="formrow">
+            <textarea class="text-smaller" rows="5" readonly="readonly">
+When the following checkbox is enabled, this product automatically collects configuration, usage and performance data, including cluster information (such as settings and configuration, software version, cluster ID, load levels, and resource quotas), and browser information (such as IP address, inferred geolocation at the city level, and browser type) (collectively with the foregoing, the “Performance Data”). The Performance Data is used by Couchbase to develop and improve our products as well as inform our sales and marketing programs. We do not access or collect any data stored in the Couchbase products. We use this Performance Data to understand aggregate usage patterns and make our products more useful to you. The Performance Data is collected by Couchbase when you access the Admin UI in the configuration wizard if this checkbox is selected. You may turn this feature off at any time from the Admin UI settings page. You can find out more about what data is collected and how it is used if you choose to keep this checkbox enabled in the privacy FAQ (link below), which supplements Couchbase’s privacy policy (link below).
+            </textarea>
+            <a href="https://docs.couchbase.com/server/current/product-privacy-faq.html" target="_blank">Privacy FAQ</a>&nbsp;/&nbsp; 
+            <a href="https://www.couchbase.com/privacy-policy" target="_blank">Couchbase Privacy Policy</a>
+          </div>
+        </div>
+        <input type="checkbox" id="init-notifications-updates-enabled" ng-model="termsCtl.sendStats" checked="checked"> 
+        <label for="init-notifications-updates-enabled">
+           Share usage information with Couchbase and get software update notifications.
+        </label>
+      </div>
+    </div>
+    
+    <div class="panel-footer">
+      <a class="tight" ui-sref="app.wizard.setupNewCluster">&lt; Back</a>
+
+      <span>
+      <button
+         type="button"
+         class="outline tight"
+         ng-click="termsCtl.finishWithDefault()"
+         title="All services enabled / Memory optimized for Couchbase / Default disk paths">
+        Finish With Defaults
+      </button>
+      <button
+         type="submit"
+         class="tight"
+         mn-focus>
+        Configure Disk, Memory, Services
+      </button>
+    </span>
+    </div>
+  </form>
+</div>
+<!-- END init_update_notifications-->

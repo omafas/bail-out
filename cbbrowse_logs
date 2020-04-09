@@ -1,0 +1,32 @@
+#!/bin/sh
+# Copyright (c) 2011-2013, Couchbase, Inc.
+# All rights reserved.
+
+COUCHBASE_BIN="$(cd "$(dirname "$0")" && pwd)"
+COUCHBASE_TOP="$COUCHBASE_BIN/.."
+export COUCHBASE_TOP
+
+PATH="$COUCHBASE_BIN":$PATH
+export PATH
+
+ERL_LIBS="$COUCHBASE_TOP/lib/couchdb/erlang/lib:$COUCHBASE_TOP/lib/ns_server/erlang/lib"
+export ERL_LIBS
+
+if [ x"$1" != "x" ]
+then
+    extra_args="-log $1"
+fi
+
+if [ x"$REPORT_DIR" = x ]
+then
+    REPORT_DIR="$COUCHBASE_TOP/var/lib/couchbase/logs"
+    if [ "x$(ls "$REPORT_DIR")" = "x" ]
+    then
+        # If the usual logs dir is empty, try the usual OSX logs location...
+        REPORT_DIR=~/Library/Application\ Support/Couchbase/var/lib/couchbase/logs
+    fi
+fi
+
+exec erl -pa ebin -noshell -run ns_log_browser \
+         -report_dir "${REPORT_DIR}" ${extra_args} \
+         -run init stop -- "$@"

@@ -1,0 +1,499 @@
+<div class="dialog-med">
+  <div class="panel-header">
+    <h2 [hidden]="!isNew">Add Data Bucket</h2>
+    <h2 [hidden]="isNew">Edit Bucket Settings</h2>
+    <a class="ui-dialog-titlebar-close modal-close" (click)="activeModal.dismiss()">X</a>
+  </div>
+  <form novalidate
+        (ngSubmit)="onSubmit.next()"
+        [formGroup]="bucketsDialogForm">
+
+    <div class="forms panel-content">
+      <div class="formrow">
+        <div class="row">
+          <label>Name</label>
+        </div>
+
+        <input
+           type="text"
+           formControlName="name"
+           [mnFocus]="focusFieldSubject"
+           autocorrect="off"
+           spellcheck="false"
+           autocapitalize="off">
+        <div
+           class="error"
+           [hidden]="!(bucketHttp.error | async)?.errors.name">
+          {{(bucketHttp.error | async)?.errors.name}}
+        </div>
+      </div>
+
+      <div class="formrow">
+        <label>Memory Quota <small>in megabytes per server node</small></label>
+        <div class="form-inline margin-bottom-1">
+          <input
+             type="number"
+             formControlName="ramQuotaMB"
+             [mnFocus]="focusFieldSubject">
+          <abbr>MB</abbr>
+        </div>
+        <mn-bar-usage
+           class="bar-usages bucket-add"
+           [ngClass]="{overcommitted: !!(bucketRamGuage | async)?.topLeft}"
+           [total]="bucketTotalRamGuage"
+           [baseInfo]="bucketRamGuage">
+        </mn-bar-usage>
+        <div
+           class="error"
+           [hidden]="!(bucketHttp.error | async)?.errors.ramQuotaMB">
+          {{(bucketHttp.error | async)?.errors.ramQuotaMB}}
+        </div>
+      </div>
+
+      <div class="formrow">
+        <label>Bucket Type</label>
+        <input
+           type="radio"
+           value="membase"
+           formControlName="bucketType"
+           id="for-bucket-type-membase">
+        <label for="for-bucket-type-membase">Couchbase</label>
+        <input
+           type="radio"
+           value="memcached"
+           formControlName="bucketType"
+           id="for-bucket-type-memcached">
+        <label for="for-bucket-type-memcached">Memcached</label>
+        <input
+           type="radio"
+           value="ephemeral"
+           formControlName="bucketType"
+           id="for-bucket-type-ephemeral">
+        <label
+           for="for-bucket-type-ephemeral">Ephemeral</label>
+      </div>
+
+      <div class="formrow">
+        <span
+           class="disclosure inline"
+           ng-class="{'disclosed': showAdvancedSettings}"
+           (click)="showAdvancedSettings = !showAdvancedSettings">
+          Advanced bucket settings
+        </span>
+      </div>
+
+      <div [hidden]="!showAdvancedSettings">
+        <div
+           class="formrow checkbox-list"
+           [hidden]="!(bucketsDialogForm | mnIsMembase) &&
+                     !(bucketsDialogForm | mnIsEphemeral)">
+          <label>Replicas</label>
+          <div class="row flex-left">
+            <span
+               class="column"
+               [formGroup]="bucketsDialogHelperForm">
+              <input
+                 type="checkbox"
+                 id="for-enable-replicas"
+                 formControlName="replicaNumberEnabled">
+              <label for="for-enable-replicas">Enable</label>
+            </span>
+            <div
+               class="row flex-left width-8"
+               [hidden]="!bucketsDialogHelperForm.get('replicaNumberEnabled').value">
+              <div class="simple-select margin-right-half">
+                <select
+                   formControlName="replicaNumber">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                </select>
+              </div>
+              <small>Number of replica (backup) copies</small>
+            </div>
+          </div>
+          <div
+             class="error margin-bottom-half"
+             [hidden]="!(bucketHttp.error | async)?.errors.replicaNumber">
+            {{(bucketHttp.error | async)?.errors.replicaNumber}}
+          </div>
+          <div
+             class="formrow"
+             [hidden]="!(bucketsDialogForm | mnIsMembase)">
+            <input
+               type="checkbox"
+               id="for-enable-view-replicas"
+               formControlName="replicaIndex">
+            <label for="for-enable-view-replicas">Replicate view indexes</label>
+          </div>
+        </div>
+
+        <div
+           class="formrow"
+           [hidden]="!((isEnterprise | async) &&
+                     (compatVersion55 | async) &&
+                     ((bucketsDialogForm | mnIsMembase) ||
+                     (bucketsDialogForm | mnIsEphemeral)))">
+          <label class="inline">Bucket Max Time-To-Live</label>
+          <ng-template #bucketMaxTimeToLiveTooltip>
+            The maximum time-to-live (TTL) for all documents in
+            this bucket in seconds. If enabled and a document is mutated with no TTL
+            or a TTL greater than than the maximum, its TTL will be set to the
+            maximum bucket TTL. The largest TTL allowed is 2147483647. This option is
+            only available for Couchbase and Ephemeral buckets in Couchbase
+            Enterprise Edition.
+          </ng-template>
+          <span
+             class="fa-stack icon-info"
+             [ngbTooltip]="bucketMaxTimeToLiveTooltip"
+             placement="top">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="row flex-left">
+            <span class="width-3"
+                  [formGroup]="bucketsDialogHelperForm">
+              <input
+                 type="checkbox"
+                 id="enable_bucket_ttl"
+                 formControlName="maxTTLEnabled">
+              <label for="enable_bucket_ttl">Enable</label>
+            </span>
+            <span class="row flex-left width-9">
+              <input
+                 type="text"
+                 formControlName="maxTTL"
+                 class="margin-right-half width-3">
+              <small> second{{bucketsDialogForm.value.maxTTL == 1 ? "" : "s"}}</small>
+            </span>
+          </div>
+          <div
+             class="error"
+             [hidden]="!(bucketHttp.error | async)?.errors.maxTTL">
+            {{(bucketHttp.error | async)?.errors.maxTTL}}
+          </div>
+          <div
+             [hidden]="!(bucketsDialogForm.value.maxTTLEnabled &&
+                       bucketsDialogForm.value.maxTTL > 0)"
+             class="content-box row margin-top-1">
+            <p>
+              <strong>NOTE</strong> &nbsp;A non-zero value will result in eventual data loss. You should not, for example, enable Bucket TTL
+              on permanent storage buckets or the metadata buckets for mobile &amp; eventing.
+            </p>
+          </div>
+        </div>
+
+        <div
+           class="formrow"
+           [hidden]="!((isEnterprise | async) &&
+                     (compatVersion55 | async) &&
+                     ((bucketsDialogForm | mnIsMembase) ||
+                     (bucketsDialogForm | mnIsEphemeral)))">
+          <label class="inline">Compression Mode</label>
+          <ng-template #compressionModeTooltip>
+            <strong>Off</strong> - compressed documents are accepted but actively decompressed for storage in memory and for streaming. Not advised!<br>
+            <strong>Passive</strong> - compressed documents can be stored and streamed from the server,
+            but the server does not try to actively compress documents (client-initiated)<br>
+            <strong>Active</strong> - the server will try to actively compress documents in memory
+          </ng-template>
+          <span
+             class="fa-stack icon-info"
+             [ngbTooltip]="compressionModeTooltip"
+             placement="right">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow checkbox-list">
+            <input
+               type="radio"
+               id="for-comp-mode-off"
+               formControlName="compressionMode"
+               value="off">
+            <label for="for-comp-mode-off">Off</label> <!--  default value -->
+            <input
+               type="radio"
+               id="for-comp-mode-passive"
+               formControlName="compressionMode"
+               value="passive">
+            <label for="for-comp-mode-passive">Passive</label>
+            <input
+               type="radio"
+               id="for-comp-mode-active"
+               formControlName="compressionMode"
+               value="active">
+            <label for="for-comp-mode-active">Active</label>
+          </div>
+        </div>
+
+        <div [hidden]="!((isEnterprise | async) &&
+                       ((bucketsDialogForm | mnIsMembase) ||
+                       (bucketsDialogForm | mnIsEphemeral)))">
+          <label class="inline">Conflict Resolution</label>
+          <ng-template #conflictResolutionTooltip>
+            Choose the timestamp conflict resolution method if XDCR replications will be set up for this bucket. Attention: timestamp conflict resolution requires additional NTP setup.
+          </ng-template>
+          <span
+             class="fa-stack icon-info"
+             [ngbTooltip]="conflictResolutionTooltip"
+             placement="right">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow checkbox-list">
+            <input
+               type="radio"
+               id="for-conflict-resolution-seqno"
+               formControlName="conflictResolutionType"
+               name="conflictResolutionType"
+               value="seqno">
+            <label for="for-conflict-resolution-seqno">Sequence number</label>
+            <input
+               type="radio"
+               id="for-conflict-resolution-lww"
+               formControlName="conflictResolutionType"
+               name="conflictResolutionType"
+               value="lww">
+            <label for="for-conflict-resolution-lww">Timestamp</label>
+            <div
+               class="error"
+               [hidden]="!(bucketHttp.error | async)?.errors.conflictResolutionType">
+              {{(bucketHttp.error | async)?.errors.conflictResolutionType}}
+            </div>
+            <div
+               class="error"
+               [hidden]="!(bucketsDialogForm.value.conflictResolutionType === 'lww')">
+              Warning: Timestamp-based conflict resolution requires NTP to be correctly set up
+              on all the nodes in your replication topology to ensure high-quality time synchronization.
+              See  <a href="http://developer.couchbase.com/documentation/server/current/install/synchronize-clocks-using-ntp.html"
+                      target="_blank">Setting Up NTP</a> in the Couchbase documentation.
+            </div>
+          </div>
+        </div>
+
+
+
+
+        <div
+           class="formrow checkbox-list"
+           [hidden]="!(bucketsDialogForm | mnIsMembase)">
+          <label class="inline">Ejection Method</label>
+          <ng-template #ejectionMethodTooltip>
+            <strong>Value Ejection:</strong>
+            During ejection, only the value will be ejected
+            (key and metadata will remain in memory).
+            <br>
+            <strong>Full Ejection:</strong> During ejection,
+            everything (including key, metadata, and value) will be ejected.
+            <br>
+            Value Ejection needs more system memory, but provides
+            the best performance. Full Ejection reduces the memory
+            overhead requirement.
+          </ng-template>
+          <span
+             class="fa-stack icon-info"
+             [ngbTooltip]="ejectionMethodTooltip"
+             placement="top">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow">
+            <input
+               type="radio"
+               name="evictionPolicy"
+               formControlName="evictionPolicy"
+               value="valueOnly"
+               id="for-metadata-value-eject">
+            <label for="for-metadata-value-eject">Value-only</label>
+            <input
+               type="radio"
+               formControlName="evictionPolicy"
+               name="evictionPolicy"
+               value="fullEviction"
+               id="for-metadata-full-eject">
+            <label for="for-metadata-full-eject">Full</label>
+            <div
+               class="error"
+               [hidden]="!(evictionPolicyWarning | async)">
+              {{(evictionPolicyWarning | async)}}
+            </div>
+          </div>
+        </div>
+
+
+        <!-- <label>Access Control</label> -->
+
+
+        <ng-template #ejectionMethodTooltip>
+          <strong>No Ejection:</strong> keeps all data until explicitly deleted,
+          but will reject any new data if you reach the quota (dedicated memory)
+          you set for your bucket.<br>
+          <strong>NRU Ejection:</strong> automatically removes older data to create
+          space for new data if you reach your bucket quota.
+        </ng-template>
+
+        <div
+           class="formrow checkbox-list"
+           [hidden]="!(bucketsDialogForm | mnIsEphemeral)">
+          <label class="inline">Ejection Method</label>
+          <span
+             class="fa-stack icon-info"
+             [ngbTooltip]="ejectionMethodEphemeralTooltip"
+             placement="top">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow">
+            <input
+               type="radio"
+               name="evictionPolicyEphemeral"
+               formControlName="evictionPolicyEphemeral"
+               value="noEviction"
+               id="for-metadata-value-eject-ephemeral">
+            <label for="for-metadata-value-eject-ephemeral">
+              No ejection
+            </label>
+            <input
+               type="radio"
+               name="evictionPolicyEphemeral"
+               formControlName="evictionPolicyEphemeral"
+               value="nruEviction"
+               id="for-metadata-full-eject-ephemeral">
+            <label for="for-metadata-full-eject-ephemeral">
+              NRU ejection
+            </label>
+            <div
+               class="error"
+               [hidden]="!(bucketHttp.error | async)?.errors.evictionPolicy">
+              {{(bucketHttp.error | async)?.errors.evictionPolicy}}
+            </div>
+          </div>
+        </div>
+
+        <div
+           class="formrow"
+           [hidden]="!(bucketsDialogForm | mnIsEphemeral)">
+          <label class="inline">Metadata Purge Interval</label>
+
+          <ng-template #metadataPurgeIntervalTooltip>
+            Set how frequently a node will purge metadata on deleted items. The available range for is 0.0007 - 60 where 0.0007 = 1m, 0.5 = 12h. If set too high, it may significantly delay the node from reclaiming memory space. If set too low, it may cause data inconsistencies in XDCR or Views.
+          </ng-template>
+
+          <span
+             [ngbTooltip]="metadataPurgeIntervalTooltip"
+             class="fa-stack icon-info"
+             placement="top">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="form-inline">
+            <input
+               type="text"
+               formControlName="purgeInterval"
+               id="metadata-purge-frequency">
+            <small>Range 0.0007 (1 minute) - 60 days)</small>
+          </div>
+          <div
+             class="error"
+             [hidden]="!(bucketHttp.error | async)?.errors.purgeInterval">
+            {{(bucketHttp.error | async)?.errors.purgeInterval}}
+          </div>
+        </div>
+
+        <div [hidden]="!((bucketsDialogForm | mnIsMembase) ||
+                       (bucketsDialogForm | mnIsEphemeral))">
+          <label class="inline">Bucket Priority</label>
+
+          <ng-template #bucketPriorityTooltip>
+            This allows tasks to be handled based on priority. The effect is relative between buckets: if all buckets are set to "high", then no bucket will have priority over another.
+          </ng-template>
+
+          <span
+             [ngbTooltip]="bucketPriorityTooltip"
+             class="fa-stack icon-info"
+             placement="right">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow checkbox-list">
+            <input
+               type="radio"
+               formControlName="threadsNumber"
+               value="3"
+               id="for-low-threads">
+            <label for="for-low-threads">Default</label>
+            <input
+               type="radio"
+               formControlName="threadsNumber"
+               value="8"
+               id="for-high-threads">
+            <label for="for-high-threads">High</label>
+          </div>
+          <div
+             class="error"
+             [hidden]="!(threadsNumberWarning | async)">
+            {{(threadsNumberWarning | async)}}
+          </div>
+        </div>
+
+        <!-- <div -->
+        <!--    id="js_bucket_auto_compaction_settings" -->
+        <!--    [hidden]="!(bucketsDialogForm.get('bucketType') | mnIsMembase)"> -->
+        <!--   <label class="inline">Auto-Compaction</label> -->
+        <!--   <ng-template #autoCompactionTooltip> -->
+        <!--     Auto-Compaction settings trigger the compaction process. The process compacts databases and their respective view indexes. -->
+        <!--   </ng-template> -->
+        <!--   <span -->
+        <!--      class="fa-stack icon-info" -->
+        <!--      [ngbTooltip]="autoCompactionTooltip" -->
+        <!--      placement="right"> -->
+        <!--     <span class="icon fa-circle-thin fa-stack-2x"></span> -->
+        <!--     <span class="icon fa-info fa-stack-1x"></span> -->
+        <!--   </span> -->
+        <!--   <div class="formrow checkbox-list"> -->
+        <!--     <input -->
+        <!--        type="checkbox" -->
+        <!--        id="for-auto-compaction-override" -->
+        <!--        formControlName="autoCompactionDefined" -->
+        <!--        value="true"> -->
+        <!--     <label for="for-auto-compaction-override">Override the default auto-compaction settings?</label> -->
+        <!--   </div> -->
+
+        <!--   <mn-autocompaction-form -->
+        <!--      class="formrow checkbox-list" -->
+        <!--      *ngIf="bucketsDialogForm.get('autoCompactionDefined').value" -->
+
+        <!--      auto-compaction-settings="autoCompactionSettings" -->
+        <!--      is-buckets-settings="true"></mn-autocompaction-form> -->
+        <!-- </div> -->
+
+        <label class="inline">Flush</label>
+        <ng-template #flushTooltip>
+          When flushed, ALL items in the bucket are removed as soon as possible. NOTE: This does not immediately show in item count statistics with memcached buckets.
+        </ng-template>
+        <span
+           [ngbTooltip]="flushTooltip"
+           class="fa-stack icon-info"
+           placement="right">
+          <span class="icon fa-circle-thin fa-stack-2x"></span>
+          <span class="icon fa-info fa-stack-1x"></span>
+        </span>
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="flushEnabled"
+             type="checkbox"
+             id="for-enable-flush">
+          <label for="for-enable-flush">Enable</label>
+        </div>
+
+      </div>
+
+    </div>
+    <div class="panel-footer">
+      <a (click)="activeModal.dismiss()">Cancel</a>
+      <button type="submit">
+        <span [hidden]="!isNew">Add Bucket</span>
+        <span [hidden]="isNew">Save Changes</span>
+      </button>
+    </div>
+  </form>
+</div>

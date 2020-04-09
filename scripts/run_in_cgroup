@@ -1,0 +1,169 @@
+#!/bin/bash
+#
+# This is a helper script that allows running a command in a control group
+# with CPU and memory limits applied. Requires libcgroup to be installed.
+#
+# Example:
+#
+#  ./scripts/run_in_cgroup --cpu-limit 0.5 -- ./cluster_run -n1 --dont-rename
+
+CGROUP_FS_PATH="/sys/fs/cgroup"
+CONTROLLERS=('cpu' 'memory')
+
+CGROUP=couchbase
+FORCE=
+CPU_LIMIT=
+MEMORY_LIMIT=
+DISABLE_OOM_KILLER=
+
+function error() {
+    echo "$@" >&2
+}
+
+function fatal() {
+    error "$@"
+    exit 1
+}
+
+function validate() {
+    local arg="$1"
+    local regexp="$2"
+
+    [[ "${arg}" =~ ^(${regexp})$ ]]
+}
+
+function cgroup_exists() {
+    for controller in "${CONTROLLERS[@]}"; do
+        test -d "$CGROUP_FS_PATH/$controller/$CGROUP" && return 0
+    done
+
+    return 1
+}
+
+function cgroup_id() {
+    local IFS=,
+    echo "${CONTROLLERS[*]}:$CGROUP"
+}
+
+function create_cgroup() {
+    sudo cgcreate -a "$USER" -t "$USER" -g "$(cgroup_id)"
+}
+
+function delete_cgroup() {
+    sudo cgdelete -g "$(cgroup_id)" ||
+        error "Failed to delete the control group."
+}
+
+function configure_cgroup() {
+    local controller="$1"
+    local param="$2"
+    local value="$3"
+
+    echo "$value" > "$CGROUP_FS_PATH/$controller/$CGROUP/$param"
+}
+
+function configure_cpu_limit() {
+    local period=1000000
+    local quota
+
+    quota=$(echo "$CPU_LIMIT * $period" | bc) || return 1
+
+    # truncate the fractional part
+    quota=$(printf "%.0f" "$quota") || return 1
+
+    configure_cgroup "cpu" "cpu.cfs_quota_us" "$quota" &&
+        configure_cgroup "cpu" "cpu.cfs_period_us" "$period"
+}
+
+function configure_memory_limit() {
+    local limit="$(( MEMORY_LIMIT * 1024 * 1024 ))"
+    configure_cgroup "memory" "memory.limit_in_bytes" "$limit" || return 1
+    test -z "$DISABLE_OOM_KILLER" ||
+        configure_cgroup "memory" "memory.oom_control" "1"
+}
+
+function usage() {
+    local name="$0"
+
+    cat <<EOF
+Usage:
+	$name [OPTIONS] -- [command [arguments ...]]
+
+Options:
+	--cgroup              Control group name to use (default: couchbase)
+	--cpu-limit           Limit command's CPU cycles. Specified as a fraction of CPU cores to allocate. For example, 0.5 doesn't allow the command to use more than half a CPU core (default: unlimited)
+	--memory-limit        Memory limit in MiBs (default: unlimited)
+	--disable-oom-killer  Disable OOM killer (default: enabled)
+	--force               Proceed even if a control group with the given name already exists (default: not set)
+	--help                Show this help text
+EOF
+}
+
+ARGS=$(getopt -o "" -l \
+              "cgroup:,cpu-limit:,memory-limit:,disable-oom-killer,force,help" \
+              -n "$0" -- "$@")
+test $? -eq 0 || exit 1
+
+eval set -- "$ARGS"
+while true; do
+    case "$1" in
+        --cgroup)
+            CGROUP="$2"
+            shift 2
+            ;;
+        --cpu-limit)
+            CPU_LIMIT="$2"
+            shift 2
+
+            validate "$CPU_LIMIT" "[[:digit:]]+(\.[[:digit:]]+)?" ||
+                fatal "Invalid value '$CPU_LIMIT' for --cpu-limit." \
+                      "Must be a number."
+            ;;
+        --memory-limit)
+            MEMORY_LIMIT="$2"
+            shift 2
+
+            validate "$MEMORY_LIMIT" "[[:digit:]]+" ||
+                fatal "Invalid value '$MEMORY_LIMIT' for --memory-limit." \
+                      "Must be an integer."
+            ;;
+        --disable-oom-killer)
+            DISABLE_OOM_KILLER=yes
+            shift
+            ;;
+        --force)
+            FORCE=yes
+            shift
+            ;;
+        --help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+    esac
+done
+
+if test $# -eq 0; then
+    fatal "No command specified."
+fi
+
+if cgroup_exists && test -z "$FORCE"; then
+    fatal "Control group '$CGROUP' already exists. Refusing to proceed." \
+          "Use --force to override."
+fi
+
+trap delete_cgroup EXIT
+create_cgroup || fatal "Failed to create a control group."
+
+if test -n "$CPU_LIMIT"; then
+    configure_cpu_limit || fatal "Failed to configure CPU limit."
+fi
+
+if test -n "$MEMORY_LIMIT"; then
+    configure_memory_limit || fatal "Failed to configure memory limit."
+fi
+
+cgexec -g "$(cgroup_id)" -- "$@"

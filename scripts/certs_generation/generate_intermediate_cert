@@ -1,0 +1,67 @@
+#!/bin/bash
+# based on https://jamielinux.com/docs/openssl-certificate-authority/create-the-root-pair.html
+
+set -e
+cur_dir=`pwd`
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+function abs_path() {
+    echo "$( cd $1 >/dev/null 2>&1 && pwd )"
+}
+
+read -e -p "Enter directory to put generated intermediate certificate to [./intermediate]:" out_dir
+out_dir="${out_dir:-"./intermediate"}"
+[ ! -d "${out_dir}" ] || { echo "Dir $out_dir already exists"; exit 1; }
+mkdir -p "$out_dir"
+out_dir_abs=$(abs_path "${out_dir}")
+
+read -e -p "Enter directory where root certificate (ca) is located [./ca]:" root_ca_dir
+root_ca_dir="${root_ca_dir:-"./ca"}"
+[ -d "${root_ca_dir}" ] || { echo "Dir $root_ca_dir doesn't exist"; exit 1; }
+root_ca_dir_abs=$(abs_path "${root_ca_dir}")
+
+cd "$out_dir_abs"
+mkdir certs crl csr newcerts private
+chmod 700 private
+touch index.txt
+echo 1000 > serial
+echo 1000 > crlnumber
+
+echo "Creating the intermediate key..."
+keyfile="${out_dir_abs}/private/intermediate.key.pem"
+openssl genrsa -aes256 -out "${keyfile}" 4096
+
+chmod 400 "${keyfile}"
+
+echo "Create a certificate signing request..."
+cnf="${out_dir_abs}/intermediate_conf.cnf"
+csrfile="${out_dir_abs}/csr/intermediate.csr.pem"
+awk "{gsub(/%%DIR%%/,\"$out_dir_abs\")}1" ${script_dir}/intermediate_template.cnf > ${cnf}
+openssl req -config ${cnf} -new -sha256 \
+      -key "${keyfile}" \
+      -out "${csrfile}"
+
+echo "Creating the intermediate certificate..."
+certfile="${out_dir_abs}/certs/intermediate.cert.pem"
+openssl ca -config ${root_ca_dir_abs}/root_conf.cnf -extensions v3_intermediate_ca \
+      -days 3650 -notext -md sha256 \
+      -in "${csrfile}" \
+      -out "${certfile}"
+
+chmod 444 "${certfile}"
+
+echo "Creating chain file..."
+chainfile="${out_dir_abs}/certs/ca-chain.cert.pem"
+cat "${certfile}" \
+    ${root_ca_dir_abs}/certs/ca.cert.pem > ${chainfile}
+
+openssl x509 -noout -text -in "$certfile"
+
+echo "Verifying the intermediate certificate against the root certificate..."
+openssl verify -CAfile ${root_ca_dir_abs}/certs/ca.cert.pem "${certfile}"
+
+cd ${cur_dir}
+echo ""
+echo "Intermediate certificate: ${certfile}"
+echo "Intermediate private key: ${keyfile}"
+echo "Chain (CA + Intermediate certs): ${chainfile}"

@@ -1,0 +1,87 @@
+<div
+   class="panel dialog-med dialog dialog-wizard">
+   <!-- mn-spinner="termsCtl.viewLoading"> -->
+  <div class="panel-header flex-left">
+    <img
+       src="../cb_logo_bug_white_2.svg"
+       width="32"
+       height="32"
+       class="margin-right-half">
+    <h2>Couchbase &gt; New Cluster</h2>
+  </div>
+  <form
+     [formGroup]="termsForm"
+     (ngSubmit)="onSubmit.next()"
+     class="forms"
+     novalidate>
+    <div class="panel-content">
+      <h4 class="inline">Terms and Conditions&nbsp;</h4>
+      <small [hidden]="!(isEnterprise | async)">Enterprise Edition</small>
+      <div
+         class="formrow text-small"
+         [hidden]="!(isEnterprise | async)">
+        <i>Couchbase Server must be licensed for use in production environments.</i>
+      </div>
+      <small [hidden]="(isEnterprise | async)">Community Edition</small>
+
+      <div
+         class="formrow">
+         <!-- mn-spinner="termsCtl.viewLoading"> -->
+        <textarea class="text-smaller" rows="10" readonly="readonly">{{license | async}}</textarea>
+      </div>
+
+      <div
+         class="error error-form"
+         [hidden]="!(termsForm.get('agree').touched || (submitted | async)) ||
+                   !termsForm.get('agree').errors?.required">
+        Terms and conditions need to be accepted in order to continue
+      </div>
+      <div
+         class="error error-form"
+         [hidden]="!(servicesHttp.error | async)">
+        <div *ngFor="let error of (servicesHttp.error | async)">{{error}}</div>
+      </div>
+
+      <div class="row">
+        <div class="formrow">
+          <input
+             type="checkbox"
+             id="for-accept-terms"
+             formControlName="agree"
+             name="agree"
+             required>
+          <label class="checkbox" for="for-accept-terms">
+            I accept the
+            <a [attr.href]="termsHref | async" target="_blank">
+              terms & conditions
+            </a>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-footer">
+      <a class="tight"
+         [uiOptions]="{location: false}"
+         uiSref="app.wizard.newCluster">&lt; Back</a>
+
+      <span>
+        <button
+           type="button"
+           class="outline tight"
+           (click)="onFinishWithDefaut.next()"
+           title="All services enabled / Memory optimized for Couchbase / Default disk paths">
+          Finish With Defaults
+        </button>
+        <!-- ng-click="termsCtl.finishWithDefault()" -->
+        <button
+           [mnFocus]="focusFieldSubject"
+           type="submit"
+           class="tight">
+          Configure Disk, Memory, Services
+        </button>
+      </span>
+    </div>
+  </form>
+</div>
+<!-- END init_update_notifications-->

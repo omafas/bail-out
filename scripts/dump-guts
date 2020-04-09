@@ -1,0 +1,782 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%
+%% @author Couchbase <info@couchbase.com>
+%% @copyright 2013-2018 Couchbase, Inc.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%      http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+-mode(compile).
+
+maybe_add_flag_arg(undefined, Flags) ->
+    Flags;
+maybe_add_flag_arg(FlagArg, Flags) ->
+    [{FlagArg, true} | Flags].
+
+parse_options_loop([], _BoolFlagP, Flags, NonFlags, LastFlag) ->
+    {lists:reverse(maybe_add_flag_arg(LastFlag, Flags)), lists:reverse(NonFlags)};
+parse_options_loop(["--" | RestArgs], BoolFlagP, Flags, NonFlags, LastFlag) ->
+    parse_options_loop([], BoolFlagP, Flags, lists:reverse(RestArgs, NonFlags), LastFlag);
+parse_options_loop(["--" ++ Arg | RestArgs], BoolFlagP, Flags0, NonFlags, LastFlag) ->
+    Flags = maybe_add_flag_arg(LastFlag, Flags0),
+    case lists:splitwith(fun (Chr) -> Chr =/= $= end, Arg) of
+        {_, ""} ->
+            case BoolFlagP(Arg) of
+                true ->
+                    parse_options_loop(RestArgs, BoolFlagP, [{Arg, true} | Flags], NonFlags, undefined);
+                false ->
+                    parse_options_loop(RestArgs, BoolFlagP, Flags, NonFlags, Arg)
+            end;
+        {RealArg, "=" ++ Value} ->
+            parse_options_loop(RestArgs, BoolFlagP, [{RealArg, Value} | Flags], NonFlags, undefined)
+    end;
+parse_options_loop([Arg | RestArgs], BoolFlagP, Flags, NonFlags, undefined = _LastFlag) ->
+    parse_options_loop(RestArgs, BoolFlagP, Flags, [Arg | NonFlags], undefined);
+parse_options_loop([ArgValue | RestArgs], BoolFlagP, Flags, NonFlags, LastFlag) ->
+    true = (LastFlag =/= undefined),
+    parse_options_loop(RestArgs, BoolFlagP, [{LastFlag, ArgValue} | Flags], NonFlags, undefined).
+
+filter_bad_flags(Flags, BoolFlagP, AccBool, AccNonBool) ->
+    case Flags of
+        [] ->
+            {AccBool, AccNonBool};
+        [{Flag, Value} | RestFlags] ->
+            NeedBool = BoolFlagP(Flag),
+            GotBool = (Value =:= true),
+            case NeedBool =:= GotBool of
+                false ->
+                    case NeedBool of
+                        true -> filter_bad_flags(RestFlags, BoolFlagP, [Flag | AccBool], AccNonBool);
+                        _ -> filter_bad_flags(RestFlags, BoolFlagP, AccBool, [Flag, AccNonBool])
+                    end;
+                _ ->
+                    filter_bad_flags(RestFlags, BoolFlagP, AccBool, AccNonBool)
+            end
+    end.
+
+parse_options(Args, BoolFlagP) ->
+    {Flags, NonFlags} = parse_options_loop(Args, BoolFlagP, [], [], undefined),
+    case filter_bad_flags(Flags, BoolFlagP, [], []) of
+        {[], []} ->
+            {ok, Flags, NonFlags};
+        {BadBool, BadNonBool} ->
+            {bad_flags, BadBool, BadNonBool, Flags, NonFlags}
+    end.
+
+complain(Format, Args) ->
+    io:format(standard_error, Format, Args).
+
+maybe_report_unknown_flags(Flags) ->
+    case [Flag || {Flag, _} <- Flags,
+                  not valid_option(Flag)] of
+        [] ->
+            true;
+        BadFlags ->
+            [complain("Got unknown flag: --~s~n", [Flag]) || Flag <- BadFlags],
+            false
+    end.
+
+options_descriptions() ->
+    [{"static-config", "<path-to-config>"},
+     {"node-file", "<path-to-node-file>"},
+     {"node-name", undefined},
+     {"couch-inis", "<paths to etc/couchdb/*.ini separated by ;>"},
+     {"initargs-path", "<path to var/lib/couchbase/initargs>"},
+     {"guess-prefix", bool},
+     {"help", bool}].
+
+valid_option(Name) ->
+    case lists:keyfind(Name, 1, options_descriptions()) of
+        false -> false;
+        _ -> true
+    end.
+
+bool_option_p(Name) ->
+    case lists:keyfind(Name, 1, options_descriptions()) of
+        {_, bool} -> true;
+        _ -> false
+    end.
+
+parse_app_flags(Args) ->
+    case parse_options(Args, fun (X) -> bool_option_p(X) end) of
+        {ok, Flags, NonFlags} ->
+            case maybe_report_unknown_flags(Flags) of
+                true ->
+                    {Flags, NonFlags};
+                _ ->
+                    complain("\n", []),
+                    usage(),
+                    erlang:halt(1)
+            end;
+        {bad_flags, BadBools, BadNonBools, Flags, _} ->
+            [complain("Value flag ~s (i.e. --~s=<value>) is used without value~n", [Flag, Flag])
+             || Flag <- BadNonBools,
+                valid_option(Flag)],
+            [complain("Bool flag --~s used as value flag (--~s=<value>)~n", [Flag, Flag])
+             || Flag <- BadBools,
+                valid_option(Flag)],
+            maybe_report_unknown_flags(Flags),
+            complain("\n", []),
+            usage(),
+            erlang:halt(1)
+    end.
+
+main(Args) ->
+    try
+        case parse_app_flags(Args) of
+            {Flags, NonFlags} ->
+                case proplists:get_value("help", Flags) of
+                    true ->
+                        usage(),
+                        erlang:halt(0);
+                    _ ->
+                        main_main(Flags, NonFlags)
+                end;
+            X ->
+                X
+        end
+    catch T:E ->
+            Stack = erlang:get_stacktrace(),
+            complain("Got exception: ~p~n~p~n~n", [{T, E}, Stack]),
+            timer:sleep(100),
+            erlang:raise(T, E, Stack)
+    end.
+
+-record(config, {static_config,
+                 node_file,
+                 node_name,
+                 couch_inis,
+                 initargs_path,
+                 guess_prefix}).
+
+flag_to_config_field("static-config") -> #config.static_config;
+flag_to_config_field("node-file") -> #config.node_file;
+flag_to_config_field("node-name") -> #config.node_name;
+flag_to_config_field("couch-inis") -> #config.couch_inis;
+flag_to_config_field("initargs-path") -> #config.initargs_path;
+flag_to_config_field("guess-prefix") -> #config.guess_prefix.
+
+confget(Field) ->
+    Config = erlang:get(config),
+    erlang:element(Field, Config).
+
+do_get_initargs(Path) ->
+    case file:read_file(Path) of
+        {ok, Binary} ->
+            case (catch {ok, binary_to_term(Binary)}) of
+                {ok, _Term} = RV ->
+                    RV;
+                Err ->
+                    {error, {binary_to_term_failed, Err}}
+            end;
+        Err ->
+            Err
+    end.
+
+get_initargs(#config{initargs_path = Path}) ->
+    Key = {get_initargs, Path},
+    case erlang:get(Key) of
+        undefined ->
+            RV = do_get_initargs(Path),
+            case RV of
+                {ok, _} ->
+                    %% complain("Got initargs:~n~p~n", [RV]),
+                    ok;
+                _ ->
+                    complain("Failed to read initargs:~n~p~n", [RV])
+            end,
+            erlang:put(Key, RV),
+            RV;
+        RV ->
+            RV
+    end.
+
+get_app_init_arg(InitArgs, App, Flag) ->
+    AppEnv = proplists:get_value(App, InitArgs, []),
+    case lists:keyfind(Flag, 1, AppEnv) of
+        false ->
+            {error, not_found};
+        {_, V} ->
+            {ok, V}
+    end.
+
+massage_config_with_not_undefined(Config, Field) ->
+    Config1 = setelement(Field, Config, not_undefined),
+    Config2 = massage_config(Config1),
+    setelement(Field, Config2, undefined).
+
+massage_config(#config{initargs_path = undefined,
+                       guess_prefix = true} = Config) ->
+    Path = filename:absname(
+             filename:join([filename:dirname(escript:script_name()),
+                            "..",
+                            "var",
+                            "lib"
+                            "couchbase",
+                            "initargs"])),
+    massage_config(Config#config{initargs_path = Path});
+massage_config(#config{static_config = undefined,
+                       initargs_path = InitArgsPath} = Config) when InitArgsPath =/= undefined ->
+    case get_initargs(Config) of
+        {ok, InitArgs} ->
+            case get_app_init_arg(InitArgs, ns_server, config_path) of
+                {ok, ConfigPath0} ->
+                    ConfigPath = filename:absname(ConfigPath0, proplists:get_value(cwd, InitArgs, "/")),
+                    massage_config(Config#config{static_config = ConfigPath});
+                Err ->
+                    complain("Failed to extract config_path from initargs: ~p~n", [Err]),
+                    massage_config_with_not_undefined(Config, #config.static_config)
+            end;
+        _Err ->
+            massage_config_with_not_undefined(Config, #config.static_config)
+    end;
+massage_config(#config{couch_inis = undefined,
+                       initargs_path = InitArgsPath} = Config) when InitArgsPath =/= undefined ->
+    case get_initargs(Config) of
+        {ok, InitArgs} ->
+            case proplists:get_value(couch_ini, InitArgs) of
+                undefined ->
+                    complain("Failed to get couch_ini: ~p~n", [InitArgs]),
+                    massage_config_with_not_undefined(Config, #config.couch_inis);
+                Values0 ->
+                    CWD = proplists:get_value(cwd, InitArgs, "/"),
+                    Values = [filename:absname(V, CWD) || V <- Values0],
+                    Config#config{couch_inis = string:join(Values, ";")}
+            end;
+        _Err ->
+            massage_config_with_not_undefined(Config, #config.couch_inis)
+    end;
+massage_config(Config) ->
+    Config.
+
+main_main(_Flags, [_|_]) ->
+    complain("Got non-option arguments~n", []),
+    usage(),
+    %% {ok, Bin} = file:read_file("etc/capi.ini.in"),
+    %% complain("Couch stuff:~n~p~n", [parse_couch_ini_file(Bin)]),
+    erlang:halt(1);
+main_main(Flags, []) ->
+    Config0 = lists:foldl(fun ({Flag, Value}, Acc) ->
+                                  Field = flag_to_config_field(Flag),
+                                  erlang:setelement(Field, Acc, Value)
+                          end, #config{}, Flags),
+    Config = massage_config(Config0),
+
+    erlang:put(config, Config),
+    StaticPath = Config#config.static_config,
+
+    case StaticPath of
+        undefined ->
+            case Config of
+                #config{initargs_path = undefined} ->
+                    complain("--static-config= or --initargs-path= option is required\n", []),
+                    usage();
+                _ ->
+                    ok
+            end,
+            erlang:halt(1);
+        _ ->
+            case file:consult(StaticPath) of
+                {ok, Terms} when is_list(Terms) ->
+                    Terms2 = case get_initargs(Config) of
+                                 {ok, InitArgs} ->
+                                     maybe_override_static_config_with_initargs(Terms, InitArgs);
+                                 _ ->
+                                     Terms
+                             end,
+                    main_with_static_config(Terms2);
+                Err ->
+                    io:format(standard_error, "Failed to read static config ~s (~p):~n~p~n", [filename:absname(StaticPath), file:get_cwd(), Err]),
+                    erlang:halt(1)
+            end
+    end.
+
+maybe_override_static_config_with_initargs(Terms, InitArgs) ->
+    %% complain("InitArgs:~n~p", [InitArgs]),
+    Prepends0 =
+        [case get_app_init_arg(InitArgs, ns_server, K) of
+             {ok, Value} ->
+                 %% complain("overriding: ~p with ~p~n", [K, Value]),
+                 [{K, Value}];
+             _Err ->
+                 %% complain("Not overriding ~p: ~p~n", [K, Err]),
+                 []
+         end || {K, _} <- Terms],
+    lists:append(Prepends0) ++ Terms.
+
+read_config(DataDir) ->
+    DynamicCfgPath = filename:join([DataDir, "config", "config.dat"]),
+    %% complain("Will read config.dat here: ~s~n", [DynamicCfgPath]),
+    case file:read_file(DynamicCfgPath) of
+        {ok, Data} ->
+            [Config|_] = erlang:binary_to_term(Data),
+            {ok, Config};
+        Err ->
+            Err
+    end.
+
+trim_from_left(String) ->
+    lists:dropwhile(fun (C) ->
+                            case C of
+                                $\s -> true;
+                                $\r -> true;
+                                $\t -> true;
+                                $\n -> true;
+                                _ -> false
+                            end
+                    end, String).
+
+trim(String) ->
+    String2 = trim_from_left(String),
+    lists:reverse(trim_from_left(lists:reverse(String2))).
+
+do_read_node_file(Path) ->
+    case file:read_file(Path) of
+        {ok, B} ->
+            {ok, list_to_atom(trim(binary_to_list(B)))};
+        Err ->
+            complain("Failed to read node-file (~s): ~p~n", [Path, Err]),
+            failed
+    end.
+
+do_read_node(StaticConfig) ->
+    case confget(#config.node_name) of
+        undefined ->
+            case confget(#config.node_file) of
+                undefined ->
+                    do_read_node_file(proplists:get_value(nodefile, StaticConfig));
+                Path ->
+                    do_read_node_file(Path)
+            end;
+        NodeString ->
+            {ok, list_to_atom(NodeString)}
+    end.
+
+read_couch_ini_file(Path) ->
+    %% complain("Reading couch ini: ~p~n", [Path]),
+    case file:read_file(Path) of
+        {ok, Binary} ->
+            parse_couch_ini_file(Binary);
+        Err ->
+            Err
+    end.
+
+read_couch_inis() ->
+    Paths0 = confget(#config.couch_inis),
+    %% usually last ini file overrides any values in previous
+    %% config. To get similar behavior with simple proplist:get_value
+    %% we reverse list of inis
+    Paths = lists:reverse(string:tokens(Paths0, ";")),
+    RVPairs = [{Name, read_couch_ini_file(Name)}
+               || Name <- Paths],
+    Errors = [Pair || {_, RV} = Pair <- RVPairs,
+                      case RV of
+                          {ok, _} -> false;
+                          _ -> true
+                      end],
+    case Errors of
+        [] ->
+            {ok, lists:append([case RV of
+                                   {ok, Config} -> Config
+                               end || {_, RV} <- RVPairs])};
+        _ ->
+            [complain("Failed to load ~s due to ~p~n", [Name, Error])
+             || {Name, Error} <- Errors],
+            failed
+    end.
+
+main_with_static_config(Terms) ->
+    %% io:format("Terms:~n~p~n", [Terms]),
+
+    case lists:keyfind(path_config_datadir, 1, Terms) of
+        {_, DataDir} ->
+            case (catch read_config(DataDir)) of
+                {ok, NSConfig} ->
+                    main_after_ns_config(Terms, NSConfig);
+                Err ->
+                    complain("Failed to read ns_config: ~p~n", [Err]),
+                    erlang:halt(1)
+            end;
+        _ ->
+            complain("static config is missing path_config_datadir~n~p~n", [Terms]),
+            erlang:halt(1)
+    end.
+
+main_after_ns_config(Terms, NSConfig) ->
+    case read_couch_inis() of
+        {ok, CouchInisPList} ->
+            main_after_couch_inis(Terms, NSConfig, CouchInisPList);
+        failed ->
+            erlang:halt(1)
+    end.
+
+main_after_couch_inis(Terms, NSConfig, CouchInisPList) ->
+    case do_read_node(Terms) of
+        {ok, Atom} ->
+            case lists:keyfind({node, Atom, port_servers}, 1, NSConfig) of
+                false ->
+                    complain("Given node name (~s) doesn't appear in ns_config.~n", [Atom]),
+                    erlang:halt(1);
+                _ ->
+                    main_with_everything(Terms, NSConfig, CouchInisPList, Atom)
+            end;
+        failed ->
+            %% NOTE: error is already reported here
+            erlang:halt(1)
+    end.
+
+strip_config_meta([{'_vclock', _} | Value]) ->
+    Value;
+strip_config_meta(Value) ->
+    Value.
+
+search_config(NSConfig, Key, Default) ->
+    case lists:keyfind(Key, 1, NSConfig) of
+        false ->
+            Default;
+        {_, Value} ->
+            strip_config_meta(Value)
+    end.
+
+search_config_for_node(NSConfig, Node, Key, Default) ->
+    None = make_ref(),
+    case search_config(NSConfig, {node, Node, Key}, None) of
+        None ->
+            search_config(NSConfig, Key, Default);
+        Value ->
+            Value
+    end.
+
+extract_rest_port(NSConfig, Node) ->
+    None = make_ref(),
+    case search_config_for_node(NSConfig, Node, rest, None) of
+        None ->
+            dig_rest_port(search_config(NSConfig, rest, []));
+        KV ->
+            case lists:keyfind(port_meta, 1, KV) of
+                {port_meta, global} ->
+                    dig_rest_port(search_config(NSConfig, rest, []));
+                _ ->
+                    dig_rest_port(KV)
+            end
+    end.
+
+%% those are copied from misc.erl. We cannot use misc.erl directly
+%% because we're standalone escript
+dig_rest_port(KV) ->
+    search_config(KV, port, "").
+
+rewrite(Fun, Term) ->
+    case Fun(Term) of
+        continue ->
+            do_rewrite(Fun, Term);
+        {stop, NewTerm} ->
+            NewTerm
+    end.
+
+do_rewrite(Fun, [H|T]) ->
+    [rewrite(Fun, H) | rewrite(Fun, T)];
+do_rewrite(_Fun, []) ->
+    [];
+do_rewrite(Fun, Tuple) when is_tuple(Tuple) ->
+    list_to_tuple(do_rewrite(Fun, tuple_to_list(Tuple)));
+do_rewrite(_Fun, Term) ->
+    Term.
+
+rewrite_tuples(Fun, Struct) ->
+    rewrite(
+      fun (Term) ->
+              case is_tuple(Term) of
+                  true ->
+                      case Fun(Term) of
+                          {continue, NewTerm} ->
+                              NewTerm1 =
+                                  list_to_tuple(
+                                    rewrite_tuples(Fun, tuple_to_list(NewTerm))),
+                              {stop, NewTerm1};
+                          {stop, NewTerm} ->
+                              {stop, NewTerm}
+                      end;
+                  false ->
+                      continue
+              end
+      end,
+      Struct).
+
+%% this one is taken from ns_config_log
+sanitize_config(Config) ->
+    rewrite_tuples(
+      fun ({password, _}) ->
+              {stop, {password, "*****"}};
+          ({sasl_password, _}) ->
+              {stop, {sasl_password, "*****"}};
+          ({admin_pass, _}) ->
+              {stop, {admin_pass, "*****"}};
+          ({pass, _}) ->
+              {stop, {pass, "*****"}};
+          ({cert_and_pkey, [VClock|{Cert, _PKey}]}) ->
+              {stop, {cert_and_pkey, [VClock|{Cert, <<"*****">>}]}};
+          ({cert_and_pkey, {Cert, _PKey}}) ->
+              {stop, {cert_and_pkey, {Cert, <<"*****">>}}};
+          ({{metakv, K}, [VClock|{metakv_sensitive, _V}]}) ->
+              {stop, {{metakv, K}, [VClock|{metakv_sensitive,
+                                            <<"*****">>}]}};
+          ({{metakv, K}, {metakv_sensitive, _V}}) ->
+              {stop, {{metakv, K}, {metakv_sensitive, <<"*****">>}}};
+          ({cookie, _Cookie}) ->
+              {stop, {cookie, "*****"}};
+          ({rest_creds, [_|_]}) ->
+              {stop, {rest_creds, "*****"}};
+          ({disabled_users, _ListUsers}) ->
+              {stop, {disabled_users, "*****"}};
+          (Other) ->
+              {continue, Other}
+      end, Config).
+
+find_port(NSConfig, Node, ConfigKey, DefaultPort) ->
+    Port = search_config_for_node(NSConfig, Node, ConfigKey, DefaultPort),
+    {ConfigKey, integer_to_list(Port)}.
+
+find_ports(NSConfig, Node, Services, Candidates) ->
+    [find_port(NSConfig, Node, ConfigKey, DefaultPort)
+     || {Service, ConfigKey, DefaultPort} <- Candidates, lists:member(Service, Services)].
+
+main_with_everything(StaticTerms, NSConfig, CouchInisPList, Node) ->
+    DBDir = proplists:get_value({"couchdb", "database_dir"}, CouchInisPList, ""),
+    IdxDir = proplists:get_value({"couchdb", "view_index_dir"}, CouchInisPList, ""),
+    RestPort = extract_rest_port(NSConfig, Node),
+    MCDConfig = search_config_for_node(NSConfig, Node, memcached, []),
+    MCDDefaults = search_config_for_node(NSConfig, Node, memcached_defaults, []),
+    MCDPort = search_config(MCDConfig, dedicated_port, ""),
+    MCDAdmin = search_config(MCDConfig, admin_user, ""),
+    MCDLogs = search_config(MCDConfig, log_path, ""),
+
+    %% Minidump path can be overridden both globally and per-node, so have
+    %% to check three possible locations:
+    DefaultMDD = search_config(MCDDefaults, breakpad_minidump_dir_path, ""),
+    GlobalMDD = search_config(search_config(NSConfig, memcached, []),
+                              breakpad_minidump_dir_path, DefaultMDD),
+    PerNodeMDD = search_config(MCDConfig, breakpad_minidump_dir_path,
+                               GlobalMDD),
+
+    BucketConfigs = search_config(search_config(NSConfig, buckets, []),
+                                  configs, []),
+    BucketTypePairs = [{Name, search_config(Props, type, undefined)} || {Name, Props} <- BucketConfigs],
+    BucketNames = [Name || {Name, _} <- BucketTypePairs],
+    MCDBucketNames = [Name || {Name, memcached} <- BucketTypePairs],
+
+    MoxiConfig = search_config_for_node(NSConfig, Node, moxi, []),
+    MoxiPort = search_config(MoxiConfig, port, undefined),
+    PerBucketMoxiPorts = [P || {_, Props} <- BucketConfigs,
+                               P <- [proplists:get_value(moxi_port, Props)]],
+
+    MoxiPorts = [integer_to_list(P) || P <- [MoxiPort | PerBucketMoxiPorts],
+                                       is_integer(P)],
+
+    NSLogPath = search_config(search_config_for_node(NSConfig, Node, ns_log, []),
+                              filename,
+                              ""),
+    NSLog = (catch read_ns_log(NSLogPath)),
+
+    Nodes = [node_host(N) || N <- search_config(NSConfig, nodes_wanted, [])],
+
+    Services = search_config_for_node(NSConfig, Node, services, [kv]),
+
+    Candidates = [{n1ql, query_port, 8093},
+                  {index, indexer_http_port, 9102},
+                  {kv, projector_port, 9999},
+                  {fts, fts_http_port, 8094},
+                  {cbas, cbas_admin_port, 9110},
+                  {cbas, cbas_parent_port, 9122},
+                  {eventing, eventing_http_port, 8096}],
+    OtherPorts = [find_port(NSConfig, Node, xdcr_rest_port, 9998) |
+                  find_ports(NSConfig, Node, Services, Candidates)],
+
+    {_, DataDir} = lists:keyfind(path_config_datadir, 1, StaticTerms),
+    StatsDir = filename:join(DataDir, "stats"),
+
+    IndexerMDD = filename:join(DataDir, "crash"),
+
+    UsersStoragePath = filename:join([DataDir, "config", "users.dets"]),
+
+    DistCfgPath = filename:join([DataDir, "config", "dist_cfg"]),
+    Ipv6 = is_net_config_ipv6(DistCfgPath),
+
+    Pairs = OtherPorts ++
+        [{ns_config, iolist_to_binary(io_lib:format("~p", [sanitize_config(NSConfig)]))},
+         {static_config, iolist_to_binary(io_lib:format("~p", [StaticTerms]))},
+         {couch_inis, confget(#config.couch_inis)},
+         {node, Node},
+         {db_dir, DBDir},
+         {idx_dir, IdxDir},
+         {rest_port, RestPort},
+         {memcached_port, MCDPort},
+         {moxi_ports, string:join(MoxiPorts, ",")},
+         {buckets, string:join(BucketNames, ",")},
+         {memcached_buckets, string:join(MCDBucketNames, ",")},
+         {ns_log_path, NSLogPath},
+         {ns_log, iolist_to_binary(io_lib:format("~p", [NSLog]))},
+         {log_path, search_config(StaticTerms, error_logger_mf_dir, "")},
+         {memcached_admin, MCDAdmin},
+         {memcached_logs_path, MCDLogs},
+         {memcached_breakpad_minidump_dir, PerNodeMDD},
+         {indexer_breakpad_minidump_dir, IndexerMDD},
+         {nodes, string:join(Nodes, ",")},
+         {stats_dir, StatsDir},
+         {localtoken_path, filename:join(DataDir, "localtoken")},
+         {users_storage_path, UsersStoragePath},
+         {dist_cfg_path, DistCfgPath},
+         {ipv6, Ipv6}],
+
+    output([E || {K, V} <- Pairs,
+                 E <- [K, V]]),
+
+    _ = io:rows(user),
+
+    %% not sure why but output to tty is sometimes truncated otherwise
+    timer:sleep(100),
+
+    erlang:halt(0).
+
+is_net_config_ipv6(DistCfgPath) ->
+    case file:consult(DistCfgPath) of
+        %% Backward Compat
+        {ok, [false]} -> false;
+        {ok, [{dist_type, inet6_tcp, _}]} -> true;
+        {ok, [{dist_type, inet6_tcp}]}    -> true;
+        {ok, [{dist_type, _, _}]} -> false;
+        {ok, [{dist_type, _}]}    -> false;
+        {ok, []} -> false;
+        %% End of backward compat
+        {ok, [Cfg]} ->
+            Proto = proplists:get_value(preferred_external_proto, Cfg,
+                                        inet_tcp_dist),
+            (Proto =:= inet6_tcp_dist) orelse (Proto =:= inet6_tls_dist);
+        {error, enoent} -> false;
+        {error, _} = Err ->
+            io:format(standard_error,
+                      "Failed to read dist_cfg file '~s': ~p~n",
+                      [filename:absname(DistCfgPath), Err]),
+            erlang:halt(1)
+    end.
+
+read_ns_log(Path) ->
+    {ok, B} = file:read_file(Path),
+    B1 = zlib:uncompress(B),
+    binary_to_term(B1).
+
+node_host(Node) ->
+    [_, Host | _] = string:tokens(atom_to_list(Node), "@"),
+    Host.
+
+binarify_output_item(Binary) when is_binary(Binary) -> Binary;
+binarify_output_item(Atom) when is_atom(Atom) -> atom_to_binary(Atom, latin1);
+binarify_output_item(Int) when is_integer(Int) -> integer_to_list(Int);
+binarify_output_item(String) when is_list(String) -> String.
+
+output(Items) ->
+    io:fwrite("~s", [[[binarify_output_item(Item) | <<0:8>>] || Item <- Items]]).
+
+usage() ->
+    Descs = options_descriptions(),
+    Options =
+        [case BoolText of
+             bool ->
+                 ["  --", Name, "\n"];
+             _ ->
+                 ["  --", Name, "=", case BoolText of
+                                         undefined ->
+                                             ["<", Name, ">"];
+                                         _ ->
+                                             BoolText
+                                     end, "\n"]
+         end || {Name, BoolText} <- Descs],
+    io:format(standard_error, "Usage: ~s [OPTION]\n\nOptions:~n~s", [escript:script_name(), Options]).
+
+couchutil_implode(List, Sep) ->
+    couchutil_implode(List, Sep, []).
+
+couchutil_implode([], _Sep, Acc) ->
+    lists:flatten(lists:reverse(Acc));
+couchutil_implode([H], Sep, Acc) ->
+    couchutil_implode([], Sep, [H|Acc]);
+couchutil_implode([H|T], Sep, Acc) ->
+    couchutil_implode(T, Sep, [Sep,H|Acc]).
+
+
+%% this is stolen from couch_config.erl and massaged a bit
+parse_couch_ini_file(IniBin) ->
+    Lines = re:split(IniBin, "\r\n|\n|\r|\032", [{return, list}]),
+    {_, ParsedIniValues} =
+        lists:foldl(
+          fun(Line, {AccSectionName, AccValues}) ->
+                  case string:strip(Line) of
+                      "[" ++ Rest ->
+                          case re:split(Rest, "\\]", [{return, list}]) of
+                              [NewSectionName, ""] ->
+                                  {NewSectionName, AccValues};
+                              _Else -> % end bracket not at end, ignore this line
+                                  {AccSectionName, AccValues}
+                          end;
+                      ";" ++ _Comment ->
+                          {AccSectionName, AccValues};
+                      Line2 ->
+                          case re:split(Line2, "\s?=\s?", [{return, list}]) of
+                              [Value] ->
+                                  MultiLineValuePart = case re:run(Line, "^ \\S", []) of
+                                                           {match, _} ->
+                                                               true;
+                                                           _ ->
+                                                               false
+                                                       end,
+                                  case {MultiLineValuePart, AccValues} of
+                                      {true, [{{_, ValueName}, PrevValue} | AccValuesRest]} ->
+                                                % remove comment
+                                          case re:split(Value, " ;|\t;", [{return, list}]) of
+                                              [[]] ->
+                                                % empty line
+                                                  {AccSectionName, AccValues};
+                                              [LineValue | _Rest] ->
+                                                  E = {{AccSectionName, ValueName},
+                                                       PrevValue ++ " " ++ LineValue},
+                                                  {AccSectionName, [E | AccValuesRest]}
+                                          end;
+                                      _ ->
+                                          {AccSectionName, AccValues}
+                                  end;
+                              [""|_LineValues] -> % line begins with "=", ignore
+                                  {AccSectionName, AccValues};
+                              [ValueName|LineValues] -> % yeehaw, got a line!
+                                  RemainingLine = couchutil_implode(LineValues, "="),
+                                  %% removes comments
+                                  case re:split(RemainingLine, " ;|\t;", [{return, list}]) of
+                                      [[]] ->
+                                          %% ALK: clearly this
+                                          %% stateful code works for
+                                          %% cases when later file
+                                          %% overrides earlier
+                                          %% file. But given we're
+                                          %% going to read just one
+                                          %% file we're fine without
+                                          %% it.
+                                          %%
+                                          %% empty line means delete this key
+                                          %% ets:delete(?MODULE, {AccSectionName, ValueName}),
+                                          {AccSectionName, AccValues};
+                                      [LineValue | _Rest] ->
+                                          {AccSectionName,
+                                           [{{AccSectionName, ValueName}, LineValue} | AccValues]}
+                                  end
+                          end
+                  end
+          end, {"", []}, Lines),
+    {ok, ParsedIniValues}.

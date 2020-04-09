@@ -1,0 +1,19 @@
+<div>
+  <h5>Warmup Progress</h5>
+  <hr>
+  <div class="column indent-1 text-smaller">
+    <div *ngFor="let task of tasks | async">
+      <span
+         [attr.title]="task[mnSortBy]"
+         class="ellipsis">
+        {{task[mnSortBy]}}
+      </span>
+      <span>{{task | mnFormatWarmupMessage}}</span>
+    </div>
+    <a
+       [hidden]="isTasksLessThanLimit | async"
+       (click)="onToggle.next($event)">
+      {{toggleText | async}}
+    </a>
+  </div>
+</div>

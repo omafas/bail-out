@@ -1,0 +1,65 @@
+<div [formGroup]="group">
+  <div
+     class="error"
+     [hidden]="!(postPoolsDefault.error | async)?.errors._">
+    {{(postPoolsDefault.error | async)?.errors._}}
+  </div>
+
+  <div *ngFor="let service of (mnServices | async)">
+    <div class="row formrow">
+      <div
+         class="width-6"
+         *ngIf="group.value.flag"
+         formGroupName="flag">
+        <input
+           [formControlName]="service"
+           type="checkbox"
+           [attr.id]="service + '-ram-flag'">
+        <!-- *ngIf="config.services" -->
+        <!-- ng-model="config.services.model.kv" -->
+        <!-- ng-disabled="config.services.disabled.kv" -->
+        <label
+           [attr.for]="service + '-ram-flag'"
+           class="checkbox">
+          {{getServiceName(service)}}
+        </label>
+      </div>
+      <label
+         *ngIf="!group.value.flag"
+         [attr.for]="service + '-service-field'"
+         class="width-6">
+        {{getServiceName(service)}}
+      </label>
+      <small
+         class="form-inline width-6 text-center"
+         *ngIf="group.value.field && service == 'n1ql'">
+        - - - - - - -
+      </small>
+      <div
+         class="row width-6 flex-right relative"
+         *ngIf="group.value.field && (service !== 'n1ql')"
+         formGroupName="field">
+        <input
+           [attr.id]="service + '-service-field'"
+           type="number"
+           [formControlName]="service"
+           [mnFocus]="focusFieldSubject">
+        <!-- ng-disabled="config.services && !config.services.model.kv || (rbac && !rbac.cluster.pools.write)" -->
+        <!-- ng-model="config.memoryQuota" -->
+        <div class="inside-label">MB</div>
+      </div>
+    </div>
+
+    <div
+       class="error"
+       [hidden]="!(postPoolsDefault.error | async)?.errors[getServiceErrorName(service)]">
+      {{(postPoolsDefault.error | async)?.errors[getServiceErrorName(service)]}}
+    </div>
+  </div>
+</div>
+
+<div
+   *ngIf="group.value.field && group.value.flag"
+   class="text-small text-right nowrap margin-right-1">
+  <strong>TOTAL QUOTA</strong> &nbsp; {{total | async}} MB
+</div>

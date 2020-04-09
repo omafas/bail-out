@@ -1,0 +1,139 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%
+%% @author Couchbase <info@couchbase.com>
+%% @copyright 2015-2018 Couchbase, Inc.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%      http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+
+%% A script dumping all the stats archives in the passed directory in
+%% json format to stdout.
+
+-mode(compile).
+
+fatal(Msg) ->
+    fatal(Msg, []).
+fatal(Fmt, Args) ->
+    io:format(standard_error, "dump-stats: ~s~n",
+              [io_lib:format(Fmt, Args)]),
+    erlang:halt(1).
+
+get_archives(StatsDir) ->
+    RegExp = "^stats_archiver-(.+)\.(minute|hour|day|week|month|year).gz$",
+    Archives =
+        filelib:fold_files(
+          StatsDir, RegExp, false,
+          fun (Path, Acc) ->
+                  FileName = filename:basename(Path),
+                  {match, [Bucket0, Period0]} =
+                      re:run(FileName, RegExp,
+                             [anchored, {capture, all_but_first, list}]),
+
+                  Bucket = list_to_binary(Bucket0),
+                  Period = list_to_binary(Period0),
+
+                  misc:dict_update(Bucket,
+                                   fun (Periods) ->
+                                           [{Period, Path} | Periods]
+                                   end, [], Acc)
+          end, dict:new()),
+
+    dict:to_list(Archives).
+
+json_producer(Archives) ->
+    fun (Yield) ->
+            stream_archives(Archives, Yield)
+    end.
+
+stream_archives(Archives, Yield) ->
+    Yield(object_start),
+    lists:foreach(
+      fun ({Bucket, BucketArchives}) ->
+              stream_bucket_archives(Bucket, BucketArchives, Yield)
+      end, Archives),
+    Yield(object_end).
+
+stream_bucket_archives(Bucket, Archives, Yield) ->
+    Yield({kv_start, Bucket}),
+    Yield(object_start),
+    lists:foreach(
+      fun ({Period, Path}) ->
+              stream_one_archive(Period, Path, Yield)
+      end, Archives),
+    Yield(object_end),
+    Yield(kv_end).
+
+stream_one_archive(Period, Path, Yield) ->
+    Yield({kv_start, Period}),
+    do_stream_one_archive(Path, Yield),
+    Yield(kv_end).
+
+do_stream_one_archive(Path, Yield) ->
+    case file:open(Path, [raw, binary, read]) of
+        {ok, F} ->
+            try
+                Yield(object_start),
+                Yield({kv, {status, ok}}),
+                Yield({kv_start, samples}),
+                stream_samples(F, Yield),
+                Yield(kv_end),
+                Yield(object_end)
+            after
+                file:close(F)
+            end;
+        Error ->
+            send_error(Yield, Error)
+    end.
+
+send_error(Yield, Error) ->
+    Yield({json,
+           {[{status, failed},
+             {error, couch_util:to_binary(Error)}]}}).
+
+stream_samples(F, Yield) ->
+    Producer = pipes:compose([pipes:read_file(F),
+                              pipes:gunzip(),
+                              pipes:unmarshal_terms()]),
+    Yield(array_start),
+    pipes:foreach(Producer,
+                  fun ({Ts, {stat_entry, _, Sample}}) ->
+                          Yield({json,
+                                 {[{ts, Ts},
+                                   {sample, {Sample}}]}})
+                  end),
+    Yield(array_end).
+
+dump_stats(Archives, F) ->
+    pipes:run(json_producer(Archives),
+              sjson:encode_extended_json([{compact, false},
+                                          {strict, true}]),
+              pipes:write_file(F)).
+
+do_main(StatsDir, OutputFile) ->
+    Archives = get_archives(StatsDir),
+    misc:with_file(OutputFile,
+                   [raw, binary, write],
+                   fun (F) ->
+                           dump_stats(Archives, F)
+                   end).
+
+main([StatsDir, OutputFile]) ->
+    try
+        do_main(StatsDir, OutputFile)
+    catch T:E ->
+            Stack = erlang:get_stacktrace(),
+            fatal("failed to encode stats to ~p: ~p~n~p",
+                  [OutputFile, {T, E}, Stack])
+    end;
+main(_) ->
+    fatal("usage: dump-stats <stats_dir> <output file>").

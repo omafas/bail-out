@@ -1,0 +1,66 @@
+#!/bin/sh
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2016 Couchbase, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Average cpu utilization.
+#
+# Example usage:
+#
+# ./cpu --period day stats_archives.json | ./avg_cpu --regex 'beam.smp|memcached'
+#
+
+REGEX='.*'
+ARGS=$(getopt -o r: -l regex: -n "$0" -- "$@")
+
+if [ $? != 0 ]; then
+    exit 1
+fi
+
+eval set -- "$ARGS"
+
+while true; do
+    case "$1" in
+        -r|--regex) REGEX=$2; shift 2;;
+        --) shift; break;;
+    esac
+done
+
+jq --arg regex "$REGEX" '
+def getProcName: capture("^(?<proc>[^/]+)/") | .proc;
+
+def combineEntries:
+  group_by(.key) |
+  map(
+    .[0].key as $key |
+    (map(.value) | add) as $value |
+    {key: $key, value: $value});
+
+def processProcs:
+  to_entries |
+  map(.key = (.key | getProcName)) |
+  map(select(.key | test($regex))) |
+  combineEntries |
+  from_entries;
+
+length as $n |
+map(
+  {total_cpu: .total_cpu} + (.cpu | processProcs) |
+  to_entries) |
+flatten |
+combineEntries |
+map(.value = .value / $n) |
+from_entries
+' "$@"

@@ -1,0 +1,131 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%
+%% @author Couchbase <info@couchbase.com>
+%% @copyright 2015 Couchbase, Inc.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%      http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+
+%% A script meant to execute erlang scripts like escript does. But before
+%% doing so, it reads the initargs file to get server code paths and passes
+%% them to actual escript invocation. That allows reusing server code in the
+%% scripts.
+
+-mode(compile).
+
+fatal(Msg) ->
+    fatal(Msg, []).
+fatal(Fmt, Args) ->
+    io:format(standard_error, "escript-wrapper: ~s~n",
+              [io_lib:format(Fmt, Args)]),
+    erlang:halt(1).
+
+get_initargs(Path) ->
+    case do_get_initargs(Path) of
+        {ok, InitArgs} ->
+            InitArgs;
+        {error, _} = Error ->
+            fatal("failed to read initargs file at ~s: ~p", [Path, Error])
+    end.
+
+do_get_initargs(Path) ->
+    case file:read_file(Path) of
+        {ok, Binary} ->
+            try
+                {ok, binary_to_term(Binary)}
+            catch
+                _:_ ->
+                    {error, binary_to_term_failed}
+            end;
+        Error ->
+            Error
+    end.
+
+get_initargs_path(Args) ->
+    case do_get_initargs_path(Args) of
+        {ok, Path} ->
+            Path;
+        {error, not_found} ->
+            fatal("missing --initargs-path argument")
+    end.
+
+do_get_initargs_path([]) ->
+    {error, not_found};
+do_get_initargs_path([_]) ->
+    {error, not_found};
+do_get_initargs_path(["--initargs-path", Path | _]) ->
+    {ok, Path};
+do_get_initargs_path([_ | Rest]) ->
+    do_get_initargs_path(Rest).
+
+split_args(Args) ->
+    {OurArgs, RestArgs} = lists:splitwith(
+                            fun (Arg) ->
+                                    Arg =/= "--"
+                            end, Args),
+
+    case RestArgs of
+        [] ->
+            fatal("command line is missing");
+        ["--" | Cmd] ->
+            {OurArgs, Cmd}
+    end.
+
+get_code_path(InitArgs) ->
+    case lists:keyfind(code_path, 1, InitArgs) of
+        false ->
+            fatal("can't find code_path in initargs:~n~p", [InitArgs]);
+        {_, CodePath} ->
+            CodePath
+    end.
+
+escript_path() ->
+    case os:find_executable("escript") of
+        false ->
+            fatal("couldn't find escript in PATH");
+        Path ->
+            Path
+    end.
+
+exec(Cmd, InitArgs) ->
+    CodePath = get_code_path(InitArgs),
+    Escript = escript_path(),
+
+    %% escript has a really weird way of passing extra options to the erl
+    %% executable: you need to prepend - to anything you want to pass through,
+    %% escript will remove leading - before doing so
+    CodePathArgs = lists:flatmap(
+                     fun (PathDir) ->
+                             ["--pa", [$- | PathDir]]
+                     end, CodePath),
+    Port = erlang:open_port({spawn_executable, Escript},
+                            [{args, CodePathArgs ++ Cmd},
+                             stream, stderr_to_stdout,
+                             exit_status, hide, binary]),
+    exec_loop(Port).
+
+exec_loop(Port) ->
+    receive
+        {Port, {data, Data}} ->
+            ok = file:write(standard_io, Data),
+            exec_loop(Port);
+        {Port, {exit_status, Status}} ->
+            erlang:halt(Status);
+        Msg ->
+            fatal("received unexpected message: ~p", [Msg])
+    end.
+
+main(Args) ->
+    {OurArgs, Cmd} = split_args(Args),
+    InitArgs = get_initargs(get_initargs_path(OurArgs)),
+    exec(Cmd, InitArgs).

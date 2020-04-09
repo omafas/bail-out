@@ -1,0 +1,82 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%
+%% @author Couchbase <info@couchbase.com>
+%% @copyright 2011-2012 Couchbase, Inc.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%      http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%
+%% ------------------------------------------------------------------------
+%%
+%% @doc Dump a config.dat file to stdout.
+%%
+%%   cbdump_config [options]
+%%
+%% The options can be used to filter the output.  These include:
+%%
+%%   node <Node>
+%%   buckets <BucketType>
+%%
+%% Examples:
+%%   linux:
+%%     ./bin/cbdump_config var/lib/couchbase/config/config.dat
+%%   windows:
+%%     bin\erlang\escript bin\cbdump_config var\lib\couchbase\config\config.dat
+%%
+%% Example of dumping info for a particular node...
+%%   cbdump_config config.dat node ns_1@127.0.0.1
+%%
+%% Example of dumping buckets names of type membase...
+%%   cbdump_config config.dat buckets membase
+
+main([Path]) ->
+    Config = read(Path),
+    io:fwrite("~p~n", [Config]);
+
+main([Path, "node", Node]) ->
+    Config = read(Path),
+    emit("~p.~n", node_only(Config, list_to_atom(Node), []));
+
+main([Path, "buckets", Type]) ->
+    Config = read(Path),
+    emit("~s~n", buckets_only(Config, list_to_atom(Type))).
+
+%% ----------------------------------------
+
+read(Path) ->
+    {ok, Data} = file:read_file(Path),
+    [Config|_] = erlang:binary_to_term(Data),
+    Config.
+
+emit(_Fmt, []) -> ok;
+emit(Fmt, [X | Rest]) ->
+    io:fwrite(Fmt, [X]),
+    emit(Fmt, Rest).
+
+node_only([], _Node, Acc) -> Acc;
+node_only([{{node, Node, _Key}, _Val} = KeyVal | Rest], Node, Acc) ->
+    node_only(Rest, Node, [KeyVal | Acc]);
+node_only([_NonMatchingKeyVal | Rest], Node, Acc) ->
+    node_only(Rest, Node, Acc).
+
+buckets_only(Config, Type) ->
+    keys(Type, proplists:get_value(configs, proplists:get_value(buckets, Config)), []).
+
+keys(_Type, [], Acc) ->
+    Acc;
+keys(Type, [{Key, Val} | Rest], Acc) ->
+    case proplists:get_value(type, Val) of
+        Type -> keys(Type, Rest, [Key | Acc]);
+        _    -> keys(Type, Rest, Acc)
+    end.
+

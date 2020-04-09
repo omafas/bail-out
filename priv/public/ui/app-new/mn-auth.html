@@ -1,0 +1,84 @@
+<div class="sign-in-background"></div>
+<div class="row flex-center items-top dialog_main_wrapper">
+  <div class="panel dialog-small dialog">
+    <div class="panel-header">
+      <img
+         src="/cb_logo_bug_white.svg"
+         width="40"
+         height="40"
+         class="logobug"
+         alt="Couchbase Server">
+      <h2>Couchbase Server</h2>
+    </div>
+    <form
+       [formGroup]="form.group"
+       (ngSubmit)="form.submit.next()"
+       class="forms"
+       novalidate>
+
+      <div class="panel-content">
+        <div
+           class="error error-form"
+           [hidden]="!((postUILogin.error | async)?.status)"
+           [ngSwitch]="(postUILogin.error | async)?.status">
+          <span *ngSwitchCase="'initialized'">
+            This cluster has been initialized.
+          </span>
+          <span *ngSwitchCase="400">
+            Login failed. Please try again.
+          </span>
+          <span *ngSwitchCase="401">
+            Login failed. Please try again.
+          </span>
+          <span *ngSwitchCase="403">
+            User does not have permission to log into the UI.
+          </span>
+          <span *ngSwitchCase="410">
+            The client's version does not match the server's. Please reload the tab.
+          </span>
+        </div>
+
+        <div class="formrow">
+          <input
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             type="text"
+             id="auth-username-input"
+             name="username"
+             placeholder="Username"
+             formControlName="user"
+             [mnFocus]="focusFieldSubject">
+          <div
+             [hidden]="!form.group.get('user').dirty"
+             class="error error-field">
+            <div [hidden]="!form.group.get('user').errors?.required">Username is required.</div>
+          </div>
+        </div>
+
+        <input
+           type="password"
+           autocorrect="off"
+           spellcheck="false"
+           id="auth-password-input"
+           name="password"
+           placeholder="Password"
+           formControlName="password">
+        <!-- mn-autocomplete-off -->
+
+        <div
+           [hidden]="!form.group.get('password').dirty"
+           class="error error-field">
+          <div [hidden]="!form.group.get('password').errors?.required">Password is required.</div>
+        </div>
+
+      </div>
+      <div class="panel-footer">
+        <button
+           [disabled]="form.group.invalid"
+           type="submit">
+          Sign In</button>
+      </div>
+    </form>
+  </div>
+</div>

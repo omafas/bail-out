@@ -1,0 +1,44 @@
+<div class="checkbox-list storage-mode formrow">
+  <div *ngIf="showForestDB | async">
+    <input
+       type="radio"
+       value="forestdb"
+       id="storage_mode_forestdb"
+       [formControl]="control">
+    <label for="storage_mode_forestdb" class="checkbox">
+      {{(isEnterprise | async) ? 'Legacy' : 'Standard'}} Global Secondary
+    </label>
+  </div>
+  <div *ngIf="showPlasma | async">
+    <input
+       type="radio"
+       value="plasma"
+       [formControl]="control"
+       id="storage_plasma_indexes">
+    <label for="storage_plasma_indexes" class="checkbox">
+      Standard Global Secondary
+    </label>
+  </div>
+  <div>
+    <input
+       type="radio"
+       value="memory_optimized"
+       [formControl]="control"
+       id="storage_memory_optimized">
+    <label for="storage_memory_optimized" class="checkbox margin-right-zero">
+      Memory-Optimized
+    </label>
+    <!-- <span -->
+    <!--    class="fa-stack icon-info" -->
+    <!--    uib-tooltip="Memory-optimized indexing is highly performant but requires careful attention to your index RAM quota. It is an Enterprise-only feature." -->
+    <!--    tooltip-placement="top"> -->
+    <!--   <span class="icon fa-circle-thin fa-stack-2x"></span> -->
+    <!--   <span class="icon fa-info fa-stack-1x"></span> -->
+    <!-- </span> -->
+  </div>
+  <div
+     class="error error-field"
+     [hidden]="!(indexesHttp.error | async)?.errors?.storageMode">
+    {{(indexesHttp.error | async)?.errors?.storageMode | mnFormatStorageModeError}}
+  </div>
+</div>

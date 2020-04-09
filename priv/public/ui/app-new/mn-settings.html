@@ -1,0 +1,35 @@
+<mn-element-cargo depot="subnav">
+  <nav
+     class="sub-nav">
+     <!--     mn-pluggable-ui-tabs -->
+     <!-- mn-tab-bar-name="settingsTab" -->
+
+     <a
+        [hidden]="!(settingsRead | async)"
+        uiSref="app.admin.settings.generalSettings"
+        uiSrefActive="selected">General</a>
+     <!-- <a -->
+     <!--    id="settings_compaction" -->
+    <!--    class="casper_settings_compaction resp-hide-sml" -->
+    <!--    ng-show="rbac.cluster.settings.read" -->
+    <!--    ui-sref="app.admin.settings.autoCompaction" -->
+    <!--    ui-sref-active="selected">Auto-Compaction</a> -->
+    <a
+       [hidden]="!(settingsRead | async)"
+       uiSref="app.admin.settings.autoCompaction"
+       uiSrefActive="selected">Auto-Compaction</a>
+    <a
+       [hidden]="!(settingsRead | async)"
+       uiSref="app.admin.settings.emailAlerts"
+       uiSrefActive="selected">Email Alerts</a>
+    <!-- <a -->
+    <!--    id="settings_sample_buckets" -->
+    <!--    class="casper_settings_sample_buckets resp-hide-sml" -->
+    <!--    ng-show="rbac.cluster.samples.read" -->
+    <!--    ui-sref="app.admin.settings.sampleBuckets" -->
+    <!--    ui-sref-active="selected">Sample Buckets</a> -->
+  </nav>
+</mn-element-cargo>
+
+<div ui-view="" class="margin-top-half padding-left-1">
+</div>

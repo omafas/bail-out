@@ -1,0 +1,583 @@
+#!/usr/bin/env python
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2011-2019 Couchbase, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import os
+import os.path
+import subprocess
+import sys
+import atexit
+import socket
+import getopt
+import shlex
+import platform
+import fnmatch
+import errno
+import shutil
+
+base_direct_port = 12000
+base_api_port = 9000
+base_couch_port = 9500
+base_projector_port = 10000
+base_xdcr_port = 13000
+base_indexer_port = 9100
+base_fts_port = 9200
+base_eventing_port = 9300
+base_cbas_port = 9600
+
+LOGLEVELS = ["debug", "info", "warn", "error", "critical"]
+
+
+def read_configuration():
+    with open("build/cluster_run.configuration") as f:
+        def fn(line):
+            k, v = line.strip().split('=')
+            return k, shlex.split(v)[0]
+
+        return dict(fn(line) for line in f.readlines())
+
+
+config = read_configuration()
+PREFIX = config['prefix']
+
+
+def setup_extra_ns_server_app_file(force_community, start_index):
+    # The extra/ebin directory contains modified versions of files also
+    # contained in other directories.  The ones in extra/ebin are listed
+    # in the path directory such that they will take precedence when
+    # loaded.  Note the -pa option used when starting erl reverses the
+    # order of the list.
+    extra_dirname = "extra"
+    extra_ebin_dirname = "{}/n_{}".format(extra_dirname, start_index)
+    extra_ebin_path = extra_ebin_dirname + "/ebin"
+    returned_path = None
+
+    # Clean up any residual files from prior runs.
+    try:
+        if force_community:
+            # Just delete the node-specific directory that we're going
+            # to recreate with new content.  There could be concurrent
+            # instances running so can't more than that.
+            shutil.rmtree(extra_ebin_dirname)
+        else:
+            # Get rid of the entire directory as we don't want any residual
+            # files being found when walking the directory (see ebin_seach).
+            shutil.rmtree(extra_dirname)
+    except OSError as exc:
+        if exc.errno == errno.ENOENT:
+            pass
+        else:
+            raise
+
+    if force_community:
+        found_enterprise = False
+        with open("./ebin/ns_server.app", "r") as src_f:
+            lines = src_f.readlines()
+
+        lines_out = ""
+        for line in lines:
+            # The way to change Enterprise edition to Community edition is to
+            # simply change the "vsn" in the ns_server app.
+            if "vsn" in line and "enterprise" in line:
+                line = line.replace("enterprise", "community")
+                # Ensure only one line containing "vsn" and "enterprise".
+                assert found_enterprise is False
+                found_enterprise = True
+            lines_out = lines_out + line
+
+        if found_enterprise:
+            # Any errors here are "real" so we want exceptions thrown
+            os.makedirs(extra_ebin_path)
+
+            with open("./{}/ns_server.app".format(
+                    extra_ebin_path), "w") as dst_f:
+                dst_f.write(lines_out)
+
+            returned_path = extra_ebin_path
+
+    return returned_path
+
+
+def setup_path(ns_server_app_path):
+    def ebin_search(path_name):
+        dirs = os.walk(path_name)
+        ebins = []
+
+        for d, _, _ in dirs:
+            if os.path.basename(d) == "ebin":
+                ebins.append(d)
+
+        return ebins
+
+    path = ebin_search(".")
+    if ns_server_app_path in path:
+        # The ns_server_app_path needs to be first in the path. We remove
+        # it from what was found and append it to the path (it's at the
+        # end as the -pa argument used when starting erl reverses the
+        # order).
+        path.remove(ns_server_app_path)
+        path.append(ns_server_app_path)
+
+    couchpath = ebin_search("{0}/lib/couchdb/erlang/lib".format(PREFIX))
+    couch_plugins = ebin_search("{0}/lib/couchdb/plugins".format(PREFIX))
+
+    if len(couchpath) == 0:
+        sys.exit("Couch libs wasn't found.\nCan't handle it")
+
+    # Note the paths are passed via "-pa" to the erl process where their
+    # ordering is reversed.
+    return couchpath + path + couch_plugins
+
+
+def maybe_mk_node_couch_config(i):
+    ini_file_name = "couch/n_{0}_conf.ini".format(i)
+
+    # If ini file exists, then don't overwrite it.
+    if os.path.isfile(ini_file_name):
+        return
+
+    try:
+        os.mkdir("couch")
+    except os.error:
+        pass
+
+    with open(ini_file_name, "w") as f:
+        f.write("[httpd]\n")
+        f.write("port={0}\n".format(base_couch_port + i))
+        f.write("[couchdb]\n")
+        f.write("database_dir={0}/data/n_{1}/data\n".format(os.getcwd(), i))
+        f.write("view_index_dir={0}/data/n_{1}/data\n".format(os.getcwd(), i))
+        f.write("max_dbs_open=10000\n")
+        f.write("[upr]\n")
+        f.write("port={0}\n".format(base_direct_port + i * 2))
+        f.write("[dcp]\n")
+        f.write("port={0}\n".format(base_direct_port + i * 2))
+
+
+def couch_configs(i):
+    maybe_mk_node_couch_config(i)
+    return ["{0}/etc/couchdb/default.ini".format(PREFIX),
+            "{0}/etc/couchdb/default.d/capi.ini".format(PREFIX),
+            "{0}/etc/couchdb/default.d/geocouch.ini".format(PREFIX),
+            "couch/n_{0}_conf.ini".format(i)]
+
+
+def os_specific(args, params):
+    """Add os-specific junk to the cluster startup."""
+    if platform.system() == 'Windows':
+        args += ["dont_suppress_stderr_logger", "false"]
+    else:
+        args += ["dont_suppress_stderr_logger", "true"]
+    if platform.system() == 'Darwin':
+        import resource
+        # OS X has a pretty tiny default fd limit.  Let's increase it
+        # (if it hasn't already been).
+        (soft, hard) = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft < 2048:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (2048, 2048))
+        params['env'] = {"ERL_MAX_PORTS": "2048"}
+        params['env'].update(os.environ)
+
+
+def is_ipv6_setup():
+    return os.getenv("IPV6", "false") == "true"
+
+
+def prepare_start_cluster(force_community, start_index):
+    ns_server_app_path = setup_extra_ns_server_app_file(force_community,
+                                                        start_index)
+
+    ebin_path = setup_path(ns_server_app_path)
+    return ebin_path
+
+
+def quote_string_for_erl(s):
+    return '"' + s.replace("\\", "\\\\").replace("\"", "\\\"") + '"'
+
+
+def generate_ssl_dist_optfile(datadir):
+    cfg_dir = os.path.join(datadir, "config")
+    in_file = os.path.join(os.getcwd(), "etc", "ssl_dist_opts.in")
+    out_file = os.path.join(cfg_dir, "ssl_dist_opts")
+
+    if not os.path.exists(cfg_dir):
+        os.makedirs(cfg_dir, 0o755)
+
+    with open(in_file) as f:
+        content = f.read().replace('@CONFIG_PREFIX@', cfg_dir)
+
+    with open(out_file, "w") as f:
+        f.write(content)
+
+    return out_file
+
+
+def erlang_args_for_node(i, ebin_path, extra_args, args_prefix):
+    logdir = os.path.abspath("logs/n_{0}".format(i))
+
+    args = args_prefix + ["erl", "+MMmcs" "30",
+                          "+A", "16", "+sbtu",
+                          "+sbwt", "none",
+                          "+P", "327680", "-pa"] + ebin_path
+    args += [
+        "-setcookie", "nocookie",
+        "-kernel", "error_logger", "false",
+        "-sasl", "sasl_error_logger", "false",
+        "-couch_ini"] + couch_configs(i)
+
+    datadir = os.path.abspath('data/n_{0}'.format(i))
+    tempdir = os.path.abspath('tmp/')
+    nodefile = os.path.join(datadir, "nodefile")
+    babysitternodefile = os.path.join(
+        datadir, "couchbase-server.babysitter.node")
+    babysittercookiefile = os.path.join(
+        datadir, "couchbase-server.babysitter.cookie")
+    ssloptfile = generate_ssl_dist_optfile(datadir)
+    cb_dist_config = os.path.join(datadir, "config", "dist_cfg")
+
+    args += [
+        "-name", "babysitter_of_n_{0}@cb.local".format(i),
+        "-proto_dist", "cb",
+        "-ssl_dist_optfile", ssloptfile,
+        "-epmd_module", "cb_epmd",
+        "-hidden",
+        "-kernel", "dist_config_file", quote_string_for_erl(cb_dist_config),
+        "-kernel", "inetrc", "\"etc/hosts.cfg\"",
+        "-kernel", "external_tcp_port", "21400",
+        "-kernel", "external_tls_port", "21450",
+        "-ns_babysitter", "cookiefile", quote_string_for_erl(
+            babysittercookiefile),
+        "-ns_babysitter", "nodefile", quote_string_for_erl(babysitternodefile),
+        "-ns_server", "config_path", '"etc/static_config.in"',
+        "error_logger_mf_dir", quote_string_for_erl(logdir),
+        "path_config_etcdir", '"priv"',
+        "path_config_bindir", quote_string_for_erl(PREFIX + "/bin"),
+        "path_config_libdir", quote_string_for_erl(PREFIX + "/lib"),
+        "path_config_datadir", quote_string_for_erl(datadir),
+        "path_config_tmpdir", quote_string_for_erl(tempdir),
+        "path_config_secdir", quote_string_for_erl(PREFIX + "/etc/security"),
+        "path_audit_log", quote_string_for_erl(logdir),
+        "rest_port", str(base_api_port + i),
+        "query_port", str(base_couch_port - 1 - i),
+        "ssl_query_port", str(10000 + base_couch_port - 1 - i),
+        "projector_port", str(base_projector_port + i),
+        "projector_ssl_port", str(base_projector_port + i),
+        "ssl_rest_port", str(10000 + base_api_port + i),
+        "capi_port", str(base_couch_port + i),
+        "ssl_capi_port", str(10000 + base_couch_port + i),
+        "memcached_port", str(base_direct_port + i * 2),
+        "memcached_dedicated_port", str(base_direct_port - i * 4 - 1),
+        "memcached_ssl_port", str(base_direct_port - i * 4 - 2),
+        "memcached_dedicated_ssl_port", str(base_direct_port - i * 4 - 3),
+        "nodefile", quote_string_for_erl(nodefile),
+        "short_name", quote_string_for_erl('n_{0}'.format(i)),
+        "xdcr_rest_port", str(base_xdcr_port + i),
+        "indexer_admin_port", str(base_indexer_port + i * 6),
+        "indexer_scan_port", str(base_indexer_port + i * 6 + 1),
+        "indexer_http_port", str(base_indexer_port + i * 6 + 2),
+        "indexer_https_port", str(10000 + base_indexer_port + i * 6 + 2),
+        "indexer_stinit_port", str(base_indexer_port + i * 6 + 3),
+        "indexer_stcatchup_port", str(base_indexer_port + i * 6 + 4),
+        "indexer_stmaint_port", str(base_indexer_port + i * 6 + 5),
+        "fts_http_port", str(base_fts_port + i * 2),
+        "fts_ssl_port", str(10000 + base_fts_port + i * 2),
+        "fts_grpc_port", str(base_fts_port + i * 2 + 1),
+        "fts_grpc_ssl_port", str(10000 + base_fts_port + i * 2 + 1),
+        "eventing_http_port", str(base_eventing_port + i),
+        "eventing_https_port", str(10000 + base_eventing_port + i),
+        "eventing_debug_port", str(base_eventing_port + i * 6 + 1),
+        "cbas_http_port", str(base_cbas_port + i * 15),
+        "cbas_cc_http_port", str(base_cbas_port + i * 15 + 1),
+        "cbas_cc_cluster_port", str(base_cbas_port + i * 15 + 2),
+        "cbas_cc_client_port", str(base_cbas_port + i * 15 + 3),
+        "cbas_console_port", str(base_cbas_port + i * 15 + 4),
+        "cbas_cluster_port", str(base_cbas_port + i * 15 + 5),
+        "cbas_data_port", str(base_cbas_port + i * 15 + 6),
+        "cbas_result_port", str(base_cbas_port + i * 15 + 7),
+        "cbas_messaging_port", str(base_cbas_port + i * 15 + 8),
+        "cbas_debug_port", str(base_cbas_port + i * 15 + 9),
+        "cbas_parent_port", str(base_cbas_port + i * 15 + 10),
+        "cbas_admin_port", str(base_cbas_port + i * 15 + 11),
+        "cbas_replication_port", str(base_cbas_port + i * 15 + 12),
+        "cbas_metadata_port", str(base_cbas_port + i * 15 + 13),
+        "cbas_metadata_callback_port", str(base_cbas_port + i * 15 + 14),
+        "cbas_ssl_port", str(10000 + base_cbas_port + i)
+    ] + extra_args
+
+    return args
+
+
+def start_cluster(num_nodes, start_index, extra_args, args_prefix,
+                  force_community):
+
+    ebin_path = prepare_start_cluster(force_community, start_index)
+
+    def start_node(node_num):
+        logdir = "logs/n_{0}".format(node_num)
+        try:
+            os.makedirs(logdir)
+        except OSError:
+            pass
+
+        args = erlang_args_for_node(node_num, ebin_path, extra_args,
+                                    args_prefix)
+
+        params = {}
+
+        os_specific(args, params)
+
+        if 'env' not in params:
+            params['env'] = {}
+            params['env'].update(os.environ)
+        path = params['env']['PATH']
+        path = (PREFIX + "/bin") + os.pathsep + path
+        if 'ERL_FULLSWEEP_AFTER' not in params['env']:
+            params['env']['ERL_FULLSWEEP_AFTER'] = '512'
+        params['env']['PATH'] = path
+
+        crash_dump_base = 'erl_crash.dump.n_%d' % node_num
+        params['env']['ERL_CRASH_DUMP_BASE'] = crash_dump_base
+        params['env']['ERL_CRASH_DUMP'] = crash_dump_base + '.babysitter'
+
+        params['env']['COUCHBASE_SMALLER_PKEYS'] = '1'
+
+        params['close_fds'] = True
+        if platform.system() == "Windows":
+            params['close_fds'] = False
+
+        w = None
+        r = None
+
+        if "-noinput" in args:
+            (r, w) = os.pipe()
+
+            params['stdin'] = r
+
+            if 'setpgrp' in os.__dict__ and params.get('close_fds'):
+                # this puts child out of our process group. So that
+                # Ctrl-C doesn't deliver SIGINT to it, leaving us
+                # ability to it shutdown carefully or otherwise
+                params['preexec_fn'] = os.setpgrp
+
+        pr = subprocess.Popen(args, **params)
+        if w is not None:
+            os.close(r)
+
+        # Squirrel away the write descriptor for the pipe into the
+        # subprocess.Popen object
+        pr.write_side = w
+
+        return pr
+
+    return [start_node(i + start_index) for i in xrange(num_nodes)]
+
+
+def usage():
+    print("usage: {0}\n\
+            [--nodes=<number of nodes>] (default: 1)\n\
+            [--dont-rename] (don't change network address)\n\
+            [--dont-start] (don't start ns_server)\n\
+            [--static-cookie] (don't reset cookie)\n\
+            [--start-index=<index>] (starting node number; default: 0)\n\
+            [--loglevel=<level>] (logging level; default: 'debug')\n\
+            [--prepend-extras] (extra arguments)\n\
+            [--pluggable-config=<file name>] (plug-ins)\n\
+            [--minified] (use minified files)\n\
+            [--disable-autocomplete] (disable auto-completion in UI)\n\
+            [--pretend-version=<version> (spoof different version;\n\
+                                          default: current version)\n\
+            [--community] (boot as Community Edition)\n\
+            [ns_server args]".format(sys.argv[0]))
+
+
+def find_primary_addr(ipv6):
+    family = socket.AF_INET6 if ipv6 else socket.AF_INET
+    dns_addr = "2001:4860:4860::8844" if ipv6 else "8.8.8.8"
+    s = socket.socket(family, socket.SOCK_DGRAM)
+    try:
+        s.connect((dns_addr, 53))
+        if ipv6:
+            addr, port, _, _ = s.getsockname()
+        else:
+            addr, port = s.getsockname()
+
+        return addr
+    except socket.error:
+        return None
+    finally:
+        s.close()
+
+
+def main():
+    try:
+        optlist, args = getopt.gnu_getopt(sys.argv[1:], "hn:p:",
+                                          ["help", "start-index=", "nodes=",
+                                           "dont-rename",
+                                           "static-cookie", "dont-start",
+                                           "loglevel=",
+                                           "prepend-extras",
+                                           "pluggable-config=",
+                                           "minified", "disable-autocomplete",
+                                           "community",
+                                           "pretend-version=", "afamily="])
+    except getopt.GetoptError as err:
+        # print help information and exit:
+        print str(err)  # will print something like "option -a not recognized"
+        usage()
+        sys.exit(2)
+
+    ipv6 = is_ipv6_setup()
+
+    dont_rename = False
+    dont_start = False
+    static_cookie = False
+    start_index = 0
+    num_nodes = 1
+    prepend_extras = False
+    loglevel = 'debug'
+    pluggable_config = []
+    use_minified = False
+    disable_autocomplete = "{disable_autocomplete,false}"
+    pretend_version = None
+    force_community_edition = False
+
+    for o, a in optlist:
+        if o in ("--nodes", "-n"):
+            num_nodes = int(a)
+        elif o == '--dont-start':
+            dont_start = True
+        elif o == '--start-index':
+            start_index = int(a)
+        elif o == '--dont-rename':
+            dont_rename = True
+        elif o in ("--help", "-h"):
+            usage()
+            exit(0)
+        elif o == "--static-cookie":
+            static_cookie = True
+        elif o == '--loglevel':
+            loglevel = a
+        elif o == "--prepend-extras":
+            prepend_extras = True
+        elif o == "--pluggable-config":
+            pluggable_config.append(a)
+        elif o == "--minified":
+            use_minified = True
+        elif o == "--disable-autocomplete":
+            disable_autocomplete = "{disable_autocomplete,true}"
+        elif o == "--pretend-version":
+            pretend_version = a
+        elif o in ("--afamily", "-p"):
+            if a == "ipv6":
+                ipv6 = True
+            elif a == "ipv4":
+                ipv6 = False
+            else:
+                assert False, "invalid address family"
+        elif o == "--community":
+            force_community_edition = True
+        else:
+            assert False, "unhandled options"
+
+    nodes = []
+    terminal_attrs = None
+
+    def kill_nodes():
+        for n in nodes:
+            if n.write_side is not None:
+                print("Closing %d\n" % n.write_side)
+                # this line does graceful shutdown versus quick
+                # os.write(n.write_side, "shutdown\n")
+                os.close(n.write_side)
+            else:
+                try:
+                    n.kill()
+                except OSError:
+                    pass
+
+        for n in nodes:
+            n.wait()
+
+        if terminal_attrs is not None:
+            termios.tcsetattr(sys.stdin, termios.TCSANOW, terminal_attrs)
+
+    atexit.register(kill_nodes)
+
+    try:
+        import termios
+        terminal_attrs = termios.tcgetattr(sys.stdin)
+    except Exception:
+        pass
+
+    extra_args = []
+    if not dont_rename:
+        primary_addr = find_primary_addr(ipv6)
+        if primary_addr is None:
+            print("was unable to detect 'internet' address of this machine."
+                  + " node rename will be disabled")
+        else:
+            extra_args += ["rename_ip", '"' + primary_addr + '"']
+
+    if prepend_extras:
+        prepend_args = args[0:]
+    else:
+        prepend_args = []
+        extra_args += args[0:]
+
+    if static_cookie:
+        extra_args += ["-ns_server", "dont_reset_cookie", "true"]
+
+    if dont_start:
+        extra_args += ["-run", "t", "fake_loggers"]
+    else:
+        extra_args += ["-noinput"]
+        extra_args += ["-run", "child_erlang", "child_start",
+                       "ns_babysitter_bootstrap"]
+        extra_args += ["-ns_babysitter", "handle_ctrl_c", "true"]
+
+    if loglevel not in LOGLEVELS:
+        print "Valid log levels are the following: %s" % ', '.join(LOGLEVELS)
+        sys.exit(1)
+    extra_args += ["-ns_server", "loglevel_stderr", loglevel]
+
+    plugins_dir = '../build/cluster_run_ui_plugins'
+    if os.path.isdir(plugins_dir):
+        for f in os.listdir(plugins_dir):
+            if fnmatch.fnmatch(f, 'pluggable-ui-*.cluster_run.json'):
+                pluggable_config.append(os.path.join(plugins_dir, f))
+
+    if pluggable_config:
+        extra_args += ["-ns_server", "ui_plugins",
+                       quote_string_for_erl(','.join(pluggable_config))]
+
+    ui_env = [disable_autocomplete]
+
+    extra_args += ["-ns_server", "use_minified",
+                   "true" if use_minified else "false"]
+    extra_args += ["-ns_server", "ui_env", '[' + ','.join(ui_env) + ']']
+
+    if pretend_version is not None:
+        extra_args += ["-ns_server",
+                       "pretend_version", '"{}"'.format(pretend_version)]
+
+    nodes = start_cluster(num_nodes, start_index, extra_args,
+                          prepend_args, force_community_edition)
+
+    for node in nodes:
+        node.wait()
+
+
+if __name__ == '__main__':
+    main()

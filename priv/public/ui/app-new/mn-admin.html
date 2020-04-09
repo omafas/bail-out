@@ -1,0 +1,246 @@
+<ng-template #loading><div class="spinner"></div></ng-template>
+<div class="page-wrap" *ngIf="!!(isAdminRootReady | async); else loading">
+  <!-- <div -->
+  <!--    ng-if="rbac.cluster.settings.read" -->
+  <!--    mn-launchpad -->
+  <!--    launchpad-source="adminCtl.launchpadSource" -->
+  <!--    launchpad-id="adminCtl.launchpadId"></div> -->
+  <!-- <div -->
+  <!--    ui-view="lostConnection"> -->
+  <!-- </div> -->
+
+  <div class="row">
+    <nav class="nav-header">
+      <a (click)="toggleProgressBar()"
+         class="activities"
+         *ngIf="(tasksRead | async)">
+        Activity
+        <span
+           [hidden]="!(tasksToDisplay| async)?.length > 0"
+           class="label badge">
+          {{(tasksToDisplay| async)?.length}}
+        </span>
+      </a>
+      <div
+         class="relative inline"
+         *ngIf="(tasksRead | async)">
+        <div
+           class="tasks-progress dialog-small"
+           mnDraggable
+           [@mnMinimize]
+           [baseCornerRight]="true"
+           *ngIf="!(isProgressBarClosed | async)">
+          <div class="close-tasks">
+            <span (click)="toggleProgressBar()">X</span>
+          </div>
+          <div class="panel-content">
+            <div
+               class="text-small margin-bottom-1"
+               [hidden]="(tasksToDisplay | async)?.length">
+              No active processes to display
+            </div>
+            <div *ngFor="let task of tasksToDisplay | async">
+              <div class="text-small text-left">
+                {{task | mnFormatProgressMessage}}
+                <span [hidden]="!task.progress">{{(task.progress | number: '1.0-1') + '%'}}</span>
+              </div>
+              <div
+                 class="bar-wrapper"
+                 [hidden]="task.type === 'loadingSampleBucket' || task.type === 'orphanBucket'">
+                <div
+                   class="bar positive"
+                   [ngStyle]="{'width': task.progress + '%'}">
+                  <div></div>
+                </div>
+                <div
+                   class="bar negative"
+                   [ngStyle]="{'width': (100 - task.progress) + '%'}">
+                  <div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <a
+         (click)="runInternalSettingsDialog();"
+         [hidden]="!(enableInternalSettings | async)">
+        Edit internal settings
+      </a>
+      <a href="https://developer.couchbase.com/documentation/server/{{majorMinorVersion | async}}/introduction/whats-new.html" target="_blank">
+        Documentation
+      </a>
+      <a href="{{(isEnterprise | async) ? 'http://support.couchbase.com' : 'http://www.couchbase.com/communities/'}}" target="cbforums">
+        Support
+      </a>
+      <span
+         ngbDropdown
+         placement="bottom-right"
+         class="dropdown">
+        <a ngbDropdownToggle class="nowrap ellipsis max-width-3">
+          {{whomiId | async}}
+          <span class="has-menu">&nbsp;</span>
+        </a>
+        <div
+           ngbDropdownMenu
+           class="dropdown-menu-select-like"
+           [style.right]="'auto'">
+          <a
+             [hidden]="!(enableResetButton | async)"
+             (click)="showResetPasswordDialog()">
+            Reset password
+          </a>
+          <a
+             (click)="onLogout()"
+             class="ellipsis max-width-4">
+            Sign out {{whomiId | async}}
+          </a>
+        </div>
+      </span>
+    </nav>
+  </div>
+
+  <header>
+    <a uiSref="app.admin.overview" class="logobug-wrapper">
+      <img src="../cb_logo_bug_white_2.svg" width="48" height="48" alt="Couchbase Server" class="logobug">
+    </a>
+    <h1>
+      <a uiSref="app.admin.overview" class="resp-txt-xsml ellipsis">
+        {{clusterName | async}} <!-- the cluster name -->
+      </a>
+      <span class="resp-hide-xsml" [hidden]="!(clusterName | async)">
+        <span class="icon fa-angle-right"></span>
+      </span>
+      <span *ngIf="stateService.current.data.child">
+        <a
+           uiState="stateService.current.data.child"
+           uiStateParams="({} | lodash:'merge':stateService.params:stateService.current.data.childParams)">
+          {{stateService.get(stateService.current.data.child).data.title}} <!-- the back-to-parent page name -->
+        </a>
+      </span>
+      <span *ngIf="stateService.current.data.child" class="icon fa-angle-right"></span>
+      <span>
+        {{stateService.current.data.title}} <!-- the current page name -->
+      </span>
+    </h1>
+
+    <!-- Depots are the placeholders for page-specific controls/content -->
+
+
+
+    <div class="row flex-right">
+      <mn-element-depot name="header"></mn-element-depot>
+      <mn-element-depot name="actions"></mn-element-depot>
+
+      <span class="menu-icon" (click)="showRespMenu = !showRespMenu">
+        <span class="icon fa-navicon"></span>
+      </span>
+    </div>
+  </header>
+
+  <mn-element-depot name="subnav"></mn-element-depot>
+  <mn-element-depot name="alerts"></mn-element-depot>
+
+  <!-- <div -->
+  <!--    class="alert alert-warning" -->
+  <!--    ng-show="adminCtl.lostConnState.isActivated"> -->
+  <!--   <p>Difficulties communicating with the cluster. Displaying cached information.</p> -->
+  <!-- </div> -->
+    <div
+       *ngFor="let alert of (mnAlerts | async);"
+       @mnAnimateHeight
+       class="alert"
+       [ngClass]="{
+                  'alert-error': alert.type === 'error',
+                  'alert-success': alert.type === 'success',
+                  'alert-warning': alert.type === 'warning'
+                  }">
+      <p>{{alert.message}}</p>
+      <a [hidden]="alert.timeout" (click)="closeAlert(alert)" class="close">X</a>
+    </div>
+
+  <main>
+    <!-- <nav -->
+    <!--    class="nav-sidebar" -->
+    <!--    ng-class="{'resp-show-menu' : showRespMenu}" -->
+    <!--    ng-click="showRespMenu = !showRespMenu" -->
+    <!--    mn-pluggable-ui-tabs -->
+    <!--    mn-tab-bar-name="adminTab"> -->
+    <nav
+       class="nav-sidebar">
+      <a
+         mn-tab="overview"
+         uiSref="app.admin.overview"
+         uiSrefActive="currentnav">Dashboard</a>
+      <a
+         mn-tab="servers"
+         uiSrefActive="currentnav"
+         uiSref="app.admin.servers">Servers</a>
+      <a
+         mn-tab="buckets"
+         [hidden]="!(bucketSettingsAnyRead | async)"
+         uiSrefActive="currentnav"
+         uiSref="app.admin.buckets">Buckets</a>
+      <a
+         mn-tab="security"
+         [hidden]="!(bucketSettingsAnyRead | async)"
+         uiSrefActive="currentnav"
+         ng-show="rbac.cluster.admin.security.read"
+         uiSref="app.admin.security">Security</a>
+      <!-- <a -->
+      <!--    mn-tab="buckets" -->
+      <!--    ng-show="rbac.cluster.bucket['.'].settings.read" -->
+      <!--    ui-sref="app.admin.buckets" -->
+      <!--    ui-sref-active="currentnav">Buckets</a> -->
+      <!-- <a -->
+      <!--    mn-tab="indexes" -->
+      <!--    ng-class="{currentnav: ('app.admin.indexes' | includedByState)}" -->
+      <!--    ng-show="rbac.cluster.bucket['.'].views.read || rbac.cluster.indexes.read" -->
+      <!--    ui-sref="app.admin.indexes.gsi" -->
+      <!--    class="resp-hide-sml"> -->
+      <!--   <span -->
+      <!--      ui-sref="app.admin.indexes.gsi" -->
+      <!--      ng-show="rbac.cluster.indexes.read">Indexes</span> -->
+      <!--   <span -->
+      <!--      ui-sref="app.admin.indexes.views.list" -->
+      <!--      ng-show="rbac.cluster.indexes.read === false">Indexes</span> -->
+      <!-- </a> -->
+      <a
+        [hidden]="!(tasksRead | async)"
+        mn-tab="replications"
+        uiSrefActive="currentnav"
+        uiSref="app.admin.replications"
+        class="margin-bottom-1">XDCR</a>
+
+      <!-- <a -->
+      <!--    mn-tab="security" -->
+      <!--    ng-class="{currentnav: ('app.admin.security' | includedByState)}" -->
+      <!--    ng-show="rbac.cluster.admin.security.read" -->
+      <!--    ui-sref="app.admin.security"> -->
+      <!--   Security -->
+      <!-- </a> -->
+      <a
+         mn-tab="settings"
+         uiSrefActive="currentnav"
+         uiSref="app.admin.settings">
+        <span
+           class="label neutral badge notify">i</span>
+        <!-- [hidden]="adminCtl.updates.sendStats && !!adminCtl.updates.newVersion" -->
+        Settings
+      </a>
+      <!-- <a -->
+      <!--    mn-tab="logs" -->
+      <!--    ui-sref="app.admin.logs.list" -->
+      <!--    ng-class="{currentnav: ('app.admin.logs' | includedByState)}" -->
+      <!--    ng-show="rbac.cluster.logs.read">Logs</a> -->
+    </nav>
+
+    <!-- all page content goes here -->
+    <ui-view name="main"
+             autoscroll="false"
+             class="main-content min-width-zero"
+             opacity="true"></ui-view>
+  </main>
+</div>
+
+<footer *ngIf="!!(isAdminRootReady | async)">Copyright &copy; 2020 <a href="https://couchbase.com" target="_blank">Couchbase, Inc.</a> All rights reserved.</footer>

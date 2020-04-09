@@ -1,0 +1,89 @@
+Laws of JS land
+================
+
+Code formatting style
+---------------------
+
+Code formatting style is largely from prototype.js. Which means: 2
+spaces indentation, no tabs characters at all, camelCase identifiers, each 'var' keyword on it's
+own line. So called nodejs-style variable declaration rules e.g.
+
+  var a,
+      crab,
+      b = a;
+
+are _strictly_ forbidden.
+
+
+Cells
+------
+
+Cell variables and attributes _must_ have Cell suffix in all new
+code. The idea is that variable points to cell not value. And there
+can be variable fooBar with value and fooBarCell with cell
+(i.e. container) of this value.
+
+All cells must be declared new-style, i.e. Cell.compute or Cell.computeEager.
+
+Non-eager cells are strongly encouraged.
+
+Cell formulas must access other cell's values via valuation function
+i.e. v(otherCell) or v.need(otherCell). The only natural exception is
+when cell's definition is seeing final value of some other cell in
+it's closure. I.e.
+
+  someValueCell.getValue(function (someValue) {
+    // ... skipped ...
+    var fooBarCell = Cell.compute(function (v) {
+      // .. do something with someValue ..
+    });
+    // ... skipped ..
+  });
+
+Cell formulas must be side-effect-free with only exception of logging
+and grabbing values of other cells.
+
+
+Application code structure
+--------------------------
+
+All application code should be structured in the following
+way. "Business logic" which includes deciding what stuff to get from
+server and how to massage it should be built on cells. This code needs
+to be cleanly separated from code presenting anything to user and
+handling user interaction. The idea is that business logic should be
+unit-testable.
+
+It's recommended to put all related cells definitions into single
+function like this:
+
+function createMyStatsCells(ns) {
+  ns.myCellFoo = Cell.compute(/* ... */);
+  ns.myCellBar = Cell.compute(/* .... */);
+}
+
+I.e. function should set all defined cells as attributes of given
+object. This makes it more testable as well as makes it easy to attach
+any user interaction with defined cells.
+
+
+Quality
+-------
+
+We want to be proud of our code. This means high quality is a
+must.
+
+Our code handles back/forward buttons naturally.
+
+Our code handles "open in new tab" when it makes sense to.
+
+Our code handles errors in sensible way. MS-style "some error
+happened" are highly discouraged. But note that code is still written
+in fail-fast way. I.e. errors are not silently eaten and are always
+processed in correct layer which knows enough context to handle them.
+
+Our code is prepared to handle network latency and displays progress
+indicators (e.g. spinners) when needed.
+
+Our code is carefully written, self-reviewed and carefully
+self-tested.

@@ -1,0 +1,187 @@
+<div class="dialog-med">
+  <div class="panel-header">
+    <h2 [hidden]="!isNew">Add Remote Cluster</h2>
+    <h2 [hidden]="isNew">Edit Remote Cluster</h2>
+    <a class="ui-dialog-titlebar-close modal-close" (click)="activeModal.dismiss()">X</a>
+  </div>
+  <form
+    [formGroup]="form.group"
+    (submit)="form.submit.next()"
+    class="forms">
+    <div class="panel-content">
+      <div class="formrow">
+        <label for="cluster_reference_name">Cluster Name</label>
+        <input
+          formControlName="name"
+          id="cluster_reference_name"
+          mnFocus
+          type="text"
+          autocorrect="off"
+          spellcheck="false"
+          autocapitalize="off">
+        <div
+          class="error"
+          [hidden]="!(postRemoteClusters.error | async)?.name">
+          {{(postRemoteClusters.error | async)?.name}}
+        </div>
+      </div>
+      <div class="formrow">
+        <label for="cluster_reference_hostname" class="inline">IP/Hostname</label>
+        <span
+          class="fa-stack icon-info"
+          ngbTooltip="This is the hostname or IP address of a node in the remote cluster you want to add. IPv6 addresses need to be enclosed in square brackets."
+          placement="right">
+          <span class="icon fa-circle-thin fa-stack-2x"></span>
+          <span class="icon fa-info fa-stack-1x"></span>
+        </span>
+        <input
+          formControlName="hostname"
+          id="cluster_reference_hostname"
+          type="text"
+          autocorrect="off"
+          spellcheck="false"
+          autocapitalize="off">
+        <div
+          class="error"
+          [hidden]="!(postRemoteClusters.error | async)?.hostname">
+          {{(postRemoteClusters.error | async)?.hostname}}
+        </div>
+      </div>
+      <div class="formrow">
+        <label>Username for Remote Cluster</label>
+        <input
+          formControlName="username"
+          type="text"
+          autocorrect="off"
+          spellcheck="false"
+          autocapitalize="off">
+        <div
+          class="error"
+          [hidden]="!(postRemoteClusters.error | async)?.username">
+          {{(postRemoteClusters.error | async)?.username}}
+        </div>
+      </div>
+      <div class="formrow">
+        <label>Password</label>
+        <input
+          formControlName="password"
+          type="password"
+          autocorrect="off"
+          spellcheck="false">
+        <div
+          class="error"
+          [hidden]="!(postRemoteClusters.error | async)?.password">
+          {{(postRemoteClusters.error | async)?.password}}
+        </div>
+        <!-- mn-autocomplete-off -->
+      </div>
+
+      <!-- encryption options -->
+      <div
+        class="formrow checkbox-list"
+        [hidden]="!(isEnterprise | async)">
+        <input
+          formControlName="demandEncryption"
+          id="for_encryption_enable"
+          type="checkbox">
+        <label for="for_encryption_enable" class="margin-right-zero">
+          Enable Secure Connection
+        </label>
+        <span
+          class="fa-stack icon-info"
+          ngbTooltip="XDCR will employ SCRAM-SHA to secure only the password
+                      (if Half is selected), or will encrypt both data and password using
+                      TLS (if Full is selected)."
+          placement="top">
+          <span class="icon fa-circle-thin fa-stack-2x"></span>
+          <span class="icon fa-info fa-stack-1x"></span>
+        </span>
+      </div>
+      <div class="formrow"
+           [hidden]="!form.group.get('demandEncryption').value ||
+                     !(isEnterprise | async)">
+        <div class="checkbox-list formrow">
+          <div>
+            <input
+              type="radio"
+              value="half"
+              id="for_encription_type_half"
+              formControlName="encryptionType">
+            <label
+              for="for_encription_type_half"
+              class="checkbox">
+              Half (secure password with SCRAM-SHA)
+            </label>
+            <div
+              class="error"
+              [hidden]="!(postRemoteClusters.error | async)?.encryptionType">
+              {{(postRemoteClusters.error | async)?.encryptionType}}
+            </div>
+          </div>
+          <div>
+            <input
+              type="radio"
+              value="full"
+              id="for_encription_type_full"
+              formControlName="encryptionType">
+            <label
+              for="for_encription_type_full"
+              class="checkbox">
+              Full (TLS encrypt password and data)
+            </label>
+          </div>
+        </div>
+        <div class="formrow">
+          <textarea
+            rows="4"
+            autocorrect="off"
+            autocompleterg="off"
+            spellcheck="false"
+            formControlName="certificate"
+            placeholder="Copy/paste the certificate information from your remote cluster into this field. You can find the certificate information on the Couchbase Web Console in the security area.">
+          </textarea>
+          <div
+            class="error"
+            [hidden]="!(postRemoteClusters.error | async)?.certificate">
+            {{(postRemoteClusters.error | async)?.certificate}}
+          </div>
+        </div>
+        <div class="formrow"
+             *ngIf="form.group.get('encryptionType').value == 'full'">
+          <textarea
+            rows="4"
+            autocorrect="off"
+            autocompleterg="off"
+            spellcheck="false"
+            formControlName="clientCertificate"
+            placeholder="Client Certificate">
+          </textarea>
+          <div
+            class="error"
+            [hidden]="!(postRemoteClusters.error | async)?.clientCertificate">
+            {{(postRemoteClusters.error | async)?.clientCertificate}}
+          </div>
+          <br>
+          <textarea
+            rows="4"
+            autocorrect="off"
+            autocompleterg="off"
+            spellcheck="false"
+            formControlName="clientKey"
+            placeholder="Client Key">
+          </textarea>
+          <div
+            class="error"
+            [hidden]="!(postRemoteClusters.error | async)?.clientKey">
+            {{(postRemoteClusters.error | async)?.clientKey}}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-footer">
+      <a (click)="activeModal.dismiss()">Cancel</a>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</div>

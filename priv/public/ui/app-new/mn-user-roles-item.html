@@ -1,0 +1,42 @@
+<section
+   (click)="detailsHashObserver.stream.toggleDetails.next(user.id + user.domain)">
+  <div class="cbui-tablerow padding-left" >
+    <span class="cbui-table-cell">
+      {{user.id}}
+      <span [hidden]="!user.passwordless" class="label lt-blue">no password</span>
+    </span>
+    <span class="cbui-table-cell resp-hide-sml">{{user.name}}</span>
+    <span class="cbui-table-cell flex-grow-3 wrap">
+      <span
+         class="relative"
+         *ngFor="let role of (userRoles | async); let last = last"
+         ngbTooltip="{{role.desc}}"
+         triggers="mouseenter mouseleave"
+         container="body"
+         placement="top">
+        <span class="ellipsis">
+          {{role.name}}
+          <span [hidden]="!role.bucket_name">[{{role.bucket_name}}]</span>
+          <span [hidden]="last">,</span>
+        </span>
+      </span>
+    </span>
+    <span class="cbui-table-cell resp-hide-xsml">
+      {{user.domain === "local" ? "Couchbase" : "External"}}
+    </span>
+  </div>
+  <div
+     class="cbui-tablerow-expanded text-right"
+     *ngIf="(detailsHashObserver.stream.isOpened | async) &&
+            (securityWrite | async)">
+    <button
+       class="outline">Delete</button>
+    <!-- ng-click="userRolesCtl.deleteUser(user)" -->
+    <button
+       class="outline"
+       [hidden]="user.domain == 'external' || user.domain == 'saslauthd'">Reset Password</button>
+    <!-- ng-click="userRolesCtl.resetUserPassword(user)" -->
+    <button>Edit</button>
+    <!-- ng-click="userRolesCtl.editUser(user)" -->
+  </div>
+</section>

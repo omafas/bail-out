@@ -1,0 +1,11 @@
+<input
+   type="text"
+   autocorrect="off"
+   spellcheck="false"
+   autocapitalize="off"
+   [formControl]="control"
+   [attr.id]="controlName"
+   >
+<p>
+  Free: {{lookUpPath | async}}
+</p>

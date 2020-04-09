@@ -1,0 +1,69 @@
+<div class="margin-top-half" [formGroup]="group">
+  <div class="formrow">
+    <label class="checkbox">Start Time</label>
+    <div class="row flex-left">
+      <input
+         class="input-short-1"
+         formControlName="fromHour"
+         type="number"
+         placeholder="HH"> &nbsp; : &nbsp;
+      <input
+         class="input-short-1"
+         formControlName="fromMinute"
+         type="number"
+         placeholder="MM">
+    </div>
+  </div>
+
+  <div class="formrow">
+    <label class="checkbox">End Time</label>
+    <div class="row flex-left">
+      <input
+         class="input-short-1"
+         type="number"
+         placeholder="HH"
+         formControlName="toHour"> &nbsp; : &nbsp;
+      <input
+         class="input-short-1"
+         formControlName="toMinute"
+         type="number"
+         placeholder="MM">
+    </div>
+  </div>
+
+  <div class="formrow">
+    <div
+       class="error"
+       [hidden]="!(error | async)[errorGroup + '[fromHour]']">
+      Start Time: {{(error | async)[errorGroup + '[fromHour]']}}
+    </div>
+    <div
+       class="error"
+       [hidden]="!(error | async)[errorGroup + '[fromMinute]']">
+      Start Time: {{(error | async)[errorGroup + '[fromMinute]']}}
+    </div>
+    <div
+       class="error"
+       [hidden]="!(error | async)[errorGroup + '[toHour]']">
+      End Time: {{(error | async)[errorGroup + '[toHour]']}}
+    </div>
+    <div
+       class="error"
+       [hidden]="!(error | async)[errorGroup + '[toMinute]']">
+      End Time: {{(error | async)[errorGroup + '[toMinute]']}}
+    </div>
+  </div>
+
+  <div class="formrow">
+    <input
+       type="checkbox"
+       formControlName="abortOutside"
+       [attr.id]="'for-compact-abort-outside-' + componentID">
+    <label [attr.for]="'for-compact-abort-outside-' + componentID">Abort compaction exceeding the set time interval</label>
+    <div
+       class="error"
+       [hidden]="!(error | async)[errorGroup + '[abortOutside]']">
+      {{(error | async)[errorGroup + '[abortOutside]']}}
+    </div>
+  </div>
+</div>

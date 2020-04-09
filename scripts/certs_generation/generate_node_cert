@@ -1,0 +1,76 @@
+#!/bin/bash
+# based on https://jamielinux.com/docs/openssl-certificate-authority/create-the-root-pair.html
+
+set -e
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+function abs_path() {
+    echo "$( cd $1 >/dev/null 2>&1 && pwd )"
+}
+
+function ensure_doesnt_exist() {
+    _dir=$1
+    if [ -d "$_dir" ]; then
+        echo "Directory ${_dir} already exists"
+        exit 1
+    fi
+}
+
+read -e -p "Enter directory to put generated node certificates to [./nodes]:" out_dir
+out_dir="${out_dir:-"./nodes"}"
+mkdir -p "$out_dir"
+out_dir_abs=$(abs_path "${out_dir}")
+
+read -p "Enter node name (hostname): " hostname
+
+if [ -z "$hostname" ]; then
+    echo "Hostname can't be empty"
+    exit 1
+fi
+
+out_node_dir="${out_dir_abs}/${hostname}"
+[ ! -d "${out_node_dir}" ] || { echo "Dir $out_node_dir already exists"; exit 1; }
+mkdir -p "$out_node_dir"
+
+read -e -p "Enter directory where intermediate certificate is located [./intermediate]:" intermediate_dir
+intermediate_dir="${intermediate_dir:-"./intermediate"}"
+[ -d "${intermediate_dir}" ] || { echo "Dir $intermediate_dir doesn't exist"; exit 1; }
+intermediate_dir_abs=$(abs_path "${intermediate_dir}")
+
+echo "Creating a key..."
+mkdir "${out_node_dir}/private"
+keyfile="${out_node_dir}/private/${hostname}.key.pem"
+openssl genrsa  -out "${keyfile}" 2048
+chmod 400 "${keyfile}"
+
+echo "Creating a certificate signing request..."
+csrfile="${out_node_dir}/${hostname}.csr.pem"
+openssl req -config "${intermediate_dir_abs}/intermediate_conf.cnf" \
+      -key "${keyfile}" \
+      -new -sha256 -out "${csrfile}"
+
+echo "Creating a certificate..."
+certfile="${out_node_dir}/${hostname}.cert.pem"
+openssl ca -config "${intermediate_dir_abs}/intermediate_conf.cnf" \
+      -extensions server_cert -days 3375 -notext -md sha256 \
+      -in "$csrfile" \
+      -out "$certfile"
+
+chmod 444 "$certfile"
+
+inboxdir="${out_node_dir}/inbox"
+mkdir "${inboxdir}"
+cp "$keyfile" "${inboxdir}/pkey.key"
+cat "${certfile}" "${intermediate_dir_abs}/certs/intermediate.cert.pem" > "${inboxdir}/chain.pem"
+
+echo "Please verify the certificate:"
+openssl x509 -noout -text -in "$certfile"
+
+echo "Validating chain of trust..."
+openssl verify -CAfile ${intermediate_dir_abs}/certs/ca-chain.cert.pem "$certfile"
+
+echo ""
+echo "Node key:  ${keyfile}"
+echo "Node cert: ${certfile}"
+echo "Files to be copied to couchbase node inbox: ${inboxdir}/*"
+

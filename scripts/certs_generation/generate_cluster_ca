@@ -1,0 +1,44 @@
+#!/bin/bash
+# based on https://jamielinux.com/docs/openssl-certificate-authority/create-the-root-pair.html
+
+set -e
+orig_dir=`pwd`
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+function abs_path() {
+    echo "$( cd $1 >/dev/null 2>&1 && pwd )"
+}
+
+read -e -p "Enter directory to put generated cluster ca to [./ca]:" out_dir
+out_dir="${out_dir:-"./ca"}"
+[ ! -d "$out_dir" ] || { echo "Dir $out_dir already exists"; exit 1; }
+mkdir -p "$out_dir"
+out_dir_abs=$(abs_path "${out_dir}")
+
+cd "$out_dir_abs"
+mkdir certs crl newcerts private
+chmod 700 private
+touch index.txt
+echo 1000 > serial
+
+echo "Creating the root key..."
+keyfile="${out_dir_abs}/private/ca.key.pem"
+openssl genrsa -aes256 -out "$keyfile" 4096
+chmod 400 "${keyfile}"
+
+echo "Creating the root certificate..."
+cnf="${out_dir_abs}/root_conf.cnf"
+certfile="${out_dir_abs}/certs/ca.cert.pem"
+awk "{gsub(/%%DIR%%/,\"$out_dir_abs\")}1" "${script_dir}/root_template.cnf" > ${cnf}
+openssl req -config ${cnf} \
+      -key "${keyfile}" \
+      -new -x509 -days 7300 -sha256 -extensions v3_ca \
+      -out "${certfile}"
+
+openssl x509 -noout -text -in "${certfile}"
+
+cd ${orig_dir}
+echo ""
+echo "Certificate: ${certfile}"
+echo "Private key: ${keyfile}"
+

@@ -1,0 +1,105 @@
+<div class="dialog-med">
+  <div class="panel-header">
+    <h2>Add Replication</h2>
+    <a class="ui-dialog-titlebar-close modal-close" (click)="activeModal.dismiss()">X</a>
+  </div>
+  <form
+    [formGroup]="form.group"
+    (submit)="form.submit.next()"
+     class="forms">
+    <div class="panel-content">
+      <div
+        class="error"
+        [hidden]="!(postCreateReplication.error | async)?.errors?._">
+        {{(postCreateReplication.error | async)?.errors?._}}
+      </div>
+      <div class="formrow">
+        <label for="replication_from_bucket">Replicate From Bucket</label>
+        <select
+          formControlName="fromBucket">
+          <option value="null" disabled="true" [selected]="true" style="display: none;">
+            select a bucket
+          </option>
+          <option *ngFor="let v of (bucketsMembaseEphemeral | async)" [ngValue]="v.name">
+            {{v.name}}
+          </option>
+        </select>
+        <div
+          class="error"
+          [hidden]="!(postCreateReplication.error | async)?.errors?.fromBucket">
+          {{(postCreateReplication.error | async)?.errors?.fromBucket}}
+        </div>
+      </div>
+
+      <div class="formrow">
+        <label for="replication_to_cluster">Remote Cluster</label>
+        <select
+          formControlName="toCluster">
+          <option value="null" disabled="true" [selected]="true" style="display: none;">
+            Pick remote cluster
+          </option>
+          <option *ngFor="let v of (remoteClusters | async)" [ngValue]="v.name">
+            {{v.name}}
+          </option>
+        </select>
+        <div
+          class="error"
+          [hidden]="!(postCreateReplication.error | async)?.errors?.toCluster">
+          {{(postCreateReplication.error | async)?.errors?.toCluster}}
+        </div>
+      </div>
+
+      <div class="formrow">
+        <label for="replication_to_bucket">Remote Bucket</label>
+        <input
+          id="replication_to_bucket"
+          formControlName="toBucket"
+          type="text"
+          autocorrect="off"
+          spellcheck="false"
+          autocapitalize="off">
+        <div
+          class="error"
+          [hidden]="!(postCreateReplication.error | async)?.errors?.toBucket">
+          {{(postCreateReplication.error | async)?.errors?.toBucket}}
+        </div>
+      </div>
+
+      <div class="formrow">
+        <label for="xdcr_advaced_settings_type">XDCR Protocol</label>
+        <select
+          formControlName="type"
+          id="xdcr_advaced_settings_type">
+          <option value="capi">Version 1</option>
+          <option value="xmem">Version 2</option>
+        </select>
+        <div
+          class="error"
+          [hidden]="!(postCreateReplication.error | async)?.errors?.type">
+          {{(postCreateReplication.error | async)?.errors?.type}}
+        </div>
+      </div>
+
+      <span>
+        <div class="formrow">
+          <h4
+             class="disclosure"
+             [ngClass]="{disclosed: (showAdvancedSettings | async)}"
+             (click)="showAdvancedSettingsClick.next()">
+            Show Advanced Settings
+          </h4>
+        </div>
+        <div
+           [hidden]="!(showAdvancedSettings | async)">
+          <mn-xdcr-settings [group]="form.group"
+                            [type]="form.group.get('type').value"></mn-xdcr-settings>
+        </div>
+      </span>
+    </div>
+
+    <div class="panel-footer">
+      <a (click)="activeModal.dismiss()">Cancel</a>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</div>

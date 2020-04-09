@@ -1,0 +1,82 @@
+Here's how joining cluster works (as of 1.7.1 Sat Jul 23 09:16:32 UTC 2011)
+============================================================================
+
+
+Node renaming
+=============
+
+We start nodes as 'ns_1@127.0.0.1'. And when two nodes join into
+cluster they're picking ip addresses they're using to reach other
+node. This currently does not work on windows because erlang as
+windows service has it's otp node name fixed at service registration
+time.
+
+We have quite elaborate cluster joining sequence where both nodes can
+be renamed and when connectivity to other node is checked from both
+sides.
+
+
+Add node
+=========
+
+Web request /controller/addNode is handled by
+menelaus_web:handle_add_node that parses params and calls
+ns_cluster:add_node. That call goes through gen_server:call into
+ns_cluster which invokes do_add_node. do_add_node checks that cluster
+is set up (and clustering with others is allowed) and calls
+do_add_node_allowed. This function calls checks_host_connectivity that
+checks epmd on target node is reachable. And then checks if this node
+needs to be renamed and renames itself if needed.
+
+After which add sequence continues in
+do_add_node_with_connectivity. We do /engageCluster2 post to target
+node (more on that later) and if it succeeds we continue in
+do_add_node_engaged. do_add_node_engaged is called with parsed json
+node info from target node.
+
+do_add_node_engaged verifies connectivity to target node again (it has
+otpNode which it uses to reach epmd, ask port and verify tcp
+connection to this node is establishable). If that succeeds we perform
+cluster compatibility check and proceed with actual node addition.
+
+Thats starts node_add_transaction which adds target node to
+nodes_wanted, calls given function and rolls back config changes if
+that fails. do_add_node_engaged_inner is called as this 'inner'
+function of node_add_transaction. Which does POST to /completeJoin on
+target node where actual join is completed from target node side.
+
+/completeJoin is handled by ns_cluster:complete_join/1 which is passed
+node info kv-list from cluster node. That calls do_complete_join in
+ns_cluster gen_server. do_complete_join extracts parameters from
+kv-list, checks it's otpNode name matches given (to catch
+engageCluster renames from two different clusters on different network
+interfaces) and calls perform_actual_join.
+
+perform_actual_join stops nearly all services. Cleans up config. Sets
+cookie from cluster. And tries connecting to cluster node. If that
+succeeds it starts services back. At this point join is complete.
+
+
+/engageCluster2
+===============
+
+/engageCluster2 is called on node being added to cluster. It performs
+checks and does node renaming if needed.
+
+HTTP calls overview
+====================
+
+(cluster node) /controller/addNode ===> (target node) /engageCluster2
+                   |                                  |
+                   +<---------------------------------+
+                   |
+                   |
+                   +=================================> /completeJoin
+                   |                                  |
+                   +----------------------------------+
+                   |
+               ( done )
+
+And if we initiate joining from target node
+(/node/controller/doJoinCluster) we do it via calling
+/controller/addNode on cluster node.

@@ -1,0 +1,123 @@
+<div>
+  <!-- mn-spinner="auditCtl.viewLoading || !auditCtl.state" -->
+  <form
+     (ngSubmit)="form.submit.next()"
+     [formGroup]="form.group"
+     class="forms">
+
+    <div class="formrow">
+      <input
+         type="checkbox"
+         id="audit-enable-flag"
+         formControlName="auditdEnabled">
+      <label for="audit-enable-flag">Audit events & write them to a log</label>
+
+      <div
+         [hidden]="!form.group.get('auditdEnabled').value"
+         class="content-box fix-width-6">
+        When enabled, auditing is activated for a default set of events.
+        Expand the filterable events modules below to select your own
+        set of events. NOTE: Your cluster’s performance may be impacted in
+        relation to the number of events selected. NOTE: Audit logs may use
+        significant disk space.
+      </div>
+    </div>
+
+    <div
+       class="formrow fix-width-6">
+      <label for="target-log-field">Audit Log Directory</label>
+      <input
+         type="text"
+         autocorrect="off"
+         spellcheck="false"
+         autocapitalize="off"
+         id="target-log-field"
+         formControlName="logPath">
+      <div
+         class="error error-field"
+         [hidden]="!(httpError | async)?.errors?.logPath">
+        {{(httpError | async)?.errors?.logPath}}
+      </div>
+    </div>
+
+    <label>Log Rotation <small>time interval & size trigger</small></label>
+    <div class="row flex-left fix-width-6">
+      <div class="column form-inline">
+        <input
+           id="log-rotation-interval"
+           formControlName="rotateInterval"
+           class="input-short-1"
+           type="number">
+        <div class="simple-select">
+          <select
+             formControlName="rotateUnit">
+            <option value="minutes">minute{{(maybeItIsPlural | async)}}</option>
+            <option value="hours">hour{{(maybeItIsPlural | async)}}</option>
+            <option value="days">day{{(maybeItIsPlural | async)}}</option>
+          </select>
+        </div>
+      </div>
+      <div class="column">
+        <span class="form-inline">
+          <input
+             id="log-rotation-size"
+             formControlName="rotateSize"
+             type="number"
+             class="input-short-1">
+          <small>MB</small>
+        </span>
+      </div>
+    </div>
+    <div class="margin-bottom-1-5">
+      <div
+         class="error error-field"
+         [hidden]="!(httpError | async)?.errors?.rotateInterval">
+        {{(httpError | async)?.errors?.rotateInterval}}
+      </div>
+      <div
+         class="error error-field"
+         [hidden]="!(httpError | async)?.errors?.rotateSize">
+        {{(httpError | async)?.errors?.rotateSize}}
+      </div>
+    </div>
+
+    <h4>Filterable Events</h4>
+    <div *ngIf="(isEnterprise | async) && (compatVersion55 | async)">
+
+      <section
+         class="audit-module"
+         *ngFor="let moduleName of (descriptorsByModule | async | mnObjectKeys);">
+
+        <mn-audit-item
+           [form]="form"
+           [descriptors]="descriptorsByModule"
+           moduleName="{{moduleName}}"
+           ></mn-audit-item>
+
+      </section>
+
+      <div class="formrow fix-width-6 margin-top-1">
+        <label>Ignore Filterable Events From These Users</label>
+        <textarea
+           formControlName="disabledUsers"
+           autocorrect="off"
+           spellcheck="false"
+           autocapitalize="off"
+           rows="3"
+           placeholder="e.g. username/external,username/couchbase ...">
+        </textarea>
+        <div
+           class="error error-field"
+           [hidden]="!(httpError | async)?.errors?.disabledUsers">
+          {{(httpError | async)?.errors?.disabledUsers}}
+        </div>
+      </div>
+    </div>
+
+    <button
+       [hidden]="!(securityWrite | async)"
+       [disabled]="((httpError | async)?.errors | mnObjectKeys).length"
+       class="save_button margin-top-1">Save</button>
+
+  </form>
+</div>

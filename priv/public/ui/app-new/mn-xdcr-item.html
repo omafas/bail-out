@@ -1,0 +1,34 @@
+<td class="break-word max-width-4">{{item.source}}</td>
+<td class="resp-hide-sml">{{version | async}}</td>
+<td class="resp-hide-sml">this cluster</td>
+<td class="resp-hide-sml">{{to | async}}</td>
+<td class="resp-hide-sml" [hidden]="!(isEnterprise | async)">
+  <a
+    [hidden]="!item.filterExpression"
+    [ngbTooltip]="item.filterExpression">Yes</a>
+  <span [hidden]="item.filterExpression">No</span>
+</td>
+<td>
+  <span>{{humanStatus | async}}</span>
+  <div
+    style="cursor: pointer; display: inline-block;"
+    class="icon text-normal"
+    [hidden]="item.status == 'notRunning' || !(xdcrExecute | async)"
+    [ngClass]="['fa-' + (status | async)]"
+    [ngStyle]="{'pointer-events': (status | async) == 'spinner' ? 'none' :  'auto' }"
+    (click)="pausePlayReplication.submit.next(item)"></div>
+  <a
+    [hidden]="!item.errors?.length">
+    <!-- (click)="xdcrCtl.showReplicationErrors(item)"> -->
+    Last <!-- {{item.errors.length | mnCount:'error'}} -->
+  </a>
+</td>
+<td class="resp-hide-sml">{{item.when}}</td>
+<td class="text-right">
+  <a
+    [hidden]="!(xdcrWrite | async)"
+    (click)="onDeleteReplication.next()">Delete</a> &nbsp;
+  <a
+    [hidden]="!(xdcrWrite | async) || !(xdcrSettingsWrite | async)"
+    (click)="onEditReplication.next()">Edit</a>
+</td>

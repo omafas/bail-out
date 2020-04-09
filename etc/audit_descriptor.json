@@ -1,0 +1,1249 @@
+{
+    "version" : 2,
+    "module" : "ns_server",
+    "events" : [
+      {
+          "id" : 8192,
+          "name" : "login success",
+          "description" : "Successful login to couchbase cluster",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "roles" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8193,
+          "name" : "login failure",
+          "description" : "Unsuccessful attempt to login to couchbase cluster",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : "",
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+          }
+      },
+      {
+          "id" : 8194,
+          "name" : "delete user",
+          "description" : "User was deleted",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "identity" : {"domain" : "", "user" : ""}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8195,
+          "name" : "user credentials change",
+          "description" : "User credentials were changed",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "identity" : {"domain" : "", "user" : ""}
+          },
+          "optional_fields" : {
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8196,
+          "name" : "add node",
+          "description" : "Node was added to the cluster",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "user" : "",
+              "node" : "",
+              "groupUUID" : "",
+              "hostname" : "",
+              "port" : 1,
+              "services" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8197,
+          "name" : "remove node",
+          "description" : "Node was removed from the cluster",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "node" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8198,
+          "name" : "failover nodes",
+          "description" : "Nodes that were failed over",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "nodes" : [],
+              "type" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8199,
+          "name" : "enter node recovery",
+          "description" : "Entered node recovery",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "node" : "",
+              "type" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8200,
+          "name" : "rebalance initiated",
+          "description" : "Rebalance was initiated",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "known_nodes" : [],
+              "ejected_nodes" : [],
+              "delta_recovery_buckets" : []
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8201,
+          "name" : "create bucket",
+          "description" : "Bucket was created",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "bucket_name" : "",
+              "type" : "",
+              "props" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8202,
+          "name" : "modify bucket",
+          "description" : "Bucket was modified",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "bucket_name" : "",
+              "type" : "",
+              "props" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8203,
+          "name" : "delete bucket",
+          "description" : "Bucket was deleted",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "bucket_name" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8204,
+          "name" : "flush bucket",
+          "description" : "Bucket was flushed",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "remote" : {"ip" : "", "port" : 1},
+              "bucket_name" : ""
+          },
+          "optional_fields" : {
+              "real_userid" : {"domain" : "", "user" : ""},
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8205,
+          "name" : "start loading sample",
+          "description" : "Started loading sample",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "bucket_name" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8206,
+          "name" : "disk storage conf",
+          "description" : "Disk storage configuration was set",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "node" : ""
+          },
+          "optional_fields" : {
+              "db_path" : "",
+              "index_path" : "",
+              "cbas_dirs" : "",
+              "eventing_path" : "",
+              "java_home" : "",
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8207,
+          "name" : "rename node",
+          "description" : "The node was renamed",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "node" : "",
+              "hostname" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8208,
+          "name" : "setup node services",
+          "description" : "The services were set for the node",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "node" : "",
+              "services" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8209,
+          "name" : "change cluster settings",
+          "description" : "Cluster settings were changed",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "quotas" : {"kv" : 1, "index" : 1, "fts" : 1, "cbas" : 1, "eventing" : 1},
+              "cluster_name" : "",
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8210,
+          "name" : "add group",
+          "description" : "Server group was added",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "group_name" : "",
+              "uuid" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8211,
+          "name" : "delete group",
+          "description" : "Server group was deleted",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "group_name" : "",
+              "uuid" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8212,
+          "name" : "update group",
+          "description" : "Server group was updated",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "group_name" : "",
+              "uuid" : "",
+              "nodes" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8213,
+          "name" : "xdcr create cluster ref",
+          "description" : "Remote cluster reference was created",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "demand_encription" : false,
+              "hostname" : "",
+              "username" : "",
+              "uuid" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8214,
+          "name" : "xdcr update cluster ref",
+          "description" : "Remote cluster reference was updated",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "demand_encription" : false,
+              "hostname" : "",
+              "username" : "",
+              "uuid" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8215,
+          "name" : "xdcr delete cluster ref",
+          "description" : "Remote cluster reference was deleted",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "demand_encription" : false,
+              "hostname" : "",
+              "username" : "",
+              "uuid" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8216,
+          "name" : "xdcr create replication",
+          "description" : "XDCR replication was created",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "rep_id" : "",
+              "from_bucket" : "",
+              "to_bucket" : "",
+              "to_cluster" : "",
+              "settings" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8217,
+          "name" : "xdcr update replication",
+          "description" : "XDCR replication was updated",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "rep_id" : "",
+              "settings" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8218,
+          "name" : "xdcr cancel replication",
+          "description" : "XDCR replication was canceled",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "rep_id" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8219,
+          "name" : "xdcr update global settings",
+          "description" : "Global XDCR settings were updated",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "settings" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8220,
+          "name" : "enable auto failover",
+          "description" : "Auto Failover was enabled",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "timeout" : 1,
+              "max_nodes" : 1
+          },
+          "optional_fields" : {
+              "sessionid" : "",
+              "failover_on_data_disk_issues" : {"enabled" : false,
+                                                "timePeriod" : 1},
+              "failover_server_group" : false,
+              "can_abort_rebalance" :  true
+          }
+      },
+      {
+          "id" : 8221,
+          "name" : "disable auto failover",
+          "description" : "Auto Failover was disabled",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8222,
+          "name" : "reset auto failover count",
+          "description" : "Count for Auto Failover was reset",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8223,
+          "name" : "enable cluster alerts",
+          "description" : "Cluster alerts were enabled",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "sender" : "",
+              "recipients" : "",
+              "alerts" : "",
+              "email_server" : {"user" : "", "host" : "", "port" : 1, "encrypt" : false}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8224,
+          "name" : "disable cluster alerts",
+          "description" : "Cluster alerts were disabled",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8225,
+          "name" : "modify compaction settings",
+          "description" : "Compaction settings were modified",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : "",
+              "allowed_time_period" : {"from_hour" : 1, "to_hour" : 1, "from_minute" : 1,
+                                       "to_minute" : 1, "abort_outside" : false},
+              "database_fragmentation_threshold" : {"percentage" : 1, "size" : 1},
+              "view_fragmentation_threshold" : {"percentage" : 1, "size" : 1},
+              "parallel_db_and_view_compaction" : false,
+              "purge_interval" : "",
+              "index_fragmentation_percentage" : "",
+              "index_compaction_mode" : "",
+              "index_circular_compaction_days" : "",
+              "index_circular_compaction_abort" : false,
+              "index_circular_compaction_interval" : {"from_hour" : 1,
+                                                      "to_hour" : 1,
+                                                      "from_minute" : 1,
+                                                      "to_minute" : 1}
+          }
+      },
+      {
+          "id" : 8226,
+          "name" : "regenerate certificate",
+          "description" : "Self-signed SSL certificate was regenerated",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8227,
+          "name" : "setup saslauthd",
+          "description" : "Saslauthd settings were modified",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "enabled" : false,
+              "admins" : "",
+              "ro_admins" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8228,
+          "name" : "internal settings",
+          "description" : "Internal Settings",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "settings" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8229,
+          "name" : "upload cluster ca",
+          "description" : "Upload cluster CA",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "subject" : "",
+              "expires" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8230,
+          "name" : "reload node certificate",
+          "description" : "Reload node certificate chain and pkey from inbox",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "subject" : "",
+              "expires" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8231,
+          "name" : "modify index storage mode",
+          "description" : "Modify Index Storage Mode",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "storageMode" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8232,
+          "name" : "set user",
+          "description" : "User was added or updated",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "identity" : {"domain" : "", "user" : ""},
+              "roles" : "",
+              "groups": "",
+              "reason" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : "",
+              "full_name" : ""
+          }
+      },
+      {
+          "id" : 8233,
+          "name" : "master password change",
+          "description" : "Master password change was requested",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : "",
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : "",
+              "error" : ""
+          }
+      },
+      {
+          "id" : 8234,
+          "name" : "encryption key rotation",
+          "description" : "Encryption key rotation was requested",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : "",
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : "",
+              "error" : ""
+          }
+      },
+      {
+          "id" : 8235,
+          "name" : "password policy",
+          "description" : "Password policy was changed",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : "",
+              "remote" : {"ip" : "", "port" : 1},
+              "min_length" : 0,
+              "must_present" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8236,
+          "name" : "client cert auth",
+          "description" : "Client certificate authentication settings changed",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "identity" : {"domain" : "", "user" : ""}
+          },
+          "optional_fields" : {
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "sessionid" : "",
+              "state": "",
+              "path": "",
+              "prefix": "",
+              "delimiter": "",
+              "prefixes": ""
+          }
+      },
+      {
+          "id" : 8237,
+          "name" : "security settings",
+          "description" : "Security Settings",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "settings" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8238,
+          "name" : "start log collection",
+          "description" : "Log collection run was started",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "nodes" : "",
+              "base_url" : "",
+              "redact_level" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : "",
+              "tmp_dir" : "",
+              "log_dir" : "",
+              "upload_proxy" : ""
+          }
+      },
+      {
+          "id" : 8239,
+          "name" : "modify log redaction settings",
+          "description" : "Log redaction settings were modified",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "log_redaction_default_cfg" : {"redact_level" : ""}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id": 8240,
+          "name": "configured audit daemon",
+          "description": "loaded configuration file for audit daemon",
+          "sync": false,
+          "enabled": true,
+          "filtering_permitted" : false,
+          "mandatory_fields": {
+              "timestamp": "",
+              "real_userid": {"domain": "", "user": ""},
+              "hostname": "",
+              "version": 1
+          },
+          "optional_fields": {
+              "auditd_enabled": true,
+              "rotate_interval": 1,
+              "rotate_size": 1,
+              "log_path": "",
+              "disabled_userids": "",
+              "disabled": "",
+              "enabled": ""
+          }
+      },
+      {
+          "id" : 8241,
+          "name": "modify index settings",
+          "description": "Index service settings were modified",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"source" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "settings" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8242,
+          "name": "modify query settings",
+          "description": "Query service settings were modified",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"source" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "settings" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8243,
+          "name": "mutate document",
+          "description": "Document was mutated via the REST API",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : true,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"source" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "operation" : "",
+              "bucket_name" : "",
+              "doc_id" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8244,
+          "name" : "set user group",
+          "description" : "User group was added or updated",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "group_name" : "",
+              "roles" : "",
+              "reason" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : "",
+              "description" : "",
+              "ldap_group_ref" : ""
+          }
+      },
+      {
+          "id" : 8245,
+          "name" : "delete user group",
+          "description" : "User group was deleted",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "group_name" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8246,
+          "name" : "modify ldap settings",
+          "description" : "Ldap settings were modified",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : "",
+              "authenticationEnabled": false,
+              "authorizationEnabled": false,
+              "hosts": [],
+              "port": 1,
+              "encryption": "",
+              "userDNMapping": "",
+              "bindDN": "",
+              "bindPass": "",
+              "groupsQuery": "",
+              "request_timeout": 1,
+              "maxParallelConnections": 1,
+              "maxCacheSize": 1,
+              "cacheValueLifetime": 1,
+              "nestedGroupsEnabled": 1,
+              "nestedGroupsMaxDepth": 1,
+              "failOnMaxDepth": false,
+              "serverCertValidation": false,
+              "cacert": ""
+          }
+      },
+      {
+          "id" : 8247,
+          "name" : "developer preview settings",
+          "description" : "Developer preview settings",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "settings" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8248,
+          "name" : "license settings",
+          "description" : "License Settings",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "settings" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8249,
+          "name" : "set user profile",
+          "description" : "UI profile was added or updated",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "identity" : {"domain" : "", "user" : ""},
+              "profile" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : "",
+              "full_name" : ""
+          }
+      },
+      {
+          "id" : 8250,
+          "name" : "delete user profile",
+          "description" : "UI profile was deleted",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "identity" : {"domain" : "", "user" : ""}
+          },
+          "optional_fields" : {
+              "sessionid" : "",
+              "full_name" : ""
+          }
+      },
+      {
+          "id" : 8251,
+          "name" : "modify retry rebalance",
+          "description" : "Retry rebalance settings were modified",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "enabled" : false,
+              "after_time_period" : 1,
+              "max_attempts" : 1
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8252,
+          "name" : "enable auto reprovision",
+          "description" : "Auto reprovision was enabled",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "max_nodes" : 1
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8253,
+          "name" : "disable auto reprovision",
+          "description" : "Auto reprovision was disabled",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8254,
+          "name" : "failover settings",
+          "description" : "Failover settings",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "settings" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8255,
+          "name" : "read document",
+          "description" : "Document was read via the REST API",
+          "sync" : false,
+          "enabled" : false,
+          "filtering_permitted" : true,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"source" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "bucket_name" : "",
+              "doc_id" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8256,
+          "name" : "logout success",
+          "description" : "Successful logout of couchbase cluster",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      },
+      {
+          "id" : 8257,
+          "name" : "alert email sent",
+          "description" : "An alert email was successfully sent",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : true,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "sender" : "",
+              "recipients" : "",
+              "subject" : "",
+              "message": ""
+          },
+          "optional_fields" : {
+          }
+      },
+      {
+          "id" : 8258,
+          "name" : "session timeout",
+          "description" : "User session has ended due to a timeout",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
+      }
+    ]
+}

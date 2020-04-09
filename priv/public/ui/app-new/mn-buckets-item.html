@@ -1,0 +1,85 @@
+<section
+   class="has-hover"
+   [ngClass]="[(statusClass | async)]"
+   (click)="detailsHashObserver.stream.toggleDetails.next(bucket.name)">
+  <div class="cbui-tablerow">
+    <span class="cbui-table-cell flex-grow-3 row">
+      <div class="cbui-tablerow-title ellipsis">{{bucket.name}}</div>
+      <span [hidden]="bucket | mnIsMembase" class="label lt-blue">
+        {{bucket.bucketType}}
+      </span>
+    </span>
+
+    <span class="cbui-table-cell">
+      {{bucket.basicStats.itemCount | number}}
+    </span>
+    <span class="cbui-table-cell">
+      <span [hidden]="!(bucket | mnIsMembase)">
+        {{residentRatio | async | number}}%
+      </span>
+      <span [hidden]="(bucket | mnIsMembase)">
+        &#8212;
+      </span>
+    </span>
+    <span class="cbui-table-cell">
+      {{bucket.basicStats.opsPerSec | number}}
+    </span>
+    <span class="cbui-table-cell flex-grow-1-5 resp-hide-sml">
+      {{bucket.basicStats.memUsed | mnFormatQuantity}} /
+      {{bucket.quota.ram | mnFormatQuantity}}
+    </span>
+    <span class="cbui-table-cell resp-hide-med">
+      <span [hidden]="!(bucket | mnIsMembase)">
+        {{bucket.basicStats.diskUsed | mnFormatQuantity}}
+      </span>
+      <span [hidden]="(bucket | mnIsMembase)">
+        &#8212;
+      </span>
+    </span>
+    <span class="cbui-table-cell flex-grow-1-5 wrap text-right resp-hide-xsml">
+      <a
+         class="nowrap"
+         style="margin-right: -3px;"
+         [hidden]="!(bucketDataRead | async) || (bucket | mnIsMemcached)"
+         (click)="$event.stopPropagation()">
+        <!-- ui-sref="app.admin.doc_editor({bucket: bucket.name, statsHostname: 'all'})" -->
+        Documents</a>
+      <a
+         title="Go to statistics for {{ bucket.name }}"
+         class="margin-left-half nowrap"
+        [hidden]="!(bucketDataRead | async) || !(statsRead | async)"
+        (click)="$event.stopPropagation()">
+        <!-- ui-sref="app.admin.buckets.analytics.list({bucket: bucket.name, statsHostname: 'all'})" -->
+        Statistics
+      </a>
+    </span>
+  </div>
+
+  <div
+     class="cbui-tablerow"
+     [hidden]="(statusClass | async) === 'dynamic_healthy'">
+    <span
+       class="error"
+       *ngFor="let message of (nodesCountByStatusMessage | async)">{{message}}</span>
+  </div>
+
+  <div
+     class="row row-min items-bottom"
+     *ngIf="(warmUpProgress | async) !== false && (tasksRead | async)">
+    <div
+       class="task-progress-row">
+      <div
+         [ngStyle]="{width: (warmUpProgress | async | number) + '%'}"
+         class="task-progress-row-meter"></div>
+    </div>
+    <div class="task-progress-row-text flex-right">
+      {{(warmUpProgress | async | number)}}% complete warmup
+    </div>
+  </div>
+  <div
+     class="cbui-tablerow-expanded"
+     *ngIf="(detailsHashObserver.stream.isOpened | async) &&
+            (bucketSettingsRead | async)">
+    <mn-buckets-item-details [bucket]="bucket"></mn-buckets-item-details>
+  </div>
+</section>
