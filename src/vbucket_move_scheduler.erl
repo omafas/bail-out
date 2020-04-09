@@ -359,10 +359,18 @@ decrement_counter_if_active_move(Node, Node, Dict) ->
 decrement_counter_if_active_move(Src, Dst, Dict) ->
     dict:update_counter(Dst, -1, dict:update_counter(Src, -1, Dict)).
 
-update_counter_nodes(Nodes, Value, Dict) ->
+increment_counter_keys(Nodes, Dict) ->
+    update_counter_keys(Nodes, 1, Dict).
+
+update_counter_keys(Nodes, Value, Dict) ->
     lists:foldl(fun (N, Acc) ->
                         dict:update_counter(N, Value, Acc)
                 end, Dict, Nodes).
+
+new_replicas(OldChain, NewChain) ->
+    [N || N <- NewChain,
+          N =/= undefined,
+          not lists:member(N, OldChain)].
 
 choose_action_not_compaction(#state{
                                 restrictions = Restrictions,
@@ -373,11 +381,46 @@ choose_action_not_compaction(#state{
                                 in_flight_backfills = CurrentBackfills,
                                 in_flight_moves = CurrentMoves,
                                 compaction_countdown_per_node = CompactionCountdown} = State) ->
-    NowBackfills = lists:foldl(
-                     fun ({_V, OldChain, NewChain, _Quirks}, Acc) ->
-                             BackfillNodes = backfill_nodes(OldChain, NewChain),
-                             update_counter_nodes(BackfillNodes, 1, Acc)
-                     end, dict:new(), CurrentBackfills),
+    %% Number backfills per node.
+    NowBackfills =
+        lists:foldl(
+          fun ({_V, OldChain, NewChain, _Quirks}, NBAcc) ->
+                  BackfillNodes = backfill_nodes(OldChain, NewChain),
+                  increment_counter_keys(BackfillNodes, NBAcc)
+          end, dict:new(), CurrentBackfills),
+
+    %% Identify all the connections(i.e, {Src, Dst}) have currently active
+    %% backfills.
+    ConnectionDict = lists:foldl(
+                       fun ({_, [Src | _] = OldChain, NewChain, _}, Acc) ->
+                               Connections = [{Src, Dst} ||
+                                              Dst <- new_replicas(OldChain,
+                                                                  NewChain)],
+                               increment_counter_keys(Connections, Acc)
+                       end, dict:new(), CurrentBackfills),
+
+    %% Active moves, i.e., moves involving change in master, is accompanied by
+    %% view building on the new master after backfill stage has been completed,
+    %% see ns_single_vbucket_mover:wait_index_updated.
+    %% ViewHeaviness account for this heaviness caused by views building.
+    ViewHeaviness = lists:foldl(
+                      fun ({_, [Src | _], [Dst | _], _}, Dict)
+                            when Src =/= Dst ->
+                              dict:update_counter(Dst, 1, Dict);
+                          (_, Dict) ->
+                              Dict
+                      end, dict:new(), CurrentMoves),
+
+    %% NodeWeights need to be calculated on all the MovesLeft not just
+    %% PossibleMoves.
+    %% NodeWeights determines the bottleneck nodes, and we want to keep them
+    %% busy at all times.
+    NodeWeights = lists:foldl(
+                    fun ({_V, OldChain, NewChain, _}, Acc) ->
+                            Nodes = backfill_nodes(OldChain, NewChain),
+                            increment_counter_keys(Nodes, Acc)
+                    end, dict:new(), MovesLeft),
+
     PossibleMoves = lists:filter(
                       fun ({_V, OldChain, NewChain, _}) ->
                               move_is_possible(OldChain, NewChain,
@@ -389,34 +432,104 @@ choose_action_not_compaction(#state{
                       end, MovesLeft),
 
     GoodnessFn =
-        fun ({Vb, [Src | _], [Dst | _], _}) ->
-                case Src =:= Dst of
-                    true ->
-                        %% we under-prioritize moves that
-                        %% don't actually move active
-                        %% position. Because a) they don't
-                        %% affect indexes and we want indexes
-                        %% to be build as early and as in
-                        %% parallel as possible and b)
-                        %% because we want to encourage
-                        %% earlier improvement of balance
-                        %% w.r.t active vbuckets to equalize
-                        %% GET/SET load earlier
-                        Vb;
-                    _ ->
-                        %% our goal is to keep indexer on all nodes
-                        %% busy as much as possible at all times. Thus
-                        %% we prefer nodes with least current
-                        %% moves. And destination is more important
-                        %% because on source is it's just cleanup and
-                        %% thus much less work
-                        NoCompactionsG = 10000 - 10 * dict:fetch(Dst, NowInFlight) - dict:fetch(Src, NowInFlight),
-                        %% all else equals we don't want to delay
-                        %% index compactions
-                        G2 = NoCompactionsG * 100 - dict:fetch(Dst, CompactionCountdown) - dict:fetch(Src, CompactionCountdown),
-                        G3 = G2 * 10000 + dict:fetch(Dst, LeftCount) + dict:fetch(Src, LeftCount),
-                        G3 * 10000 + Vb
-                end
+        fun ({Vb, [OldMaster | _] = OldChain, [NewMaster | _] = NewChain, _}) ->
+                %% 1. OldMaster from KV perspective since it needs to perform
+                %% backfills.
+                %% 2. NewReplicas from KV perspective since they need to process
+                %% backfills.
+                %% 2. NewMaster(if not same as OldMaster) from view perspective
+                %% since view index needs to built on NewMaster.
+                BackfillNodes = backfill_nodes(OldChain, NewChain),
+
+                %% MoveWeight = Maximum NodeWeight of node involved in the move
+                MoveWeight = lists:max([misc:dict_get(Node, NodeWeights, 0) ||
+                                        Node <- BackfillNodes]),
+
+                %% KV/Data service is limited in term of processing number of
+                %% backfill streams per connection (at the time of writing this
+                %% comment, KV can handle only one backfill stream at a time
+                %% per connection, as they have one thread per connection for
+                %% processing data).
+                %% Therefore, in order to achieve the max amount of parallelism
+                %% we need to schedule vbucket moves in such a fashion that we
+                %% involve separate connection at any given point in time. For
+                %% example, in a 4->4 swap rebalance case, when node3 is
+                %% replaced by node4, we can achieve max data transfer when we
+                %% have concurrent backfilling as below,
+                %% 1. node0 -> node4 (replica move)
+                %% 2. node1 -> node4 (replica move)
+                %% 3. node2 -> node4 (replica move)
+                %% 4. node3 -> node4 (active move)
+                %%
+                %% SerialScore is calculated on the new backfill connections for
+                %% this move, this is where we have maximum data flow.
+                %% If existing backfills use this connection we effectively
+                %% serialize the moves involved.
+                %% We are not only trying to determine the speed with which this
+                %% move will complete but also how this move affects the
+                %% existing moves.
+                SerialScore = lists:sum(
+                                [misc:dict_get({OldMaster, Dst},
+                                               ConnectionDict, 0) ||
+                                 Dst <- new_replicas(OldChain, NewChain)]),
+
+                %% New view indexes are built on the NewMaster.
+                %% We want to spread the view building load across the cluster.
+                %% Therefore, prefer moves where index building happens on the
+                %% least busy node.
+                ViewEqualizer = case OldMaster =/= NewMaster of
+                                    true ->
+                                        1000 - misc:dict_get(NewMaster,
+                                                             ViewHeaviness, 0);
+                                    false ->
+                                        0
+                                end,
+
+                %% Heaviness determines how busy the nodes involved, i.e.,
+                %% BackfillNodes already are.
+                Heaviness = lists:sum([misc:dict_get(N, NowBackfills, 0) ||
+                                       N <- BackfillNodes]),
+
+                CompactionDistance =
+                    case OldMaster =/= NewMaster of
+                        true ->
+                            1000 - dict:fetch(NewMaster, CompactionCountdown)
+                                 - dict:fetch(OldMaster, CompactionCountdown);
+                        false ->
+                            0
+                    end,
+
+                {
+                 %% 1. Prefer moves which involve node with most moves left.
+                 %% We also want to keep the bottleneck nodes involved so that
+                 %% we are not stuck with moves to/from the same node(s) at the
+                 %% end.
+                 MoveWeight,
+
+                 %% 2. Prefer moves which will give us the most parallelism.
+                 %% Parallelism is achieved by scheduling moves that use
+                 %% different connections(i.e., {Src, Dst}) for backfills.
+                 %% We penalize moves that will result in multiple backfills on
+                 %% same connection.
+                 -SerialScore,
+
+                 %% 3. Prefer active moves over replica moves, and prefer moves
+                 %% that will help spread the view index building across the
+                 %% cluster.
+                 ViewEqualizer,
+
+                 %% 4. Prefer nodes with least current moves.
+                 %% We want to spread the load across the cluster, hence
+                 %% penalise moves that are involved in the current moves.
+                 -Heaviness,
+
+                 %% 5. Prefer active moves over replica moves, and prefer
+                 %% active moves closer to compaction.
+                 CompactionDistance,
+
+                 %% Last resort tie breaker.
+                 Vb
+                }
         end,
 
     LessEqFn = fun (GoodnessA, GoodnessB) -> GoodnessA >= GoodnessB end,
