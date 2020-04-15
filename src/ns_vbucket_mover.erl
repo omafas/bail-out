@@ -24,8 +24,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--define(MAX_MOVES_PER_NODE,
-        ns_config:read_key_fast(rebalance_moves_per_node, 4)).
 -define(MOVES_BEFORE_COMPACTION,
         ns_config:read_key_fast(rebalance_moves_before_compaction, 64)).
 -define(MAX_INFLIGHT_MOVES_PER_NODE,
@@ -151,7 +149,8 @@ init({Bucket, Nodes, OldMap, NewMap, ProgressCallback}) ->
     Quirks = rebalance_quirks:get_quirks(Nodes),
     SchedulerState = vbucket_move_scheduler:prepare(
                        OldMap, NewMap, Quirks,
-                       ?MAX_MOVES_PER_NODE, ?MOVES_BEFORE_COMPACTION,
+                       menelaus_web_settings:get_rebalance_moves_per_node(),
+                       ?MOVES_BEFORE_COMPACTION,
                        ?MAX_INFLIGHT_MOVES_PER_NODE),
 
     ns_rebalance_observer:submit_master_event(

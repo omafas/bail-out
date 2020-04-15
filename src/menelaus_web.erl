@@ -338,6 +338,9 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["settings", "autoReprovision"] ->
                     {{[settings], read},
                      fun menelaus_web_settings:handle_settings_auto_reprovision/1};
+                ["settings", "rebalance"] ->
+                    {{[settings], read},
+                     fun menelaus_web_settings:handle_settings_rebalance/1};
                 ["settings", "retryRebalance"] ->
                     {{[settings], read},
                      fun menelaus_web_auto_rebalance:handle_get_retry/1};
@@ -546,6 +549,9 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["settings", "autoReprovision"] ->
                     {{[settings], write},
                      fun menelaus_web_settings:handle_settings_auto_reprovision_post/1};
+                ["settings", "rebalance"] ->
+                    {{[settings], write},
+                     fun menelaus_web_settings:handle_settings_rebalance_post/1};
                 ["settings", "retryRebalance"] ->
                     {{[settings], write},
                      fun menelaus_web_auto_rebalance:handle_post_retry/1};

@@ -42,6 +42,10 @@
          handle_settings_stats/1,
          handle_settings_stats_post/1,
 
+         handle_settings_rebalance/1,
+         handle_settings_rebalance_post/1,
+         get_rebalance_moves_per_node/0,
+
          handle_settings_auto_reprovision/1,
          handle_settings_auto_reprovision_post/1,
          handle_settings_auto_reprovision_reset_count/1,
@@ -827,6 +831,28 @@ config_upgrade_to_65(Config) ->
         _ ->
             []
     end.
+
+get_rebalance_moves_per_node() ->
+    ns_config:read_key_fast(rebalance_moves_per_node,
+                            ?DEFAULT_MAX_MOVES_PER_NODE).
+
+handle_settings_rebalance(Req) ->
+    reply_json(Req,
+               {[{rebalanceMovesPerNode, get_rebalance_moves_per_node()}]},
+               200).
+
+handle_settings_rebalance_post(Req) ->
+    menelaus_util:assert_is_66(),
+    validator:handle(
+      fun (Values) ->
+              Num = proplists:get_value(rebalanceMovesPerNode, Values),
+              ns_config:set(rebalance_moves_per_node, Num),
+              reply_json(Req, {[{rebalanceMovesPerNode, Num}]}, 200)
+      end, Req, form,
+      [validator:required(rebalanceMovesPerNode, _),
+       validator:integer(rebalanceMovesPerNode, ?MIN_OF_MAX_MOVES_PER_NODE,
+                         ?MAX_OF_MAX_MOVES_PER_NODE, _),
+       validator:unsupported(_)]).
 
 -ifdef(TEST).
 build_kvs_test() ->

@@ -228,6 +228,10 @@
 -define(LATEST_VERSION_NUM, ?VERSION_66).
 -define(MASTER_ADVERTISED_VERSION, [6, 6, 0]).
 
+-define(MIN_OF_MAX_MOVES_PER_NODE, 1).
+-define(MAX_OF_MAX_MOVES_PER_NODE, 64).
+-define(DEFAULT_MAX_MOVES_PER_NODE, 4).
+
 -define(flush(Pattern),
         misc:letrec([0],
                     fun (Rec, I) ->
