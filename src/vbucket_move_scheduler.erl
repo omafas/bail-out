@@ -297,13 +297,6 @@ choose_action(State) ->
 
     {Actions, NewState2}.
 
-sortby(List, KeyFn, LessEqFn) ->
-    KeyedList = [{KeyFn(E), E} || E <- List],
-    KeyedSorted = lists:sort(fun ({KA, _}, {KB, _}) ->
-                                     LessEqFn(KA, KB)
-                             end, KeyedList),
-    [E || {_, E} <- KeyedSorted].
-
 move_is_possible([Src | _] = OldChain,
                  [Dst | _] = NewChain,
                  NowBackfills, CompactionCountdown, InFlightMoves,
@@ -421,16 +414,6 @@ choose_action_not_compaction(#state{
                             increment_counter_keys(Nodes, Acc)
                     end, dict:new(), MovesLeft),
 
-    PossibleMoves = lists:filter(
-                      fun ({_V, OldChain, NewChain, _}) ->
-                              move_is_possible(OldChain, NewChain,
-                                               NowBackfills,
-                                               CompactionCountdown,
-                                               NowInFlight,
-                                               NowCompactions,
-                                               Restrictions)
-                      end, MovesLeft),
-
     GoodnessFn =
         fun ({Vb, [OldMaster | _] = OldChain, [NewMaster | _] = NewChain, _}) ->
                 %% 1. OldMaster from KV perspective since it needs to perform
@@ -532,49 +515,43 @@ choose_action_not_compaction(#state{
                 }
         end,
 
-    LessEqFn = fun (GoodnessA, GoodnessB) -> GoodnessA >= GoodnessB end,
-    SortedMoves = sortby(PossibleMoves, GoodnessFn, LessEqFn),
+    ScoredMoves = lists:filtermap(
+                    fun ({_V, OldChain, NewChain, _} = Move) ->
+                            case move_is_possible(OldChain, NewChain,
+                                                  NowBackfills,
+                                                  CompactionCountdown,
+                                                  NowInFlight,
+                                                  NowCompactions,
+                                                  Restrictions) of
+                                true ->
+                                    Score = GoodnessFn(Move),
+                                    {true, {Score, Move}};
+                                false ->
+                                    false
+                            end
+                    end, MovesLeft),
 
-    %% NOTE: we know that first move is always allowed
-    {SelectedMoves, _NewNowBackfills, NewCompactionCountdown, NewNowInFlight, NewLeftCount} =
-        misc:letrec(
-          [SortedMoves, NowBackfills, CompactionCountdown, NowInFlight, LeftCount, []],
-          fun (Rec, [{_V, [Src|_] = OldChain, [Dst|_] = NewChain, _} = Move | RestMoves],
-               NowBackfills0, CompactionCountdown0, NowInFlight0, LeftCount0, Acc) ->
-                  case move_is_possible(OldChain, NewChain, NowBackfills0,
-                                        CompactionCountdown0, NowInFlight0,
-                                        NowCompactions, Restrictions) of
-                      true ->
-                          NewNowBackfills =
-                              lists:foldl(
-                                fun (N, Acc0) ->
-                                        dict:update_counter(N, 1, Acc0)
-                                end, NowBackfills0, backfill_nodes(OldChain, NewChain)),
-
-                          Rec(Rec, RestMoves,
-                              NewNowBackfills,
-                              decrement_counter_if_active_move(Src, Dst, CompactionCountdown0),
-                              increment_counter(Src, Dst, NowInFlight0),
-                              decrement_counter_if_active_move(Src, Dst, LeftCount0),
-                              [Move | Acc]);
-                      _ ->
-                          Rec(Rec, RestMoves, NowBackfills0, CompactionCountdown0, NowInFlight0,
-                              LeftCount0, Acc)
-                  end;
-              (_Rec, [], NowBackfills0, MovesBeforeCompaction0, NowInFlight0, LeftCount0, Acc) ->
-                  {Acc, NowBackfills0, MovesBeforeCompaction0, NowInFlight0, LeftCount0}
-          end),
-
-    NewMovesLeft = MovesLeft -- SelectedMoves,
-
-    NewState = State#state{in_flight_per_node = NewNowInFlight,
-                           moves_left_count_per_node = NewLeftCount,
-                           moves_left = NewMovesLeft,
-                           in_flight_backfills = CurrentBackfills ++ SelectedMoves,
-                           in_flight_moves = CurrentMoves ++ SelectedMoves,
-                           compaction_countdown_per_node = NewCompactionCountdown},
-
-    {[{move, M} || M <- SelectedMoves], NewState}.
+    case ScoredMoves of
+        [] ->
+            {[], State};
+        _ ->
+            {_, {VB, [Src | _], [Dst | _], _} = BestMove} = lists:max(
+                                                              ScoredMoves),
+            NewState = State#state{
+                         in_flight_per_node =
+                             increment_counter(Src, Dst, NowInFlight),
+                         moves_left_count_per_node =
+                             decrement_counter_if_active_move(
+                               Src, Dst, LeftCount),
+                         moves_left = lists:keydelete(VB, 1, MovesLeft),
+                         in_flight_backfills = [BestMove | CurrentBackfills],
+                         in_flight_moves = [BestMove | CurrentMoves],
+                         compaction_countdown_per_node =
+                             decrement_counter_if_active_move(
+                               Src, Dst, CompactionCountdown)},
+            {Moves, NewState0} = choose_action_not_compaction(NewState),
+            {[{move, BestMove} | Moves], NewState0}
+    end.
 
 extract_progress(#state{initial_move_counts = InitialCounts,
                         left_move_counts = LeftCounts} = _State) ->
