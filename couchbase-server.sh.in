@@ -236,16 +236,18 @@ usage() {
 cat <<EOF
 couchbase-server is a script to start/stop Couchbase Server.
 
-Usage: $0 [options]
+Usage: $0 [--start|--status|--stop|--help|--version|-s|-k|-h|-v] [options]
 
-  Special options:
+  Recognized options:
+     --start        Start Couchbase Server
+     --status, -s   Determine if Couchbase Server is running
+     --stop, -k     Stop Couchbase Server
      --help, -h     Print this help text
      --version, -v  Print software Version
-     --status, -s   Determine if Couchbase Server is running
-     -k             Stop couchbase Server
 
-All other options and arguments will be passed to Couchbase
-Server and should NOT be used unless you know what you're doing.
+If none of the recognized options are specifed, --start is implied.  In
+this case, any trailing options and arguments will be passed to Couchbase
+Server; they should NOT be used unless you know what you're doing.
 
 EOF
 }
@@ -254,20 +256,31 @@ _parse_options () {
     # the getopt lack support for longopts..
     if [ "$1" == "--version" ]
     then
-       echo "Couchbase Server ${SOFTWARE_VERSION}"
-       exit 0
+      echo "Couchbase Server ${SOFTWARE_VERSION}"
+      exit 0
     fi
 
     if [ "$1" == "--help" ]
     then
-       usage
-       exit 0
+      usage
+      exit 0
     fi
 
     if [ "$1" == "--status" ]
     then
-       _status
-       exit $?
+      _status
+      exit $?
+    fi
+
+    if [ "$1" == "--start" ]
+    then
+      _start -detached
+    fi
+
+    if [ "$1" == "--stop" ]
+    then
+      _stop
+      exit $?
     fi
 
     # set +e
