@@ -17,11 +17,10 @@
                         value.slice().reverse().find(stat => stat != null) : value);
     }
 
-    function getBaseConfig(title, used, total, used2) {
+    function getBaseConfig(title, used, freeOrQuota, isQuota) {
       used = getValue(used);
-      total = getValue(total);
-      used2 = getValue(used2);
-      if (Number.isNaN(used) || Number.isNaN(total)) {
+      freeOrQuota = getValue(freeOrQuota);
+      if (Number.isNaN(used) || Number.isNaN(freeOrQuota)) {
         return;
       }
       return {
@@ -30,7 +29,7 @@
           value: used
         }, {
           name: 'remaining',
-          value: total - (Number.isNaN(used2) ? used : used2)
+          value: isQuota ? freeOrQuota - used : freeOrQuota
         }]
       };
     }
