@@ -57,6 +57,13 @@
       };
       $scope.replicaNumberEnabled = $scope.bucketConf.replicaNumber != 0;
       $scope.canChangeBucketsSettings = $scope.bucketConf.isNew;
+      $scope.bucketTypeChanged = function () {
+        if ($scope.bucketConf.bucketType == "ephemeral" &&
+            ($scope.bucketConf.durabilityMinLevel != "none" ||
+             $scope.bucketConf.durabilityMinLevel != "majority")) {
+          $scope.bucketConf.durabilityMinLevel = "none";
+        }
+      };
 
       if ($scope.rbac && $scope.rbac.cluster.admin.security.read) {
         mnPermissions.getBucketPermissions(getBucketName($scope)).then(function (permissions) {

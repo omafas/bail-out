@@ -66,6 +66,7 @@
        type="radio"
        value="membase"
        id="for-bucket-type-membase"
+       ng-change="bucketTypeChanged()"
        ng-model="bucketConf.bucketType"
        ng-disabled="!bucketConf.isNew">
     <label for="for-bucket-type-membase">Couchbase</label>
@@ -73,6 +74,7 @@
        type="radio"
        value="memcached"
        id="for-bucket-type-memcached"
+       ng-change="bucketTypeChanged()"
        ng-model="bucketConf.bucketType"
        ng-disabled="!bucketConf.isNew">
     <label for="for-bucket-type-memcached">Memcached</label>
@@ -80,6 +82,7 @@
        type="radio"
        value="ephemeral"
        id="for-bucket-type-ephemeral"
+       ng-change="bucketTypeChanged()"
        ng-model="bucketConf.bucketType"
        ng-disabled="!bucketConf.isNew">
     <label
@@ -410,7 +413,7 @@
       </div>
     </div>
 
-    <div ng-show="bucketConf.bucketType === 'membase'">
+    <div ng-show="bucketConf.bucketType === 'membase' || bucketConf.bucketType === 'ephemeral'">
       <label class="inline">Durability Level</label>
       <span
          class="fa-stack icon-info"
@@ -425,8 +428,10 @@
            ng-model="bucketConf.durabilityMinLevel">
           <option value="none">None</option>
           <option value="majority">Majority</option>
-          <option value="majorityAndPersistActive">Majority and persist to active</option>
-          <option value="persistToMajority">Persist to majority</option>
+          <option value="majorityAndPersistActive"
+             ng-show="bucketConf.bucketType === 'membase'">Majority and persist to active</option>
+          <option value="persistToMajority"
+             ng-show="bucketConf.bucketType === 'membase'">Persist to majority</option>
         </select>
       </div>
       <div
