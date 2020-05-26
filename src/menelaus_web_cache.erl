@@ -1,5 +1,5 @@
 %% @author Couchbase <info@couchbase.com>
-%% @copyright 2013-2018 Couchbase, Inc.
+%% @copyright 2013-2020 Couchbase, Inc.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -19,7 +19,10 @@
 -module(menelaus_web_cache).
 -include("ns_common.hrl").
 
--export([start_link/0, versions_response/0, lookup_or_compute_with_expiration/3]).
+-export([start_link/0,
+         versions_response/0,
+         get_static_value/1,
+         lookup_or_compute_with_expiration/3]).
 
 start_link() ->
     work_queue:start_link(menelaus_web_cache, fun cache_init/0).
@@ -27,7 +30,9 @@ start_link() ->
 cache_init() ->
     ets:new(menelaus_web_cache, [set, named_table]),
     VersionsPList = build_versions(),
-    ets:insert(menelaus_web_cache, {versions, VersionsPList}).
+    ets:insert(menelaus_web_cache, {versions, VersionsPList}),
+    PackageVariant = read_package_variant(),
+    ets:insert(menelaus_web_cache, {package_variant, PackageVariant}).
 
 implementation_version(Versions) ->
     list_to_binary(proplists:get_value(ns_server, Versions, "unknown")).
@@ -41,8 +46,23 @@ build_versions() ->
                                     end,
                                     Versions)}}].
 
+read_package_variant() ->
+    Filename = filename:join(path_config:component_path(bin, ".."),
+                             "VARIANT.txt"),
+    case file:read_file(Filename) of
+        {ok, C} ->
+            string:trim(C);
+        Err ->
+            ?log_error("Failed to read '~p': ~p", [Filename, Err]),
+            <<"">>
+    end.
+
 versions_response() ->
     [{_, Value}] = ets:lookup(menelaus_web_cache, versions),
+    Value.
+
+get_static_value(Key) ->
+    [{Key, Value}] = ets:lookup(menelaus_web_cache, Key),
     Value.
 
 lookup_value_with_expiration(Key, Nothing, InvalidPred) ->

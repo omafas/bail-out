@@ -1,5 +1,5 @@
 %% @author Couchbase <info@couchbase.com>
-%% @copyright 2017-2018 Couchbase, Inc.
+%% @copyright 2017-2020 Couchbase, Inc.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -60,7 +60,9 @@ handle_pools(Req) ->
            {isEnterprise, Enterprise},
            {allowedServices, AllowedServices},
            {isIPv6, misc:is_ipv6()},
-           {isDeveloperPreview, cluster_compat_mode:is_developer_preview()}
+           {isDeveloperPreview, cluster_compat_mode:is_developer_preview()},
+           {packageVariant,
+            menelaus_web_cache:get_static_value(package_variant)}
            | get_content_for_provisioned_system()],
     RV = RV1 ++ menelaus_web_cache:versions_response(),
     reply_json(Req, {struct, RV}).
