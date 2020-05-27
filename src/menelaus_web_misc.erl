@@ -1,5 +1,5 @@
 %% @author Couchbase <info@couchbase.com>
-%% @copyright 2017-2018 Couchbase, Inc.
+%% @copyright 2017-2020 Couchbase, Inc.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ handle_can_use_cert_for_auth(Req) ->
     menelaus_util:reply_json(Req, {[{cert_for_auth, RV}]}).
 
 handle_versions(Req) ->
-    reply_json(Req, {struct, menelaus_web_cache:versions_response()}).
+    reply_json(Req, {struct, menelaus_web_cache:get_static_value(versions)}).
 
 handle_tasks(PoolId, Req) ->
     DefaultTimeout = integer_to_list(?REBALANCE_OBSERVER_TASK_DEFAULT_TIMEOUT),

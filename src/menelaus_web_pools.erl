@@ -64,7 +64,7 @@ handle_pools(Req) ->
            {packageVariant,
             menelaus_web_cache:get_static_value(package_variant)}
            | get_content_for_provisioned_system()],
-    RV = RV1 ++ menelaus_web_cache:versions_response(),
+    RV = RV1 ++ menelaus_web_cache:get_static_value(versions),
     reply_json(Req, {struct, RV}).
 
 get_content_for_provisioned_system() ->

@@ -20,7 +20,6 @@
 -include("ns_common.hrl").
 
 -export([start_link/0,
-         versions_response/0,
          get_static_value/1,
          lookup_or_compute_with_expiration/3]).
 
@@ -56,10 +55,6 @@ read_package_variant() ->
             ?log_error("Failed to read '~p': ~p", [Filename, Err]),
             <<"">>
     end.
-
-versions_response() ->
-    [{_, Value}] = ets:lookup(menelaus_web_cache, versions),
-    Value.
 
 get_static_value(Key) ->
     [{Key, Value}] = ets:lookup(menelaus_web_cache, Key),
