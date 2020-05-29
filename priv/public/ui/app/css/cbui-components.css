@@ -3132,9 +3132,12 @@ input[type=text].scenario-desc:hover {
 .chart-builder .columns-3 {
    columns: 120px 3;
 }
-/* footer for saving forms (builds on <footer>) ----------------------------- */
+/* footer for saving main-page forms (builds on <footer>) ----------------------------- */
 .footer-save {
   height: 3rem;
+}
+.footer-import {
+  height: 4rem;
 }
 /* stats footers for the wizard, dashboard, and various service pages --------*/
 .footer-dashboard {
@@ -3343,4 +3346,30 @@ a.supported-browsers {
 }
 a:hover.supported-browsers {
   color: #000;
+}
+
+/* for import docs page ----------------------------------------------------- */
+.import-wrapper {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  position: relative;
+  margin-bottom: 4rem;
+}
+.importdata-parsedwrapper {
+  position: relative;
+  height: 10rem;
+}
+.import-parsed-panel {
+  height: 160px;
+}
+.import-empty-panel {
+  background-color: #f4f4f4;
+  height: 160px;
+  padding: .5rem;
+}
+.import-raw-panel {
+  height: 160px;
+  margin-bottom: 2rem;
 }
