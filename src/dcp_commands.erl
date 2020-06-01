@@ -59,7 +59,9 @@ open_connection(Sock, ConnName, Type, RepFeatures, Node) ->
                       false -> FAcc
                   end
           end, Flags, [{xattr, ?DCP_CONNECTION_FLAG_XATTR},
-                       {del_times, ?DCP_CONNECTION_FLAG_INCL_DEL_TIMES}]),
+                       {del_times, ?DCP_CONNECTION_FLAG_INCL_DEL_TIMES},
+                       {del_user_xattr,
+                        ?DCP_CONNECTION_FLAG_INCL_DEL_USER_XATTR}]),
 
     Extra = <<0:32, NewFlags:32>>,
 

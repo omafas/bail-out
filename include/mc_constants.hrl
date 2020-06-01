@@ -235,6 +235,7 @@
 -define(DCP_CONNECTION_FLAG_NOTIFIER,       16#02).
 -define(DCP_CONNECTION_FLAG_XATTR,          16#04).
 -define(DCP_CONNECTION_FLAG_INCL_DEL_TIMES, 16#20).
+-define(DCP_CONNECTION_FLAG_INCL_DEL_USER_XATTR, 16#100).
 
 %% Definitions of sub-document path flags (this is a bitmap)
 -define(SUBDOC_FLAG_NONE, 16#00).
