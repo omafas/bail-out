@@ -1,5 +1,5 @@
 %% @author Couchbase <info@couchbase.com>
-%% @copyright 2010-2019 Couchbase, Inc.
+%% @copyright 2010-2020 Couchbase, Inc.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -204,6 +204,7 @@
 %% window update is officially called "buffer acknowledgement"
 -define(DCP_WINDOW_UPDATE,         16#5d).
 -define(DCP_CONTROL,               16#5e).
+-define(DCP_SYSTEM_EVENT,          16#5f).
 -define(DCP_PREPARE,               16#60).
 -define(DCP_SEQNO_ACKNOWLEDGED,    16#61).
 -define(DCP_COMMIT,                16#62).

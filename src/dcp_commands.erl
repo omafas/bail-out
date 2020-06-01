@@ -1,5 +1,5 @@
 %% @author Couchbase <info@couchbase.com>
-%% @copyright 2013-2018 Couchbase, Inc.
+%% @copyright 2013-2020 Couchbase, Inc.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -144,6 +144,8 @@ command_2_atom(?DCP_SET_VBUCKET_STATE) ->
     dcp_set_vbucket_state;
 command_2_atom(?DCP_CONTROL) ->
     dcp_control;
+command_2_atom(?DCP_SYSTEM_EVENT) ->
+    dcp_system_event;
 command_2_atom(?DCP_WINDOW_UPDATE) ->
     dcp_window_update;
 command_2_atom(?DCP_NOP) ->
