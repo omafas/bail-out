@@ -67,7 +67,7 @@ upgrade(?VERSION_51, Config) ->
          query_settings_manager:config_upgrade_to_55() ++
          eventing_settings_manager:config_upgrade_to_55() ++
          ns_bucket:config_upgrade_to_55(Config) ++
-         menelaus_users:config_upgrade_to_55() ++
+         menelaus_users:config_upgrade(?VERSION_55) ++
          ns_audit_cfg:upgrade_to_55(Config) ++
          leader_quorum_nodes_manager:config_upgrade_to_55(Config) ++
          scram_sha:config_upgrade_to_55()};
