@@ -741,11 +741,10 @@ config_upgrade_to_55() ->
     [{delete, rbac_55_upgrade_key()}].
 
 upgrade_status() ->
-    UserUpgrade = ns_config:read_key_fast(users_upgrade, undefined),
     RolesUpgrade = ns_config:read_key_fast(rbac_55_upgrade_key(), undefined),
-    case {UserUpgrade, RolesUpgrade} of
-        {undefined, undefined} -> no_upgrade;
-        _ -> upgrade_in_progress
+    case RolesUpgrade of
+        undefined -> no_upgrade;
+        started -> upgrade_in_progress
     end.
 
 filter_out_invalid_roles(Props, Definitions, AllPossibleValues) ->
