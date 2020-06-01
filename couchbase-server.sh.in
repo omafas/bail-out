@@ -275,6 +275,7 @@ _parse_options () {
     if [ "$1" == "--start" ]
     then
       _start -detached
+      # No "exit" is required here because _start does an exec.
     fi
 
     if [ "$1" == "--stop" ]
