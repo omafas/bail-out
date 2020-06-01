@@ -415,6 +415,8 @@ build_bucket_capabilities(BucketConfig) ->
                 Conditional =
                     [{collections, collections:enabled(BucketConfig)},
                      {durableWrite, cluster_compat_mode:is_cluster_65()},
+                     {tombstonedUserXAttrs,
+                      cluster_compat_mode:is_cluster_66()},
                      {couchapi,
                       ns_bucket:storage_mode(BucketConfig) =:= couchstore}],
 
