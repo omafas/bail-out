@@ -15,6 +15,8 @@
       getSubmitCallbacks: getSubmitCallbacks,
       getSettingsRetryRebalance: getSettingsRetryRebalance,
       postSettingsRetryRebalance: postSettingsRetryRebalance,
+      getSettingsRebalance: getSettingsRebalance,
+      postSettingsRebalance: postSettingsRebalance,
       getPendingRetryRebalance: getPendingRetryRebalance,
       postCancelRebalanceRetry: postCancelRebalanceRetry,
       getMemcachedSettings: getMemcachedSettings,
@@ -27,6 +29,14 @@
 
     function postSettingsRetryRebalance(data, params) {
       return $http.post("/settings/retryRebalance", data, {params: params});
+    }
+
+    function getSettingsRebalance() {
+      return $http.get("/settings/rebalance");
+    }
+
+    function postSettingsRebalance(data) {
+      return $http.post("/settings/rebalance", data);
     }
 
     function getMemcachedSettings() {

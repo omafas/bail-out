@@ -27,6 +27,7 @@
     var version51 = encodeCompatVersion(5, 1);
     var version55 = encodeCompatVersion(5, 5);
     var version65 = encodeCompatVersion(6, 5);
+    var version66 = encodeCompatVersion(6, 6);
     var cache;
     var request;
 
@@ -76,13 +77,15 @@
         poolDefault.compat = {
           atLeast51: poolDefault.thisNode.clusterCompatibility >= version51,
           atLeast55: poolDefault.thisNode.clusterCompatibility >= version55,
-          atLeast65: poolDefault.thisNode.clusterCompatibility >= version65
+          atLeast65: poolDefault.thisNode.clusterCompatibility >= version65,
+          atLeast66: poolDefault.thisNode.clusterCompatibility >= version66
         };
         poolDefault.versions = {
           "50": version50,
           "51": version51,
           "55": version55,
-          "65": version65
+          "65": version65,
+          "66": version66
         };
         poolDefault.capiBase = $window.location.protocol === "https:" ? poolDefault.thisNode.couchApiBaseHTTPS : poolDefault.thisNode.couchApiBase;
 

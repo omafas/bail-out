@@ -54,11 +54,9 @@
       var promise5;
       var promise6;
       var promise8;
-      var promise7 =
-          mnPromiseHelper(vm, mnSettingsClusterService
-                          .postSettingsRetryRebalance(vm.retryRebalanceCfg))
-          .catchErrors("retryRebalanceErrors")
-          .getPromise();
+      var promise7;
+      var promise8;
+      var promise9;
 
       promise6 = mnPromiseHelper(vm,
                                  mnXDCRService.postSettingsReplications(vm.replicationSettings))
@@ -99,7 +97,26 @@
           .onSuccess(prepareQueryCurl)
           .getPromise();
 
-        queries.push(promise3, promise5, promise7);
+        queries.push(promise3, promise5);
+      }
+
+      if (mnPoolDefault.export.isEnterprise &&
+          mnPoolDefault.export.compat.atLeast65 &&
+          $scope.rbac.cluster.settings.write) {
+        promise7 = mnPromiseHelper(vm, mnSettingsClusterService
+                                   .postSettingsRetryRebalance(vm.retryRebalanceCfg))
+          .catchErrors("retryRebalanceErrors")
+          .getPromise();
+        queries.push(promise7);
+      }
+
+      if (mnPoolDefault.export.compat.atLeast66 &&
+          $scope.rbac.cluster.settings.write) {
+        promise9 = mnPromiseHelper(vm, mnSettingsClusterService
+                                   .postSettingsRebalance(vm.settingsRebalance))
+          .catchErrors("settingsRebalanceErrors")
+          .getPromise();
+        queries.push(promise9);
       }
 
       if ($scope.rbac.cluster.admin.memcached.write) {
@@ -205,19 +222,30 @@
         });
       }
 
-      mnSettingsClusterService.getSettingsRetryRebalance().then(function (data) {
-        vm.retryRebalanceCfg = data;
+      if (mnPoolDefault.export.compat.atLeast66 &&
+          $scope.rbac.cluster.settings.read) {
+        mnSettingsClusterService.getSettingsRebalance().then(settings => {
+          vm.settingsRebalance = settings.data;
+        });
+      }
 
-        if (!$scope.rbac.cluster.settings.write) {
-          return;
-        }
+      if (mnPoolDefault.export.compat.atLeast65 &&
+          mnPoolDefault.export.isEnterprise &&
+          $scope.rbac.cluster.settings.read) {
+        mnSettingsClusterService.getSettingsRetryRebalance().then(function (data) {
+          vm.retryRebalanceCfg = data;
 
-        $scope.$watch('settingsClusterCtl.retryRebalanceCfg', _.debounce(function (values) {
-          mnPromiseHelper(vm, mnSettingsClusterService
-                          .postSettingsRetryRebalance(values, {just_validate: 1}))
-            .catchErrorsFromSuccess("retryRebalanceErrors");
-        }, 500, {leading: true}), true);
-      });
+          if (!$scope.rbac.cluster.settings.write) {
+            return;
+          }
+
+          $scope.$watch('settingsClusterCtl.retryRebalanceCfg', _.debounce(function (values) {
+            mnPromiseHelper(vm, mnSettingsClusterService
+                            .postSettingsRetryRebalance(values, {just_validate: 1}))
+              .catchErrorsFromSuccess("retryRebalanceErrors");
+          }, 500, {leading: true}), true);
+        });
+      }
 
       mnPromiseHelper(vm, mnMemoryQuotaService.memoryQuotaConfig(services, false, false))
         .applyToScope(function (resp) {

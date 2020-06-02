@@ -46,61 +46,107 @@
 
         <div ng-if="rbac.cluster.settings.read" ui-view="autofailover"></div>
 
-        <div ng-if="adminCtl.poolDefault.isEnterprise && rbac.cluster.settings.indexes.read"
-             class="formrow">
-          <label class="margin-top-half">Rebalance Settings</label>
-          <div class="row flex-left text-medium flex-wrap">
-            <input
-               type="checkbox"
-               id="for-retry-rebalance-up-to"
-               ng-disabled="!rbac.cluster.settings.write"
-               ng-model="settingsClusterCtl.retryRebalanceCfg.enabled">
-            <label
-               for="for-retry-rebalance-up-to"
-               class="line-height-1-5">
-              Retry rebalance up to
-            </label>
-            <input
-               type="number"
-               autocorrect="off"
-               spellcheck="false"
-               autocapitalize="off"
-               ng-model="settingsClusterCtl.retryRebalanceCfg.maxAttempts"
-               ng-disabled="!settingsClusterCtl.retryRebalanceCfg.enabled ||
-                            !rbac.cluster.settings.write"
-               class="input-small input-short-half margin-right-half">
-              time after
-            <input
-               type="number"
-               autocorrect="off"
-               spellcheck="false"
-               autocapitalize="off"
-               ng-model="settingsClusterCtl.retryRebalanceCfg.afterTimePeriod"
-               ng-disabled="!settingsClusterCtl.retryRebalanceCfg.enabled ||
-                            !rbac.cluster.settings.write"
-               class="input-small input-short-1 margin-right-half margin-left-half">
-            second{{settingsClusterCtl.retryRebalanceCfg.max_attempts !== 1 ? "s" : ""}}
-            <span
-               class="icon-info-warning raised margin-left-half"
-               uib-tooltip-html="'<p>Do not enable this feature if the cluster is managed by the Couchbase Autonomous Operator or
-                                  your own scripts that trigger rebalance automatically upon failure or other conditions.</p>
-                                  <p>When this feature is enabled, Couchbase Server will automatically retry a failed rebalance after
-                                  the user-specified time period. If a rebalance fails, remember to cancel the pending retry before
-                                  atempting to perform any administrative operations on the cluster.</p>'"
-               tooltip-placement="auto right">
-              <span class="icon fa-warning"></span>
-            </span>
-          </div>
+        <div ng-show="((adminCtl.poolDefault.compat.atLeast65 &&
+                      adminCtl.poolDefault.isEnterprise) ||
+                      adminCtl.poolDefault.compat.atLeast66) && rbac.cluster.settings.read"
+           class="margin-top-1">
+          <label>Rebalance Settings</label>
+          <p
+             class="disclosure"
+             ng-class="{disclosed: settingsClusterCtl.showSettingsRebalance}"
+             ng-click="settingsClusterCtl.showSettingsRebalance = !settingsClusterCtl.showSettingsRebalance">
+            Advanced Rebalance Settings
+          </p>
+          <div
+             ng-show="settingsClusterCtl.showSettingsRebalance"
+             class="indent-1-5">
+            <div ng-if="adminCtl.poolDefault.compat.atLeast65 &&
+                        adminCtl.poolDefault.isEnterprise"
+               class="formrow">
+              <label class="inline">
+                Retry rebalance
+              </label>
+              <span
+                 class="icon-info-warning raised margin-left-half"
+                 uib-tooltip-html="'<p>Do not enable this feature if the cluster is managed by the Couchbase Autonomous Operator or
+                        your own scripts that trigger rebalance automatically upon failure or other conditions.</p>
+                        <p>When this feature is enabled, Couchbase Server will automatically retry a failed rebalance after
+                        the user-specified time period. If a rebalance fails, remember to cancel the pending retry before
+                        atempting to perform any administrative operations on the cluster.</p>'"
+                 tooltip-placement="auto right">
+                <span class="icon fa-warning"></span>
+              </span>
+              <div class="row flex-left text-medium flex-wrap">
+                <input
+                   type="checkbox"
+                   id="for-retry-rebalance-up-to"
+                   ng-disabled="!rbac.cluster.settings.write"
+                   ng-model="settingsClusterCtl.retryRebalanceCfg.enabled">
+                <label
+                   for="for-retry-rebalance-up-to"
+                   class="line-height-1-5">
+                  Retry rebalance up to
+                </label>
+                <input
+                   type="number"
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   ng-model="settingsClusterCtl.retryRebalanceCfg.maxAttempts"
+                   ng-disabled="!settingsClusterCtl.retryRebalanceCfg.enabled ||
+                         !rbac.cluster.settings.write"
+                   class="input-small input-short-half margin-right-half">
+                time after
+                <input
+                   type="number"
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   ng-model="settingsClusterCtl.retryRebalanceCfg.afterTimePeriod"
+                   ng-disabled="!settingsClusterCtl.retryRebalanceCfg.enabled ||
+                         !rbac.cluster.settings.write"
+                   class="input-small input-short-1 margin-right-half margin-left-half">
+                second{{settingsClusterCtl.retryRebalanceCfg.max_attempts !== 1 ? "s" : ""}}
+              </div>
 
-          <div
-             class="error"
-             ng-show="settingsClusterCtl.retryRebalanceErrors.maxAttempts">
-            {{settingsClusterCtl.retryRebalanceErrors.maxAttempts}}
-          </div>
-          <div
-             class="error"
-             ng-show="settingsClusterCtl.retryRebalanceErrors.afterTimePeriod">
-            {{settingsClusterCtl.retryRebalanceErrors.afterTimePeriod}}
+              <div
+                 class="error"
+                 ng-show="settingsClusterCtl.retryRebalanceErrors.maxAttempts">
+                {{settingsClusterCtl.retryRebalanceErrors.maxAttempts}}
+              </div>
+              <div
+                 class="error"
+                 ng-show="settingsClusterCtl.retryRebalanceErrors.afterTimePeriod">
+                {{settingsClusterCtl.retryRebalanceErrors.afterTimePeriod}}
+              </div>
+            </div>
+
+            <div
+               class="formrow"
+               ng-if="adminCtl.poolDefault.compat.atLeast66">
+              <label for="max_moves_per_node" class="inline">
+                Max moves per node during rebalance
+              </label>
+              <span
+                 class="icon-info-warning raised margin-left-half"
+                 uib-tooltip="Increasing this value may increase rebalance speed but will also increase memory use and can cause a degradation in KV operation performance."
+                 tooltip-placement="auto right">
+                <span class="icon fa-warning"></span>
+              </span>
+              <input
+                 type="number"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocapitalize="off"
+                 id="max_moves_per_node"
+                 ng-disabled="!rbac.cluster.settings.write"
+                 ng-model="settingsClusterCtl.settingsRebalance.rebalanceMovesPerNode">
+              <div
+                 class="error error-form"
+                 ng-show="!!settingsClusterCtl.settingsRebalanceErrors.rebalanceMovesPerNode">
+                {{settingsClusterCtl.settingsRebalanceErrors.rebalanceMovesPerNode}}
+              </div>
+            </div>
           </div>
         </div>
 
