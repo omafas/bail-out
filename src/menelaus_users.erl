@@ -809,7 +809,10 @@ maybe_upgrade_role_to_55(Role) ->
     [Role].
 
 upgrade_user(?VERSION_55, Props) ->
-    upgrade_user_roles(fun maybe_upgrade_role_to_55/1, Props).
+    upgrade_user_roles(fun maybe_upgrade_role_to_55/1, Props);
+upgrade_user(?VERSION_66, Props) ->
+    %% remove junk user_roles property that might appear due to MB-39706
+    lists:keydelete(user_roles, 1, Props).
 
 upgrade_user_roles(Fun, Props) ->
     OldRoles = lists:sort(proplists:get_value(roles, Props)),

@@ -85,4 +85,5 @@ upgrade(?VERSION_60, Config) ->
 
 upgrade(?VERSION_65, Config) ->
     {?VERSION_66,
-     ns_bucket:config_upgrade_to_66(Config)}.
+     menelaus_users:config_upgrade(?VERSION_66) ++
+         ns_bucket:config_upgrade_to_66(Config)}.
