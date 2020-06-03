@@ -811,7 +811,7 @@ maybe_upgrade_role_to_55(Role) ->
     [Role].
 
 upgrade_user_roles_to_55(Props) ->
-    OldRoles = proplists:get_value(user_roles, Props),
+    OldRoles = proplists:get_value(roles, Props),
     %% Convert roles and remove duplicates.
     NewRoles = lists:usort(upgrade_roles_to_55(OldRoles)),
     [{roles, NewRoles} | lists:keydelete(roles, 1, Props)].
