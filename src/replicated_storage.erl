@@ -23,6 +23,9 @@
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
 
+%% exported for unit tests only
+-export([make_mass_updater/2]).
+
 -callback init(term()) -> term().
 -callback init_after_ack(term()) -> term().
 -callback get_id(term()) -> term().
@@ -123,22 +126,15 @@ handle_call({interactive_update, Doc}, _From,
                     {reply, Error, State}
             end
     end;
-handle_call({mass_update, Context}, From, #state{child_module = Module,
-                                                 child_state = ChildState} = State) ->
-    Updater =
-        ?make_consumer(
-           pipes:fold(
-             ?producer(),
-             fun (Doc, {Errors, St}) ->
-                     {reply, RV, NewSt} =
-                         handle_call({interactive_update, Doc}, From, St),
-                     {case RV of
-                          ok ->
-                              Errors;
-                          Error ->
-                              [{Doc, Error} | Errors]
-                      end, NewSt}
-             end, {[], State})),
+handle_call({mass_update, Context}, From,
+            #state{child_module = Module,
+                   child_state = ChildState} = State) ->
+    Updater = make_mass_updater(
+                fun (Doc, St) ->
+                        {reply, RV, NewSt} = handle_call({interactive_update,
+                                                          Doc}, From, St),
+                        {RV, NewSt}
+                end, State),
     {RV1, NewState} =
         Module:handle_mass_update(Context, Updater, ChildState),
     {reply, RV1, NewState};
@@ -235,3 +231,17 @@ should_be_written(NewDoc, Module, ChildState) ->
         false -> true;
         OldDoc -> NewRev > Module:get_revision(OldDoc)
     end.
+
+make_mass_updater(Update, InitState) ->
+    ?make_consumer(
+       pipes:fold(
+         ?producer(),
+         fun (Doc, {Errors, State}) ->
+                 {RV, NewState} = Update(Doc, State),
+                 {case RV of
+                      ok ->
+                          Errors;
+                      Error ->
+                          [{Doc, Error} | Errors]
+                  end, NewState}
+         end, {[], InitState})).

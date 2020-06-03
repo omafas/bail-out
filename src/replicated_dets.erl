@@ -32,6 +32,9 @@
          get_revision/1, set_revision/2, is_deleted/1, save_docs/2,
          handle_mass_update/3, on_replicate_in/1, on_replicate_out/1]).
 
+%% unit test helpers
+-export([toy_init/1, toy_set/3, toy_select_with_update/4]).
+
 -record(state, {child_module :: atom(),
                 child_state :: term(),
                 path :: string(),
@@ -158,11 +161,14 @@ handle_mass_update({Name, KeySpec, N, UpdateFun}, Updater, _State) ->
 init([Name, ChildModule, InitParams, Path, Replicator]) ->
     replicated_storage:anounce_startup(Replicator),
     ChildState = ChildModule:init(InitParams),
-    ets:new(Name, [named_table, set, protected, {keypos, #docv2.id}]),
+    init_ets(Name, protected),
     #state{name = Name,
            path = Path,
            child_module = ChildModule,
            child_state = ChildState}.
+
+init_ets(Name, Access) ->
+    ets:new(Name, [named_table, set, Access, {keypos, #docv2.id}]).
 
 init_after_ack(State = #state{name = TableName}) ->
     Start = os:timestamp(),
@@ -369,3 +375,20 @@ do_select_from_dets_continue(Selection, Continuation, Yield) ->
         '$end_of_table' ->
             ok
     end.
+
+toy_init(Name) ->
+    init_ets(Name, public).
+
+toy_set(Name, Id, Value) ->
+    true = ets:insert(Name, [update_doc(Id, Value)]),
+    ok.
+
+toy_select_with_update(Name, KeySpec, N, UpdateFun) ->
+    Updater = replicated_storage:make_mass_updater(
+                fun (Doc, undefined) ->
+                        true = ets:insert(Name, [Doc]),
+                        {ok, undefined}
+                end, undefined),
+    {RV, _} =
+        handle_mass_update({Name, KeySpec, N, UpdateFun}, Updater, undefined),
+    RV.

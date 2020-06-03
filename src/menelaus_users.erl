@@ -524,8 +524,10 @@ get_user_props(Identity) ->
     get_user_props(Identity, ?DEFAULT_PROPS).
 
 get_user_props(Identity, ItemList) ->
-    Props = replicated_dets:get(storage_name(), {user, Identity}, []),
-    make_props(Identity, Props, ItemList).
+    make_props(Identity, get_user_props_raw(Identity), ItemList).
+
+get_user_props_raw(Identity) ->
+    replicated_dets:get(storage_name(), {user, Identity}, []).
 
 -spec user_exists(rbac_identity()) -> boolean().
 user_exists(Identity) ->
@@ -793,7 +795,15 @@ upgrade(Version, Config, Nodes) ->
             {value, started} ->
                 ?log_debug("Found unfinished roles upgrade. Continue.")
         end,
-        do_upgrade(Version, Nodes),
+
+        %% propagate upgrade key to nodes
+        ok = ns_config_rep:ensure_config_seen_by_nodes(Nodes),
+
+        replicated_storage:sync_to_me(
+          storage_name(), Nodes,
+          ?get_timeout(rbac_upgrade_key(Version), 60000)),
+
+        do_upgrade(Version),
         ok
     catch T:E ->
               ale:error(?USER_LOGGER, "Unsuccessful user storage upgrade.~n~p",
@@ -824,13 +834,7 @@ upgrade_user_roles(Fun, Props) ->
             lists:keyreplace(roles, 1, Props, {roles, NewRoles})
     end.
 
-do_upgrade(Version, Nodes) ->
-    %% propagate upgrade key to nodes
-    ok = ns_config_rep:ensure_config_seen_by_nodes(Nodes),
-
-    replicated_storage:sync_to_me(
-      storage_name(), Nodes, ?get_timeout(rbac_upgrade_key(Version), 60000)),
-
+do_upgrade(Version) ->
     UpdateFun =
         fun ({user, Key}, Props) ->
                 case upgrade_user(Version, Props) of
@@ -847,3 +851,80 @@ do_upgrade(Version, Nodes) ->
 
     [] = replicated_dets:select_with_update(storage_name(), {user, '_'}, 100,
                                             UpdateFun).
+
+-ifdef(TEST).
+
+upgrade_test_() ->
+    CheckUser =
+        fun (Id, Name) ->
+                Props = get_user_props_raw({Id, local}),
+                ?assertEqual([name, roles],
+                             lists:sort(proplists:get_keys(Props))),
+                ?assertEqual(Name, proplists:get_value(name, Props))
+        end,
+
+    SetRoles =
+        ?cut([{Id, [{roles, Roles}, {name, "Test"}]} || {Id, Roles} <- _]),
+
+    CheckRoles =
+        fun (List) ->
+                fun () ->
+                        lists:foreach(
+                          fun ({Id, Expected}) ->
+                                  CheckUser(Id, "Test"),
+                                  Props = get_user_props_raw({Id, local}),
+                                  Actual = proplists:get_value(roles, Props),
+                                  ?assertEqual(lists:sort(Expected),
+                                               lists:sort(Actual))
+                          end, List)
+                end
+        end,
+
+    Test =
+        fun (Version, Users, Check) ->
+                {lists:flatten(io_lib:format("Upgrade to ~p", [Version])),
+                 fun () ->
+                         [replicated_dets:toy_set(
+                            storage_name(), {user, {Id, local}}, Props) ||
+                             {Id, Props} <- Users],
+                         do_upgrade(Version),
+                         Check()
+                 end}
+        end,
+    {foreach,
+     fun() ->
+             %% only because update_fun calls it. remove when the support of
+             %% pre 5.5 is discontinued
+             meck:new(cluster_compat_mode, [passthrough]),
+             meck:expect(cluster_compat_mode, is_cluster_55,
+                         fun () -> true end),
+
+             meck:new(replicated_dets, [passthrough]),
+             meck:expect(replicated_dets, select_with_update,
+                         fun replicated_dets:toy_select_with_update/4),
+             replicated_dets:toy_init(storage_name())
+     end,
+     fun (_) ->
+             meck:unload(replicated_dets),
+             meck:unload(cluster_compat_mode),
+             ets:delete(storage_name())
+     end,
+     [Test(?VERSION_55,
+           SetRoles([{"user1", [admin, cluster_admin]},
+                     {"user2", [{bucket_admin, ["test"]}, ro_admin]},
+                     {"user3", [{bucket_admin, ["test"]},
+                                {bucket_full_access, ["test"]}]},
+                     {"user4", [admin]}]),
+           CheckRoles(
+             [{"user1", [admin, cluster_admin, {bucket_full_access, [any]}]},
+              {"user2", [{bucket_admin, ["test"]},
+                         {bucket_full_access, ["test"]}, ro_admin]},
+              {"user3", [{bucket_admin, ["test"]},
+                         {bucket_full_access, ["test"]}]},
+              {"user4", [admin]}])),
+      Test(?VERSION_66,
+           [{"user",
+             [{roles, [admin]}, {name, "Test"}, {user_roles, [admin]}]}],
+           ?cut(CheckUser("user", "Test")))]}.
+
+-endif.
