@@ -1726,6 +1726,12 @@ def main():
         print("do not have write access to the directory %s" % (zip_dir))
         sys.exit(1)
 
+    cur_work_dir = os.getcwd()
+    if not os.access(cur_work_dir, os.R_OK | os.X_OK):
+        print("Read/execute access to current working directory '{}' is "
+              "required".format(cur_work_dir))
+        sys.exit(1)
+
     if options.redact_level != "none" and options.redact_level != "partial":
         parser.error(
             "Invalid redaction level. Only 'none' and 'partial' are supported.")
