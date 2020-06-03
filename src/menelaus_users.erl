@@ -524,8 +524,10 @@ get_user_props(Identity) ->
     get_user_props(Identity, ?DEFAULT_PROPS).
 
 get_user_props(Identity, ItemList) ->
-    Props = replicated_dets:get(storage_name(), {user, Identity}, []),
-    make_props(Identity, Props, ItemList).
+    make_props(Identity, get_user_props_raw(Identity), ItemList).
+
+get_user_props_raw(Identity) ->
+    replicated_dets:get(storage_name(), {user, Identity}, []).
 
 -spec user_exists(rbac_identity()) -> boolean().
 user_exists(Identity) ->
@@ -833,7 +835,7 @@ do_upgrade_to_55(Nodes) ->
 
     UpdateUsers = fetch_users_for_55_upgrade(),
     lists:foreach(fun (Identity) ->
-                          OldProps = get_user_props(Identity, [user_roles]),
+                          OldProps = get_user_props_raw(Identity),
                           NewProps = upgrade_user_roles_to_55(OldProps),
                           store_user_validated(Identity, NewProps, same)
                   end, UpdateUsers).
