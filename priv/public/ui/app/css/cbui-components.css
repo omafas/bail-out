@@ -3134,10 +3134,11 @@ input[type=text].scenario-desc:hover {
 }
 /* footer for saving main-page forms (builds on <footer>) ----------------------------- */
 .footer-save {
-  height: 3rem;
+  height: 3rem
 }
 .footer-import {
   height: 4rem;
+  z-index: 4;
 }
 /* stats footers for the wizard, dashboard, and various service pages --------*/
 .footer-dashboard {
@@ -3355,21 +3356,22 @@ a:hover.supported-browsers {
   flex-wrap: nowrap;
   justify-content: space-between;
   position: relative;
-  margin-bottom: 4rem;
+  margin-bottom: 2rem;
 }
 .importdata-parsedwrapper {
   position: relative;
-  height: 10rem;
+  height: 50vh;
+  background-color: #f4f4f4;
+  margin-bottom: 2rem;
 }
-.import-parsed-panel {
-  height: 160px;
+.import-table-panel {
+  padding: 0 .5rem .5rem;
+  font-size: .75rem;
+  font-weight: 400;
 }
 .import-empty-panel {
-  background-color: #f4f4f4;
-  height: 160px;
   padding: .5rem;
 }
 .import-raw-panel {
-  height: 160px;
-  margin-bottom: 2rem;
+
 }

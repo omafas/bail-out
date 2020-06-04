@@ -135,7 +135,7 @@
 }
 
 /* responsive small ------------------------------------- */
-@media (max-width: 720px) {
+@media (max-width: 780px) {
   .resp-hide-sml {
     display: none !important;
   }
@@ -154,7 +154,8 @@
   .row.resp-sml,
   .content-box-dashboard.resp-sml,
   .wb-query-editor-footer,
-  .row.flex-wrap {
+  .row.flex-wrap,
+  .import-wrapper {
     flex-wrap: wrap !important;
   }
   div[class*="width-"] {
@@ -232,6 +233,14 @@
   }
   .controls .column button {
     margin-top: 0!important;
+  }
+  .import-clinote {
+    background-color: #f6f7f9;
+    font-size: .875rem;
+    padding: 1rem 2rem;
+    border-radius: 9px;
+    margin: .5rem 0;
+    text-align: center;
   }
 }
 
