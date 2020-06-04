@@ -3356,7 +3356,10 @@ a:hover.supported-browsers {
   flex-wrap: nowrap;
   justify-content: space-between;
   position: relative;
-  margin-bottom: 2rem;
+  margin: .5rem 0 2rem 0;
+}
+.import-col1 {
+  margin: 0 2.5rem 0 0;
 }
 .importdata-parsedwrapper {
   position: relative;
@@ -3365,13 +3368,13 @@ a:hover.supported-browsers {
   margin-bottom: 2rem;
 }
 .import-table-panel {
-  padding: 0 .5rem .5rem;
   font-size: .75rem;
   font-weight: 400;
+  position: absolute;
+  width: 100%;
 }
 .import-empty-panel {
   padding: .5rem;
 }
 .import-raw-panel {
-
 }

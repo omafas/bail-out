@@ -242,6 +242,9 @@
     margin: .5rem 0;
     text-align: center;
   }
+  .import-col1 {
+    margin: 0 0 0 0!important;
+  }
 }
 
 /* responsive extra-small ------------------------------- */
