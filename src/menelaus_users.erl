@@ -560,7 +560,8 @@ delete_group(GroupId) ->
                         NewProps = misc:key_update(groups, Props,
                                                    lists:delete(GroupId, _)),
                         ?log_debug("Updating user ~p groups: ~p -> ~p",
-                                   [Key, Props, NewProps]),
+                                   [ns_config_log:tag_user_data(Key),
+                                    Props, NewProps]),
                         {update, NewProps};
                     false ->
                         skip
@@ -770,7 +771,8 @@ cleanup_bucket_roles(BucketName) ->
                     NewProps ->
                         ?log_debug("Changing properties of ~p ~p from ~p "
                                    "to ~p due to deletion of ~p",
-                                   [Type, Key, Props, NewProps, BucketName]),
+                                   [Type, ns_config_log:tag_user_data(Key),
+                                    Props, NewProps, BucketName]),
                         {update, NewProps}
                 end
         end,
