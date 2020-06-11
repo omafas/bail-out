@@ -185,7 +185,8 @@ process_req(Header, Data, State) ->
 authenticate(<<"PLAIN">>, AuthReq) ->
     Challenge = proplists:get_value(<<"challenge">>, AuthReq),
     case sasl_decode_plain_challenge(Challenge) of
-        {ok, {"", Username, Password}} ->
+        {ok, {Authzid, Username, Password}} when Authzid == "";
+                                                 Authzid == Username ->
             case menelaus_auth:authenticate({Username, Password}) of
                 {ok, Id} ->
                     ?log_debug("Successful ext authentication for ~p",
