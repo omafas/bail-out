@@ -1,11 +1,6 @@
 <mn-element-cargo depot="actions">
   <div class="header-controls resp-hide-sml">
     <a
-       ng-show="viewsListCtl.showViewCreationButtons() && rbac.cluster.bucket[viewsCtl.currentBucketName].views.write"
-       ng-click="viewsListCtl.showSpatialCreationDialog()">
-      ADD SPATIAL VIEW
-    </a>
-    <a
        ng-click="viewsListCtl.showMapreduceCreationDialog()"
        ng-show="viewsListCtl.showViewCreationButtons() && rbac.cluster.bucket[viewsCtl.currentBucketName].views.write">
       ADD VIEW
@@ -51,7 +46,7 @@
          ui-sref-active="selected">Production Views</a>
       <span
          class="label badge red-3"
-         ng-show="viewsListCtl.ddocs.production.length">{{viewsListCtl.ddocs.production.length}}
+         ng-show="viewsListCtl.getNonSpatialProductionCount()">{{viewsListCtl.getNonSpatialProductionCount()}}
       </span>
     </span>
   </div>
@@ -92,11 +87,10 @@
       <div
          ng-repeat-start="row in viewsListCtl.ddocs[viewsListCtl.type] | orderBy:'hostname' track by row.doc.meta.id"
          ng-if="viewsListCtl.ddocs.rows.length">
-        <hr class="margin-bottom-half margin-top-1">
-        <div class="cbui-tablerow">
+        <hr class="margin-bottom-half margin-top-1" ng-if="!row.doc.json.spatial">
+        <div class="cbui-tablerow" ng-if="!row.doc.json.spatial">
           <span class="cbui-table-cell flex-grow-2 cbui-tablerow-title">
-            {{row.doc.meta.id}}
-            <span class="label lt-blue" ng-show="viewsListCtl.showSpatialButton(row)">spatial views</span>
+             {{row.doc.meta.id}}
             <span class="label lt-blue" ng-show="viewsListCtl.showCreationButton(row)">views</span>
           </span>
           <span class="cbui-table-cell flex-grow-1">
@@ -120,10 +114,6 @@
                ng-click="viewsListCtl.showCreationDialog(row.doc)"
                ng-show="viewsListCtl.showCreationButton(row) && rbac.cluster.bucket[viewsCtl.currentBucketName].views.write">Add View</button>
             <button
-               class="outline tight"
-               ng-click="viewsListCtl.showCreationDialog(row.doc, true)"
-               ng-show="viewsListCtl.showSpatialButton(row) && rbac.cluster.bucket[viewsCtl.currentBucketName].views.write">Add Spatial View</button>
-            <button
                ng-show="!viewsListCtl.isDevelopmentViews && rbac.cluster.bucket[viewsCtl.currentBucketName].views.write"
                ng-click="viewsListCtl.copyToDev(row.doc)">Copy to Dev</button>
             <button
@@ -133,7 +123,7 @@
             <div
                class="error"
                ng-show="viewsListCtl.showMatchingWarning(row)">
-              No new views can be added to this document. Delete either mapreduce or spatial views first.
+              No new views can be added to this document. Delete mapreduce views first.
             </div>
           </span>
         </div>
@@ -145,6 +135,7 @@
 
       <div
          class="cbui-tablerow row-min has-hover"
+         ng-repeat-end=""
          ng-if="!('isEmpty' | lodash:row.doc.json.views)"
          ng-repeat="(key, view) in row.doc.json.views"
          ui-sref=".editing.result(viewsListCtl.getInitialViewsFilterParams(key, row, false))">
@@ -167,26 +158,6 @@
         </span>
       </div>
 
-      <div class="cbui-tablerow has-hover row-min"
-         ng-repeat-end=""
-         ng-if="!('isEmpty' | lodash:row.doc.json.spatial)"
-         ng-repeat="(key, spatial) in row.doc.json.spatial"
-         ui-sref=".editing.result(viewsListCtl.getInitialViewsFilterParams(key, row, true))">
-        <span class="cbui-table-cell"><span class="semi-bold indent-1">{{key}}</span></span>
-        <span class="cbui-table-cell flex-grow-3 text-right">
-          <button
-             class="outline tight"
-             ng-show="viewsListCtl.isDevModeDoc(row.doc.meta.id) && rbac.cluster.bucket[viewsCtl.currentBucketName].views.write"
-             ng-click="$event.stopPropagation() || viewsListCtl.showViewDeletionDialog(row.doc, key, true)">
-            Delete
-          </button>
-          <button
-             ng-click="$event.stopPropagation()"
-             ui-sref=".editing.result(viewsListCtl.getInitialViewsFilterParams(key, row, true))">
-            {{viewsListCtl.isDevModeDoc(row.doc.meta.id) && rbac.cluster.bucket[viewsCtl.currentBucketName].views.write ? 'Edit' : 'Show' }}
-           </button>
-        </span>
-      </div>
     </div>
   </div>
 </div>

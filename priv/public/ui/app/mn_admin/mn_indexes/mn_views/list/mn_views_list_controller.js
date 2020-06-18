@@ -27,6 +27,7 @@
     vm.showMatchingWarning = showMatchingWarning;
     vm.getInitialViewsFilterParams = getInitialViewsFilterParams;
     vm.isDevelopmentViews = $state.params.type === 'development';
+    vm.getNonSpatialProductionCount = getNonSpatialProductionCount;
 
     activate();
 
@@ -69,7 +70,14 @@
     function showSpatialCreationDialog() {
       showCreationDialog(undefined, true);
     }
-
+    function getNonSpatialProductionCount() {
+      if (!vm.ddocs || !vm.ddocs.production) {
+        return 0;
+      }
+      return _.filter(vm.ddocs.production,function (o) {
+        if (!o.doc.json.spatial) return o;
+      }).length;
+    }
     function showCreationDialog(ddoc, isSpatial) {
       $uibModal.open({
         controller: 'mnViewsCreateDialogController as viewsCreateDialogCtl',
