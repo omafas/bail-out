@@ -59,7 +59,8 @@ start(_, _) ->
                 SomeCookie
         end,
 
-    ?log_info("babysitter cookie: ~p~n", [Cookie]),
+    ?log_info("babysitter cookie: ~p~n",
+              [ns_cookie_manager:sanitize_cookie(Cookie)]),
     maybe_write_file(cookiefile, Cookie, "babysitter cookie"),
     maybe_write_file(nodefile, node(), "babysitter node name"),
 
