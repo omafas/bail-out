@@ -1,5 +1,5 @@
 %% @author Couchbase <info@couchbase.com>
-%% @copyright 2013-2017 Couchbase, Inc.
+%% @copyright 2013-2020 Couchbase, Inc.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -80,8 +80,7 @@ open_port_args() ->
                Base ->
                    [{"ERL_CRASH_DUMP", Base ++ ".ns_server"}]
            end,
-    Env = [{"NS_SERVER_BABYSITTER_COOKIE", atom_to_list(erlang:get_cookie())},
-           {"NS_SERVER_BABYSITTER_PID", os:getpid()},
+    Env = [{"NS_SERVER_BABYSITTER_PID", os:getpid()},
            {"CHILD_ERLANG_ENV_ARGS", misc:inspect_term(AppEnvArgs)} | Env0],
 
     {ErlPath, AllArgs, [{env, Env}, exit_status, use_stdio, stream, eof]}.
