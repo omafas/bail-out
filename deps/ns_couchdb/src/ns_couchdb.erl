@@ -48,9 +48,13 @@ start(_StartType, _StartArgs) ->
 
     ok = dist_manager:configure_net_kernel(),
 
+    {ok, CookieFile} = application:get_env(ns_couchdb, cookiefile),
+    Cookie = ns_server:read_cookie_file(CookieFile),
+    erlang:set_cookie(node(), Cookie),
+
     ?log_info("CouchDB node ~p was initialized for ~p. Cookie: ~p",
               [node(), ns_node_disco:ns_server_node(),
-              ns_cookie_manager:sanitize_cookie(erlang:get_cookie())]),
+              ns_cookie_manager:sanitize_cookie(Cookie)]),
     ns_couchdb_sup:start_link().
 
 stop(_State) ->

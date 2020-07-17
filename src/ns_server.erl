@@ -19,6 +19,7 @@
 
 -export([start/2, stop/1, get_loglevel/1, setup_node_names/0,
          get_babysitter_node/0, get_babysitter_cookie/0, get_babysitter_pid/0,
+         read_cookie_file/1,
          start_disk_sink/2, get_disk_sink_rotation_opts/1, adjust_loglevel/2]).
 
 -include("ns_common.hrl").

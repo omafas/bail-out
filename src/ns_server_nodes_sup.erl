@@ -114,9 +114,10 @@ create_ns_couchdb_spec() ->
             _ -> []
         end,
 
+    {ok, CookieFile} = application:get_env(ns_babysitter, cookiefile),
+
     ErlangArgs = CouchIni ++ KernelInetrc ++ SSLDistOpts ++
-        ["-setcookie", atom_to_list(ns_server:get_babysitter_cookie()),
-         "-name", atom_to_list(ns_node_disco:couchdb_node()),
+        ["-name", atom_to_list(ns_node_disco:couchdb_node()),
          "-smp", "enable",
          "+P", "327680",
          "+K", "true",
@@ -127,6 +128,7 @@ create_ns_couchdb_spec() ->
          "-proto_dist", "cb",
          "-epmd_module", atom_to_list(net_kernel:epmd_module()),
          "-start_epmd", "false",
+         "-ns_couchdb", "cookiefile", misc:inspect_term(CookieFile),
          "-run", "child_erlang", "child_start", "ns_couchdb"],
 
     ns_ports_setup:create_erl_node_spec(
