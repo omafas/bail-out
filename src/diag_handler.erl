@@ -341,6 +341,8 @@ get_ets_table_sanitizer(_, Info) ->
     case proplists:get_value(name, Info) of
         ssl_otp_pem_cache ->
             skip;
+        cookies ->
+            skip;
         _ ->
             {ok, ns_config_log:sanitize(_, true)}
     end.
