@@ -61,7 +61,7 @@ start(_, _) ->
 
     ?log_info("babysitter cookie: ~p~n",
               [ns_cookie_manager:sanitize_cookie(Cookie)]),
-    maybe_write_file(cookiefile, Cookie, "babysitter cookie"),
+    write_required_file(cookiefile, Cookie, "babysitter cookie"),
     maybe_write_file(nodefile, node(), "babysitter node name"),
 
     % Clear the HTTP proxy environment variables as they are honored, when they
@@ -71,15 +71,27 @@ start(_, _) ->
 
     ns_babysitter_sup:start_link().
 
+write_required_file(Env, Content, Name) ->
+    case application:get_env(Env) of
+        {ok, File} ->
+            do_write_file(Content, File, Name);
+        _ ->
+            erlang:error("A required parameter for the ns_server "
+                         "application is missing!")
+    end.
+
 maybe_write_file(Env, Content, Name) ->
     case application:get_env(Env) of
         {ok, File} ->
-            filelib:ensure_dir(File),
-            misc:atomic_write_file(File, erlang:atom_to_list(Content) ++ "\n"),
-            ?log_info("Saved ~s to ~s", [Name, File]);
+            do_write_file(Content, File, Name);
         _ ->
             ok
     end.
+
+do_write_file(Content, File, Name) ->
+    ok = filelib:ensure_dir(File),
+    ok = misc:atomic_write_file(File, erlang:atom_to_list(Content) ++ "\n"),
+    ?log_info("Saved ~s to ~s", [Name, File]).
 
 log_pending() ->
     receive
