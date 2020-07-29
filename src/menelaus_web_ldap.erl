@@ -130,6 +130,12 @@ ldap_settings_desc() ->
       end, Id},
      {user_dn_mapping, userDNMapping,
       Curry(fun validate_user_dn_mapping/2), fun ({Obj, _}) -> Obj end},
+     {bind_method, bindMethod,
+      fun (N) ->
+          functools:compose(
+            [validator:one_of(N, ["Simple", "SASLExternal", "None"], _),
+             validator:convert(N, fun list_to_atom/1, _)])
+      end, Id},
      {bind_dn, bindDN,
       Curry(fun validate_ldap_dn/2), list_to_binary(_)},
      {bind_pass, bindPass,

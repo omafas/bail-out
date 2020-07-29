@@ -22,7 +22,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--export([with_authenticated_connection/4,
+-export([with_simple_bind/4,
+         with_external_bind/2,
          with_connection/2,
          search/6,
          parse_url/1,
@@ -137,15 +138,31 @@ with_connection(Settings, Fun) ->
             {error, {connect_failed, Reason}}
     end.
 
-with_authenticated_connection(DN, Password, Settings, Fun) ->
+with_external_bind(Settings, Fun) ->
+    with_connection(Settings,
+                    fun (Handle) ->
+                            Bind = eldap:sasl_external_bind(Handle),
+                            ?log_debug("SASL EXTERNAL bind res: ~p", [Bind]),
+                            case Bind of
+                                ok -> Fun(Handle);
+                                {ok, {referral, _}} ->
+                                    {error, referral_not_supported};
+                                {error, Error} ->
+                                    {error, {bind_failed, "<external>", Error}}
+                            end
+                    end).
+
+with_simple_bind(DN, Password, Settings, Fun) ->
     with_connection(Settings,
                     fun (Handle) ->
                             PasswordBin = iolist_to_binary(Password),
                             Bind = eldap:simple_bind(Handle, DN, PasswordBin),
-                            ?log_debug("Bind for dn ~p: ~p",
+                            ?log_debug("Simple bind for DN ~p: ~p",
                                        [ns_config_log:tag_user_name(DN), Bind]),
                             case Bind of
                                 ok -> Fun(Handle);
+                                {ok, {referral, _}} ->
+                                    {error, referral_not_supported};
                                 {error, Error} ->
                                     {error, {bind_failed, DN, Error}}
                             end
@@ -175,7 +192,8 @@ default_settings() ->
      {cache_value_lifetime,
       round(0.5*menelaus_roles:external_auth_polling_interval())},
      {cacert, undefined},
-     {server_cert_validation, true}].
+     {server_cert_validation, true},
+     {bind_method, undefined}].
 
 build_settings() ->
     case ns_config:search(ldap_settings) of

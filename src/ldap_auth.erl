@@ -42,7 +42,7 @@ authenticate_with_cause(Username, Password, Settings) ->
         true ->
             case get_user_DN(Username, Settings, #{}) of
                 {ok, DN, _} ->
-                    case ldap_util:with_authenticated_connection(
+                    case ldap_util:with_simple_bind(
                            DN, Password, Settings, fun (_) -> ok end) of
                         ok -> {ok, DN};
                         {error, _} = Error -> Error
@@ -55,13 +55,31 @@ authenticate_with_cause(Username, Password, Settings) ->
     end.
 
 with_query_connection(Settings, Fun) ->
-    case ldap_util:client_cert_auth_enabled(Settings) of
-        true ->
-            ldap_util:with_connection(Settings, Fun);
-        false ->
+    BindMethod =
+        case proplists:get_value(bind_method, Settings) of
+            undefined ->
+                %% we need 'undefined' to support migration from 6.6 and pre-6.6
+                %% versions which doesn't have bind_method setting at all
+                case ldap_util:client_cert_auth_enabled(Settings) of
+                    true -> 'SASLExternal';
+                    false -> 'Simple'
+                end;
+            M -> M
+        end,
+    case BindMethod of
+        'Simple' ->
             DN = proplists:get_value(bind_dn, Settings),
             {password, Pass} = proplists:get_value(bind_pass, Settings),
-            ldap_util:with_authenticated_connection(DN, Pass, Settings, Fun)
+            ldap_util:with_simple_bind(DN, Pass, Settings, Fun);
+        'SASLExternal' ->
+            ldap_util:with_external_bind(Settings, Fun);
+        'None' ->
+            ldap_util:with_connection(
+              Settings,
+              fun (Handle) ->
+                  ?log_debug("Skipping binding as it is turned off"),
+                  Fun(Handle)
+              end)
     end.
 
 lookup_user(Username) ->
@@ -306,5 +324,9 @@ format_error({parse_error, starting_comma, _}) ->
     "cannot start with comma";
 format_error({parse_error, Err, _}) ->
     io_lib:format("~p", [Err]);
+format_error(authMethodNotSupported) ->
+    "Authentication method not supported";
+format_error(referral_not_supported) ->
+    "Referrals are not supported";
 format_error(Error) ->
     io_lib:format("~p", [Error]).
