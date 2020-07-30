@@ -137,9 +137,13 @@
               </div>
             </div>
             <div class="formrow">
-              <label>
-                Contact LDAP host:</label>
-              <small>"Client Certificate" requires "Encryption" to be enabled.</small>
+              <label>Contact LDAP Host</label>
+              <div class="desc" ng-show="addLdapDialogCtl.config.authType == 'cert'">
+                Note: Client cert auth is currently supported only for GSuite Secure LDAP
+              </div>
+              <div class="desc" ng-if="addLdapDialogCtl.maybeDisableClientCert()">
+                The Client Certificate choice requires Encryption be enabled above.
+              </div>
               <div class="checkbox-list">
                 <input
                    type="radio"
