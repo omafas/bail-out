@@ -73,33 +73,26 @@ handle_start_collect_logs(Req) ->
     case parse_validate_collect_params(Params, ns_config:get()) of
         {ok, Nodes, BaseURL, Options} ->
             ProxyInfo = lists:keyfind(upload_proxy, 1, Options),
-            case cluster_logs_collection_task:preflight_proxy_url(ProxyInfo) of
+            case maybe_do_preflight_checks(BaseURL, ProxyInfo, Options) of
                 {error, Message} ->
                     menelaus_util:reply_json(Req,
                                              {struct, [{'_', Message}]},
                                              400);
                 ok ->
-                    case cluster_logs_collection_task:preflight_base_url(
-                           BaseURL, ProxyInfo) of
+                    case cluster_logs_sup:start_collect_logs(
+                           Nodes, BaseURL, Options) of
                         ok ->
-                            case cluster_logs_sup:start_collect_logs(
-                                   Nodes, BaseURL, Options) of
-                                ok ->
-                                    ns_audit:start_log_collection(
-                                      Req, Nodes, BaseURL,
-                                      lists:keydelete(redact_salt_fun, 1,
-                                                      Options)),
-                                    menelaus_util:reply_json(Req, [], 200);
-                                already_started ->
-                                    menelaus_util:reply_json(
-                                      Req,
-                                      {struct,
-                                       [{'_', <<"Logs collection task is "
-                                                "already started">>}]}, 400)
-                            end;
-                        {error, Message} ->
+                            ns_audit:start_log_collection(
+                              Req, Nodes, BaseURL,
+                              lists:keydelete(redact_salt_fun, 1,
+                                              Options)),
+                            menelaus_util:reply_json(Req, [], 200);
+                        already_started ->
                             menelaus_util:reply_json(
-                              Req, {struct, [{'_', Message}]}, 400)
+                              Req,
+                              {struct,
+                               [{'_', <<"Logs collection task is "
+                                        "already started">>}]}, 400)
                     end
             end;
         {errors, RawErrors} ->
@@ -108,6 +101,28 @@ handle_start_collect_logs(Req) ->
                           {Field, iolist_to_binary(Msg)}
                       end || E <- RawErrors],
             menelaus_util:reply_json(Req, {struct, lists:flatten(Errors)}, 400)
+    end.
+
+maybe_do_preflight_checks(BaseURL, ProxyInfo, Options) ->
+    case proplists:get_bool(bypass_reachability_checks, Options) of
+        true ->
+            ok;
+        false ->
+            do_preflight_checks(BaseURL, ProxyInfo)
+    end.
+
+do_preflight_checks(BaseURL, ProxyInfo) ->
+    case cluster_logs_collection_task:preflight_proxy_url(ProxyInfo) of
+        ok ->
+            case cluster_logs_collection_task:preflight_base_url(
+                   BaseURL, ProxyInfo) of
+                ok ->
+                    ok;
+                Error ->
+                    Error
+            end;
+        Error ->
+            Error
     end.
 
 %% we're merely best-effort-sync and we don't care about results
@@ -237,7 +252,15 @@ parse_validate_collect_params(Params, Config) ->
     Customer = proplists:get_value("customer", Params),
     %% we handle no ticket or empty ticket the same
     Ticket = proplists:get_value("ticket", Params, ""),
-
+    BypassReachabilityChecks =
+        case proplists:get_value("bypassReachabilityChecks", Params, "false") of
+            "true" ->
+                [{bypass_reachability_checks, true}];
+            "false" ->
+                [{bypass_reachability_checks, false}];
+            _ ->
+                [{error, {invalid, bypassReachabilityChecks}}]
+        end,
     MaybeUploadProxy = case proplists:get_value("uploadProxy", Params) of
                            undefined -> [];
                            Proxy ->
@@ -319,7 +342,8 @@ parse_validate_collect_params(Params, Config) ->
 
     BasicErrors = [E || {error, E} <- NodesRV ++ TmpDir ++ LogDir ++
                                       MaybeUploadProxy ++ RedactLevel ++
-                                      RedactSalt ++ MaybeUpload],
+                                      RedactSalt ++ MaybeUpload ++
+                                      BypassReachabilityChecks],
     case BasicErrors of
         [] ->
             [{ok, Nodes}] = NodesRV,
@@ -331,7 +355,7 @@ parse_validate_collect_params(Params, Config) ->
                                   []
                           end,
             Options = RedactLevel ++ RedactSalt ++ TmpDir ++
-                      LogDir ++ UploadProxy,
+                      LogDir ++ UploadProxy ++ BypassReachabilityChecks,
             {ok, Nodes, Upload, Options};
         _ ->
             {errors, BasicErrors}
