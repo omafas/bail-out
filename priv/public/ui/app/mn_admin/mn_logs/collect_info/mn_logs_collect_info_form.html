@@ -175,6 +175,16 @@
         <div
            class="error error-field"
            ng-show="logsCollectInfoCtl.errors.uploadProxy">{{logsCollectInfoCtl.errors.uploadProxy}}</div>
+        <input
+           type="checkbox"
+           id="bypass_reachability_checks"
+           ng-model="logsCollectInfoCtl.collect.bypassReachabilityChecks">
+        <label for="bypass_reachability_checks" class="margin-right-zero">
+            Bypass Reachability Checks
+        </label>
+        <div
+           class="error error-field"
+           ng-show="logsCollectInfoCtl.errors.bypassReachabilityChecks">{{logsCollectInfoCtl.errors.bypassReachabilityChecks}}</div>
       </div>
 
       <div class="formrow fix-width-5">
