@@ -358,7 +358,24 @@ preflight_lhttpc_request(Type, URL, Options) ->
 preflight_base_url(false, false) ->
     ok;
 preflight_base_url(BaseURL, {upload_proxy, URL}) ->
-    preflight_lhttpc_request("Base", BaseURL, [{proxy, URL}]);
+    case http_uri:parse(BaseURL) of
+        {ok, Result} ->
+            {_, _, Host, _, _, _} = Result,
+            %% The server_name_indication is needed to let the destination
+            %% server know which hostname is being connected to.
+            %% This allows multiple websites to be served by the same IP
+            %% address without using the same certificate.
+            %% If "Host" is not a DNS hostname the preflight check may fail
+            %% (see otp ssl:validate_option(server_name_indication...) for
+            %% details).
+            preflight_lhttpc_request("Base",
+                                     BaseURL,
+                                     [{proxy, URL},
+                                      {proxy_ssl_options,
+                                       [{server_name_indication, Host}]}]);
+        Error ->
+            Error
+    end;
 preflight_base_url(BaseURL, false) ->
     preflight_lhttpc_request("Base", BaseURL, []).
 
