@@ -42,6 +42,8 @@
         });
     }
     function activate() {
+      vm.isEventingNode = node.services.includes("eventing");
+
       mnPromiseHelper(vm, mnServersService.getNodeStatuses(node.hostname))
         .showSpinner()
         .getPromise()
@@ -49,7 +51,9 @@
           if (details) {
             vm.status = details;
           } else {
-            $uibModalInstance.close();
+            if (!vm.isEventingNode) {
+              $uibModalInstance.close();
+            }
           }
         });
     }
