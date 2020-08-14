@@ -4,11 +4,6 @@
   </div>
   <div mn-spinner="serversFailOverDialogCtl.viewLoading">
     <div class="panel-content forms">
-      <div
-         ng-show="serversFailOverDialogCtl.isEventingNode"
-         class="error error-form">
-        <strong>Warning:</strong> Failover of this node will trigger internal processing after failover for the following service: Eventing. This processing may take a moment to complete.
-      </div>
       <div ng-show="!serversFailOverDialogCtl.status.down && !serversFailOverDialogCtl.status.dataless">
         <label>Failover Options</label>
         <div class="formrow checkbox-list">
@@ -52,6 +47,15 @@
              name="confirmation"
              ng-model="serversFailOverDialogCtl.status.confirmation">
           <label for="for_failover_confirm">Confirm failover</label>
+        </div>
+        <div
+           ng-show="(!serversFailOverDialogCtl.status.backfill &&
+                    (serversFailOverDialogCtl.status.failOver === 'startFailover')) &&
+                    serversFailOverDialogCtl.isEventingNode) ||
+                    (!serversFailOverDialogCtl.isKVNode &&
+                    serversFailOverDialogCtl.isEventingNode)"
+           class="error error-form">
+          <strong>Warning:</strong> Failover of this node will trigger internal processing after failover for the following service: Eventing. This processing may take a moment to complete.
         </div>
         <div
            class="error error-form"
