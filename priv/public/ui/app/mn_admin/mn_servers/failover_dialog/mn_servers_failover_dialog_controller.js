@@ -43,7 +43,6 @@
     }
     function activate() {
       vm.isEventingNode = node.services.includes("eventing");
-      vm.isKVNode = node.services.includes("kv");
 
       mnPromiseHelper(vm, mnServersService.getNodeStatuses(node.hostname))
         .showSpinner()
