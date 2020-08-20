@@ -49,12 +49,6 @@
           <label for="for_failover_confirm">Confirm failover</label>
         </div>
         <div
-           ng-show="(serversFailOverDialogCtl.status.failOver === 'startFailover') &&
-                    serversFailOverDialogCtl.isEventingNode"
-           class="error error-form">
-          <strong>Warning:</strong> Failover of this node will trigger internal processing after failover for the following service: Eventing. This processing may take some time to complete.
-        </div>
-        <div
            class="error error-form"
            ng-show="!serversFailOverDialogCtl.status.backfill && (serversFailOverDialogCtl.status.failOver === 'startFailover')">
           <strong>Warning:</strong> Failing over the node will remove it from the cluster and activate a replica.
@@ -89,12 +83,13 @@
           Rebalancing will be required to add the node back into the cluster.
         </div>
       </div>
+
       <div
-         ng-show="serversFailOverDialogCtl.status.dataless &&
-                  serversFailOverDialogCtl.isEventingNode"
+         ng-show="serversFailOverDialogCtl.isEventingNode"
          class="error error-form">
         <strong>Warning:</strong> Failover of this node will trigger internal processing after failover for the following service: Eventing. This processing may take some time to complete.
       </div>
+
       <div
          class="error error-form"
          ng-if="serversFailOverDialogCtl.status.dataless">
