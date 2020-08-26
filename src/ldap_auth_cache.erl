@@ -17,7 +17,8 @@
 -behaviour(active_cache).
 
 %% API
--export([start_link/0, authenticate/2, lookup_user/1, user_groups/1, flush/0]).
+-export([start_link/0, authenticate/2, lookup_user/1, user_groups/1, flush/0,
+         remote_flush/1]).
 
 %% gen_server callbacks
 -export([init/1, translate_options/1]).
@@ -53,6 +54,10 @@ user_groups(Username) ->
 
 flush() ->
     active_cache:flush(?MODULE).
+
+%% to be called from couchdb node
+remote_flush(Node) ->
+    active_cache:flush({?MODULE, Node}).
 
 %%%===================================================================
 %%% callbacks

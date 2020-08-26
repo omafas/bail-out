@@ -69,7 +69,7 @@ init([]) ->
                 %% Ldap cache might receive this notification later
                 %% but we need to make sure it is flushed before
                 %% we renew the upper level cache
-                ldap_auth_cache:flush(),
+                ldap_auth_cache:remote_flush(ns_node_disco:ns_server_node()),
                 active_cache:renew_cache(Self);
             ({group_version, _}) ->
                 active_cache:renew_cache(Self);
