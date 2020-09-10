@@ -51,7 +51,7 @@ ssl_options(Host, Settings) ->
         case proplists:get_value(server_cert_validation, Settings) of
             true ->
                 [{verify, verify_peer}, {cacerts, get_cacerts(Settings)},
-                 {server_name_indication, Host}, {log_alert, false},
+                 {server_name_indication, Host}, {log_alert, true},
                  {depth, ?ALLOWED_CERT_CHAIN_LENGTH}];
             false ->
                 [{verify, verify_none}]
@@ -111,7 +111,8 @@ with_connection(Settings, Fun) ->
 
     case open_ldap_connection(Hosts, Port, SSL, Timeout, Settings) of
         {ok, Handle, Host} ->
-            ?log_debug("Connected to LDAP server: ~p", [Host]),
+            ?log_debug("Connected to LDAP server: ~p (port: ~p, SSL: ~p)",
+                       [Host, Port, SSL]),
             try
                 %% The upgrade is done in two phases: first the server is asked
                 %% for permission to upgrade. Second, if the request is
@@ -133,7 +134,7 @@ with_connection(Settings, Fun) ->
                 eldap:close(Handle)
             end;
         {error, Reason} ->
-            ?log_error("Connect to ldap {~p, ~p, ~p} failed: ~p",
+            ?log_error("Connect to ldap ~p (port: ~p, SSL: ~p} failed: ~p",
                        [Hosts, Port, SSL, Reason]),
             {error, {connect_failed, Reason}}
     end.

@@ -36,10 +36,14 @@ prepare_ldap_settings(Settings) ->
     Fun =
       fun (_, undefined) -> undefined;
           (K, V) ->
-            {_, JsonKey, _, Formatter} = lists:keyfind(K, 1, SettingsDesc),
-            {JsonKey, Formatter(V)}
+            case lists:keyfind(K, 1, SettingsDesc) of
+                %% Removing parameters that are used for validation only,
+                %% like authUser and authPass
+                false -> undefined;
+                {_, JsonKey, _, Formatter} -> {JsonKey, Formatter(V)}
+            end
       end,
-    [Fun(K, V) || {K, V} <- Settings, V =/= undefined].
+    [{ResK, ResV} || {K, V} <- Settings, {ResK, ResV} <- [Fun(K, V)]].
 
 handle_ldap_settings_post(Req) ->
     menelaus_web_rbac:assert_groups_and_ldap_enabled(),
@@ -61,7 +65,8 @@ parse_ldap_settings_keys(Props) ->
       end, Props).
 
 build_new_ldap_settings(Props) ->
-    misc:update_proplist(ldap_util:build_settings(), Props).
+    Current = ldap_util:build_settings(),
+    {Current, misc:update_proplist(Current, Props)}.
 
 handle_ldap_settings_validate_post(Type, Req) when Type =:= "connectivity";
                                                    Type =:= "authentication";
@@ -70,7 +75,14 @@ handle_ldap_settings_validate_post(Type, Req) when Type =:= "connectivity";
     validator:handle(
       fun (Props) ->
               ParsedProps = parse_ldap_settings_keys(Props),
-              NewProps = build_new_ldap_settings(ParsedProps),
+              {CurrProps, NewProps} = build_new_ldap_settings(ParsedProps),
+              ?log_debug("Validating ~p for LDAP settings: ~n~p~n"
+                         "Modified settings:~n~p~n"
+                         "Full list of settings:~n~p",
+                         [Type,
+                          prepare_ldap_settings(ParsedProps),
+                          prepare_ldap_settings(ParsedProps -- CurrProps),
+                          prepare_ldap_settings(NewProps)]),
               Res = validate_ldap_settings(Type, NewProps),
               menelaus_util:reply_json(Req, {Res})
       end, Req, form, ldap_settings_validator_validators(Type) ++
