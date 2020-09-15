@@ -1262,7 +1262,6 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
         LiteralTask("Couchbase config", read_guts(guts, "ns_config")),
         LiteralTask("Couchbase static config",
                     read_guts(guts, "static_config")),
-        LiteralTask("Raw ns_log", read_guts(guts, "ns_log")),
         # TODO: just gather those in python
         WindowsTask("Memcached logs",
                     "cd " + winquote_path(read_guts(guts, "memcached_logs_path")) + " && " +
@@ -1399,6 +1398,8 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
 
         [CollectFile("Rebalance Report: %s" % path, path)
          for path in glob.glob(os.path.join(rebdir, "rebalance_report*"))],
+
+        CollectFile("NS Log", read_guts(guts, "ns_log_path")),
 
         make_stats_archives_task(guts, initargs_path),
         AllOsTask("Phosphor Trace",

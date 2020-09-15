@@ -585,7 +585,6 @@ main_with_everything(StaticTerms, NSConfig, CouchInisPList, Node) ->
     NSLogPath = search_config(search_config_for_node(NSConfig, Node, ns_log, []),
                               filename,
                               ""),
-    NSLog = (catch read_ns_log(NSLogPath)),
 
     Nodes = [node_host(N) || N <- search_config(NSConfig, nodes_wanted, [])],
 
@@ -624,7 +623,6 @@ main_with_everything(StaticTerms, NSConfig, CouchInisPList, Node) ->
          {buckets, string:join(BucketNames, ",")},
          {memcached_buckets, string:join(MCDBucketNames, ",")},
          {ns_log_path, NSLogPath},
-         {ns_log, iolist_to_binary(io_lib:format("~p", [NSLog]))},
          {log_path, search_config(StaticTerms, error_logger_mf_dir, "")},
          {memcached_admin, MCDAdmin},
          {memcached_logs_path, MCDLogs},
@@ -668,11 +666,6 @@ is_net_config_ipv6(DistCfgPath) ->
                       [filename:absname(DistCfgPath), Err]),
             erlang:halt(1)
     end.
-
-read_ns_log(Path) ->
-    {ok, B} = file:read_file(Path),
-    B1 = zlib:uncompress(B),
-    binary_to_term(B1).
 
 node_host(Node) ->
     [_, Host | _] = string:tokens(atom_to_list(Node), "@"),
