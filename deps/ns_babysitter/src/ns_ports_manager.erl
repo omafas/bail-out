@@ -52,7 +52,9 @@ send_command(Node, Name, Command) ->
 
 set_dynamic_children(Node, Children) ->
     ?log_debug("Setting children ~p", [get_names(Children)]),
-    gen_server:call({?MODULE, Node}, {set_dynamic_children, Children}, infinity).
+    ChildrenThunk = fun () -> Children end,
+    gen_server:call({?MODULE, Node},
+                    {set_dynamic_children, ChildrenThunk}, infinity).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -84,7 +86,8 @@ handle_call({find_port, Name}, _From, State) ->
 handle_call({send_command, Name, Command}, _From, State) ->
     ?log_debug("Command ~p is about to be sent to port ~p", [Command, Name]),
     {reply, ns_child_ports_sup:send_command(Name, Command), State};
-handle_call({set_dynamic_children, Children}, _From, State) ->
+handle_call({set_dynamic_children, ChildrenThunk}, _From, State) ->
+    Children = ChildrenThunk(),
     ?log_debug("New list of children is received: ~p", [get_names(Children)]),
     {reply, ns_child_ports_sup:set_dynamic_children(Children), State}.
 
