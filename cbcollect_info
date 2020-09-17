@@ -1406,12 +1406,12 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
                    "-H", "%s:%s" % (local_url_addr,
                                     read_guts(guts, "memcached_port")),
                    "-u", read_guts(guts, "memcached_admin"),
-                   "-P", memcached_pass,
                    "kv_trace.json"],
                   timeout=120,
                   log_file="stats.log",
                   change_dir=True,
-                  artifacts=["kv_trace.json"]),
+                  artifacts=["kv_trace.json"],
+                  addenv=[("CB_PASSWORD", memcached_pass)]),
     ]
 
     _tasks = flatten([getent_tasks,
