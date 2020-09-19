@@ -64,9 +64,16 @@ parse_ldap_settings_keys(Props) ->
           end
       end, Props).
 
-build_new_ldap_settings(Props) ->
+build_validation_settings(Props) ->
     Current = ldap_util:build_settings(),
-    {Current, misc:update_proplist(Current, Props)}.
+    SetReuseSessions =
+        %% Set reuse_sessions to false, unless it's set to another value
+        %% in settings explicitly
+        fun (undefined) -> [{reuse_sessions, false}];
+            (Opts) -> misc:update_proplist([{reuse_sessions, false}], Opts)
+        end,
+    Settings = misc:key_update(extra_tls_opts, Current, SetReuseSessions),
+    {Current, misc:update_proplist(Settings, Props)}.
 
 handle_ldap_settings_validate_post(Type, Req) when Type =:= "connectivity";
                                                    Type =:= "authentication";
@@ -75,7 +82,7 @@ handle_ldap_settings_validate_post(Type, Req) when Type =:= "connectivity";
     validator:handle(
       fun (Props) ->
               ParsedProps = parse_ldap_settings_keys(Props),
-              {CurrProps, NewProps} = build_new_ldap_settings(ParsedProps),
+              {CurrProps, NewProps} = build_validation_settings(ParsedProps),
               ?log_debug("Validating ~p for LDAP settings: ~n~p~n"
                          "Modified settings:~n~p~n"
                          "Full list of settings:~n~p",
@@ -185,8 +192,23 @@ ldap_settings_desc() ->
       Curry(fun validate_key/2),
       fun (undefined) -> <<>>;
           ({password, {_, _, not_encrypted}}) -> <<"**********">>
+      end},
+     {extra_tls_opts, extraTLSOpts,
+      Curry(fun not_supported/2),
+      fun (List) ->
+          Sanitized =
+              lists:map(
+                fun ({K, {password, _}}) -> {K, <<"********">>};
+                    ({K, V}) -> {K, V}
+                end, List),
+          iolist_to_binary(io_lib:format("~p", [Sanitized]))
       end}
     ].
+
+not_supported(Name, State) ->
+    validator:validate(
+      fun (_) -> {error, "modification not supported"} end,
+      Name, State).
 
 ldap_settings_validators() ->
     [Validator(JsonKey) || {_, JsonKey, Validator, _} <- ldap_settings_desc()]

@@ -56,7 +56,22 @@ ssl_options(Host, Settings) ->
             false ->
                 [{verify, verify_none}]
         end,
-    ClientAuthOpts ++ PeerVerificationOpts.
+    ExtraOptsUnprepared =
+        case proplists:get_value(extra_tls_opts, Settings) of
+            undefined -> []; %% not a default, but value == undefined
+            L -> L
+        end,
+    %% Remove {password, _} wrap.
+    %% In case if a value in opts contains sensitive information (like
+    %% a password or a private key) it might be protected by such a wrap.
+    %% That would prevent the value from being printed to logs or returned as
+    %% an API response. We need to drop it before use, because ssl knows nothing
+    %% about it.
+    ExtraOpts = lists:map(
+                  fun ({K, {password, V}}) -> {K, V};
+                      (KV) -> KV
+                  end, ExtraOptsUnprepared),
+    misc:update_proplist(ClientAuthOpts ++ PeerVerificationOpts, ExtraOpts).
 
 client_cert_auth_enabled(Settings) ->
     Encryption = proplists:get_value(encryption, Settings),
@@ -194,7 +209,8 @@ default_settings() ->
       round(0.5*menelaus_roles:external_auth_polling_interval())},
      {cacert, undefined},
      {server_cert_validation, true},
-     {bind_method, undefined}].
+     {bind_method, undefined},
+     {extra_tls_opts, undefined}].
 
 build_settings() ->
     case ns_config:search(ldap_settings) of
