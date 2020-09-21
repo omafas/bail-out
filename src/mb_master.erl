@@ -1,5 +1,5 @@
 %% @author Couchbase <info@couchbase.com>
-%% @copyright 2010-2019 Couchbase, Inc.
+%% @copyright 2010-2020 Couchbase, Inc.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -28,8 +28,9 @@
 -endif.
 
 %% Constants and definitions
--define(HEARTBEAT_INTERVAL, 2000).
--define(TIMEOUT, ?HEARTBEAT_INTERVAL * 5).
+-define(HEARTBEAT_INTERVAL, ?get_param(heartbeat_interval, 2000)).
+-define(TIMEOUT_INTERVAL_COUNT, ?get_param(timeout_interval_count, 5)).
+-define(TIMEOUT, ?HEARTBEAT_INTERVAL * ?TIMEOUT_INTERVAL_COUNT).
 
 -type node_info() :: {version(), node()}.
 
