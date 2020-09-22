@@ -31,19 +31,22 @@ convert_header_name(Header) when is_atom(Header) ->
 convert_header_name(Header) when is_list(Header) ->
     Header.
 
-convert_headers(MochiReq) ->
-    HeadersList = mochiweb_headers:to_list(mochiweb_request:get(headers, MochiReq)),
-    Headers = lists:filtermap(fun ({'Content-Length', _Value}) ->
-                                      false;
-                                  ({Name, Value}) ->
-                                      {true, {convert_header_name(Name), Value}}
-                              end, HeadersList),
-    case menelaus_auth:extract_ui_auth_token(MochiReq) of
-        undefined ->
-            Headers;
-        Token ->
-            [{"ns-server-auth-token", Token} | Headers]
-    end.
+headers_for_proxy(MochiReq, Identity) ->
+    HeadersList = mochiweb_headers:to_list(
+                    mochiweb_request:get(headers, MochiReq)),
+    Headers = lists:filtermap(
+                fun ({'Content-Length', _Value}) ->
+                        false;
+                    ({Name, Value}) ->
+                        case menelaus_rest:is_auth_header(Name) of
+                            true ->
+                                false;
+                            false ->
+                                {true, {convert_header_name(Name), Value}}
+                        end
+                end, HeadersList),
+    [menelaus_rest:on_behalf_header(Identity),
+     menelaus_rest:special_auth_header() | Headers].
 
 send(MochiReq, Method, Path, Headers, Body) ->
     Params = mochiweb_request:parse_qs(MochiReq),
@@ -66,16 +69,12 @@ is_safe_response_header({"Transfer-Encoding", _}) ->
 is_safe_response_header(_) ->
     true.
 
-special_auth_headers() ->
-    menelaus_rest:add_basic_auth([{"Accept", "application/json"}],
-                                 ns_config_auth:get_user(special),
-                                 ns_config_auth:get_password(special)).
-
 proxy(MochiReq) ->
     proxy(mochiweb_request:get(raw_path, MochiReq), MochiReq).
 
 proxy(Path, MochiReq) ->
-    Headers = convert_headers(MochiReq),
+    Identity = menelaus_auth:get_identity(MochiReq),
+    Headers = headers_for_proxy(MochiReq, Identity),
     Body = case mochiweb_request:recv_body(MochiReq) of
                undefined ->
                    <<>>;
@@ -115,7 +114,10 @@ convert_doc_key(Key) ->
 
 query_goxdcr(Fun, Method, Path, Timeout) ->
     RV = {Code, _Headers, Body} =
-        send_with_timeout(Method, Path, special_auth_headers(), [], Timeout),
+        send_with_timeout(
+          Method, Path,
+          [menelaus_rest:special_auth_header(),
+           {"Accept", "application/json"}], [], Timeout),
     case Code of
         200 ->
             case Body of

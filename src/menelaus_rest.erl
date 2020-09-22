@@ -23,7 +23,10 @@
 -export([rest_url/3,
          rest_url/4,
          json_request_hilevel/4,
-         add_basic_auth/3]).
+         basic_auth_header/2,
+         special_auth_header/0,
+         is_auth_header/1,
+         on_behalf_header/1]).
 
 -spec rest_url(string(), string() | integer(), string(), string() | atom()) -> string().
 rest_url(Host, Port, Path, Scheme) when is_atom(Scheme) ->
@@ -36,13 +39,33 @@ rest_url(Host, Port, Path, Scheme) ->
 rest_url(Host, Port, Path) ->
     rest_url(Host, Port, Path, "http").
 
-add_basic_auth(Headers, User, Password) ->
+basic_auth_header(User, Password) ->
     UserPassword = base64:encode_to_string(User ++ ":" ++ Password),
-    [{"Authorization",
-      "Basic " ++ UserPassword} | Headers].
+    {"Authorization", "Basic " ++ UserPassword}.
+
+special_auth_header() ->
+    basic_auth_header(ns_config_auth:get_user(special),
+                      ns_config_auth:get_password(special)).
+
+on_behalf_header({User, Domain}) ->
+    {"cb-on-behalf-of",
+     base64:encode_to_string(User ++ ":" ++ atom_to_list(Domain))}.
+
+is_auth_header(Header) when is_atom(Header) ->
+    is_auth_header(atom_to_list(Header));
+is_auth_header("Authorization") ->
+    true;
+is_auth_header("cb-on-behalf-of") ->
+    true;
+is_auth_header("ns-server-auth-token") ->
+    true;
+is_auth_header("ns-server-ui") ->
+    true;
+is_auth_header(_) ->
+    false.
 
 rest_add_auth(Headers, {User, Password}) ->
-    add_basic_auth(Headers, User, Password);
+    [basic_auth_header(User, Password) | Headers];
 rest_add_auth(Headers, undefined) ->
     Headers.
 

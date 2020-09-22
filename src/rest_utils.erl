@@ -39,10 +39,7 @@ request(Type, URL, Method, Headers, Body, Timeout) ->
     RV.
 
 request_local(Type, URL, Method, Headers, Body, Timeout) ->
-    User = ns_config_auth:get_user(special),
-    Pwd = ns_config_auth:get_password(special),
-
-    HeadersWithAuth = menelaus_rest:add_basic_auth(Headers, User, Pwd),
+    HeadersWithAuth = [menelaus_rest:special_auth_header() | Headers],
 
     request(Type, URL, Method, HeadersWithAuth, Body, Timeout).
 
