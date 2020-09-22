@@ -33,7 +33,7 @@
          parse_validate_number/3,
          parse_validate_boolean_field/3]).
 
--define(AUTO_FAILOVER_MIN_TIMEOUT, 5).
+-define(AUTO_FAILOVER_MIN_TIMEOUT, ?get_param(auto_failover_min_timeout, 5)).
 -define(AUTO_FAILOVER_MIN_CE_TIMEOUT, 30).
 -define(AUTO_FAILOVER_MAX_TIMEOUT, 3600).
 
