@@ -33,9 +33,9 @@
          parse_validate_number/3,
          parse_validate_boolean_field/3]).
 
--define(AUTO_FAILLOVER_MIN_TIMEOUT, 5).
--define(AUTO_FAILLOVER_MIN_CE_TIMEOUT, 30).
--define(AUTO_FAILLOVER_MAX_TIMEOUT, 3600).
+-define(AUTO_FAILOVER_MIN_TIMEOUT, 5).
+-define(AUTO_FAILOVER_MIN_CE_TIMEOUT, 30).
+-define(AUTO_FAILOVER_MAX_TIMEOUT, 3600).
 
 -define(CAN_ABORT_REBALANCE_CONFIG_KEY, can_abort_rebalance).
 -define(DATA_DISK_ISSUES_CONFIG_KEY, failover_on_data_disk_issues).
@@ -154,11 +154,11 @@ validate_settings_auto_failover(Args, Config) ->
 parse_validate_other_params(Args, Config) ->
     Min = case cluster_compat_mode:is_enterprise() of
               true ->
-                  ?AUTO_FAILLOVER_MIN_TIMEOUT;
+                  ?AUTO_FAILOVER_MIN_TIMEOUT;
               false ->
-                  ?AUTO_FAILLOVER_MIN_CE_TIMEOUT
+                  ?AUTO_FAILOVER_MIN_CE_TIMEOUT
           end,
-    Max = ?AUTO_FAILLOVER_MAX_TIMEOUT,
+    Max = ?AUTO_FAILOVER_MAX_TIMEOUT,
     Timeout = proplists:get_value("timeout", Args),
     case parse_validate_number(Timeout, Min, Max) of
         {ok, Val} ->
