@@ -118,3 +118,8 @@
 .uib-position-measure {
   visibility: hidden;
 }
+
+.tooltip-custom-wide .tooltip-inner {
+  max-width: 1024px;
+  width: auto;
+}

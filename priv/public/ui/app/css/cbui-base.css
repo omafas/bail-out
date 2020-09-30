@@ -175,8 +175,12 @@ h5 {
 /* very small title --------------------------------------------------------- */
 h6 {
   font-size: .75rem;
-  font-weight: 600;
+  font-weight: 400;
   color: #333;
+  line-height: 1.5 !important;
+}
+h6 + h5 {
+  line-height: 1.4 !important;
 }
 /* MARGINS:  only the first element of type (2nd el in pair),
    preceded by the former element receives this style ----------------------- */
@@ -247,10 +251,6 @@ ul.nobullet li {
 }
 
 /* BASIC TEXT STYLES ---------------------------------------------------------*/
-.text-normal {
-  font-size: 1rem;
-  font-weight: 400;
-}
 /* 16px base = 15px --------------------------------------------------------- */
 .text-medium {
   font-size: .961rem;
@@ -272,7 +272,7 @@ small {
 }
 /* 16px base = 12px --------------------------------------------------------- */
 .text-smaller {
-  font-size: .75rem;
+  font-size: .75rem !important;
   font-weight: 400;
 }
 /* 16px base = 11px --------------------------------------------------------- */
@@ -286,6 +286,10 @@ small {
 }
 .text-larger {
   font-size: 130%;
+}
+.text-normal {
+  font-size: 1rem;
+  font-weight: 400;
 }
 strong,
 b {
@@ -337,6 +341,12 @@ sup {
 }
 sup {
   top: -0.4rem;
+}
+.sup {
+  position: relative;
+  display: inline-block;
+  top: -1px;
+  left: 1px;
 }
 sub {
   bottom: -0.2rem;
@@ -1118,7 +1128,7 @@ form .error-form {
   color: #56b349;
 }
 .warning { /* orange-1 */
-  color: #f5a623;
+  color: #f5a623 !important;
 }
 .error { /* red-1 */
   color: #cc2a2e;
