@@ -38,7 +38,8 @@ headers_for_proxy(MochiReq, Identity) ->
                 fun ({'Content-Length', _Value}) ->
                         false;
                     ({Name, Value}) ->
-                        case menelaus_rest:is_auth_header(Name) of
+                        case menelaus_rest:is_auth_header(Name) orelse
+                            menelaus_auth:is_meta_header(Name) of
                             true ->
                                 false;
                             false ->

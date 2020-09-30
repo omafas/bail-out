@@ -53,15 +53,18 @@ on_behalf_header({User, Domain}) ->
 
 is_auth_header(Header) when is_atom(Header) ->
     is_auth_header(atom_to_list(Header));
-is_auth_header("Authorization") ->
+is_auth_header(Header) when is_list(Header) ->
+    is_auth_header_lc(string:lowercase(Header)).
+
+is_auth_header_lc("authorization") ->
     true;
-is_auth_header("cb-on-behalf-of") ->
+is_auth_header_lc("cb-on-behalf-of") ->
     true;
-is_auth_header("ns-server-auth-token") ->
+is_auth_header_lc("ns-server-auth-token") ->
     true;
-is_auth_header("ns-server-ui") ->
+is_auth_header_lc("ns-server-ui") ->
     true;
-is_auth_header(_) ->
+is_auth_header_lc(_) ->
     false.
 
 rest_add_auth(Headers, {User, Password}) ->

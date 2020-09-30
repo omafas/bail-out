@@ -35,6 +35,7 @@
          get_user_id/1,
          get_token/1,
          assert_no_meta_headers/1,
+         is_meta_header/1,
          verify_rest_auth/2,
          verify_local_token/1,
          apply_headers/2]).
@@ -125,12 +126,20 @@ maybe_refresh_token(Req) ->
             end
     end.
 
+meta_header_names() ->
+    ["menelaus-auth-user", "menelaus-auth-domain", "menelaus-auth-token",
+     scram_sha:meta_header()].
+
+-spec is_meta_header(atom() | list()) -> boolean().
+is_meta_header(Header) when is_atom(Header) ->
+    is_meta_header(atom_to_list(Header));
+is_meta_header(Header) when is_list(Header) ->
+    lists:member(string:lowercase(Header), meta_header_names()).
+
 -spec assert_no_meta_headers(mochiweb_request()) -> ok.
 assert_no_meta_headers(Req) ->
-    undefined = mochiweb_request:get_header_value("menelaus-auth-user", Req),
-    undefined = mochiweb_request:get_header_value("menelaus-auth-domain", Req),
-    undefined = mochiweb_request:get_header_value("menelaus-auth-token", Req),
-    undefined = mochiweb_request:get_header_value(scram_sha:meta_header(), Req),
+    [undefined = mochiweb_request:get_header_value(N, Req) ||
+        N <- meta_header_names()],
     ok.
 
 apply_headers(Req, []) ->
