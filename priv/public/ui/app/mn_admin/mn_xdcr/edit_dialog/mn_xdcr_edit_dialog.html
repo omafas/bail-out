@@ -9,7 +9,8 @@
     <div class="panel-content">
 
       <div class="formrow"
-           ng-show="xdcrEditDialogCtl.settings.type !== 'capi'">
+         ng-show="xdcrEditDialogCtl.pools.isEnterprise &&
+                  (xdcrEditDialogCtl.settings.type !== 'capi')">
         <label for="replication_priority">Replication Priority</label>
         <select
            id="xdcr_advaced_settings_type"
