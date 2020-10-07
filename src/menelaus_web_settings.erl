@@ -653,7 +653,8 @@ is_valid_port_number_or_error(StringPort) ->
 
 is_port_free("SAME") ->
     true;
-is_port_free(Port) ->
+is_port_free(StringPort) ->
+    Port = list_to_integer(StringPort),
     Port =/= service_ports:get_port(memcached_port)
         andalso Port =/= service_ports:get_port(memcached_dedicated_port)
         andalso Port =/= service_ports:get_port(memcached_ssl_port)
