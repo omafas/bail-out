@@ -484,44 +484,92 @@ handle_terse_cluster_info(Req) ->
     menelaus_util:assert_is_65(),
     case ns_config_auth:is_system_provisioned() of
         true ->
-            RV = handle_terse_cluster_info_inner(Req),
-            reply_json(Req, {struct, RV});
+            Props = cluster_info_props(Req),
+            validator:handle(
+              fun (ReqdPropNames) ->
+                      RV = get_terse_cluster_info(ReqdPropNames, Props),
+                      menelaus_util:reply_json(Req, RV, 200)
+              end, Req, qs, [validator:boolean(all, _) |
+                             [validator:boolean(K, _) || {K, _} <- Props]]);
         false ->
             reply_json(Req, <<"unknown pool">>, 404)
     end.
 
-handle_terse_cluster_info_inner(Req) ->
-    Orchestrator = case leader_registry:whereis_name(ns_orchestrator) of
-                       undefined -> undefined;
-                       RV -> node(RV)
-                   end,
+cluster_info_props(Req) ->
+    [{clusterUUID, fun menelaus_web:get_uuid/0},
+     {autoFailover,
+      fun (Cfg) ->
+              AFCfg = [{K, V} || {K, V} <- ns_config:search(
+                                             Cfg, auto_failover_cfg, []),
+                                 lists:member(K, [enabled, timeout])],
+              {struct, AFCfg}
+      end},
+     {autoReprovision,
+      fun (Cfg) ->
+              ARCfg = ns_config:search(Cfg, auto_reprovision_cfg, []),
+              {struct, ARCfg}
+      end},
+     {orchestrator,
+      fun () ->
+              case leader_registry:whereis_name(ns_orchestrator) of
+                  undefined -> undefined;
+                  RV -> node(RV)
+              end
+      end},
+     {master, fun mb_master:master_node/0},
+     {isBalanced, fun ns_cluster_membership:is_balanced/0},
+     {quotaInfo,
+      fun (Cfg) ->
+              QuotaInfo = menelaus_web_node:build_memory_quota_info(Cfg),
+              {struct, QuotaInfo}
+      end},
+     {clusterCompatVersion,
+      fun (Cfg) ->
+              [V1 | V2] = lists:map(
+                            integer_to_list(_),
+                            cluster_compat_mode:get_compat_version(Cfg)),
+              list_to_binary(V1 ++ "." ++ V2)
+      end},
+     {clientCertAuthState,
+      fun (Cfg) ->
+              CCAState = ns_ssl_services_setup:client_cert_auth_state(Cfg),
+              list_to_binary(CCAState)
+      end},
+     {buckets, fun extract_bucket_specific_data/1},
+     {nodes,
+      fun () ->
+              [begin
+                   {struct, Props} = menelaus_web_node:build_full_node_info(
+                                       N, local_addr(Req)),
+                   glean_node_details(Props)
+               end || N <- ns_node_disco:nodes_wanted()]
+      end}].
 
-    Nodes = [begin
-                 {struct, Props} = menelaus_web_node:build_full_node_info(
-                                     N, local_addr(Req)),
-                 glean_node_details(Props)
-             end || N <- ns_node_disco:nodes_wanted()],
-
-    Cfg = ns_config:get(),
-    AFCfg = [{K, V} || {K, V} <- ns_config:search(Cfg, auto_failover_cfg, []),
-                       lists:member(K, [enabled, timeout])],
-    ARCfg = ns_config:search(Cfg, auto_reprovision_cfg, []),
-    QuotaInfo = menelaus_web_node:build_memory_quota_info(Cfg),
-    CCAState = ns_ssl_services_setup:client_cert_auth_state(Cfg),
-    [V1 | V2] = lists:map(integer_to_list(_),
-                          cluster_compat_mode:get_compat_version(Cfg)),
-
-    [{clusterUUID, menelaus_web:get_uuid()},
-     {autoFailover, {struct, AFCfg}},
-     {autoReprovision, {struct, ARCfg}},
-     {orchestrator, Orchestrator},
-     {master, mb_master:master_node()},
-     {isBalanced, ns_cluster_membership:is_balanced()},
-     {quotaInfo, {struct, QuotaInfo}},
-     {clusterCompatVersion, list_to_binary(V1 ++ "." ++ V2)},
-     {clientCertAuthState, list_to_binary(CCAState)},
-     {buckets, extract_bucket_specific_data(Cfg)},
-     {nodes, Nodes}].
+get_terse_cluster_info([], Props) ->
+    get_terse_cluster_info([clusterUUID,
+                            orchestrator,
+                            isBalanced,
+                            clusterCompatVersion], Props);
+get_terse_cluster_info(ReqdPropNames, Props) ->
+    ReqdPropNames1 = case proplists:get_bool(all, ReqdPropNames) of
+                         true -> [K || {K, _Fun} <- Props];
+                         false -> ReqdPropNames
+                     end,
+    Config = ns_config:get(),
+    RV = lists:filtermap(
+           fun ({Key, Fun}) ->
+                   case proplists:get_bool(Key, ReqdPropNames1) of
+                       true ->
+                           Val = case Fun of
+                                     _ when is_function(Fun, 0) -> Fun();
+                                     _ when is_function(Fun, 1) -> Fun(Config)
+                                 end,
+                           {true, {Key, Val}};
+                       false ->
+                           false
+                   end
+           end, Props),
+    {struct, RV}.
 
 extract_bucket_specific_data(Config) ->
     BktsInfo =
