@@ -1322,7 +1322,7 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
          for kind in ["all", "allocator", "checkpoint", "collections", "config",
                       "dcp", "dcpagg",
                       ["diskinfo", "detail"], ["dispatcher", "logs"],
-                      "eviction", "failovers", ["hash", "detail"],
+                      "eviction", "failovers",
                       "kvstore", "kvtimings", "memory",
                       "prev-vbucket", ["responses", "all"],
                       "runtimes", "scheduler", "scopes",
