@@ -191,7 +191,7 @@ start_failover(Nodes, AllowUnsafe) ->
     gen_statem:call(?SERVER, {start_failover, Nodes, AllowUnsafe}).
 
 -spec try_autofailover(list()) -> ok |
-                                  rebalance_running |
+                                  {operation_running, list()}|
                                   retry_aborting_rebalance |
                                   in_recovery |
                                   orchestration_unsafe |
@@ -931,11 +931,15 @@ rebalancing({timeout, _Tref, stop_timeout},
     handle_rebalance_completion(Reason, State).
 
 %% Synchronous rebalancing events
-rebalancing({try_autofailover, Nodes}, From, State) ->
+rebalancing({try_autofailover, Nodes}, From,
+            #rebalancing_state{type = Type} = State) ->
     case cluster_compat_mode:is_cluster_65() andalso
-        menelaus_web_auto_failover:config_check_can_abort_rebalance() of
+         menelaus_web_auto_failover:config_check_can_abort_rebalance() andalso
+         Type =/= failover of
         false ->
-            {keep_state_and_data, [{reply, From, rebalance_running}]};
+            TypeStr = binary_to_list(rebalance_type2text(Type)),
+            {keep_state_and_data,
+             [{reply, From, {operation_running, TypeStr}}]};
         true ->
             case stop_rebalance(State, {try_autofailover, From, Nodes}) of
                 State ->
