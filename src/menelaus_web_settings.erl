@@ -140,11 +140,12 @@ get_cipher_suites(Str) ->
     end.
 
 get_cluster_encryption(Level) ->
-    SupportedLevels = ["control", "all"],
+    SupportedLevels = ["control", "all", "strict"],
     IsCEncryptEnabled = misc:is_cluster_encryption_fully_enabled(),
     ValidLevel = lists:member(Level, SupportedLevels),
     IsMandatory = (ns_ssl_services_setup:client_cert_auth_state() =:=
                        "mandatory"),
+    IsStrictPossible = misc:is_strict_possible(),
 
     if
         not IsCEncryptEnabled  ->
@@ -152,11 +153,16 @@ get_cluster_encryption(Level) ->
                 "is disabled.",
             {error, M};
         not ValidLevel ->
-            M = "Cluster encryption level must be one of ['control', 'all'].",
+            M = io_lib:format("Cluster encryption level must be one of ~p",
+                              [SupportedLevels]),
+            {error, lists:flatten(M)};
+        IsMandatory andalso (Level =:= "all" orelse Level =:= "strict") ->
+            M = "Can't set cluster encryption level to '" ++ Level ++
+                "' when client certificate authentication state is set "
+                "to 'mandatory'.",
             {error, M};
-        IsMandatory andalso Level =:= "all" ->
-            M = "Can't set cluster encryption level to 'all' when client "
-                "certificate authentication state is set to 'mandatory'.",
+        Level =:= "strict" andalso not IsStrictPossible ->
+            M = "Can't set cluster encryption level to 'strict'.",
             {error, M};
         true ->
             {ok, list_to_atom(Level)}
@@ -229,6 +235,8 @@ conf(internal) ->
      {drop_request_memory_threshold_mib, dropRequestMemoryThresholdMiB,
       undefined, get_number(0, 99999, undefined)},
      {gotraceback, gotraceback, <<"single">>, fun get_string/1},
+     {can_enable_strict_encryption, canEnableStrictEncryption, false,
+      fun get_bool/1},
      {{auto_failover_disabled, index}, indexAutoFailoverDisabled, true,
       fun get_bool/1},
      {{cert, use_sha1}, certUseSha1, false, fun get_bool/1}];

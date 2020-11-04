@@ -1434,6 +1434,10 @@ try_with_maybe_ignorant_after(TryBody, AfterBody) ->
 letrec(Args, F) ->
     erlang:apply(F, [F | Args]).
 
+-spec is_strict_possible() -> true | false.
+is_strict_possible() ->
+    ns_config:read_key_fast(can_enable_strict_encryption, false).
+
 -spec is_ipv6() -> true | false.
 is_ipv6() ->
     get_net_family() == inet6.
@@ -1464,7 +1468,7 @@ is_cluster_encryption_fully_disabled() ->
     [] =:= [N || N <- ns_node_disco:nodes_wanted(),
                  misc:is_node_encryption_enabled(Cfg, N)].
 
--spec get_cluster_encryption_level() -> none | control | all.
+-spec get_cluster_encryption_level() -> none | control | all | strict.
 get_cluster_encryption_level() ->
     Default = case is_cluster_encryption_fully_enabled() of
                   true ->
@@ -1474,7 +1478,8 @@ get_cluster_encryption_level() ->
               end,
     ns_config:search(ns_config:latest(), cluster_encryption_level, Default).
 
--spec get_effective_cluster_encryption_level(term()) -> none | control | all.
+-spec get_effective_cluster_encryption_level(term()) -> none | control |
+                                                        all | strict.
 get_effective_cluster_encryption_level(Config) ->
     case is_cluster_encryption_fully_enabled() of
         true ->
@@ -1485,16 +1490,15 @@ get_effective_cluster_encryption_level(Config) ->
 
 -spec should_cluster_data_be_encrypted() -> true | false.
 should_cluster_data_be_encrypted() ->
-    get_cluster_encryption_level() =:= all.
+    case get_cluster_encryption_level() of
+        all -> true;
+        strict -> true;
+        _ -> false
+    end.
 
 -spec disable_non_ssl_ports() -> true | false.
 disable_non_ssl_ports() ->
-    %% TODO: Disabling the non-SSL ports in not targeted for the 6.5
-    %% release. Hence returning 'false' unconditionally. The thinking is to
-    %% implement this API correctly in the next release when this feature
-    %% will be supported. This will avoid making changes to the plumbing to
-    %% get this info to other services via cbauth.
-    false.
+    get_cluster_encryption_level() =:= strict.
 
 -spec get_net_family() -> inet:address_family().
 get_net_family() ->

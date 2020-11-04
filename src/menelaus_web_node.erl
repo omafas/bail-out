@@ -823,7 +823,7 @@ verify_net_config_allowed(State) ->
     AFamily = validator:get_value(afamily, State),
     AutoFailover = ns_config_auth:is_system_provisioned() andalso
                    auto_failover:is_enabled(),
-    EncryptLevelAll = (misc:get_cluster_encryption_level() =:= all),
+    Encrypted = misc:should_cluster_data_be_encrypted(),
     IsCommunity = not cluster_compat_mode:is_enterprise(),
 
     if
@@ -837,10 +837,12 @@ verify_net_config_allowed(State) ->
             M = "Can't change network configuration when auto-failover "
                 "is enabled.",
             validator:return_error('_', M, State);
-        EncryptLevelAll andalso NodeEncryption =:= false ->
+        Encrypted andalso NodeEncryption =:= false ->
             M = <<"Can't disable nodeEncryption when the cluster "
-                  "encryption level has been set to 'all'">>,
-            validator:return_error(nodeEncryption, M, State);
+                  "encryption level has been set to ">>,
+            EL = atom_to_binary(misc:get_cluster_encryption_level(), latin1),
+            validator:return_error(nodeEncryption, <<M/binary, EL/binary>>,
+                                   State);
         true ->
             State
     end.
