@@ -97,7 +97,7 @@ init([]) ->
               State
       end, empty),
     erlang:process_flag(trap_exit, true),
-    {ok, _} = timer2:send_interval(?HEARTBEAT_INTERVAL, send_heartbeat),
+    send_heartbeat_msg(),
     Now = erlang:monotonic_time(),
     case ns_node_disco:nodes_wanted() of
         [N] = P when N == node() ->
@@ -346,17 +346,12 @@ candidate(info, {peers, Peers}, StateData) ->
             {keep_state, S}
     end;
 candidate(info, send_heartbeat, #state{peers=Peers} = StateData) ->
-    case misc:flush(send_heartbeat) of
-        0 -> ok;
-        Eaten ->
-            ?log_warning("Skipped ~p heartbeats~n", [Eaten])
-    end,
-
     StartTS = erlang:monotonic_time(),
 
     MostOfTimeout = ?TIMEOUT * 4 div 5,
 
     Armed = diag_handler:arm_timeout(MostOfTimeout),
+    send_heartbeat_msg(),
     send_heartbeat_with_peers(Peers, candidate, Peers),
     diag_handler:disarm_timeout(Armed),
 
@@ -463,12 +458,7 @@ master(info, {peers, Peers}, StateData) ->
             {next_state, candidate, NewState}
     end;
 master(info, send_heartbeat, StateData) ->
-    case misc:flush(send_heartbeat) of
-        0 -> ok;
-        Eaten ->
-            ?log_warning("Skipped ~p heartbeats~n", [Eaten])
-    end,
-
+    send_heartbeat_msg(),
     send_heartbeat_with_peers(ns_node_disco:nodes_wanted(), master, StateData#state.peers),
     keep_state_and_data;
 master(info, {heartbeat, NodeInfo, master, _H}, #state{peers=Peers} = State) ->
@@ -633,6 +623,9 @@ strongly_lower_priority_node({SelfVersion, _SelfNode},
 
 announce_leader(Node) ->
     gen_event:sync_notify(leader_events, {new_leader, Node}).
+
+send_heartbeat_msg() ->
+    erlang:send_after(?HEARTBEAT_INTERVAL, self(), send_heartbeat).
 
 
 -ifdef(TEST).
