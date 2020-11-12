@@ -461,7 +461,6 @@ init([]) ->
 
     Data = get_node_cert_data(),
     apply_node_cert_data(Data),
-    ?log_info("Used ssl options:~n~p", [ssl_server_opts()]),
     RetrySvc = case misc:marker_exists(marker_path()) of
                    true ->
                        Self ! notify_services,

@@ -64,13 +64,22 @@ init([Options0]) ->
                      list_to_atom(lists:flatten(io_lib:format("~p_~s", [N, S])))
                  end,
     IsEnterprise = cluster_compat_mode:is_enterprise(),
+    {IPv4Addr, IPv6Addr} = case misc:disable_non_ssl_ports() andalso
+                                not proplists:get_bool(ssl, Options) of
+                               true ->
+                                   {misc:localhost(inet, []),
+                                    misc:localhost(inet6, [])};
+                               false ->
+                                   {misc:inaddr_any(inet, []),
+                                    misc:inaddr_any(inet6, [])}
+                           end,
     Specs = [{menelaus_web_ipv4,
               {?MODULE, http_server,
-               [[{ip, "0.0.0.0"}, {name, CreateName(Name, "ipv4")} | Options]]},
+               [[{ip, IPv4Addr}, {name, CreateName(Name, "ipv4")} | Options]]},
               permanent, 5000, worker, dynamic}] ++
             [{menelaus_web_ipv6,
               {?MODULE, http_server,
-               [[{ip, "::"}, {name, CreateName(Name, "ipv6")} | Options]]},
+               [[{ip, IPv6Addr}, {name, CreateName(Name, "ipv6")} | Options]]},
               permanent, 5000, worker, dynamic} || IsEnterprise],
     {ok, {{one_for_all, 10, 10}, Specs}}.
 
@@ -84,21 +93,26 @@ http_server(Options) ->
     Loop = fun (Req) ->
                    ?MODULE:loop(Req, {AppRoot, IsSSL, Plugins})
            end,
+    LogOptions = [{K, V} || {K, V} <- Options1,
+                            lists:member(K, [ssl, ssl_opts, ip, port])],
     case mochiweb_http:start_link([{loop, Loop} | Options1]) of
-        {ok, Pid} -> {ok, Pid};
+        {ok, Pid} ->
+            ?log_info("Started web service with ~p", [LogOptions]),
+            {ok, Pid};
         Other ->
             AFamily = misc:get_net_family(),
-            case {proplists:get_value(ip, Options1, "0.0.0.0"), AFamily} of
-                {"0.0.0.0", inet6} ->
-                    ?log_warning("Failed to start IPv4 web service, ignoring"),
+            {ok, Addr} = inet:parse_address(proplists:get_value(ip, Options1)),
+            {Msg, Values} = {"Failed to start web service with ~p, Reason : ~p",
+                             [LogOptions, Other]},
+            case {Addr, AFamily} of
+                {{_, _, _, _}, inet6} ->
+                    ?log_warning("Ignoring error: " ++ Msg, Values),
                     ignore;
-                {"::", inet} ->
-                    ?log_warning("Failed to start IPv6 web service, ignoring"),
+                {{_, _, _, _, _, _, _, _}, inet} ->
+                    ?log_warning("Ignoring error: " ++ Msg, Values),
                     ignore;
                 _ ->
-                    ?MENELAUS_WEB_LOG(?START_FAIL,
-                                      "Failed to start web service:  ~p",
-                                      [Other]),
+                    ?MENELAUS_WEB_LOG(?START_FAIL, Msg, Values),
                     Other
             end
     end.

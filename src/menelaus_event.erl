@@ -32,7 +32,9 @@
 -export([init/1, handle_event/2, handle_call/2,
          handle_info/2, terminate/2, code_change/3]).
 
--record(state, {webconfig, watchers = []}).
+-record(state, {webconfig,
+                disable_non_ssl_ports,
+                watchers = []}).
 
 -include("ns_common.hrl").
 
@@ -95,6 +97,7 @@ unregister_watcher(Pid) ->
 
 init(ns_config_events) ->
     {ok, #state{watchers = [],
+                disable_non_ssl_ports = misc:disable_non_ssl_ports(),
                 webconfig = menelaus_web:webconfig()}};
 
 init(_) ->
@@ -134,6 +137,10 @@ handle_event({{node, Node, rest}, _}, State) when Node =:= node() ->
     {ok, NewState};
 
 handle_event({rest, _}, State) ->
+    NewState = maybe_restart(State),
+    {ok, NewState};
+
+handle_event({cluster_encryption_level, _}, State) ->
     NewState = maybe_restart(State),
     {ok, NewState};
 
@@ -192,12 +199,15 @@ notify_watchers(#state{watchers = Watchers}) ->
                   Watchers),
     ok.
 
-maybe_restart(#state{webconfig=WebConfigOld} = State) ->
+maybe_restart(#state{webconfig = WebConfigOld,
+                     disable_non_ssl_ports = DisableOld} = State) ->
     WebConfigNew = menelaus_web:webconfig(),
-    case WebConfigNew =:= WebConfigOld of
+    DisableNew = misc:disable_non_ssl_ports(),
+    case WebConfigNew =:= WebConfigOld andalso DisableOld =:= DisableNew of
         true -> State;
         false -> spawn(fun menelaus_sup:restart_web_servers/0),
-                 State#state{webconfig=WebConfigNew}
+                 State#state{webconfig = WebConfigNew,
+                             disable_non_ssl_ports = DisableNew}
     end.
 
 flush_watcher_notifications(PrevID) ->
