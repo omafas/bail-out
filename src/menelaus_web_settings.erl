@@ -534,7 +534,7 @@ handle_settings_web(Req) ->
     reply_json(Req, build_settings_web()).
 
 build_settings_web() ->
-    Port = proplists:get_value(port, menelaus_web:webconfig()),
+    Port = menelaus_web:webconfig(port),
     User = case ns_config_auth:get_user(admin) of
                undefined ->
                    "";
@@ -734,7 +734,7 @@ handle_settings_web_post(Req) ->
 
 do_handle_settings_web_post(Port, U, P, Req) ->
     PortInt = case Port of
-                  "SAME" -> proplists:get_value(port, menelaus_web:webconfig());
+                  "SAME" -> menelaus_web:webconfig(port);
                   _      -> list_to_integer(Port)
               end,
 

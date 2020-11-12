@@ -103,7 +103,8 @@ http_server(Options) ->
             end
     end.
 
-webconfig(Config) ->
+webconfig() ->
+    Config = ns_config:get(),
     Ip = case os:getenv("MOCHIWEB_IP") of
              false -> misc:inaddr_any();
              Any -> Any
@@ -114,15 +115,13 @@ webconfig(Config) ->
                P ->
                    list_to_integer(P)
            end,
-    WebConfig = [{ip, Ip},
-                 {port, Port},
-                 {nodelay, true},
-                 {approot, menelaus_deps:local_path(["priv","public"],
-                                                    ?MODULE)}],
-    WebConfig.
+    [{ip, Ip},
+     {port, Port},
+     {nodelay, true},
+     {approot, menelaus_deps:local_path(["priv","public"], ?MODULE)}].
 
-webconfig() ->
-    webconfig(ns_config:get()).
+webconfig(Prop) ->
+    proplists:get_value(Prop, webconfig()).
 
 loop(Req, Config) ->
     ok = menelaus_sup:barrier_wait(),

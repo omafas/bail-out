@@ -41,8 +41,7 @@
 %% @doc API for starting the supervisor.
 start_link() ->
     Result = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
-    WConfig = menelaus_web:webconfig(),
-    Port = proplists:get_value(port, WConfig),
+    Port = menelaus_web:webconfig(port),
     case Result of
         {ok, _Pid} ->
             ?user_log(?START_OK,
