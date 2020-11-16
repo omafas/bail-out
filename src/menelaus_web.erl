@@ -104,14 +104,7 @@ http_server(Options) ->
     end.
 
 webconfig() ->
-    Config = ns_config:get(),
-    Port = case os:getenv("MOCHIWEB_PORT") of
-               false ->
-                   service_ports:get_port(rest_port, Config);
-               P ->
-                   list_to_integer(P)
-           end,
-    [{port, Port},
+    [{port, service_ports:get_port(rest_port)},
      {nodelay, true},
      {approot, menelaus_deps:local_path(["priv","public"], ?MODULE)}].
 
