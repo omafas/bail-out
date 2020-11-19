@@ -123,6 +123,7 @@ is_notable_config_key(scramsha_fallback_salt) -> true;
 is_notable_config_key(external_auth_polling_interval) -> true;
 is_notable_config_key(cipher_suites) -> true;
 is_notable_config_key(honor_cipher_order) -> true;
+is_notable_config_key(cluster_encryption_level) -> true;
 is_notable_config_key({security_settings, kv}) -> true;
 is_notable_config_key(ldap_settings) -> true;
 is_notable_config_key(saslauthd_auth_settings) -> true;
@@ -457,19 +458,26 @@ generate_interfaces(MCDParams) ->
 
     IPv4Interfaces = lists:map(
                        fun ({Props}) ->
-                               Additonal = [{host, get_host()},
+                               IsSSL = proplists:is_defined(ssl, Props),
+                               Additonal = [{host, get_host(inet, IsSSL)},
                                             {ipv4, get_afamily_type(inet)},
                                             {ipv6, <<"off">>}],
                                {Props ++ Additonal}
                        end, InterProps),
     IPv6Interfaces = lists:map(
                        fun ({Props}) ->
-                               Additonal = [{host, get_host()},
+                               IsSSL = proplists:is_defined(ssl, Props),
+                               Additonal = [{host, get_host(inet6, IsSSL)},
                                             {ipv4, <<"off">>},
                                             {ipv6, get_afamily_type(inet6)}],
                                {Props ++ Additonal}
                        end, InterProps),
     IPv4Interfaces ++ IPv6Interfaces.
 
-get_host() ->
-    <<"*">>.
+get_host(Proto, IsSSL) ->
+    case (not IsSSL) andalso misc:disable_non_ssl_ports() of
+        true ->
+            list_to_binary(misc:localhost(Proto, []));
+        false ->
+            <<"*">>
+    end.
