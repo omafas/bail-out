@@ -208,35 +208,7 @@ default() ->
 
      {{node, node(), memcached_config},
       {[
-        {interfaces,
-         {memcached_config_mgr, omit_missing_mcd_ports,
-          [
-           {[{host, <<"*">>},
-             {port, port},
-             {ipv4, {memcached_config_mgr, get_afamily_type, [inet]}},
-             {ipv6, {memcached_config_mgr, get_afamily_type, [inet6]}}]},
-
-           {[{host, <<"*">>},
-             {port, dedicated_port},
-             {system, true},
-             {ipv4, {memcached_config_mgr, get_afamily_type, [inet]}},
-             {ipv6, {memcached_config_mgr, get_afamily_type, [inet6]}}]},
-           {[{host, <<"*">>},
-             {port, ssl_port},
-             {ssl, {[{key, list_to_binary(ns_ssl_services_setup:memcached_key_path())},
-                     {cert, list_to_binary(ns_ssl_services_setup:memcached_cert_path())}]}},
-             {ipv4, {memcached_config_mgr, get_afamily_type, [inet]}},
-             {ipv6, {memcached_config_mgr, get_afamily_type, [inet6]}}]},
-
-           {[{host, <<"*">>},
-             {port, dedicated_ssl_port},
-             {system, true},
-             {ssl, {[{key, list_to_binary(ns_ssl_services_setup:memcached_key_path())},
-                     {cert, list_to_binary(ns_ssl_services_setup:memcached_cert_path())}]}},
-             {ipv4, {memcached_config_mgr, get_afamily_type, [inet]}},
-             {ipv6, {memcached_config_mgr, get_afamily_type, [inet6]}}]}
-          ]}},
-
+        {interfaces, {memcached_config_mgr, get_interfaces, []}},
         {ssl_cipher_list, {memcached_config_mgr, get_ssl_cipher_list, []}},
         {ssl_cipher_order, {memcached_config_mgr, get_ssl_cipher_order, []}},
         {client_cert_auth, {memcached_config_mgr, client_cert_auth, []}},

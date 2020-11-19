@@ -24,12 +24,12 @@
 -export([start_link/0]).
 
 %% referenced from ns_config_default
--export([get_minidump_dir/2, omit_missing_mcd_ports/2, ssl_minimum_protocol/2,
+-export([get_minidump_dir/2, get_interfaces/2, ssl_minimum_protocol/2,
          client_cert_auth/2, is_snappy_enabled/2,
          is_snappy_enabled/0, collections_enabled/2, get_fallback_salt/2,
          get_external_users_push_interval/2, get_ssl_cipher_list/2,
          get_ssl_cipher_order/2, get_external_auth_service/2,
-         is_external_auth_service_enabled/0, get_afamily_type/2]).
+         is_external_auth_service_enabled/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -345,13 +345,10 @@ get_minidump_dir([], Params) ->
     list_to_binary(proplists:get_value(breakpad_minidump_dir_path, Params,
                                        proplists:get_value(log_path, Params))).
 
-omit_missing_mcd_ports(Interfaces, MCDParams) ->
-    Expanded = expand_memcached_config(Interfaces, MCDParams),
-    [Obj || Obj <- Expanded,
-            case Obj of
-                {Props} ->
+get_interfaces([], MCDParams) ->
+    lists:filter(fun ({Props}) ->
                     proplists:get_value(port, Props) =/= undefined
-            end].
+                 end, generate_interfaces(MCDParams)).
 
 ssl_minimum_protocol([], _Params) ->
     ns_ssl_services_setup:ssl_minimum_protocol(kv).
@@ -431,9 +428,48 @@ format_ciphers(RFCCipherNames) ->
 get_ssl_cipher_order([], _Params) ->
     ns_ssl_services_setup:honor_cipher_order(kv).
 
-get_afamily_type([AFamily], _Params) ->
+get_afamily_type(AFamily) ->
     Required = ns_config:read_key_fast({node, node(), address_family}, inet),
     case AFamily of
         Required -> <<"required">>;
         _ -> <<"optional">>
     end.
+
+generate_interfaces(MCDParams) ->
+    SSL = {[{key, list_to_binary(ns_ssl_services_setup:memcached_key_path())},
+            {cert,
+             list_to_binary(ns_ssl_services_setup:memcached_cert_path())}]},
+    GetPort = fun (Port) ->
+                      {Port, Value} = lists:keyfind(Port, 1, MCDParams),
+                      Value
+              end,
+    InterProps = [{[{port, GetPort(port)}]},
+
+                  {[{port, GetPort(dedicated_port)},
+                    {system, true}]},
+
+                  {[{port, GetPort(ssl_port)},
+                    {ssl, SSL}]},
+
+                  {[{port, GetPort(dedicated_ssl_port)},
+                    {system, true},
+                    {ssl, SSL}]}],
+
+    IPv4Interfaces = lists:map(
+                       fun ({Props}) ->
+                               Additonal = [{host, get_host()},
+                                            {ipv4, get_afamily_type(inet)},
+                                            {ipv6, <<"off">>}],
+                               {Props ++ Additonal}
+                       end, InterProps),
+    IPv6Interfaces = lists:map(
+                       fun ({Props}) ->
+                               Additonal = [{host, get_host()},
+                                            {ipv4, <<"off">>},
+                                            {ipv6, get_afamily_type(inet6)}],
+                               {Props ++ Additonal}
+                       end, InterProps),
+    IPv4Interfaces ++ IPv6Interfaces.
+
+get_host() ->
+    <<"*">>.
