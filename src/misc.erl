@@ -1095,13 +1095,15 @@ absname(Name) ->
     end.
 
 start_event_link(SubscriptionBody) ->
-    {ok,
-     spawn_link(fun () ->
-                        SubscriptionBody(),
-                        receive
-                            _ -> ok
-                        end
-                end)}.
+    proc_lib:start_link(
+      erlang, apply,
+      [fun () ->
+               SubscriptionBody(),
+               proc_lib:init_ack({ok, self()}),
+               receive
+                   _ -> ok
+               end
+       end, []]).
 
 %% Writes to file atomically using write_file + atomic_rename
 atomic_write_file(Path, BodyOrBytes)
