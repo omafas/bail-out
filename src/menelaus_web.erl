@@ -55,60 +55,66 @@
 start_link() ->
     start_link([]).
 start_link(Options) ->
-    supervisor:start_link(?MODULE, [Options]).
+    Defaults = [{name, ?MODULE} | webconfig()],
+    MergedOptions = misc:update_proplist(Defaults, Options),
+    supervisor:start_link(?MODULE, [MergedOptions]).
 
-init([Options0]) ->
-    Name = proplists:get_value(name, Options0, ?MODULE),
-    Options = proplists:delete(name, Options0),
-    CreateName = fun (N, S) ->
-                     list_to_atom(lists:flatten(io_lib:format("~p_~s", [N, S])))
-                 end,
+init([Options]) ->
     IsEnterprise = cluster_compat_mode:is_enterprise(),
-    {IPv4Addr, IPv6Addr} = case misc:disable_non_ssl_ports() andalso
-                                not proplists:get_bool(ssl, Options) of
-                               true ->
-                                   {misc:localhost(inet, []),
-                                    misc:localhost(inet6, [])};
-                               false ->
-                                   {misc:inaddr_any(inet, []),
-                                    misc:inaddr_any(inet6, [])}
-                           end,
     Specs = [{menelaus_web_ipv4,
-              {?MODULE, http_server,
-               [[{ip, IPv4Addr}, {name, CreateName(Name, "ipv4")} | Options]]},
+              {?MODULE, http_server, [[{afamily, inet} | Options]]},
               permanent, 5000, worker, dynamic}] ++
             [{menelaus_web_ipv6,
-              {?MODULE, http_server,
-               [[{ip, IPv6Addr}, {name, CreateName(Name, "ipv6")} | Options]]},
+              {?MODULE, http_server, [[{afamily, inet6} | Options]]},
               permanent, 5000, worker, dynamic} || IsEnterprise],
     {ok, {{one_for_all, 10, 10}, Specs}}.
 
-http_server(Options) ->
-    Defaults = webconfig(),
-    Options0 = misc:update_proplist(Defaults, Options),
-    {AppRoot, Options1} = get_option(approot, Options0),
+get_addr(AFamily, IsSSL) ->
+    case misc:disable_non_ssl_ports() andalso not IsSSL of
+        true ->
+            misc:localhost(AFamily, []);
+        false ->
+            misc:inaddr_any(AFamily, [])
+    end.
 
+get_name(Name, inet) ->
+    get_name(Name, "ipv4");
+get_name(Name, inet6) ->
+    get_name(Name, "ipv6");
+get_name(Name, String) when is_list(String) ->
+    list_to_atom(lists:flatten(io_lib:format("~p_~s", [Name, String]))).
+
+generate_http_server_options(Options) ->
+    {AppRoot, Options1} = get_option(approot, Options),
+    {AFamily, Options2} = get_option(afamily, Options1),
+    {Name, Options3} = get_option(name, Options2),
     Plugins = menelaus_pluggable_ui:find_plugins(),
-    IsSSL = proplists:get_value(ssl, Options1, false),
+    IsSSL = proplists:get_bool(ssl, Options3),
     Loop = fun (Req) ->
                    ?MODULE:loop(Req, {AppRoot, IsSSL, Plugins})
            end,
-    LogOptions = [{K, V} || {K, V} <- Options1,
+    [{ip, get_addr(AFamily, IsSSL)},
+     {name, get_name(Name, AFamily)},
+     {loop, Loop}] ++ Options3.
+
+http_server(Options) ->
+    ServerAFamily = proplists:get_value(afamily, Options),
+    ServerOptions = generate_http_server_options(Options),
+    LogOptions = [{K, V} || {K, V} <- ServerOptions,
                             lists:member(K, [ssl, ssl_opts, ip, port])],
-    case mochiweb_http:start_link([{loop, Loop} | Options1]) of
+    case mochiweb_http:start_link(ServerOptions) of
         {ok, Pid} ->
             ?log_info("Started web service with ~p", [LogOptions]),
             {ok, Pid};
         Other ->
             AFamily = misc:get_net_family(),
-            {ok, Addr} = inet:parse_address(proplists:get_value(ip, Options1)),
             {Msg, Values} = {"Failed to start web service with ~p, Reason : ~p",
                              [LogOptions, Other]},
-            case {Addr, AFamily} of
-                {{_, _, _, _}, inet6} ->
+            case {ServerAFamily, AFamily} of
+                {inet, inet6} ->
                     ?log_warning("Ignoring error: " ++ Msg, Values),
                     ignore;
-                {{_, _, _, _, _, _, _, _}, inet} ->
+                {inet6, inet} ->
                     ?log_warning("Ignoring error: " ++ Msg, Values),
                     ignore;
                 _ ->
