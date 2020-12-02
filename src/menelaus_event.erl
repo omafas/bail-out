@@ -132,26 +132,10 @@ is_interesting_to_watchers({client_cert_auth, _}) -> true;
 is_interesting_to_watchers({audit_uid_change, _}) -> true;
 is_interesting_to_watchers(_) -> false.
 
-handle_event({{node, Node, rest}, _}, State) when Node =:= node() ->
-    NewState = maybe_restart(State),
-    {ok, NewState};
-
-handle_event({rest, _}, State) ->
-    NewState = maybe_restart(State),
-    {ok, NewState};
-
-handle_event({cluster_encryption_level, _}, State) ->
-    NewState = maybe_restart(State),
-    {ok, NewState};
-
 handle_event(Event, State) ->
-    case is_interesting_to_watchers(Event) of
-        true ->
-            ok = notify_watchers(State);
-        _ ->
-            ok
-    end,
-    {ok, State}.
+    NewState = maybe_restart(Event, State),
+    maybe_notify_watchers(Event, State),
+    {ok, NewState}.
 
 handle_call({register_watcher, Pid},
             #state{watchers = Watchers} = State) ->
@@ -191,13 +175,28 @@ handle_info(_Info, State) ->
 
 % ------------------------------------------------------------
 
+maybe_notify_watchers(Event, State) ->
+    case is_interesting_to_watchers(Event) of
+        true -> notify_watchers(State);
+        false -> ok
+    end.
+
 notify_watchers(#state{watchers = Watchers}) ->
     UpdateID = erlang:unique_integer(),
     lists:foreach(fun({Pid, _}) ->
                           Pid ! {notify_watcher, UpdateID}
-                  end,
-                  Watchers),
-    ok.
+                  end, Watchers).
+
+restart_event({{node, N, rest}, _}) when N =:= node() -> true;
+restart_event({rest, _}) -> true;
+restart_event({cluster_encryption_level, _}) -> true;
+restart_event(_) -> false.
+
+maybe_restart(Event, State) ->
+    case restart_event(Event) of
+        true -> maybe_restart(State);
+        false -> State
+    end.
 
 maybe_restart(#state{webconfig = WebConfigOld,
                      disable_non_ssl_ports = DisableOld} = State) ->
