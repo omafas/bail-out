@@ -106,32 +106,6 @@ init(_) ->
 terminate(_Reason, _State)     -> ok.
 code_change(_OldVsn, State, _) -> {ok, State}.
 
-is_interesting_to_watchers({significant_buckets_change, _}) -> true;
-is_interesting_to_watchers({memcached, _}) -> true;
-is_interesting_to_watchers({{node, _, memcached}, _}) -> true;
-is_interesting_to_watchers({{node, _, membership}, _}) -> true;
-is_interesting_to_watchers({rebalance_status, _}) -> true;
-is_interesting_to_watchers({recovery_status, _}) -> true;
-is_interesting_to_watchers({buckets, _}) -> true;
-is_interesting_to_watchers({nodes_wanted, _}) -> true;
-is_interesting_to_watchers({server_groups, _}) -> true;
-is_interesting_to_watchers({ns_node_disco_events, _NodesBefore, _NodesAfter}) -> true;
-is_interesting_to_watchers({autocompaction, _}) -> true;
-is_interesting_to_watchers({cluster_compat_version, _}) -> true;
-is_interesting_to_watchers({developer_preview_enabled, _}) -> true;
-is_interesting_to_watchers({cluster_name, _}) -> true;
-is_interesting_to_watchers({memory_quota, _}) -> true;
-is_interesting_to_watchers({index_settings_change, memoryQuota, _}) -> true;
-is_interesting_to_watchers({indexes_change, index, _}) -> true;
-is_interesting_to_watchers({goxdcr_enabled, _}) -> true;
-is_interesting_to_watchers({{node, _, stop_xdcr}, _}) -> true;
-is_interesting_to_watchers({{node, _, services}, _}) -> true;
-is_interesting_to_watchers({{service_map, _}, _}) -> true;
-is_interesting_to_watchers({user_roles, _}) -> true;
-is_interesting_to_watchers({client_cert_auth, _}) -> true;
-is_interesting_to_watchers({audit_uid_change, _}) -> true;
-is_interesting_to_watchers(_) -> false.
-
 handle_event(Event, State) ->
     NewState = maybe_restart(Event, State),
     maybe_notify_watchers(Event, State),
@@ -174,6 +148,31 @@ handle_info(_Info, State) ->
     {ok, State}.
 
 % ------------------------------------------------------------
+is_interesting_to_watchers({significant_buckets_change, _}) -> true;
+is_interesting_to_watchers({memcached, _}) -> true;
+is_interesting_to_watchers({{node, _, memcached}, _}) -> true;
+is_interesting_to_watchers({{node, _, membership}, _}) -> true;
+is_interesting_to_watchers({rebalance_status, _}) -> true;
+is_interesting_to_watchers({recovery_status, _}) -> true;
+is_interesting_to_watchers({buckets, _}) -> true;
+is_interesting_to_watchers({nodes_wanted, _}) -> true;
+is_interesting_to_watchers({server_groups, _}) -> true;
+is_interesting_to_watchers({ns_node_disco_events, _NodesBefore, _NodesAfter}) -> true;
+is_interesting_to_watchers({autocompaction, _}) -> true;
+is_interesting_to_watchers({cluster_compat_version, _}) -> true;
+is_interesting_to_watchers({developer_preview_enabled, _}) -> true;
+is_interesting_to_watchers({cluster_name, _}) -> true;
+is_interesting_to_watchers({memory_quota, _}) -> true;
+is_interesting_to_watchers({index_settings_change, memoryQuota, _}) -> true;
+is_interesting_to_watchers({indexes_change, index, _}) -> true;
+is_interesting_to_watchers({goxdcr_enabled, _}) -> true;
+is_interesting_to_watchers({{node, _, stop_xdcr}, _}) -> true;
+is_interesting_to_watchers({{node, _, services}, _}) -> true;
+is_interesting_to_watchers({{service_map, _}, _}) -> true;
+is_interesting_to_watchers({user_roles, _}) -> true;
+is_interesting_to_watchers({client_cert_auth, _}) -> true;
+is_interesting_to_watchers({audit_uid_change, _}) -> true;
+is_interesting_to_watchers(_) -> false.
 
 maybe_notify_watchers(Event, State) ->
     case is_interesting_to_watchers(Event) of
