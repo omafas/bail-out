@@ -650,8 +650,8 @@ conf(Prop, Conf) ->
 defaults() ->
     [{preferred_external_proto, inet_tcp_dist},
      {preferred_local_proto, inet_tcp_dist},
-     {local_listeners, [inet_tcp_dist, inet6_tcp_dist]},
-     {external_listeners, [inet_tcp_dist, inet6_tcp_dist]}].
+     {local_listeners, [inet_tcp_dist]},
+     {external_listeners, [inet_tcp_dist]}].
 
 transform_old_to_new_config(Dist) ->
     DistType = list_to_atom((atom_to_list(Dist) ++ "_dist")),
@@ -819,9 +819,10 @@ import_props_to_config(Props, Cfg) ->
             undefined -> CurListeners;
             L -> [netsettings2proto(E) || E <- L]
         end,
-    [{external_listeners, Listeners}     || Listeners =/= undefined] ++
-    [{preferred_external_proto, PrefExt} || PrefExt   =/= undefined] ++
-    [{preferred_local_proto, PrefLocal}  || PrefLocal =/= undefined].
+    [{external_listeners, Listeners} || Listeners =/= undefined] ++
+    [{local_listeners, [PrefLocal]},
+     {preferred_external_proto, PrefExt},
+     {preferred_local_proto, PrefLocal}].
 
 store_config(DCfgFile, DCfg) ->
     DirName = filename:dirname(DCfgFile),
