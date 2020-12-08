@@ -255,8 +255,10 @@ handle_call({listen, Name}, _From, #s{creation = Creation} = State) ->
     %% to start later. To work around that start the ipv4 listener before
     %% the ipv6 one.
     OrderFun =
-        fun (inet_tcp_dist, _) -> true;
-            (_, inet_tcp_dist) -> false;
+        fun ({_, inet_tcp_dist}, _) -> true;
+            (_, {_, inet_tcp_dist}) -> false;
+            ({_, inet_tls_dist}, _) -> true;
+            (_, {_, inet_tls_dist}) -> false;
             (A, B) -> A =< B
         end,
     Protos = lists:sort(OrderFun, Protos0),
@@ -287,8 +289,8 @@ handle_call({listen, Name}, _From, #s{creation = Creation} = State) ->
 handle_call({accept, KernelPid}, _From, #s{listeners = Listeners} = State) ->
     Acceptors =
         lists:map(
-            fun ({Module, {LSocket, _Addr, _Creation}}) ->
-                {Module:accept(LSocket), Module}
+            fun ({{_AType, Module} = Listener, {LSocket, _Addr, _Creation}}) ->
+                {Module:accept(LSocket), Listener}
             end,
             Listeners),
     {reply, self(), ensure_config(State#s{acceptors = Acceptors,
@@ -296,7 +298,7 @@ handle_call({accept, KernelPid}, _From, #s{listeners = Listeners} = State) ->
 
 handle_call({get_module_by_acceptor, AcceptorPid}, _From,
             #s{acceptors = Acceptors} = State) ->
-    Module = proplists:get_value(AcceptorPid, Acceptors),
+    {_, Module} = proplists:get_value(AcceptorPid, Acceptors),
     {reply, Module, State};
 
 handle_call({get_preferred, Target}, _From, #s{name = Name,
@@ -326,7 +328,7 @@ handle_call(ensure_config, _From, State) ->
     case not_started_required_listeners(NewState) of
         [] -> {reply, ok, NewState};
         List ->
-            ProtoList = [proto2netsettings(L) || L <- List],
+            ProtoList = [proto2netsettings(L) || {_, L} <- List],
             {reply, {error, {not_started, ProtoList}}, NewState}
     end;
 
@@ -358,10 +360,11 @@ handle_call({update_connection_pid, Ref, Pid}, _From, State) ->
     {reply, ok, update_connection_pid(Ref, Pid, State)};
 
 handle_call(restart_tls, _From, #s{connections = Connections,
-                                   kernel_pid = KernelPid} = State) ->
+                                   kernel_pid = KernelPid,
+                                   listeners = Listeners} = State) ->
     info_msg("Restarting tls distribution protocols (if any)", []),
-    NewState = functools:chain(State, [remove_proto(inet6_tls_dist, _),
-                                       remove_proto(inet_tls_dist, _)]),
+    TLSListeners = [L || {{_, P} = L, _} <- Listeners, proto_to_encryption(P)],
+    NewState = lists:foldl(fun remove_proto/2, State, TLSListeners),
 
     NewConnections =
         lists:filtermap(
@@ -403,8 +406,10 @@ handle_info({accept, AcceptorPid, ConSocket, _Family, _Protocol},
                connections = Connections,
                acceptors = Acceptors} = State) ->
     Ref = make_ref(),
-    Con = #con{ref = Ref, mod = proplists:get_value(AcceptorPid, Acceptors)},
-    info_msg("Accepted new connection from ~p: ~p", [AcceptorPid, Con]),
+    {_, Module} = proplists:get_value(AcceptorPid, Acceptors),
+    Con = #con{ref = Ref, mod = Module},
+    info_msg("Accepted new connection from ~p DistCtrl ~p: ~p",
+             [AcceptorPid, ConSocket, Con]),
     KernelPid ! {accept, self(), {Ref, AcceptorPid, ConSocket}, ?family, ?proto},
     {noreply, State#s{connections = [Con | Connections]}};
 
@@ -460,13 +465,15 @@ close_listeners(#s{listeners = Listeners} = State) ->
 %% inet_*_dist modules use inet_dist_listen_min and inet_dist_listen_max to
 %% choose port for listening. Since we need them to choose Port we set those
 %% variables to Port, call listen function, and then change variables back.
-with_dist_port(noport, _Fun) -> ignore;
-with_dist_port(Port, Fun) ->
+with_dist_ip_and_port(_, noport, _Fun) -> ignore;
+with_dist_ip_and_port(IP, Port, Fun) ->
     OldMin = application:get_env(kernel,inet_dist_listen_min),
     OldMax = application:get_env(kernel,inet_dist_listen_max),
+    OldIP = application:get_env(kernel,inet_dist_use_interface),
     try
         application:set_env(kernel, inet_dist_listen_min, Port),
         application:set_env(kernel, inet_dist_listen_max, Port),
+        application:set_env(kernel, inet_dist_use_interface, IP),
         Fun()
     after
         case OldMin of
@@ -476,27 +483,34 @@ with_dist_port(Port, Fun) ->
         case OldMax of
             undefined -> application:unset_env(kernel, inet_dist_listen_max);
             {ok, V2} -> application:set_env(kernel, inet_dist_listen_max, V2)
+        end,
+        case OldIP of
+            undefined ->
+                application:unset_env(kernel, inet_dist_use_interface);
+            {ok, V3} ->
+                application:set_env(kernel, inet_dist_use_interface, V3)
         end
     end.
 
-add_proto(Mod, #s{name = NodeName, listeners = Listeners,
-                  acceptors = Acceptors} = State) ->
-    case can_add_proto(Mod, State) of
+add_proto({_AddrType, Mod} = Listener,
+          #s{name = NodeName, listeners = Listeners,
+             acceptors = Acceptors} = State) ->
+    case can_add_proto(Listener, State) of
         ok ->
-            case listen_proto(Mod, NodeName) of
+            case listen_proto(Listener, NodeName) of
                 {ok, L = {LSocket, _, _}} ->
                     try
                         APid = Mod:accept(LSocket),
                         true = is_pid(APid),
-                        State#s{listeners = [{Mod, L}|Listeners],
-                                acceptors = [{APid, Mod}|Acceptors]}
+                        State#s{listeners = [{Listener, L}|Listeners],
+                                acceptors = [{APid, Listener}|Acceptors]}
                     catch
                         _:E ->
                             ST = erlang:get_stacktrace(),
                             catch Mod:close(LSocket),
                             error_msg(
                               "Accept failed for protocol ~p with reason: ~p~n"
-                              "Stacktrace: ~p", [Mod, E, ST]),
+                              "Stacktrace: ~p", [Listener, E, ST]),
                             start_ensure_config_timer(State)
                     end;
                 {error, eafnosupport} -> State;
@@ -505,7 +519,7 @@ add_proto(Mod, #s{name = NodeName, listeners = Listeners,
                 _Error -> start_ensure_config_timer(State)
             end;
         {error, Reason} ->
-            error_msg("Ignoring ~p listener, reason: ~p", [Mod, Reason]),
+            error_msg("Ignoring ~p listener, reason: ~p", [Listener, Reason]),
             State
     end.
 
@@ -516,12 +530,12 @@ start_ensure_config_timer(#s{ensure_config_timer = undefined} = State) ->
 start_ensure_config_timer(#s{} = State) ->
     State.
 
-remove_proto(Mod, #s{listeners = Listeners, acceptors = Acceptors} = State) ->
-    case proplists:get_value(Mod, Listeners) of
+remove_proto({_AddrType, Mod} = Listener,
+             #s{listeners = Listeners, acceptors = Acceptors} = State) ->
+    case proplists:get_value(Listener, Listeners) of
         {LSocket, _, _} ->
-            info_msg("Closing listener ~p", [Mod]),
-            [erlang:unlink(P) || {P, M} <- Acceptors, M =:= Mod],
-
+            info_msg("Closing listener ~p", [Listener]),
+            [erlang:unlink(P) || {P, M} <- Acceptors, M =:= Listener],
             ToWait =
                 case lists:member(Mod, [inet_tls_dist, inet6_tls_dist]) of
                     true ->
@@ -551,14 +565,14 @@ remove_proto(Mod, #s{listeners = Listeners, acceptors = Acceptors} = State) ->
                                         "reason: ~p", [Proc, Reason]),
                               exit(Proc, kill)
                       end
-              end, lists:usort([P || {P, M} <- Acceptors, M =:= Mod] ++
-                   ToWait)),
+              end, lists:usort([P || {P, M} <- Acceptors, M =:= Listener] ++
+                              ToWait)),
 
-            State#s{listeners = proplists:delete(Mod, Listeners),
-                    acceptors = [{P, M} || {P, M} <- Acceptors, M =/= Mod]};
+            State#s{listeners = proplists:delete(Listener, Listeners),
+                    acceptors = [{P, M} || {P, M} <- Acceptors, M =/= Listener]};
         undefined ->
             info_msg("ignoring closing of ~p because listener is not started",
-                     [Mod]),
+                     [Listener]),
             State
     end.
 
@@ -572,7 +586,7 @@ extract_tls_acceptors() ->
             {[LocalSocket, WorldSocket], [LocalCon, WorldCon]}
     end.
 
-listen_proto(Module, NodeName) ->
+listen_proto({AddrType, Module}, NodeName) ->
     NameStr = atom_to_list(NodeName),
     Port = cb_epmd:port_for_node(Module, NameStr),
     info_msg("Starting ~p listener on ~p...", [Module, Port]),
@@ -587,7 +601,8 @@ listen_proto(Module, NodeName) ->
                     Error -> Error
                 end
         end,
-    case with_dist_port(Port, ListenFun) of
+    ListenAddr = get_listen_addr(AddrType, Module),
+    case with_dist_ip_and_port(ListenAddr, Port, ListenFun) of
         {ok, Res} -> {ok, Res};
         ignore ->
             info_msg("Ignoring starting dist ~p on port ~p", [Module, Port]),
@@ -597,6 +612,15 @@ listen_proto(Module, NodeName) ->
                       [Module, Port, Error]),
             Error
     end.
+
+get_listen_addr(AddrType, Module) ->
+    AFamily = proto_to_family(Module),
+    IPStr = case AddrType of
+                local -> misc:localhost(AFamily, []);
+                external -> misc:inaddr_any(AFamily, [])
+            end,
+    {ok, IPParsed} = inet:parse_address(IPStr),
+    IPParsed.
 
 %% Backward compat: we need to register ns_server non tls port on epmd to allow
 %% old nodes to find this node
@@ -618,14 +642,15 @@ maybe_register_on_epmd(Module, NodeName, PortNo)
 maybe_register_on_epmd(_Module, _NodeName, _PortNo) ->
     ok.
 
-can_add_proto(P, #s{listeners = L}) ->
-    case is_valid_protocol(P) of
+can_add_proto({_AddrType, Proto}, #s{listeners = Listeners}) ->
+    case is_valid_protocol(Proto) of
         true ->
-            case proplists:is_defined(P, L) of
+            Protos = [P || {{_, P}, _} <- Listeners],
+            case lists:member(Proto, Protos) of
                 false ->
-                    HasInet6Tls = proplists:is_defined(inet6_tls_dist, L),
-                    HasInetTls = proplists:is_defined(inet_tls_dist, L),
-                    case P of
+                    HasInet6Tls = lists:member(inet6_tls_dist, Protos),
+                    HasInetTls = lists:member(inet_tls_dist, Protos),
+                    case Proto of
                         inet6_tls_dist when HasInetTls ->
                             {error, {already_has, inet_tls_dist}};
                         inet_tls_dist when HasInet6Tls ->
@@ -696,7 +721,7 @@ handle_reload_config(State) ->
             case not_started_required_listeners(NewState) of
                 [] ->
                     #s{listeners = Listeners} = NewState,
-                    L = [proto2netsettings(M) || {M, _} <- Listeners],
+                    L = [proto2netsettings(M) || {{_, M}, _} <- Listeners],
                     {reply, {ok, L}, NewState};
                 NotStartedRequired ->
                     error_msg("Failed to start required dist listeners ~p",
@@ -726,23 +751,28 @@ ensure_config(#s{listeners = Listeners} = State) ->
     State3.
 
 get_protos(#s{name = Name, config = Config}) ->
-    Protos =
-        case cb_epmd:is_local_node(Name) of
-            true ->
-                conf(local_listeners, Config);
-            false ->
-                conf(external_listeners, Config) ++
-                    conf(local_listeners, Config)
-        end,
-    lists:usort(Protos).
+    case cb_epmd:is_local_node(Name) of
+        true ->
+            [{local, P} || P <- lists:usort(conf(local_listeners, Config))];
+        false ->
+            External = lists:usort(conf(external_listeners, Config)),
+            Local = lists:usort(conf(local_listeners, Config)),
+            OnlyLocal = Local -- External,
+            [{local, P} || P <- OnlyLocal] ++
+            [{external, P} || P <- External]
+    end.
 
 get_required_protos(#s{name = Name, config = Config}) ->
     Local = conf(preferred_local_proto, Config),
     Ext = conf(preferred_external_proto, Config),
     case {cb_epmd:node_type(atom_to_list(Name)), cb_epmd:is_local_node(Name)} of
         {executioner, _} -> [];
-        {_, true} -> [Local];
-        {_, false} -> lists:usort([Local, Ext])
+        {_, true} -> [{local, Local}];
+        {_, false} ->
+            case Ext == Local of
+                true -> [{external, Ext}];
+                false -> [{local, Local}, {external, Ext}]
+            end
     end.
 
 info_msg(F, A) ->
@@ -856,7 +886,7 @@ store_config(Cfg) ->
     end.
 
 format_error({not_started, Protocols}) ->
-    PS = string:join([proto2str(P) || P <- Protocols], ", "),
+    PS = string:join([proto2str(P) || {_, P} <- Protocols], ", "),
     io_lib:format("Failed to start the following required listeners: ~p", [PS]);
 format_error({invalid_cb_dist_config, File, invalid_format}) ->
     io_lib:format("Invalid format of cb_dist config file (~s)", [File]);
