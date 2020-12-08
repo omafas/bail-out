@@ -907,10 +907,10 @@ format_error(Unknown) ->
 
 netsettings2str(S) -> proto2str(netsettings2proto(S)).
 
-proto2str(inet_tcp_dist) -> "TCP-ipv4";
-proto2str(inet_tls_dist) -> "TLS-ipv4";
-proto2str(inet6_tcp_dist) -> "TCP-ipv6";
-proto2str(inet6_tls_dist) -> "TLS-ipv6".
+proto2str(inet_tcp_dist) -> "TCP-IPv4";
+proto2str(inet_tls_dist) -> "TLS-IPv4";
+proto2str(inet6_tcp_dist) -> "TCP-IPv6";
+proto2str(inet6_tls_dist) -> "TLS-IPv6".
 
 netsettings2proto({inet, false}) -> inet_tcp_dist;
 netsettings2proto({inet, true}) -> inet_tls_dist;
