@@ -92,7 +92,7 @@ handle_regenerate_certificate(Req) ->
     assert_n2n_encryption_is_disabled(),
 
     ns_server_cert:generate_and_set_cert_and_pkey(),
-    ns_ssl_services_setup:sync_local_cert_and_pkey_change(),
+    ns_ssl_services_setup:sync(),
     ?log_info("Completed certificate regeneration"),
     ns_audit:regenerate_certificate(Req),
     handle_cluster_certificate_simple(Req).
@@ -136,7 +136,7 @@ handle_reload_node_certificate(Req) ->
             ns_audit:reload_node_certificate(Req,
                                              proplists:get_value(subject, Props),
                                              proplists:get_value(expires, Props)),
-            ns_ssl_services_setup:sync_local_cert_and_pkey_change(),
+            ns_ssl_services_setup:sync(),
             case netconfig_updater:ensure_tls_dist_started(Nodes) of
                 ok ->
                     menelaus_util:reply(Req, 200);

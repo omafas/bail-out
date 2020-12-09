@@ -121,7 +121,7 @@ engage_cluster_apply_certs(NodeKVList) ->
                   NeedEncryption} of
                 {Cert, true} when Cert =/= undefined ->
                     ns_server_cert:set_generated_public_ca(Cert),
-                    ns_ssl_services_setup:sync_local_cert_and_pkey_change(),
+                    ns_ssl_services_setup:sync(),
                     ?log_info("Generated certificate was loaded on the node "
                               "before joining. Cert: ~p", [Cert]);
                 _ ->
@@ -140,7 +140,7 @@ apply_certs(ClusterCA) ->
         {ok, _} ->
             case ns_server_cert:apply_certificate_chain_from_inbox(ClusterCA) of
                 {ok, Props} ->
-                    ns_ssl_services_setup:sync_local_cert_and_pkey_change(),
+                    ns_ssl_services_setup:sync(),
                     ?log_info("Custom certificate was loaded on the node "
                               "before joining. Props: ~p", [Props]),
                     ok;
@@ -172,7 +172,15 @@ apply_net_config(NodeKVList) ->
                     Props = [{externalListeners, Protos},
                              {afamily, AFamily},
                              {nodeEncryption, NEncryption}],
-                    netconfig_updater:apply_config(Props);
+                    case netconfig_updater:apply_config(Props) of
+                        ok ->
+                            ns_config:sync_announcements(),
+                            menelaus_event:sync(ns_config_events),
+                            cluster_compat_mode:is_enterprise() andalso
+                                ns_ssl_services_setup:sync(),
+                            ok;
+                        {error, Msg} -> {error, Msg}
+                    end;
                 {error, Msg} -> {error, Msg}
             end;
         {error, Msg} -> {error, Msg}

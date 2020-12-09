@@ -871,8 +871,15 @@ handle_setup_net_config(Req) ->
       fun (Values) ->
               erlang:process_flag(trap_exit, true),
               case netconfig_updater:apply_config(Values) of
-                  ok -> menelaus_util:reply(Req, 200);
-                  {error, Msg} -> menelaus_util:reply_global_error(Req, Msg)
+                  ok ->
+                      %% Wait for web servers to restart
+                      ns_config:sync_announcements(),
+                      menelaus_event:sync(ns_config_events),
+                      cluster_compat_mode:is_enterprise() andalso
+                          ns_ssl_services_setup:sync(),
+                      menelaus_util:reply(Req, 200);
+                  {error, Msg} ->
+                      menelaus_util:reply_global_error(Req, Msg)
               end,
               erlang:exit(normal)
       end, Req, form, net_config_validators(false)).

@@ -25,7 +25,8 @@
 
 -export([register_watcher/1,
          unregister_watcher/1,
-         flush_watcher_notifications/1]).
+         flush_watcher_notifications/1,
+         sync/1]).
 
 %% gen_event callbacks
 
@@ -93,6 +94,9 @@ unregister_watcher(Pid) ->
                         {?MODULE, audit_events},
                         {unregister_watcher, Pid}).
 
+sync(Module) ->
+    gen_event:call(Module, {?MODULE, Module}, sync).
+
 %% Implementation
 
 init(ns_config_events) ->
@@ -129,6 +133,9 @@ handle_call({unregister_watcher, Pid},
                         WatchersRest
                 end,
     {ok, ok, State#state{watchers = Watchers2}};
+
+handle_call(sync, State) ->
+    {ok, ok, State};
 
 handle_call(Request, State) ->
     ?log_warning("Unexpected handle_call(~p, ~p)", [Request, State]),

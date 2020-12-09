@@ -377,8 +377,7 @@ complete_rename(OldNode) ->
     %% rename command to be synchronous. They can perform calls to web server
     %% immediately after rename is done. In order to avoid the race we need
     %% to make sure web server is restarted by the time the rename is finished.
-    cluster_compat_mode:is_enterprise() andalso
-        ns_ssl_services_setup:sync_local_cert_and_pkey_change(),
+    cluster_compat_mode:is_enterprise() andalso ns_ssl_services_setup:sync(),
     misc:remove_marker(ns_cluster:rename_marker_path()).
 
 rename_node_in_config(Old, New) ->

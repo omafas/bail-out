@@ -29,7 +29,7 @@
          ssl_cacert_key_path/0,
          memcached_cert_path/0,
          memcached_key_path/0,
-         sync_local_cert_and_pkey_change/0,
+         sync/0,
          ssl_minimum_protocol/1,
          ssl_minimum_protocol/2,
          client_cert_auth/0,
@@ -428,8 +428,13 @@ do_check_local_cert_and_pkey(ClusterCertPEM, Node) ->
     Digest = erlang:md5(term_to_binary({Node, ClusterCertPEM, LocalCert, LocalPKey})),
     {proplists:get_value(digest, Meta) =:= Digest, LocalCert, LocalPKey}.
 
-sync_local_cert_and_pkey_change() ->
+sync() ->
     ns_config:sync_announcements(),
+    %% First ping guarantees that trigger_ssl_reload has sent
+    %% the notify_services message
+    ok = gen_server:call(?MODULE, ping, infinity),
+    %% Second ping guarantees that the notify_services message message
+    %% has been handled
     ok = gen_server:call(?MODULE, ping, infinity).
 
 set_node_certificate_chain(Props, CAChain, Cert, PKey) ->
