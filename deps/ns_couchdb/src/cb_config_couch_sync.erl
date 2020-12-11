@@ -64,6 +64,13 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Request, State) ->
     {noreply, State}.
 
+handle_info({notable_change, cluster_encryption_level = Key}, State) ->
+    flush_for_key(Key),
+    apply_to_couch_config(httpd, ip4_bind_address,
+                          menelaus_web:get_addr(inet, false), true),
+    apply_to_couch_config(httpd, ip6_bind_address,
+                          menelaus_web:get_addr(inet6, false), true),
+    {noreply, State};
 handle_info({notable_change, secure_headers = Key}, State) ->
     flush_for_key(Key),
 
@@ -122,6 +129,7 @@ is_notable_key({couchdb, _}) -> true;
 is_notable_key({{node, Node, {couchdb, _}}}) when Node =:= node() -> true;
 is_notable_key(secure_headers) -> true;
 is_notable_key(audit) -> true;
+is_notable_key(cluster_encryption_level) -> true;
 is_notable_key(_) -> false.
 
 handle_config_event({Key, _Value}) ->
@@ -135,6 +143,8 @@ handle_config_event(_) ->
     ok.
 
 to_global_key({couchdb, _} = Key) ->
+    Key;
+to_global_key(cluster_encryption_level = Key) ->
     Key;
 to_global_key(secure_headers = Key) ->
     Key;

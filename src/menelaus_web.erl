@@ -34,6 +34,7 @@
          webconfig/0,
          webconfig/1,
          get_uuid/0,
+         get_addr/2,
          init/1]).
 
 -export([ns_log_cat/1, ns_log_code_string/1, ns_log_prepare_message/2]).

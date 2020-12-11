@@ -84,7 +84,8 @@ do_start_link_capi_service(SSLPort) ->
 
     Options = [{port, SSLPort},
                {ssl, true},
-               {ssl_opts, ssl_server_opts()}],
+               {ssl_opts, ssl_server_opts()},
+               {ip, misc:inaddr_any()}],
 
     %% the following is copied almost verbatim from couch_httpd.  The
     %% difference is that we don't touch "ssl" key of couch config and
@@ -96,11 +97,6 @@ do_start_link_capi_service(SSLPort) ->
     %% fossilized couchdb code.
     %%
     %% Also couchdb code is reformatted for ns_server formatting
-    Field = case misc:is_ipv6() of
-                true -> "ip6_bind_address";
-                false -> "ip4_bind_address"
-            end,
-    BindAddress = couch_config:get("httpd", Field, any),
     DefaultSpec = "{couch_httpd_db, handle_request}",
     DefaultFun = make_arity_1_fun(
                    couch_config:get("httpd", "default_handler", DefaultSpec)),
@@ -151,8 +147,7 @@ do_start_link_capi_service(SSLPort) ->
     %% set mochiweb options
     FinalOptions = lists:append([Options, ServerOptions,
                                  [{loop, Loop},
-                                  {name, https},
-                                  {ip, BindAddress}]]),
+                                  {name, https}]]),
 
     %% launch mochiweb
     {ok, _Pid} = case mochiweb_http:start(FinalOptions) of
