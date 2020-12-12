@@ -175,10 +175,20 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 apply_changed_memcached_config(DifferentConfig, State) ->
-    case ns_memcached:config_validate(DifferentConfig) of
+    %% We might have changed address family in ns_server and we don't want to
+    %% fail after trying to connect to the address family which might not exist
+    %% in memcached yet.
+    %% Since we cannot know for sure which address family memcached is
+    %% listening on, due to various error paths that can lead to mismatch in
+    %% what this module perceives the memcached config is and what in fact is
+    %% applied in memcached, it is simplest to attempt connection using both
+    %% address family.
+    AFamiliesToTry = [inet, inet6],
+
+    case ns_memcached:config_validate(DifferentConfig, AFamiliesToTry) of
         ok ->
             ?log_debug("New memcached config is hot-reloadable."),
-            hot_reload_config(DifferentConfig, State, 10, []),
+            hot_reload_config(DifferentConfig, AFamiliesToTry, State, 10, []),
             {noreply, State#state{memcached_config = DifferentConfig}};
         {memcached_error, einval, _} ->
             ?log_debug("Memcached config is not hot-reloadable"),
@@ -221,14 +231,14 @@ changed_keys(BlobBefore, BlobAfter) ->
             unknown
     end.
 
-hot_reload_config(NewMcdConfig, State, Tries, LastErr) when Tries < 1 ->
+hot_reload_config(NewMcdConfig, _, State, Tries, LastErr) when Tries < 1 ->
     ale:error(?USER_LOGGER,
               "Unable to apply memcached config update that was supposed to "
               "succeed. Error: ~p. Giving up. Restart memcached to apply that "
               "config change. Updated keys: ~p",
               [LastErr, changed_keys(State#state.memcached_config,
                                      NewMcdConfig)]);
-hot_reload_config(NewMcdConfig, State, Tries, _LastErr) ->
+hot_reload_config(NewMcdConfig, AFamiliesToTry, State, Tries, _LastErr) ->
     FilePath = get_memcached_config_path(),
     PrevFilePath = FilePath ++ ".prev",
 
@@ -243,7 +253,7 @@ hot_reload_config(NewMcdConfig, State, Tries, _LastErr) ->
     %% we'll be able to retry hot or cold config update
     ok = misc:atomic_write_file(FilePath, NewMcdConfig),
 
-    case ns_memcached:config_reload() of
+    case ns_memcached:config_reload(AFamiliesToTry) of
         ok ->
             delete_prev_config_file(),
             ale:info(?USER_LOGGER,
@@ -255,7 +265,8 @@ hot_reload_config(NewMcdConfig, State, Tries, _LastErr) ->
             ?log_error("Failed to reload memcached config. "
                        "Will retry. Error: ~p", [Err]),
             timer:sleep(1000),
-            hot_reload_config(NewMcdConfig, State, Tries - 1, Err)
+            hot_reload_config(NewMcdConfig, AFamiliesToTry, State,
+                              Tries - 1, Err)
     end.
 
 get_memcached_config_path() ->

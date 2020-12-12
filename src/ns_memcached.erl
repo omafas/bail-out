@@ -116,8 +116,8 @@
          get_vbucket_high_seqno/2,
          wait_for_seqno_persistence/3,
          get_keys/3,
-         config_validate/1,
-         config_reload/0,
+         config_validate/2,
+         config_reload/1,
          get_failover_log/2,
          get_failover_logs/2,
          get_collections_uid/1
@@ -1184,13 +1184,27 @@ do_connect(Options) ->
     Port = service_ports:get_port(memcached_dedicated_port, Config),
     User = ns_config:search_node_prop(Config, memcached, admin_user),
     Pass = ns_config:search_node_prop(Config, memcached, admin_pass),
-    {ok, Sock} = gen_tcp:connect(misc:localhost(), Port,
-                                 [misc:get_net_family(),
-                                  binary,
-                                  {packet, 0},
-                                  {active, false},
-                                  {recbuf, ?RECBUF},
-                                  {sndbuf, ?SNDBUF}]),
+    AFamilies = proplists:get_value(try_afamily, Options,
+                                    [misc:get_net_family()]),
+    HelloFeatures = proplists:delete(try_afamily, Options),
+    {ok, Sock} = lists:foldl(
+                   fun (_AFamily, {ok, Socket}) ->
+                           {ok, Socket};
+                       (AFamily, Acc) ->
+                           RV = gen_tcp:connect(misc:localhost(AFamily, []),
+                                                Port,
+                                                [AFamily,
+                                                 binary,
+                                                 {packet, 0},
+                                                 {active, false},
+                                                 {recbuf, ?RECBUF},
+                                                 {sndbuf, ?SNDBUF}]),
+                           case RV of
+                               {ok, S} -> {ok, S};
+                               _ -> [{AFamily, RV} | Acc]
+                           end
+                   end, [], AFamilies),
+
     try
         case mc_client_binary:auth(Sock, {<<"PLAIN">>,
                                           {list_to_binary(User),
@@ -1201,7 +1215,7 @@ do_connect(Options) ->
                            "provided password <ud>~s</ud>", [User, Pass]),
                 error({auth_failure, Err})
         end,
-        Features = mc_client_binary:hello_features(Options),
+        Features = mc_client_binary:hello_features(HelloFeatures),
         {ok, Negotiated} = mc_client_binary:hello(Sock, "regular", Features),
         Failed = Features -- Negotiated,
         Failed == [] orelse error({feature_negotiation_failed, Failed}),
@@ -1447,18 +1461,20 @@ do_get_keys(Bucket, NodeVBuckets, Params) ->
               end
       end, NodeVBuckets, ?GET_KEYS_OUTER_TIMEOUT).
 
--spec config_validate(binary()) -> ok | mc_error().
-config_validate(NewConfig) ->
+-spec config_validate(binary(), [inet | inet6]) -> ok | mc_error().
+config_validate(NewConfig, AFamilies) ->
     misc:executing_on_new_process(
       fun () ->
-              {ok, Sock} = connect([{retries, 1}]),
+              {ok, Sock} = connect([{retries, 1},
+                                    {try_afamily, AFamilies}]),
               mc_client_binary:config_validate(Sock, NewConfig)
       end).
 
-config_reload() ->
+config_reload(AFamilies) ->
     misc:executing_on_new_process(
       fun () ->
-              {ok, Sock} = connect([{retries, 1}]),
+              {ok, Sock} = connect([{retries, 1},
+                                    {try_afamily, AFamilies}]),
               mc_client_binary:config_reload(Sock)
       end).
 
