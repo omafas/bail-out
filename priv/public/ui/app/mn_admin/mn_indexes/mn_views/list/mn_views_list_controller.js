@@ -74,9 +74,7 @@
       if (!vm.ddocs || !vm.ddocs.production) {
         return 0;
       }
-      return _.filter(vm.ddocs.production,function (o) {
-        if (!o.doc.json.spatial) return o;
-      }).length;
+      return vm.ddocs.production.filter(row => _.isEmpty(row.doc.json.spatial)).length;
     }
     function showCreationDialog(ddoc, isSpatial) {
       $uibModal.open({

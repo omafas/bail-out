@@ -87,8 +87,8 @@
       <div
          ng-repeat-start="row in viewsListCtl.ddocs[viewsListCtl.type] | orderBy:'hostname' track by row.doc.meta.id"
          ng-if="viewsListCtl.ddocs.rows.length">
-        <hr class="margin-bottom-half margin-top-1" ng-if="!row.doc.json.spatial">
-        <div class="cbui-tablerow" ng-if="!row.doc.json.spatial">
+        <hr class="margin-bottom-half margin-top-1" ng-if="('isEmpty' | lodash:row.doc.json.spatial)">
+        <div class="cbui-tablerow" ng-if="('isEmpty' | lodash:row.doc.json.spatial)">
           <span class="cbui-table-cell flex-grow-2 cbui-tablerow-title">
              {{row.doc.meta.id}}
             <span class="label lt-blue" ng-show="viewsListCtl.showCreationButton(row)">views</span>
