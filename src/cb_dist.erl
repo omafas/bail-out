@@ -823,7 +823,7 @@ validate_config_file(CfgFile) ->
             orelse throw(not_unique_listeners),
         length(lists:usort(ExternalListeners)) == length(ExternalListeners)
             orelse throw(not_unique_listeners),
-        lists:member(ExtPreferred, ExternalListeners ++ LocalListeners)
+        lists:member(ExtPreferred, ExternalListeners)
             orelse throw({missing_preferred_external_listener, ExtPreferred}),
         lists:member(LocalPreferred, LocalListeners)
             orelse throw({missing_preferred_local_listener, LocalPreferred}),
