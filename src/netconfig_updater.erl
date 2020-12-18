@@ -70,6 +70,15 @@ handle_call({apply_config, Config}, _From, State) ->
         {error, _} = Error -> {reply, Error, State, hibernate}
     end;
 
+handle_call({change_listeners, disable_unused, _Config}, _From, State) ->
+    CurListeners = cb_dist:external_listeners(),
+    CurAFamily = cb_dist:address_family(),
+    CurNEncrypt = cb_dist:external_encryption(),
+    NewListeners = [{CurAFamily, CurNEncrypt}],
+    NewConfig = [{externalListeners, NewListeners}],
+    CurConfig = [{externalListeners, CurListeners}],
+    handle_with_marker(apply_config, CurConfig, NewConfig, State);
+
 handle_call({change_listeners, Action, Config}, _From, State) ->
     CurProtos = cb_dist:external_listeners(),
     AFamily = proplists:get_value(afamily, Config, cb_dist:address_family()),

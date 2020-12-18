@@ -884,6 +884,11 @@ handle_setup_net_config(Req) ->
               erlang:exit(normal)
       end, Req, form, net_config_validators(false)).
 
+handle_change_external_listeners(disable_unused, Req) ->
+    case netconfig_updater:change_external_listeners(disable_unused, []) of
+        ok -> menelaus_util:reply(Req, 200);
+        {error, Msg} -> menelaus_util:reply_global_error(Req, Msg)
+    end;
 handle_change_external_listeners(Action, Req) ->
     menelaus_util:assert_is_65(),
     validator:handle(
