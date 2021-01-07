@@ -1262,7 +1262,7 @@ handle_apply_new_config(Node, NewBucketConfig,
     end,
 
     %% and ok to delete vbuckets we want to delete
-    [ns_memcached:delete_vbucket(BucketName, VBucket) || VBucket <- ToDelete],
+    ok = ns_memcached:delete_vbuckets(BucketName, ToDelete),
 
     {reply, ok, pass_vbucket_states_to_set_view_manager(State2)}.
 

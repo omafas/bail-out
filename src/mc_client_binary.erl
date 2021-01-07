@@ -34,6 +34,7 @@
          create_bucket/4,
          delete_bucket/3,
          delete_vbucket/2,
+         delete_vbuckets/2,
          sync_delete_vbucket/2,
          flush/1,
          hello_features/1,
@@ -236,12 +237,19 @@ delete_bucket(Sock, BucketName, Options) ->
 
 delete_vbucket(Sock, VBucket) ->
     case cmd(?CMD_DELETE_VBUCKET, Sock, undefined, undefined,
-             {#mc_header{vbucket = VBucket}, #mc_entry{}},
+             construct_delete_vbucket_packet(VBucket),
              ?VB_DELETE_TIMEOUT) of
         {ok, #mc_header{status=?SUCCESS}, _ME, _NCB} ->
             ok;
         Response -> process_error_response(Response)
     end.
+
+delete_vbuckets(Sock, VBs) ->
+    pipeline_send_recv(Sock, ?CMD_DELETE_VBUCKET,
+                       fun construct_delete_vbucket_packet/1, VBs).
+
+construct_delete_vbucket_packet(VBucket) ->
+    {#mc_header{vbucket = VBucket}, #mc_entry{}}.
 
 sync_delete_vbucket(Sock, VBucket) ->
     case cmd(?CMD_DELETE_VBUCKET, Sock, undefined, undefined,

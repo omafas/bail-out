@@ -83,6 +83,7 @@
          mark_warmed/1,
          disable_traffic/2,
          delete_vbucket/2,
+         delete_vbuckets/2,
          sync_delete_vbucket/2,
          get_vbucket_details_stats/2,
          get_single_vbucket_details_stats/3,
@@ -378,6 +379,7 @@ verify_report_long_call(StartTS, ActualStartTS, State, Msg, RV) ->
 
 %% anything effectful is likely to be heavy
 assign_queue({delete_vbucket, _}) -> #state.very_heavy_calls_queue;
+assign_queue({delete_vbuckets, _}) -> #state.very_heavy_calls_queue;
 assign_queue({sync_delete_vbucket, _}) -> #state.very_heavy_calls_queue;
 assign_queue(flush) -> #state.very_heavy_calls_queue;
 assign_queue({set_vbucket, _, _, _}) -> #state.heavy_calls_queue;
@@ -481,6 +483,13 @@ do_handle_call({raw_stats, SubStat, StatsFun, StatsFunState}, _From, State) ->
             {reply, Reply, State}
     catch T:E ->
             {reply, {exception, {T, E}}, State}
+    end;
+do_handle_call({delete_vbuckets, VBuckets}, _From, #state{sock=Sock} = State) ->
+    try
+        {reply, mc_client_binary:delete_vbuckets(Sock, VBuckets), State}
+    catch
+        {error, _} = Err ->
+            {compromised_reply, Err, State}
     end;
 do_handle_call({delete_vbucket, VBucket}, _From, #state{sock=Sock} = State) ->
     case mc_client_binary:delete_vbucket(Sock, VBucket) of
@@ -962,6 +971,17 @@ update_with_rev(Bucket, VBucket, Id, Value, Rev, Deleted, LocalCAS) ->
                             ok | mc_error().
 delete_vbucket(Bucket, VBucket) ->
     do_call(server(Bucket), {delete_vbucket, VBucket}, ?TIMEOUT_VERY_HEAVY).
+
+-spec delete_vbuckets(bucket_name(), [vbucket_id()]) ->
+    ok | {errors, [{vbucket_id(), mc_error()}]} | {error, any()}.
+delete_vbuckets(Bucket, VBuckets) ->
+    case VBuckets of
+        [] ->
+            ok;
+        _ ->
+            do_call(server(Bucket), {delete_vbuckets, VBuckets},
+                    ?TIMEOUT_VERY_HEAVY)
+    end.
 
 -spec sync_delete_vbucket(bucket_name(), vbucket_id()) ->
                                  ok | mc_error().
