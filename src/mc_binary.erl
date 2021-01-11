@@ -19,8 +19,9 @@
 -include("mc_constants.hrl").
 -include("mc_entry.hrl").
 
--export([bin/1, recv/2, recv/3, send/4, encode/3, quick_stats/4,
-         quick_stats/5, quick_stats_append/3,
+-export([bin/1, recv/2, recv/3,  quick_active_recv/3,
+         send/4, send/2, encode/3,
+         quick_stats/4, quick_stats/5, quick_stats_append/3,
          decode_packet/1, decode_packet_ext/1,
          get_keys/4, get_xattrs/4]).
 

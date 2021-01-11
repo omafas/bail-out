@@ -92,6 +92,7 @@
          local_connected_and_list_vbuckets/1,
          local_connected_and_list_vbucket_details/2,
          set_vbucket/3, set_vbucket/4,
+         set_vbuckets/2,
          stats/1, stats/2,
          warmup_stats/1,
          topkeys/1,
@@ -380,6 +381,7 @@ assign_queue({delete_vbucket, _}) -> #state.very_heavy_calls_queue;
 assign_queue({sync_delete_vbucket, _}) -> #state.very_heavy_calls_queue;
 assign_queue(flush) -> #state.very_heavy_calls_queue;
 assign_queue({set_vbucket, _, _, _}) -> #state.heavy_calls_queue;
+assign_queue({set_vbuckets, _}) -> #state.very_heavy_calls_queue;
 assign_queue({add, _Key, _VBucket, _Value}) -> #state.heavy_calls_queue;
 assign_queue({get, _Key, _VBucket}) -> #state.heavy_calls_queue;
 assign_queue({get_from_replica, _Key, _VBucket}) -> #state.heavy_calls_queue;
@@ -543,6 +545,31 @@ do_handle_call({get_from_replica, Key, VBucket}, _From, State) ->
                                   #mc_entry{key = Key}}),
     {reply, Reply, State};
 
+do_handle_call({set_vbuckets, VBsToSet}, _From, #state{sock = Sock} = State) ->
+    ToSet = [{VB, VBState, construct_vbucket_info_json(Topology)}
+             || {VB, VBState, Topology} <- VBsToSet],
+    try
+        Reply = mc_client_binary:set_vbuckets(Sock, ToSet),
+        Good = case Reply of
+                   ok ->
+                       ToSet;
+                   {errors, BadVBs} ->
+                       ?log_error("Failed to change following vbucket "
+                                  "state ~n~p", [BadVBs]),
+                       ToSet -- [Bad || {Bad, _ErrMsg} <- BadVBs]
+               end,
+        ?log_info("Changed vbucket state ~n~p", [Good]),
+        [(catch master_activity_events:note_vbucket_state_change(
+                  State#state.bucket, node(), VBucket, VBState,
+                  VBInfoJson)) || {VBucket, VBState, VBInfoJson} <- Good],
+        {reply, Reply, State}
+    catch
+        {error, _} = Err ->
+            %% We should not reuse this socket on these errors.
+            ?log_error("Failed to change vbucket states: ~p~n~p",
+                       [Err, ToSet]),
+            {compromised_reply, Err, State}
+    end;
 do_handle_call({set_vbucket, VBucket, VBState, Topology}, _From,
                #state{sock=Sock, bucket=BucketName} = State) ->
     VBInfoJson = construct_vbucket_info_json(Topology),
@@ -1029,6 +1056,19 @@ set_vbucket(Bucket, VBucket, VBState, Topology) ->
     do_call(server(Bucket), {set_vbucket, VBucket, VBState, Topology},
             ?TIMEOUT_HEAVY).
 
+-spec set_vbuckets(bucket_name(),
+                   [{vbucket_id(), vbucket_state(), [[node()]] | undefined}]) ->
+    ok |
+    {errors, [{{vbucket_id(), vbucket_state(), [[node()]] | undefined},
+               mc_error()}]} |
+    {error, any()}.
+set_vbuckets(Bucket, ToSet) ->
+    case ToSet of
+        [] ->
+            ok;
+        _ ->
+            do_call(server(Bucket), {set_vbuckets, ToSet}, ?TIMEOUT_VERY_HEAVY)
+    end.
 
 -spec stats(bucket_name()) ->
                    {ok, [{binary(), binary()}]} | mc_error().

@@ -1251,17 +1251,15 @@ handle_apply_new_config(Node, NewBucketConfig,
     ok = replication_manager:remove_undesired_replications(
            BucketName, WantedReplications),
 
-    SetTopology = cluster_compat_mode:is_cluster_65(),
     %% then we're ok to change vbucket states
-    [begin
-         case SetTopology of
-             true ->
-                 ns_memcached:set_vbucket(BucketName, VBucket, StateToSet,
-                                          Topology);
-             false ->
-                 ns_memcached:set_vbucket(BucketName, VBucket, StateToSet)
-         end
-     end || {VBucket, StateToSet, Topology} <- ToSet],
+    case cluster_compat_mode:is_cluster_65() of
+        true ->
+            ok = ns_memcached:set_vbuckets(BucketName, ToSet);
+        false ->
+            %% Do not set the Topology, only state of vbucket.
+            CompatToSet = [{VB, S, undefined} || {VB, S, _} <- ToSet],
+            ok = ns_memcached:set_vbuckets(BucketName, CompatToSet)
+    end,
 
     %% and ok to delete vbuckets we want to delete
     [ns_memcached:delete_vbucket(BucketName, VBucket) || VBucket <- ToDelete],
