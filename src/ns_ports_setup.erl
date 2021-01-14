@@ -368,10 +368,10 @@ goport_args(projector, Config, _Cmd, _NodeUUID) ->
 
     build_https_args(projector_ssl_port, "--httpsPort", "--certFile",
                      "--keyFile", Config) ++
+    build_afamily_requirement("-") ++
     ["-kvaddrs=" ++ misc:local_url(LocalMemcachedPort, [no_scheme]),
      build_port_arg("-adminport", ":", projector_port, Config),
      "-diagDir=" ++ MinidumpDir,
-     "-ipv6=" ++ atom_to_list(misc:is_ipv6()),
      misc:local_url(RestPort, [no_scheme])];
 
 goport_args(goxdcr, Config, _Cmd, _NodeUUID) ->
