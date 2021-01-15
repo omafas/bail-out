@@ -481,12 +481,12 @@ goport_args(fts, Config, _Cmd, NodeUUID) ->
         "hideUI=true," ++
         "cbaudit=" ++ atom_to_list(cluster_compat_mode:is_enterprise()) ++
         "," ++
-        "ipv6=" ++ atom_to_list(misc:is_ipv6()) ++ "," ++
         "ftsMemoryQuota=" ++ integer_to_list(FTSMemoryQuota * 1024000) ++ "," ++
         "maxReplicasAllowed=" ++ integer_to_list(MaxReplicasAllowed) ++ "," ++
         "bucketTypesAllowed=" ++ BucketTypesAllowed ++ "," ++
         "http2=" ++ atom_to_list(cluster_compat_mode:is_enterprise()) ++ "," ++
-        "vbuckets=" ++ integer_to_list(ns_bucket:get_num_vbuckets()),
+        "vbuckets=" ++ integer_to_list(ns_bucket:get_num_vbuckets()) ++
+        build_afamily_requirement(","),
     [
      "-cfg=metakv",
      "-uuid=" ++ NodeUUID,
