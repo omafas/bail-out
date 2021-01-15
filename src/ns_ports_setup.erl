@@ -398,13 +398,14 @@ goport_args(indexer, Config, _Cmd, NodeUUID) ->
         build_https_args(indexer_https_port, "--httpsPort",
                          "--certFile", "--keyFile", Config) ++
 
+        build_afamily_requirement("-") ++
+
         ["-vbuckets=" ++ integer_to_list(ns_bucket:get_num_vbuckets()),
          "-cluster=" ++ misc:local_url(RestPort, [no_scheme]),
          "-storageDir=" ++ IdxDir2,
          "-diagDir=" ++ path_config:minidump_dir(),
          "-logDir=" ++ LogDir,
          "-nodeUUID=" ++ NodeUUID,
-         "-ipv6=" ++ atom_to_list(misc:is_ipv6()),
          "-isEnterprise=" ++ atom_to_list(cluster_compat_mode:is_enterprise())];
 
 goport_args(backup, Config, _Cmd, NodeUUID) ->
