@@ -377,10 +377,9 @@ goport_args(projector, Config, _Cmd, _NodeUUID) ->
 goport_args(goxdcr, Config, _Cmd, _NodeUUID) ->
     IsEnterprise = "-isEnterprise=" ++
         atom_to_list(cluster_compat_mode:is_enterprise()),
-    IsIpv6 = "-ipv6=" ++ atom_to_list(misc:is_ipv6()),
     build_port_args([{"-sourceKVAdminPort", rest_port},
                      {"-xdcrRestPort", xdcr_rest_port}], Config) ++
-        [IsEnterprise, IsIpv6];
+        [IsEnterprise | build_afamily_requirement("-")];
 
 goport_args(indexer, Config, _Cmd, NodeUUID) ->
     {ok, LogDir} = application:get_env(ns_server, error_logger_mf_dir),
