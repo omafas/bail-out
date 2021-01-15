@@ -414,6 +414,8 @@ goport_args(backup, Config, _Cmd, NodeUUID) ->
     build_https_args(backup_https_port, "-https-port", "-cert-path",
                      "-key-path", Config) ++
 
+    build_afamily_requirement("-") ++
+
     ["-cbm=" ++ filename:join(path_config:component_path(bin), "cbbackupmgr"),
      "-node-uuid=" ++ NodeUUID,
      "-public-address=" ++ misc:extract_node_address(node()),
