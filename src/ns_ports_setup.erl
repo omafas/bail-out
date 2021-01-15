@@ -514,10 +514,11 @@ goport_args(eventing, Config, _Cmd, NodeUUID) ->
         build_https_args(eventing_https_port, "-adminsslport",
                          "-certfile", "-keyfile", Config) ++
 
+        build_afamily_requirement("-") ++
+
         ["-dir=" ++ filename:join(EvDir, "@eventing"),
          "-uuid=" ++ NodeUUID,
          "-diagdir=" ++ path_config:minidump_dir(),
-         "-ipv6=" ++ atom_to_list(misc:is_ipv6()),
          "-vbuckets=" ++ integer_to_list(ns_bucket:get_num_vbuckets())];
 
 goport_args(cbas, Config, Cmd, NodeUUID) ->
