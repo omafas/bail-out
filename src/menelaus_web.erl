@@ -798,7 +798,6 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                                Plugins, PReq)
                      end};
                 _ ->
-                    ?MENELAUS_WEB_LOG(0001, "Invalid post received: ~p", [Req]),
                     {done, reply_not_found(Req)}
             end;
         'DELETE' ->
@@ -871,8 +870,6 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {{[admin, setup], write},
                      fun menelaus_web_node:handle_node_altaddr_external_delete/1};
                 _ ->
-                    ?MENELAUS_WEB_LOG(0002, "Invalid delete received: ~p as ~p",
-                                      [Req, PathTokens]),
                     {done, reply_text(Req, "Method Not Allowed", 405)}
             end;
         'PUT' = Method ->
@@ -918,14 +915,12 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {{[admin, setup], write},
                      fun menelaus_web_node:handle_node_altaddr_external/1};
                 _ ->
-                    ?MENELAUS_WEB_LOG(0003, "Invalid ~p received: ~p", [Method, Req]),
                     {done, reply_text(Req, "Method Not Allowed", 405)}
             end;
         "RPCCONNECT" ->
             {{[admin, internal], all}, fun json_rpc_connection_sup:handle_rpc_connect/1};
 
         _ ->
-            ?MENELAUS_WEB_LOG(0004, "Invalid request received: ~p", [Req]),
             {done, reply_text(Req, "Method Not Allowed", 405)}
     end.
 
