@@ -1,5 +1,5 @@
 %% @author Couchbase <info@couchbase.com>
-%% @copyright 2013-2018 Couchbase, Inc.
+%% @copyright 2013-2021 Couchbase, Inc.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -203,7 +203,11 @@ compute_bucket_info_with_config(Bucket, Config, BucketConfig) ->
                 VBMapInfo = [{vBucketServerMap, {VBMap}} | Caps],
                 case ns_bucket:storage_mode(BucketConfig) of
                     couchstore ->
-                        [{ddocs, {[{uri, <<"/pools/default/buckets/", BucketBin/binary, "/ddocs">>}]}}
+                        DDocsUri =
+                            menelaus_util:bin_concat_path(["pools", "default",
+                                                           "buckets", Bucket,
+                                                           "ddocs"]),
+                        [{ddocs, {[{uri, DDocsUri}]}}
                          | VBMapInfo];
                     _ ->
                         VBMapInfo
@@ -214,10 +218,17 @@ compute_bucket_info_with_config(Bucket, Config, BucketConfig) ->
     %% to track changes to node services and set of active nodes.
     Rev = ns_config:compute_global_rev(Config),
 
+    BucketUuid = [{"bucket_uuid", UUID}],
+    Uri = menelaus_util:bin_concat_path(["pools", "default", "buckets",
+                                         Bucket], BucketUuid),
+    StreamingUri = menelaus_util:bin_concat_path(["pools", "default",
+                                                  "bucketsStreaming",
+                                                  Bucket], BucketUuid),
+
     J = {[{rev, Rev},
           {name, BucketBin},
-          {uri, <<"/pools/default/buckets/", BucketBin/binary, "?bucket_uuid=", UUID/binary>>},
-          {streamingUri, <<"/pools/default/bucketsStreaming/", BucketBin/binary, "?bucket_uuid=", UUID/binary>>},
+          {uri, Uri},
+          {streamingUri, StreamingUri},
           {nodes, NIs},
           {nodesExt, NEIs},
           {nodeLocator, ns_bucket:node_locator(BucketConfig)},
