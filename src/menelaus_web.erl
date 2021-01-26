@@ -872,7 +872,7 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 _ ->
                     {done, reply_text(Req, "Method Not Allowed", 405)}
             end;
-        'PUT' = Method ->
+        'PUT' ->
             case PathTokens of
                 ["pools", "default", "serverGroups"] ->
                     {{[server_groups], write},
