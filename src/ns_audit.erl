@@ -1,5 +1,5 @@
 %% @author Couchbase <info@couchbase.com>
-%% @copyright 2013-2019 Couchbase, Inc.
+%% @copyright 2013-2021 Couchbase, Inc.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -113,6 +113,20 @@ terminate(_Reason, #state{queue = Queue}) ->
 
 code_change(_OldVsn, State, _) -> {ok, State}.
 
+obscure_sessionid(Body) ->
+    misc:rewrite_tuples(
+      fun do_obscure_session_id/1, Body).
+
+do_obscure_session_id({sessionid, SessionId}) ->
+    %% The sessionid is obscured in a manner which maintains supportability
+    %% as it allows tracking all the actions related to the sessionid. This
+    %% wouldn't be possible if it were obscured using something like "******".
+    Salt = scram_sha:get_fallback_salt(),
+    ObscuredId = ns_config_auth:hash_password(Salt, binary_to_list(SessionId)),
+    {stop, {sessionid, misc:hexify(ObscuredId)}};
+do_obscure_session_id(_Other) ->
+    continue.
+
 handle_call({log, Code, Body, IsSync}, From, #state{queue = Queue} = State) ->
     CleanedQueue =
         case queue:len(Queue) > ns_config:read_key_fast(max_audit_queue_length, 1000) of
@@ -123,8 +137,15 @@ handle_call({log, Code, Body, IsSync}, From, #state{queue = Queue} = State) ->
             false ->
                 Queue
         end,
-    ?log_debug("Audit ~p: ~p", [Code, ns_config_log:tag_user_data(Body)]),
-    EncodedBody = ejson:encode({Body}),
+    %% The record logged to the audit log shouldn't contain the sessionid
+    %% as it could be used to obtain unauthorized access.
+    ObscuredBody = obscure_sessionid(Body),
+
+    %% The info logged to other logs (e.g. debug.log) should have additional
+    %% information hidden.
+    ?log_debug("Audit ~p: ~p", [Code,
+                                ns_config_log:tag_user_data(ObscuredBody)]),
+    EncodedBody = ejson:encode({ObscuredBody}),
     Continuation =
         case IsSync of
             true -> fun (Res) -> gen_server:reply(From, Res) end;
