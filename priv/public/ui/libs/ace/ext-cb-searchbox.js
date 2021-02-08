@@ -15,25 +15,30 @@ var keyUtil = require("../lib/keys");
 
 //dom.importCssString(searchboxCss, "ace_searchbox");
 
-var html = '<div class="ace_search">\
-    <div class="ace_search_form row">\
-        <input type="text" class="ace_search_field" placeholder="Search for" spellcheck="false"></input>\
-        <span action="findPrev" class="icon angle-icon up"></span>\
-        <span action="findNext" class="icon angle-icon down"></span>\
-        <span action="hide" class="ace_searchbtn_close">X</span>\
-    </div>\
-    <div class="ace_replace_form">\
-        <input class="ace_search_field" placeholder="Replace with" spellcheck="false"></input>\
-        <button type="button" action="replaceAndFindNext" class="ace_replacebtn">Replace</button>\
-        <button type="button" action="replaceAll" class="ace_replacebtn">All</button>\
-    </div>\
-    <div class="ace_search_options">\
-        <span action="toggleRegexpMode" class="ace_button" title="RegExp Search">.*</span>\
-        <span action="toggleCaseSensitive" class="ace_button" title="CaseSensitive Search">Aa</span>\
-        <span action="toggleWholeWords" class="ace_button" title="Whole Word Search">\\b</span>\
-    </div>\
-</div>'.replace(/>\s+/g, ">");
-
+var html = `<div class="ace-search forms">
+    <div class="row flex-right">
+      <div class="ace-search-options">
+        <button class="ace-search-options-buttons" action="toggleRegexpMode" title="RegExp search">.*</button>
+        <button class="ace-search-options-buttons" action="toggleCaseSensitive" title="case sensitive search">Aa</button>
+        <button class="ace-search-options-buttons" action="toggleWholeWords" title="search whole word">\\b</button>
+      </div>
+      <span action="hide" class="ace-searchbtn-close">X</span>
+    </div>
+    <div class="row ace-search-form">
+      <input type="text" class="ace-search-field" placeholder="Find..." spellcheck="false"></input>
+      <button action="findPrev" class="outline tight icon angle-icon up"></button>
+      <button action="findNext" class="outline tight icon angle-icon down"></button>
+    </div>
+    <div class="row items-top ace-replace-form">
+      <input type="text" class="ace-search-field" placeholder="Replace with..." spellcheck="false"></input>
+      <div class="flex-grow-half text-right">
+      <button type="button" action="replaceAndFindNext" class="outline tight">Replace</button>
+      <br>
+      <button type="button" action="replaceAll" class="outline tight">All</button>
+      </div>
+    </div>
+  </div>`.replace(/>\s+/g, ">");
+  
 var SearchBox = function(editor, range, showReplaceForm) {
     var div = dom.createElement("div");
     div.innerHTML = html;
@@ -51,14 +56,14 @@ var SearchBox = function(editor, range, showReplaceForm) {
     };
 
     this.$initElements = function(sb) {
-        this.searchBox = sb.querySelector(".ace_search_form");
-        this.replaceBox = sb.querySelector(".ace_replace_form");
-        this.searchOptions = sb.querySelector(".ace_search_options");
+        this.searchBox = sb.querySelector(".ace-search-form");
+        this.replaceBox = sb.querySelector(".ace-replace-form");
+        this.searchOptions = sb.querySelector(".ace-search-options");
         this.regExpOption = sb.querySelector("[action=toggleRegexpMode]");
         this.caseSensitiveOption = sb.querySelector("[action=toggleCaseSensitive]");
         this.wholeWordOption = sb.querySelector("[action=toggleWholeWords]");
-        this.searchInput = this.searchBox.querySelector(".ace_search_field");
-        this.replaceInput = this.replaceBox.querySelector(".ace_search_field");
+        this.searchInput = this.searchBox.querySelector(".ace-search-field");
+        this.replaceInput = this.replaceBox.querySelector(".ace-search-field");
     };
 
     this.$init = function() {
@@ -233,9 +238,10 @@ var SearchBox = function(editor, range, showReplaceForm) {
         this.editor.keyBinding.removeKeyboardHandler(this.$closeSearchBarKb);
         this.editor.focus();
     };
-    this.show = function(value, isReplace) {
+    this.show = function(value, isReplace, showOptions) {
         this.element.style.display = "";
         this.replaceBox.style.display = isReplace ? "" : "none";
+        this.searchOptions.style.display = isReplace && showOptions ? "" : "none";
 
         this.isReplace = isReplace;
 
@@ -258,9 +264,9 @@ var SearchBox = function(editor, range, showReplaceForm) {
 
 exports.SearchBox = SearchBox;
 
-exports.Search = function(editor, isReplace) {
+  exports.Search = function(editor, isReplace, showOptions) {
     var sb = editor.searchBox || new SearchBox(editor);
-    sb.show(editor.session.getTextRange(), isReplace);
+    sb.show(editor.session.getTextRange(), isReplace, showOptions);
 };
 
 });

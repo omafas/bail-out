@@ -2267,47 +2267,85 @@ button:hover.scenarios-delete {
   text-align: right;
 }
 /* -- ACE search modifications --------------------------------------------- */
-.ace_search {
+.ace-search {
   background-color: #fff;
-  max-width: 325px;
+  width: 400px;
   overflow: hidden;
   margin: 0;
-  padding: 0;
+  padding: .25rem .5rem .25rem .5rem;
   position: absolute;
-  top: 8px;
-  right: 8px;
-  border-radius: 3px;
+  top: .5rem;
+  right: .5rem;
+  border-radius: 3px 3px 2px 2px;
   box-shadow: 0px 1px 1px 1px rgba(0,0,0,0.25);
   z-index: 99;
   white-space: normal;
+  font: 12px/normal 'OpenSans' !important;
+  font-size: 12px !important;
 }
-.ace_search_form {
-  border: 1px solid #fff;
-  border-radius: 3px;
-}
-.ace_search_form.ace_nomatch {
-  border: 1px solid #e07f82;
-}
-.ace_search_field {
-  width: 100%;
-  border-width: 0!important;
-  font-size: .8125rem;
-}
-.ace_searchbtn_close {
-  font-size: .961rem;
-  color: #a1a1a1;
-  padding: .5rem .75rem;
+.ace-search-icon {
   cursor: pointer;
-  line-height: 1;
+  font-size: .961rem;
+  padding: .25rem;
+  color: #a1a1a1;
 }
-.ace_searchbtn_close:hover {
-  background-color: #ececec;
+.ace-search-icon:hover {
   color: #333;
 }
-.ace_search_options{
-  display: none
+.ace-search-form,
+.ace-replace-form {
+  margin: 0 0 .5rem 0;
 }
-
+.ace-search-form button.icon {
+  font-size: 14px !important;
+}
+.ace-search-form.ace_nomatch {
+}
+.ace-search-field {
+  margin-right: .25rem;
+}
+.ace-searchbtn-close {
+  color: #a1a1a1;
+  padding: .25rem .6rem;
+  cursor: pointer;
+  margin-left: .75rem;
+}
+.ace-searchbtn-close:hover {
+  background-color: #ececec;
+  color: #333;
+  border-radius: 50%;
+}
+.ace_replace_form,
+.ace_search_options {
+  padding: 0 .5rem;
+}
+.ace-search-options {
+  display: flex;
+  justify-content: flex-end;
+  margin: .5rem 0;
+}
+button.ace-search-options-buttons {
+  padding: 0;
+  min-width: 0;
+  width: 24px !important;
+  height: 24px !important;
+  background-color: #ececec;
+  color: #000;
+  font-size: .75rem !important;
+}
+button.ace-search-options-buttons:hover {
+  background-color: #bcbcbc;
+}
+button.ace-search-options-buttons.checked {
+  background-color: #4287d6;
+  color: #fff;
+}
+.ace-replace-form button.outline.tight {
+  width: 90px !important;
+  padding: 0;
+  font-size: 12px !important;
+  margin-bottom: .25rem;
+}
 /* bucket inference sidebar ------------------------------------------------- */
 .insights-sidebar { /* wrapper for sidebar area ----------------------------- */
   -webkit-box-flex: 0;
