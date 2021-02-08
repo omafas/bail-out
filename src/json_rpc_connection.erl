@@ -1,5 +1,5 @@
 %% @author Couchbase <info@couchbase.com>
-%% @copyright 2014-2018 Couchbase, Inc.
+%% @copyright 2014-2021 Couchbase, Inc.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -156,7 +156,7 @@ handle_call({call, Name, EJsonArgThunk}, From, #state{counter = Counter,
               {method, NameB}
               | MaybeParams]},
     ale:debug(?JSON_RPC_LOGGER,
-              "sending jsonrpc call:~p", [ns_config_log:sanitize(EJSON)]),
+              "sending jsonrpc call:~p", [ns_config_log:sanitize(EJSON, true)]),
     ok = gen_tcp:send(Sock, [ejson:encode(EJSON) | <<"\n">>]),
     ets:insert(IdToCaller, {Counter, From}),
     {noreply, State#state{counter = Counter + 1}}.
