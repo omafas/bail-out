@@ -50,8 +50,6 @@
 -define(SERVER, ?MODULE).
 -define(PRECONDITIONS_TIMEOUT,
         ?get_timeout(preconditions_timeout, 15000)).
--define(UNSAFE_PRECONDITIONS_TIMEOUT,
-        ?get_timeout(unsafe_preconditions_timeout, 2000)).
 
 -type lease_holder() :: {node(), binary()}.
 
@@ -338,9 +336,9 @@ handle_call({if_internal_process, Type, Pid, SubCall}, From, State) ->
 handle_call({wait_for_preconditions,
              Domain, DomainToken,
              Lease, Quorum, Unsafe, SubCall, Timeout}, From, State) ->
-    {noreply, handle_wait_for_preconditions(Domain, DomainToken,
-                                            Lease, Quorum, Unsafe, SubCall,
-                                            Timeout, From, State)};
+    handle_wait_for_preconditions(Domain, DomainToken,
+                                  Lease, Quorum, Unsafe, SubCall,
+                                  Timeout, From, State);
 handle_call(get_quorum_nodes, From, State) ->
     {noreply, handle_get_quorum_nodes(From, State)};
 handle_call({set_quorum_nodes, OldNodes, NewNodes}, From, State) ->
@@ -377,7 +375,8 @@ call_if_internal_process(Type, Pid, SubCall) ->
 
 call_wait_for_preconditions(Node, Token, UserQuorum, Opts, Call, Args) ->
     Unsafe               = proplists:get_bool(unsafe, Opts),
-    PreconditionsTimeout = preconditions_timeout(Opts, Unsafe),
+    PreconditionsTimeout = proplists:get_value(preconditions_timeout, Opts,
+                                               ?PRECONDITIONS_TIMEOUT),
     OuterTimeout         =
         proplists:get_value(timeout, Opts, PreconditionsTimeout + 5000),
 
@@ -394,17 +393,6 @@ call_wait_for_preconditions(Node, Token, UserQuorum, Opts, Call, Args) ->
     call(Node, {wait_for_preconditions,
                 Domain, DomainToken, Lease, Quorum, Unsafe,
                 SubCall, PreconditionsTimeout}, OuterTimeout).
-
-preconditions_timeout(Opts, Unsafe) ->
-    Default =
-        case Unsafe of
-            true ->
-                ?UNSAFE_PRECONDITIONS_TIMEOUT;
-            false ->
-                ?PRECONDITIONS_TIMEOUT
-        end,
-
-    proplists:get_value(preconditions_timeout, Opts, Default).
 
 call(Call) ->
     call(Call, infinity).
@@ -791,17 +779,22 @@ check_no_domain_conflicts(Domain, DomainToken, State) ->
     end.
 
 handle_wait_for_preconditions(Domain, DomainToken, Lease, Quorum,
-                              Unsafe, SubCall, Timeout, From, State) ->
+                              false = _Unsafe, SubCall, Timeout, From, State) ->
     gen_server2:conditional(
       wait_for_preconditions_pred(Domain, DomainToken, Lease, Quorum, _),
       ?cut(handle_wait_for_preconditions_success(SubCall, From, _2)),
       Timeout,
-      handle_wait_for_preconditions_timeout(SubCall, Timeout,
-                                            From,
+      %% Capture the last check_preconditions error on timeout.
+      handle_wait_for_preconditions_timeout(SubCall, From,
                                             Domain, DomainToken,
-                                            Lease, Quorum, Unsafe, _)),
+                                            Lease, Quorum, false, _)),
 
-    State.
+    {noreply, State};
+handle_wait_for_preconditions(Domain, DomainToken, Lease, Quorum,
+                              true = _Unsafe, SubCall, _Timeout, From, State) ->
+    %% When unsafe is true exit early if check_conditions fails.
+    handle_wait_for_preconditions_timeout(SubCall, From, Domain, DomainToken,
+                                          Lease, Quorum, true, State).
 
 wait_for_preconditions_pred(Domain, DomainToken, Lease, Quorum, State) ->
     check_preconditions(Domain, DomainToken,
@@ -817,7 +810,7 @@ check_preconditions(Domain, DomainToken, Lease, Quorum, Unsafe, State) ->
 handle_wait_for_preconditions_success(SubCall, From, State) ->
     {noreply, handle_activity_subcall(SubCall, From, State)}.
 
-handle_wait_for_preconditions_timeout(SubCall, Timeout, From,
+handle_wait_for_preconditions_timeout(SubCall, From,
                                       Domain, DomainToken,
                                       RequiredLease, RequiredQuorum, Unsafe,
                                       #state{leases = RemoteLeases} = State) ->
@@ -827,11 +820,10 @@ handle_wait_for_preconditions_timeout(SubCall, Timeout, From,
             %% This should only be possible if Unsafe is true
             true = Unsafe,
 
-            ?log_debug("Failed to acquire quorum for call ~p after ~bms. "
-                       "Continuing since 'unsafe' option is set.~n"
+            ?log_debug("Performing call ~p when 'unsafe' option set.~n"
                        "Required quorum: ~p~n"
                        "Leases: ~p",
-                       [SubCall, Timeout, RequiredQuorum, RemoteLeases]),
+                       [SubCall, RequiredQuorum, RemoteLeases]),
             handle_wait_for_preconditions_success(SubCall, From, State);
         Error ->
             gen_server2:reply(From, Error),
