@@ -755,6 +755,14 @@ def make_query_task(statement, user, password, port):
                           user=user, password=password, url=url)
 
 
+def make_cbas_task(statement, user, password, port):
+    url = "http://%s:%s/analytics/service/diagnostics?statement=%s" % (
+        local_url_addr, port, urllib.parse.quote(statement))
+
+    return make_curl_task(name="Result of query statement \'%s\'" % statement,
+                          user=user, password=password, url=url)
+
+
 def make_index_task(name, api, passwd, index_port, logfile="couchbase.log", **kwargs):
     index_url = 'http://%s:%s/%s' % (local_url_addr, index_port, api)
 
@@ -1164,7 +1172,7 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
                                     log_file="fts_diag.json", no_header=True)]
 
     cbas_tasks = []
-    cbas_port = read_guts(guts, "cbas_admin_port")
+    cbas_port = read_guts(guts, "cbas_http_port")
     if cbas_port:
         cbas_diag_url = 'http://%s:%s/analytics/node/diagnostics' % (
             local_url_addr, cbas_port)
@@ -1173,7 +1181,7 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
             local_url_addr, cbas_parent_port)
 
         def make_cbas(statement):
-            return make_query_task(statement, user="@",
+            return make_cbas_task(statement, user="@",
                                    password=memcached_pass,
                                    port=cbas_port)
 

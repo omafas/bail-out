@@ -594,6 +594,7 @@ main_with_everything(StaticTerms, NSConfig, CouchInisPList, Node) ->
                   {index, indexer_http_port, 9102},
                   {kv, projector_port, 9999},
                   {fts, fts_http_port, 8094},
+                  {cbas, cbas_http_port, 8095},
                   {cbas, cbas_admin_port, 9110},
                   {cbas, cbas_parent_port, 9122},
                   {eventing, eventing_http_port, 8096}],
