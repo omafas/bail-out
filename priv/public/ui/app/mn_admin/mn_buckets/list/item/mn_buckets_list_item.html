@@ -6,7 +6,7 @@
      class="cbui-tablerow resp-xsml"
      ng-class="{['dynamic_' + bucketsItemCtl.bucketStatus.statusClass] : !bucketsListCtl.isDetailsOpened(bucket.name) && !(bucketsItemCtl.getWarmUpProgress(bucket, adminCtl.tasks) !== false && rbac.cluster.tasks.read) && bucketsItemCtl.bucketStatus.statusClass == 'healthy'}">
     <span class="cbui-table-cell flex-grow-3 row flex-left">
-      <div class="cbui-tablerow-title ellipsis">{{bucket.name}}</div>
+      <div class="cbui-tablerow-title ellipsis" ng-attr-title="{{bucket.name}}">{{bucket.name}}</div>
       <span class="label lt-blue" ng-show="bucket.isMemcached">
         memcached
       </span>
