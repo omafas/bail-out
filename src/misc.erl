@@ -340,9 +340,11 @@ node_name_host(Node) ->
 %% This alias doesn't work outside the vm, so we need to return localhost
 %% ip address in this case
 extract_node_address(Node) ->
+    extract_node_address(Node, get_net_family()).
+extract_node_address(Node, AFamily) ->
     LocalhostAlias = localhost_alias(),
     case node_name_host(Node) of
-        {_, LocalhostAlias} -> localhost();
+        {_, LocalhostAlias} -> localhost(AFamily, []);
         {_, Host} -> Host
     end.
 

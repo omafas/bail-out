@@ -39,6 +39,11 @@ connection_error_message({tls_alert, "bad record mac"}, Host, Port) ->
     list_to_binary(io_lib:format("Failed to establish TLS connection to ~s:~w. "
                                  "Please check that you are connecting to a "
                                  "TLS / HTTPS endpoint.", [Host, Port]));
+connection_error_message({tls_alert, {handshake_failure, Str}}, Host, Port)
+                                                            when is_list(Str) ->
+    list_to_binary(io_lib:format("Failed to establish TLS connection to ~s:~w. "
+                                 "TLS handshake failure (~s)",
+                                 [Host, Port, Str]));
 connection_error_message({tls_alert, M}, Host, Port) ->
     list_to_binary(io_lib:format("Failed to establish TLS connection to ~s:~w: ~p", [Host, Port, M]));
 connection_error_message({AFamily, nxdomain}, Host, _Port) ->

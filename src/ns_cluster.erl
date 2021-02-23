@@ -794,29 +794,35 @@ expect_integer(PropName, Value) ->
         false -> erlang:exit({unexpected_json, not_integer, PropName})
     end.
 
-call_port_please(Name, Host) ->
-    %% When the 'Host' parameter is the actual hostname the epmd:port_please API
-    %% implementation uses "inet" protocol by default. This will fail if the
-    %% host is configured with IPv6. But if we pass in the IP Address instead of
-    %% hostname the API does the right thing. Hence passing the IP Address.
-    case inet:getaddr(Host, misc:get_net_family()) of
-        {ok, IpAddr} ->
-            ErlEpmd = net_kernel:epmd_module(),
-            case ErlEpmd:port_please(Name, IpAddr, 5000) of
-                {port, Port, _Version} -> {ok, Port};
-                X -> X
-            end;
-        {error, _} = Error -> Error
-    end.
+get_port_from_empd(OtpNode, AFamily, Encryption) ->
+    Res = case cb_epmd:get_port(OtpNode, AFamily, Encryption, 5000)  of
+              {port, Port, _Version} -> {ok, Port};
+              noport -> {error, noport};
+              {error, _} = Error -> Error
+          end,
+    ?cluster_debug("port_please(~p, ~p, ~p) = ~p",
+                   [OtpNode, AFamily, Encryption, Res]),
+    Res.
 
-verify_otp_connectivity(OtpNode) ->
-    {Name, Host} = misc:node_name_host(OtpNode),
-    PortPleaseRes = call_port_please(Name, Host),
-    ?cluster_debug("port_please(~p, ~p) = ~p", [Name, Host, PortPleaseRes]),
-    case PortPleaseRes of
+verify_otp_connectivity(OtpNode, Options) ->
+    NodeAFamily = proplists:get_value(node_afamily, Options,
+                                      cb_dist:address_family()),
+    NodeEncryption = proplists:get_value(node_encryption, Options,
+                                         cb_dist:external_encryption()),
+    TCPOnly = proplists:get_bool(tcp_only, Options),
+    Host = misc:extract_node_address(OtpNode, NodeAFamily),
+    case get_port_from_empd(OtpNode, NodeAFamily, NodeEncryption) of
+        {ok, Port} when NodeEncryption and not TCPOnly ->
+            case check_otp_tls_connectivity(Host, Port, NodeAFamily) of
+                {ok, IP} -> {ok, IP};
+                {error, Reason} ->
+                    {error, connect_node,
+                     ns_error_messages:verify_otp_connectivity_connection_error(
+                       Reason, OtpNode, Host, Port),
+                     {error, Reason}}
+            end;
         {ok, Port} ->
-            AFamily = misc:get_net_family(),
-            case check_host_port_connectivity(Host, Port, AFamily) of
+            case check_host_port_connectivity(Host, Port, NodeAFamily) of
                 {ok, IP} -> {ok, IP};
                 {error, Reason} ->
                     {error, connect_node,
@@ -830,9 +836,50 @@ verify_otp_connectivity(OtpNode) ->
              {connect_node, OtpNode, Error}}
     end.
 
+check_otp_tls_connectivity(Host, Port, AFamily) ->
+    %% Building connect options the same way inet_tls_dist builds it.
+    %% Note that ssl_dist_opts ets is populated by erlang ssl app (in our case
+    %% it should contain options from /etc/ssl_dist_opts.in).
+    [{client, TLSOpts}] = ets:lookup(ssl_dist_opts, client),
+    Opts = application:get_env(kernel, inet_dist_connect_options, []),
+    SNIOpts = case inet:parse_address(Host) of
+                  {ok, _} -> [];
+                  _ -> [{server_name_indication, Host}]
+              end,
+    AllOpts = [binary, {active, false}, {packet, 4},
+               AFamily, {nodelay, true}] ++ SNIOpts ++
+               lists:ukeysort(1, Opts ++ TLSOpts),
+    Timeout = net_kernel:connecttime(),
+    case inet:getaddr(Host, AFamily) of
+        {ok, IpAddr} ->
+            case ssl:connect(IpAddr, Port, AllOpts, Timeout) of
+                {ok, TLSSocket} ->
+                    {ok, {IpAddr, _}} = ssl:sockname(TLSSocket),
+                    catch ssl:close(TLSSocket),
+                    {ok, inet:ntoa(IpAddr)};
+                {error, _} = Error ->
+                    Error
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
 do_add_node_engaged(NodeKVList, Auth, GroupUUID, Services, Scheme) ->
     OtpNode = expect_json_property_atom(<<"otpNode">>, NodeKVList),
-    RV = verify_otp_connectivity(OtpNode),
+
+    VerifyOpts = case ns_server_cert:cluster_ca() of
+                     %% Do not test TLS connection in case of self-generated
+                     %% certs.
+                     %% Reason: the remote node can't have correct certs
+                     %% generated at this point.
+                     %% The remote node will establish TLS dist connection
+                     %% to us (because it knows our CA), then it will sync
+                     %% config, and only then it will be able to generate
+                     %% correct certs
+                     {_, _} -> [tcp_only];
+                     {_, _, _} -> []
+                 end,
+    RV = verify_otp_connectivity(OtpNode, VerifyOpts),
     case RV of
         {ok, _} ->
             case check_can_add_node(NodeKVList) of
@@ -1123,7 +1170,7 @@ unsupported_services_error(Supported, Requested) ->
 do_engage_cluster_inner(NodeKVList, Services) ->
     OtpNode = expect_json_property_atom(<<"otpNode">>, NodeKVList),
     MaybeTargetHost = proplists:get_value(<<"requestedTargetNodeHostname">>, NodeKVList),
-    case verify_otp_connectivity(OtpNode) of
+    case verify_otp_connectivity(OtpNode, []) of
         {ok, MyIP} ->
             {Address, UserSupplied} =
                 case MaybeTargetHost of
