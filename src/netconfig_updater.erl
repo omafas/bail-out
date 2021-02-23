@@ -266,6 +266,12 @@ ensure_connection_proto(Node, Family, Encryption, Retries, RetryTimeout) ->
             try check_connection_proto(Node, Family, Encryption) of
                 ok -> ok
             catch
+                throw:{wrong_proto, Node, AddressInfo} ->
+                    ?log_debug("Ignoring unexpected connection info for node "
+                               "~p connection (most likely the remote node "
+                               "connected to us faster than we connected to "
+                               "it):~n~p", [Node, AddressInfo]),
+                    ok;
                 throw:Reason ->
                     ?log_error("Checking node ~p connection type failed with "
                                "reason: ~p, will sleep for ~p ms, "
