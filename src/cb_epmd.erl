@@ -25,7 +25,8 @@
 %% External exports
 -export([start/0, start_link/0, stop/0, port_for_node/2, port_please/2,
          port_please/3, names/0, names/1,
-         register_node/2, register_node/3, is_local_node/1, node_type/1]).
+         register_node/2, register_node/3, is_local_node/1, node_type/1,
+         get_port/4]).
 
 %%%----------------------------------------------------------------------
 %%% API
@@ -48,24 +49,42 @@ port_please(Node, Hostname) ->
     port_please(Node, Hostname, infinity).
 
 port_please(NodeStr, Hostname, Timeout) ->
-    try {cb_dist:get_preferred_dist(NodeStr), node_type(NodeStr)} of
+    try cb_dist:get_preferred_dist(NodeStr) of
+        Module ->
+            {AFamily, Encryption} = cb_dist:proto2netsettings(Module),
+            get_port(NodeStr, Hostname, AFamily, Encryption, Timeout)
+    catch
+        error:Error ->
+            {error, Error}
+    end.
+
+get_port(Node, AFamily, Encryption, Timeout) ->
+    {Name, Host} = misc:node_name_host(Node),
+    get_port(Name, Host, AFamily, Encryption, Timeout).
+
+get_port(NodeName, NodeHost, AFamily, Encryption, Timeout) ->
+    Module = cb_dist:netsettings2proto({AFamily, Encryption}),
+    try {node_type(NodeName), Encryption} of
         %% needed for backward compat: old ns_server nodes use dynamic
         %% ports so the only way to know those ports is to ask real epmd
         %% for this reason we also keep registering new static ports on
         %% epmd because old nodes doesn't know anything about those
         %% ports
-        {Module, ns_server} when Module == inet_tcp_dist;
-                                 Module == inet6_tcp_dist ->
-            case erl_epmd:port_please(NodeStr, Hostname, Timeout) of
-                {port, _, _} = R -> R;
-                _ ->
-                    case port_for_node(Module, NodeStr) of
-                        noport -> noport;
-                        P -> {port, P, 5}
-                    end
+        {ns_server, false} ->
+            case inet:getaddr(NodeHost, AFamily) of
+                {ok, IpAddr} ->
+                    case erl_epmd:port_please(NodeName, IpAddr, Timeout) of
+                        {port, _, _} = R -> R;
+                        _ ->
+                            case port_for_node(Module, NodeName) of
+                                noport -> noport;
+                                P -> {port, P, 5}
+                            end
+                    end;
+                {error, _} = Error -> Error
             end;
-        {Module, _} ->
-            case port_for_node(Module, NodeStr) of
+        {_, _} ->
+            case port_for_node(Module, NodeName) of
                 noport -> noport;
                 P -> {port, P, 5}
             end

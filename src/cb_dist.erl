@@ -42,7 +42,9 @@
          proto_to_encryption/1,
          format_error/1,
          netsettings2str/1,
-         restart_tls/0]).
+         restart_tls/0,
+         netsettings2proto/1,
+         proto2netsettings/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
