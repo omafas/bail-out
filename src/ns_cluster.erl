@@ -59,7 +59,8 @@
          check_host_port_connectivity/2, change_address/1,
          enforce_topology_limitation/1,
          rename_marker_path/0,
-         sanitize_node_info/1]).
+         sanitize_node_info/1,
+         verify_otp_connectivity/2]).
 
 %% debugging & diagnostic export
 -export([do_change_address/2]).

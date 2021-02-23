@@ -909,7 +909,26 @@ handle_change_external_listeners(Action, Req) ->
     validator:handle(
       fun (Props) ->
               case netconfig_updater:change_external_listeners(Action, Props) of
-                  ok -> menelaus_util:reply(Req, 200);
+                  ok ->
+                      case Action of
+                          enable ->
+                              AFamily = proplists:get_value(afamily, Props),
+                              Encryption = proplists:get_value(
+                                             nodeEncryption, Props),
+                              Opts = [{node_afamily, AFamily}
+                                          || AFamily =/= undefined] ++
+                                     [{node_encryption, Encryption}
+                                          || Encryption =/= undefined],
+                              case ns_cluster:verify_otp_connectivity(
+                                     node(), Opts) of
+                                  {ok, _} ->
+                                      menelaus_util:reply(Req, 200);
+                                  {error, _, Msg, _} ->
+                                      menelaus_util:reply_global_error(Req, Msg)
+                              end;
+                          disable ->
+                              menelaus_util:reply(Req, 200)
+                      end;
                   {error, Msg} -> menelaus_util:reply_global_error(Req, Msg)
               end
       end, Req, form, net_config_validators(Action == disable)).
