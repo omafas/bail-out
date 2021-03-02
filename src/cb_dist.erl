@@ -379,8 +379,7 @@ handle_call(restart_tls, _From, #s{connections = Connections,
                               _ ->
                                   info_msg("Closing connection ~p because of "
                                            "tls restart", [Pid]),
-                                  catch erlang:demonitor(Mon, [flush]),
-                                  close_dist_connection(Pid, KernelPid),
+                                  close_dist_connection(Mon, Pid, KernelPid),
                                   false
                           end;
                       {_, _} ->
@@ -950,15 +949,19 @@ with_registered_connection(Fun, Module) ->
             erlang:raise(C, E, ST)
     end.
 
-update_connection_pid(Ref, Pid, #s{connections = Connections,
-                                   kernel_pid = KernelPid} = State) ->
+update_connection_pid(Ref, Pid, #s{connections = Connections} = State) ->
     case lists:keytake(Ref, #con.ref, Connections) of
         {value, Con, Rest} when Pid =:= undefined ->
             info_msg("Removed connection: ~p", [Con]),
             State#s{connections = Rest};
         {value, #con{pid = shutdown}, Rest} ->
             info_msg("Closing connection ~p because of tls restart", [Pid]),
-            close_dist_connection(Pid, KernelPid),
+            %% No point in using close_dist_connection here as {KernelPid,
+            %% disconnect} message is only useful after we forward the
+            %% controller message to AcceptorPid(which no longer exists), and it
+            %% in turn sends another controller message to ConPid to proceed
+            %% accepting connection.
+            force_close_dist_connection(Pid),
             State#s{connections = Rest};
         {value, Con, Rest} ->
             MonRef = erlang:monitor(process, Pid),
@@ -970,11 +973,15 @@ update_connection_pid(Ref, Pid, #s{connections = Connections,
             State
     end.
 
-close_dist_connection(Pid, KernelPid) ->
+close_dist_connection(MonRef, Pid, KernelPid) ->
+    catch erlang:demonitor(MonRef, [flush]),
     Pid ! {KernelPid, disconnect},
     case misc:wait_for_process(Pid, ?TERMINATE_TIMEOUT) of
         ok -> ok;
         {error, Reason} ->
             error_msg("Close connection ~p error: ~p", [Pid, Reason]),
-            exit(Pid, kill)
+            force_close_dist_connection(Pid)
     end.
+
+force_close_dist_connection(ConPid) ->
+    exit(ConPid, kill).
