@@ -448,19 +448,22 @@ prepare_list(List) ->
       end, [], List).
 
 prepare(Req, Params) ->
-    {User, Token, Remote} =
-        case Req of
-            undefined ->
-                {undefined, undefined, undefined};
-            _ ->
-                {get_identity(menelaus_auth:get_identity(Req)),
-                 menelaus_auth:get_token(Req),
-                 get_remote(Req)}
-        end,
-    Body = [{timestamp, now_to_iso8601(os:timestamp())},
-            {remote, Remote},
-            {sessionid, Token},
-            {real_userid, User}] ++ Params,
+    IdentityProps = case Req of
+                        undefined ->
+                            [{real_userid, undefined},
+                             {sessionid, undefined},
+                             {remote, undefined}];
+                        _ ->
+                            [{real_userid,
+                              get_identity(menelaus_auth:get_identity(Req))},
+                             {sessionid, menelaus_auth:get_token(Req)},
+                             {remote, get_remote(Req)}]
+                    end,
+
+    %% Any params specified by the caller have precedence.
+    Body = misc:update_proplist(
+             [{timestamp, now_to_iso8601(os:timestamp())} | IdentityProps],
+             Params),
 
     prepare_list(Body).
 
