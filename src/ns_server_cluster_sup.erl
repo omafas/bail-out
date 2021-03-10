@@ -55,7 +55,7 @@ init([]) ->
             permanent, infinity, supervisor,
             [ns_config_sup]},
            {netconfig_updater, {netconfig_updater, start_link, []},
-            permanent, infinity, supervisor, [netconfig_updater]},
+            permanent, 5000, worker, [netconfig_updater]},
            {json_rpc_connection_sup,
             {json_rpc_connection_sup, start_link, []},
             permanent, infinity, supervisor,
