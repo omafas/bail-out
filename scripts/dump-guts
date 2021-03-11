@@ -525,8 +525,12 @@ sanitize_config(Config) ->
               {stop, {pass, "*****"}};
           ({cert_and_pkey, [VClock|{Cert, _PKey}]}) ->
               {stop, {cert_and_pkey, [VClock|{Cert, <<"*****">>}]}};
+          ({cert_and_pkey, [VClock|{CAPros, Cert, _PKey}]}) ->
+              {stop, {cert_and_pkey, [VClock|{CAPros, Cert, <<"*****">>}]}};
           ({cert_and_pkey, {Cert, _PKey}}) ->
               {stop, {cert_and_pkey, {Cert, <<"*****">>}}};
+          ({cert_and_pkey, {CAPros, Cert, _PKey}}) ->
+              {stop, {cert_and_pkey, {CAPros, Cert, <<"*****">>}}};
           ({{metakv, K}, [VClock|{metakv_sensitive, _V}]}) ->
               {stop, {{metakv, K}, [VClock|{metakv_sensitive,
                                             <<"*****">>}]}};
