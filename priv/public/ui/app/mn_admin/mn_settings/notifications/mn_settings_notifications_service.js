@@ -383,7 +383,8 @@ angular.module('mnSettingsNotificationsService', [
               'where d.DataverseName <> "Metadata") select ' +
                 '(select value count(*) from user_datasets d group by d.BucketName) as datasets_per_bucket, ' +
                 '(select value count(*) from user_datasets d group by d.DataverseName) as datasets_per_dataverse, ' +
-                '(select value count(distinct d.UUID) from Metadata.`Bucket` d where d.IsRunning) as connected_buckets;'})
+                '(select value count(distinct d.UUID) from Metadata.`Bucket` d where d.IsRunning) as connected_buckets;'}
+                ,{ headers: {'ignore-401': 'true', 'Analytics-Priority': '-1'}})
             .then(function (resp) {
                 if (resp && resp.data && _.isArray(resp.data.results) && resp.data.results[0])
                     return(resp.data.results[0]);
