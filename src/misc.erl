@@ -1702,6 +1702,32 @@ parse_cpuset_cpus_test() ->
     ?assertException(error, badarg, parse_cpuset_cpus("1,aa")).
 -endif.
 
+%% What platform are we running on?
+
+is_linux() ->
+    case os:type() of
+        {unix, linux} ->
+            true;
+        {_, _} ->
+            false
+    end.
+
+is_macos() ->
+    case os:type() of
+        {unix, darwin} ->
+            true;
+        {_, _} ->
+            false
+    end.
+
+is_windows() ->
+    case os:type() of
+        {win32, _} ->
+            true;
+        {_, _} ->
+            false
+    end.
+
 ensure_writable_dir(Path) ->
     filelib:ensure_dir(Path),
     case filelib:is_dir(Path) of
