@@ -1447,13 +1447,13 @@ is_cluster_encryption_fully_disabled() ->
 
 -spec get_cluster_encryption_level() -> none | control | all.
 get_cluster_encryption_level() ->
-    case is_cluster_encryption_fully_enabled() of
-        true ->
-            ns_config:search(ns_config:latest(), cluster_encryption_level,
-                             control);
-        false ->
-            none
-    end.
+    Default = case is_cluster_encryption_fully_enabled() of
+                  true ->
+                      control;
+                  false ->
+                      none
+              end,
+    ns_config:search(ns_config:latest(), cluster_encryption_level, Default).
 
 -spec should_cluster_data_be_encrypted() -> true | false.
 should_cluster_data_be_encrypted() ->
