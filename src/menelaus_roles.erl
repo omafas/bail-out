@@ -89,7 +89,7 @@ roles_50() ->
        {desc, <<"Can manage all cluster features EXCEPT security.">>}],
       [{[admin, internal], none},
        {[admin, security], none},
-       {[admin, diag], read},
+       {[admin, diag], [read]},
        {[n1ql, curl], none},
        {[], all}]},
      {bucket_admin, [bucket_name],
@@ -305,7 +305,7 @@ roles_55() ->
                 "can access the web console. This user cannot read data.">>}],
       [{[admin, internal], none},
        {[admin, security], none},
-       {[admin, diag], read},
+       {[admin, diag], [read]},
        {[{bucket, any}, data], none},
        {[{bucket, any}, views], none},
        {[{bucket, any}, n1ql], none},
@@ -590,7 +590,7 @@ roles_66() ->
                 "can access the web console. This user cannot read data.">>}],
       [{[admin, internal], none},
        {[admin, security], none},
-       {[admin, diag], read},
+       {[admin, diag], [read]},
        {[{bucket, any}, data], none},
        {[{bucket, any}, views], none},
        {[{bucket, any}, n1ql], none},
@@ -1399,4 +1399,37 @@ validate_role_test() ->
     ?assertEqual(false, validate_role({admin, ["test"]}, Definitions, AllParamValues)),
     ?assertEqual(false, validate_role(bucket_admin, Definitions, AllParamValues)),
     ?assertEqual(false, validate_role({bucket_admin, ["test", "test"]}, Definitions, AllParamValues)).
+
+validate_roles(Roles) ->
+    lists:all(
+      fun ({Name, Params, Desc, Permissions}) when is_atom(Name),
+                                                   is_list(Params),
+                                                   is_list(Desc),
+                                                   is_list(Permissions) ->
+          ?assert(lists:member(Params, all_params_combinations())),
+          ?assert(lists:all(fun ({_, _}) -> true; (_) -> false end, Desc)),
+          ValidateObject =
+              fun (Obj) ->
+                  ?assert(lists:all(
+                            fun (A) when is_atom(A) -> true;
+                                ({A, _}) when is_atom(A) -> true;
+                                (_) -> false
+                            end, Obj)),
+                  true
+              end,
+          ?assert(lists:all(
+                    fun ({Object, all}) -> ValidateObject(Object);
+                        ({Object, none}) -> ValidateObject(Object);
+                        ({Object, Ops}) when is_list(Ops) ->
+                            ?assert(lists:all(fun (A) -> is_atom(A) end, Ops)),
+                            ValidateObject(Object)
+                    end, Permissions)),
+          true
+      end, Roles).
+
+roles_format_test() ->
+    ?assert(validate_roles(roles_50())),
+    ?assert(validate_roles(roles_55())),
+    ?assert(validate_roles(roles_66())).
+
 -endif.
