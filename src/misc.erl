@@ -66,9 +66,7 @@ get_utc_offset(LocalTime, UTCTime) ->
 
 % formats time (see erlang:localtime/0) as ISO-8601 text
 iso_8601_fmt({{Year,Month,Day},{Hour,Min,Sec}}, Millis, UTCOffset) ->
-    TimeS =
-        io_lib:format("~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B",
-                      [Year, Month, Day, Hour, Min, Sec]),
+    TimeS = iso_8601_fmt_datetime({{Year,Month,Day}, {Hour,Min,Sec}}, "-", ":"),
     MilliSecond = case Millis of
                      undefined -> "";
                      _ -> io_lib:format(".~3.10.0B", [Millis])
@@ -86,8 +84,29 @@ iso_8601_fmt({{Year,Month,Day},{Hour,Min,Sec}}, Millis, UTCOffset) ->
         end,
     lists:flatten(TimeS ++ MilliSecond ++ OffsetS).
 
+%% Format see: https://en.wikipedia.org/wiki/ISO_8601
+iso_8601_fmt_datetime({{Year,Month,Day},{Hour,Min,Sec}}, DateDelim, TimeDelim) ->
+    lists:flatten(
+      io_lib:format("~4.10.0B~s~2.10.0B~s~2.10.0BT~2.10.0B~s~2.10.0B~s~2.10.0B",
+                    [Year, DateDelim, Month, DateDelim, Day, Hour, TimeDelim,
+                     Min, TimeDelim, Sec])).
+
+-ifdef(TEST).
+iso_8601_fmt_datetime_test() ->
+    ?assertEqual("2007-04-05T14:30:00",
+                 iso_8601_fmt_datetime({{2007, 4, 5}, {14, 30, 00}}, "-", ":")),
+    ?assertEqual("20070405T143000",
+                 iso_8601_fmt_datetime({{2007, 4, 5}, {14, 30, 00}}, "", "")).
+-endif.
+
+-spec timestamp_utc_iso8601() -> string().
 timestamp_utc_iso8601() ->
     iso_8601_fmt(erlang:universaltime(), undefined, {0, 0}).
+
+%% safe for use in filenames
+-spec timestamp_utc_iso8601_basic() -> string().
+timestamp_utc_iso8601_basic() ->
+    iso_8601_fmt_datetime(erlang:universaltime(), "", "").
 
 %% Time is as per erlang:timestamp/0
 timestamp_local_iso8601(Time) ->

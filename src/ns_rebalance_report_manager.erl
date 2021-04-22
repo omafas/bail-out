@@ -129,7 +129,8 @@ handle_call({record_compressed_rebalance_report, R}, From, State) ->
     handle_call({record_rebalance_report, Report}, From, State);
 handle_call({record_rebalance_report, Report}, _From,
             #state{report_dir = Dir} = State) ->
-    FileName = "rebalance_report_" ++ misc:timestamp_utc_iso8601() ++ ".json",
+    FileName = "rebalance_report_" ++ misc:timestamp_utc_iso8601_basic()
+        ++ ".json",
     NewReport = {couch_uuids:random(), [{node, node()}, {filename, FileName}]},
     AllReports = [NewReport | ns_config:read_key_fast(rebalance_reports, [])],
     Keep = lists:sublist(AllReports, get_num_rebalance_reports()),
