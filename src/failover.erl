@@ -399,11 +399,16 @@ promote_max_replicas(FailoverNodes, Bucket, Map, PromoteReplicaFun) ->
     EnumeratedMap = misc:enumerate(MarkedMap, 0),
 
     NodesToQuery = nodes_to_query(EnumeratedMap, FailoverNodes),
+    %% failover_nodes option causes replications from failed over nodes to be
+    %%                shut down on 6.6.3 nodes
+    %% stop_replications - backward compatibility with 6.6.2 on which
+    %%                     failover_nodes option is ignored
     {Info, BadNodes} =
         janitor_agent:query_vbuckets(
           Bucket, NodesToQuery,
           [high_seqno, high_prepared_seqno],
-          [stop_replications, {timeout, ?FAILOVER_OPS_TIMEOUT}]),
+          [stop_replications, {timeout, ?FAILOVER_OPS_TIMEOUT},
+           {failover_nodes, FailoverNodes}]),
 
     BadNodes =:= [] orelse
         throw_failover_error("Failed to get failover info for bucket ~p: ~p",
@@ -529,7 +534,7 @@ meck_query_vbuckets(Input, Output) ->
     meck:expect(
       janitor_agent, query_vbuckets,
       fun ("test", Nodes, [high_seqno, high_prepared_seqno],
-           [stop_replications, {timeout, 1234}]) ->
+           [stop_replications, {timeout, 1234}, {failover_nodes, [a ,b]}]) ->
               ?assertEqual(Input, lists:sort(Nodes)),
               {dict:from_list(
                  [{VB, [{N, replica,

@@ -1013,7 +1013,7 @@ perform_flush(#state{bucket_name = BucketName} = State, BucketConfig,
     pass_vbucket_states_to_set_view_manager(NewState),
     ok = ns_couchdb_api:reset_master_vbucket(BucketName),
     ?log_info("Shutting down incoming replications"),
-    ok = stop_replications(BucketName, all),
+    ok = stop_all_replications(BucketName),
     %% kill all vbuckets
     [ok = ns_memcached:sync_delete_vbucket(BucketName, VB)
      || {VB, _} <- VBStates],
@@ -1127,21 +1127,22 @@ decode_vbucket_details(VBDetails) ->
 handle_query_vbuckets(Call, #state{bucket_name = BucketName,
                                    rebalance_status = finished} = State) ->
     %% NOTE: uses 'outer' memcached timeout of 60 seconds
-    {Fun, VBuckets, Options} =
+    {Fun, Options} =
         case Call of
             query_vbucket_states ->
                 {?cut((catch ns_memcached:local_connected_and_list_vbuckets(
-                               BucketName))), all, []};
+                               BucketName))), []};
             {query_vbuckets, VBs, Keys, Opts} ->
                 {?cut((catch perform_query_vbuckets(Keys, VBs, BucketName))),
-                 VBs, Opts}
+                 Opts}
         end,
     NewState = consider_doing_flush(State),
-    case proplists:is_defined(stop_replications, Options) of
-        true ->
-            ok = stop_replications(BucketName, VBuckets);
-        false ->
-            ok
+    case proplists:get_value(failover_nodes, Options, []) of
+        [] ->
+            ok;
+        FailoverNodes ->
+            ?log_info("Stopping replications for nodes ~p", [FailoverNodes]),
+            ok = replication_manager:stop_nodes(BucketName, FailoverNodes)
     end,
     {Fun(), NewState}.
 
@@ -1174,10 +1175,8 @@ perform_query_vbuckets(Keys, VBs, BucketName) ->
             Err
     end.
 
-stop_replications(Bucket, all) ->
-    replication_manager:set_incoming_replication_map(Bucket, []);
-stop_replications(Bucket, VBs) ->
-    replication_manager:teardown_replications(Bucket, VBs).
+stop_all_replications(Bucket) ->
+    replication_manager:set_incoming_replication_map(Bucket, []).
 
 handle_apply_new_config(NewBucketConfig, State) ->
     check_for_node_rename(apply_new_config,

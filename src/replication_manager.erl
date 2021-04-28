@@ -26,7 +26,7 @@
          get_incoming_replication_map/1,
          set_incoming_replication_map/2,
          change_vbucket_replication/3,
-         teardown_replications/2,
+         stop_nodes/2,
          remove_undesired_replications/2,
          dcp_takeover/3]).
 
@@ -55,9 +55,9 @@ set_incoming_replication_map(Bucket, DesiredReps) ->
 remove_undesired_replications(Bucket, DesiredReps) ->
     gen_server:call(server_name(Bucket), {remove_undesired_replications, DesiredReps}, infinity).
 
--spec teardown_replications(bucket_name(), [vbucket_id()]) -> ok | {error, any()}.
-teardown_replications(Bucket, VBuckets) ->
-    gen_server:call(server_name(Bucket), {teardown_replications, VBuckets},
+-spec stop_nodes(bucket_name(), [node()]) -> ok | {error, any()}.
+stop_nodes(Bucket, Nodes) ->
+    gen_server:call(server_name(Bucket), {stop_nodes, Nodes},
                     infinity).
 
 -spec change_vbucket_replication(bucket_name(), vbucket_id(), node() | undefined) -> ok.
@@ -80,21 +80,11 @@ terminate(Reason, State) ->
 handle_info(_Msg, State) ->
     {noreply, State}.
 
-handle_call({teardown_replications, VBuckets}, From, State) ->
+handle_call({stop_nodes, Nodes}, From, State) ->
     CurrentReps = get_actual_replications_as_list(State),
-    VBucketsSet = ordsets:from_list(VBuckets),
 
-    DesiredReps =
-        lists:filtermap(
-          fun ({N, VBs}) ->
-                  Reqd = ordsets:subtract(ordsets:from_list(VBs), VBucketsSet),
-                  case ordsets:to_list(Reqd) of
-                      [] ->
-                          false;
-                      L ->
-                          {true, {N, L}}
-                  end
-          end, CurrentReps),
+    DesiredReps = [{N, VBs} || {N, VBs} <- CurrentReps,
+                               not lists:member(N, Nodes)],
     handle_call({set_desired_replications, DesiredReps}, From, State);
 
 handle_call({remove_undesired_replications, FutureReps}, From, State) ->
