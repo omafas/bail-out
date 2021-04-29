@@ -29,7 +29,7 @@
 -record(stream_state, {owner :: {pid(), any()},
                        to_add :: [vbucket_id()],
                        to_close :: [vbucket_id()],
-                       to_close_on_producer :: [vbucket_id()],
+                       to_close_on_producer :: [vbucket_id()] | ignore,
                        errors :: [{non_neg_integer(), vbucket_id()}],
                        next_state = idle :: idle | shut
                       }).
@@ -235,6 +235,25 @@ handle_call(shut_connection, From,
                                             }}, ParentState}
     end;
 
+handle_call(shut_connection, From,
+            #state{state = #stream_state{to_add = ToAdd,
+                                         to_close = ToClose} = StreamState,
+                   partitions = Partitions} = State, ParentState) ->
+    ?log_debug("Discovered stuck replicator with state: ~p and partitions ~p.~n"
+               "Shutting the connection.",
+               [StreamState, Partitions]),
+
+    MoreToClose = ToAdd ++ [{P} || P <- Partitions] -- ToClose,
+    Sock = dcp_proxy:get_socket(ParentState),
+    [close_stream(Sock, P, P, ParentState) || {P} <- MoreToClose],
+
+    {noreply, State#state{state = StreamState#stream_state{
+                                    owner = From,
+                                    to_close = ToClose ++ MoreToClose,
+                                    to_close_on_producer = ignore,
+                                    next_state = shut
+                                   }}, ParentState};
+
 handle_call({takeover, Partition}, From, #state{state=idle} = State, ParentState) ->
     Sock = dcp_proxy:get_socket(ParentState),
     case has_partition(Partition, State) of
@@ -355,6 +374,11 @@ handle_cast(Msg, State, ParentState) ->
     ?rebalance_warning("Unhandled cast: Msg = ~p, State = ~p", [Msg, State]),
     {noreply, State, ParentState}.
 
+process_stream_response(Header, ignore, Errors, close_stream, producer,
+                        _ParentState) ->
+    ?rebalance_warning("Ignore producer close stream response with opaque ~p, "
+                       "status = ~p", [Header#mc_header.opaque]),
+    {error, ignore, Errors};
 process_stream_response(Header, PendingPartitions, Errors, Type, Side, ParentState) ->
     case lists:keytake(Header#mc_header.opaque, 1, PendingPartitions) of
         {value, {Partition}, N} ->
@@ -401,8 +425,14 @@ process_close_stream_response(Header, PendingPartitions, Errors, Side, ParentSta
                             close_stream, Side, ParentState).
 
 maybe_reply_setup_streams(#state{state = StreamState} = State) ->
+    ToCloseOnProducer = case StreamState#stream_state.to_close_on_producer of
+                            ignore ->
+                                [];
+                            Other ->
+                                Other
+                        end,
     case {StreamState#stream_state.to_add, StreamState#stream_state.to_close,
-          StreamState#stream_state.to_close_on_producer} of
+          ToCloseOnProducer} of
         {[], [], []} ->
             Reply =
                 case StreamState#stream_state.errors of
