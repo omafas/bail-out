@@ -16,6 +16,7 @@
 
 -include("ns_common.hrl").
 -include("ns_stats.hrl").
+-include("cut.hrl").
 
 %% needed to mock ns_config in tests
 -include("ns_config.hrl").
@@ -291,22 +292,20 @@ check(ip, Opaque, _History, _Stats) ->
 
 %% @doc check the capacity of the drives used for db and log files
 check(disk, Opaque, _History, _Stats) ->
-
     Mounts = ns_disksup:get_disk_data(),
-
     UsedPre = [ns_storage_conf:this_node_dbdir(),
                ns_storage_conf:this_node_ixdir(),
                ns_storage_conf:this_node_logdir(),
                ns_audit_cfg:get_log_path()],
-    UsedFiles = [X || {ok, X} <- UsedPre],
-
-    RealPaths = [misc:realpath(File, "/") || File <- UsedFiles],
-
-    UsedMountsTmp =
-        [begin {ok, Mnt} = ns_storage_conf:extract_disk_stats_for_path(Mounts, RealFile),
-               Mnt
-         end || {ok, RealFile} <- RealPaths],
-
+    ExtractStats = ns_storage_conf:extract_disk_stats_for_path(Mounts, _),
+    UsedMountsTmp = [X || {ok, X} <- [begin
+                                          case misc:realpath(Mnt, "/") of
+                                              {ok, RealFile} ->
+                                                  ExtractStats(RealFile);
+                                              _ ->
+                                                  none
+                                          end
+                                      end || {ok, Mnt} <- UsedPre]],
     UsedMounts = sets:to_list(sets:from_list(UsedMountsTmp)),
     {value, Config} = ns_config:search(alert_limits),
     MaxDiskUsed = proplists:get_value(max_disk_used, Config),
@@ -462,7 +461,6 @@ hit_rate_limit(Key, Dict) ->
 
             TimePassed < ?DISK_USAGE_TIMEOUT
     end.
-
 
 %% @doc calculate percentage of overhead and if it is over threshold
 -spec over_threshold(integer(), integer()) -> false | {true, float()}.
