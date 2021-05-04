@@ -21,9 +21,9 @@
 -export([init/1, handle_cast/2, handle_call/3,
          handle_info/2, terminate/2, code_change/3]).
 
--export([rename_and_refresh/3]).
-
 -export([format_status/2]).
+
+-define(MAX_RENAME_RETRIES, 6).
 
 -callback init() -> term().
 -callback filter_event(term()) -> boolean().
@@ -35,7 +35,7 @@
 
 -record(state, {stuff,
                 module,
-                write_pending,
+                retry_timer,
                 path,
                 tmp_path}).
 
@@ -80,17 +80,13 @@ init([Module, Path]) ->
                    tmp_path = Path ++ ".tmp",
                    stuff = Stuff,
                    module = Module,
-                   write_pending = false},
+                   retry_timer = undefined},
 
-    ok = write_cfg(State),
-    {ok, State}.
+    {ok, initiate_write(State)}.
 
 terminate(_Reason, _State)     -> ok.
 code_change(_OldVsn, State, _) -> {ok, State}.
 
-handle_cast(write_cfg, State) ->
-    ok = write_cfg(State),
-    {noreply, State#state{write_pending = false}};
 handle_cast({event, Key}, State = #state{module = Module,
                                          stuff = Stuff}) ->
     case Module:handle_event(Key, Stuff) of
@@ -105,14 +101,39 @@ handle_cast(full_reset, State = #state{module = Module}) ->
 handle_call(sync, _From, State) ->
     {reply, ok, State}.
 
+handle_info({retry_rename_and_refresh, Tries, SleepTime}, State) ->
+    MaybeTRef = case rename_and_refresh(State, Tries, SleepTime) of
+                    ok ->
+                        %% Rename was successful
+                        undefined;
+                    TRef ->
+                        %% Error still happened so new timer started.
+                        TRef
+                end,
+    {noreply, State#state{retry_timer = MaybeTRef}};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
-initiate_write(#state{write_pending = true} = State) ->
-    State;
-initiate_write(#state{module = Module} = State) ->
-    gen_server:cast(Module, write_cfg),
-    State#state{write_pending = true}.
+cancel_retry_timer(undefined) ->
+    ok;
+cancel_retry_timer(TRef) ->
+    erlang:cancel_timer(TRef),
+    %% Just in case message came in right before the cancel attempt
+    misc:flush({retry_rename_and_refresh, _, _}),
+    ok.
+
+initiate_write(#state{retry_timer = TRef} = State) ->
+    %% If we're retrying a rename we'll just punt on that and start over
+    %% with new config information.
+    cancel_retry_timer(TRef),
+    case write_cfg(State) of
+        ok ->
+            State#state{retry_timer = undefined};
+        NewTRef ->
+            %% Rename failed and needs to be retried
+            State#state{retry_timer = NewTRef}
+    end.
 
 write_cfg(#state{path = Path,
                  tmp_path = TmpPath,
@@ -124,36 +145,48 @@ write_cfg(#state{path = Path,
         Producer ->
             ok = filelib:ensure_dir(TmpPath),
             ?log_debug("Writing config file for: ~p", [Path]),
-            misc:write_file(TmpPath,
-                            ?cut(pipes:run(Producer, pipes:write_file(_)))),
-            rename_and_refresh(State, 5, 101)
+            case misc:write_file(TmpPath,
+                                 ?cut(pipes:run(Producer,
+                                                pipes:write_file(_)))) of
+                ok ->
+                    ok;
+                Error ->
+                    ?log_error("Failed to write configuration to ~p: ~p",
+                               [TmpPath, Error]),
+                    %% Failed to write the configuration. Restart and hope
+                    %% things are better next time.
+                    erlang:exit({failed_to_write_configuration, TmpPath})
+            end,
+            rename_and_refresh(State, ?MAX_RENAME_RETRIES, 101)
     end.
 
 rename_and_refresh(#state{path = Path,
                           tmp_path = TmpPath,
-                          module = Module} = State, Tries, SleepTime) ->
+                          module = Module}, Tries, SleepTime) ->
     case file:rename(TmpPath, Path) of
         ok ->
-            case (catch Module:refresh()) of
-                ok ->
-                    ok;
-                %% in case memcached is not yet started
-                {error, couldnt_connect_to_memcached} ->
-                    ok;
-                Error ->
-                    ?log_error("Failed to force update of memcached configuration for ~p:~p",
-                               [Path, Error])
-            end;
+            ok = Module:refresh(),
+            ?log_debug("Successfully renamed ~p to ~p", [TmpPath, Path]);
         {error, Reason} ->
+            %% It's likely the rename failed as the destination file is
+            %% open by memcached. Retrying will allow it to finish up
+            %% and close the file.
             ?log_warning("Error renaming ~p to ~p: ~p", [TmpPath, Path, Reason]),
             case Tries of
                 0 ->
-                    {error, Reason};
+                    ?log_error("Exhausted ~p retries to rename ~p to ~p",
+                               [?MAX_RENAME_RETRIES, TmpPath, Path]),
+                    %% We failed to rename the file and effectively have lost
+                    %% the writes. Restart and hope things are better next
+                    %% time.
+                    file:delete(TmpPath),
+                    erlang:exit({failed_to_rename_configuration,
+                                 TmpPath, Path});
                 _ ->
                     ?log_info("Trying again after ~p ms (~p tries remaining)",
                               [SleepTime, Tries]),
-                    {ok, _TRef} = timer:apply_after(SleepTime, ?MODULE, rename_and_refresh,
-                                                    [State, Tries - 1,
-                                                     SleepTime * 2])
+                    erlang:send_after(SleepTime, self(),
+                                      {retry_rename_and_refresh, Tries - 1,
+                                       SleepTime * 2})
             end
     end.
