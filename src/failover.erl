@@ -409,6 +409,8 @@ failover_membase_bucket_with_no_map(Nodes, Bucket, BucketConfig) ->
     ok.
 
 failover_membase_bucket_with_map(Nodes, Bucket, BucketConfig, Map, Options) ->
+    not proplists:is_defined(quorum_failover, Options) orelse
+        collections:bump_epoch(Bucket),
     NewMap = fix_vbucket_map(Nodes, Bucket, Map, Options),
     true = (NewMap =/= undefined),
 

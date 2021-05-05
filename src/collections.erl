@@ -33,6 +33,7 @@
          create_collection/4,
          drop_scope/2,
          drop_collection/3,
+         bump_epoch/1,
          wait_for_manifest_uid/5,
          convert_uid_from_memcached/1,
          convert_uid_to_memcached/1,
@@ -53,6 +54,8 @@
 
 %% rpc from other nodes
 -export([wait_for_manifest_uid/4]).
+
+-define(EPOCH, 16#1000).
 
 start_link() ->
     work_queue:start_link(?MODULE).
@@ -236,6 +239,9 @@ drop_scope(Bucket, Name) ->
 drop_collection(Bucket, Scope, Name) ->
     update(Bucket, {drop_collection, Scope, Name}).
 
+bump_epoch(Bucket) ->
+    update(Bucket, bump_epoch).
+
 update(Bucket, Operation) ->
     work_queue:submit_sync_work(
       ?MODULE, ?cut(do_update(Bucket, Operation))).
@@ -280,7 +286,9 @@ do_update_with_manifest(Bucket, Manifest, Operation, OtherBucketCounts) ->
         {ok, NewManifest} ->
             case check_cluster_limits(NewManifest, OtherBucketCounts) of
                 ok ->
-                    apply_manifest(Bucket, NewManifest);
+                    FinalManifest = advance_manifest_id(Operation, NewManifest),
+                    {commit, [{set, key(Bucket), FinalManifest}],
+                     uid(FinalManifest)};
                 Error ->
                     {abort, {user_error, Error}}
             end;
@@ -288,11 +296,9 @@ do_update_with_manifest(Bucket, Manifest, Operation, OtherBucketCounts) ->
             {abort, {user_error, Error}}
     end.
 
-apply_manifest(Bucket, Manifest) ->
-    NewManifest = advance_manifest_id(Manifest),
-    {commit, [{set, key(Bucket), NewManifest}], uid(NewManifest)}.
-
-advance_manifest_id(Manifest) ->
+advance_manifest_id(bump_epoch, Manifest) ->
+    Manifest;
+advance_manifest_id(_Operation, Manifest) ->
     Manifest1 = bump_id(Manifest, next_uid),
     lists:keyreplace(uid, 1, Manifest1,
                      {uid, proplists:get_value(next_uid, Manifest1)}).
@@ -310,8 +316,11 @@ perform_operations(Manifest, [Operation | Rest]) ->
             Error
     end.
 
+bump_id(Manifest, ID, Increment) ->
+    misc:key_update(ID, Manifest, _ + Increment).
+
 bump_id(Manifest, ID) ->
-    misc:key_update(ID, Manifest, _ + 1).
+    bump_id(Manifest, ID, 1).
 
 other_bucket_counts(Bucket) ->
     Snapshot = ns_bucket:get_snapshot(),
@@ -493,7 +502,9 @@ verify_oper({create_collection, ScopeName, Name, _}, Manifest) ->
 verify_oper({drop_collection, ScopeName, Name}, Manifest) ->
     with_collection(fun (_) -> ok end, ScopeName, Name, Manifest);
 verify_oper({modify_collection, ScopeName, Name}, _Manifest) ->
-    {cannot_modify_collection, ScopeName, Name}.
+    {cannot_modify_collection, ScopeName, Name};
+verify_oper(bump_epoch, _Manifest) ->
+    ok.
 
 handle_oper({check_uid, _CheckUid}, Manifest) ->
     Manifest;
@@ -524,7 +535,13 @@ handle_oper({drop_collection, Scope, Name}, Manifest) ->
     functools:chain(
       Manifest,
       [delete_collection(_, Name, Scope),
-       update_counter(_, num_collections, -NumCollections)]).
+       update_counter(_, num_collections, -NumCollections)]);
+handle_oper(bump_epoch, Manifest) ->
+    functools:chain(
+      Manifest,
+      [bump_id(_, next_scope_uid, ?EPOCH),
+       bump_id(_, next_coll_uid, ?EPOCH),
+       bump_id(_, next_uid, ?EPOCH)]).
 
 get_counter(Manifest, Counter) ->
     proplists:get_value(Counter, Manifest).
