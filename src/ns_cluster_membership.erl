@@ -278,10 +278,29 @@ add_node(Node, GroupUUID, Services, Transaction) ->
                                  lists:usort([Node | NodesWanted])},
                                 {set, {node, Node, membership}, inactiveAdded},
                                 {set, {node, Node, services}, Services},
-                                {set, server_groups, NewGroups}]}
+                                {set, server_groups, NewGroups} |
+                                collections_sets(chronicle_compat:backend(),
+                                                 Node, Txn)]}
                       end
               end
       end).
+
+collections_sets(ns_config, _Node, _Txn) ->
+    [];
+collections_sets(chronicle, Node, Txn) ->
+    {ok, {Buckets, _}} = chronicle_compat:txn_get(ns_bucket:root(), Txn),
+    Snapshot = chronicle_compat:txn_get_many(
+                 [collections:key(B) || B <- Buckets], Txn),
+    lists:filtermap(
+      fun (Bucket) ->
+              case collections:get_manifest(Bucket, Snapshot) of
+                  undefined ->
+                      false;
+                  Manifest ->
+                      {true, collections:last_seen_ids_set(
+                               Node, Bucket, Manifest)}
+              end
+      end, Buckets).
 
 add_node_to_groups(Groups, GroupUUID, Node) ->
     MaybeGroup0 = [G || G <- Groups,
@@ -333,11 +352,13 @@ remove_nodes(ns_config, [RemoteNode], _Transaction) ->
 remove_nodes(chronicle, RemoteNodes, Transaction) ->
     RV = Transaction(
            fun (Txn) ->
-                   Snapshot = chronicle_compat:txn_get_many(
-                                [nodes_wanted, server_groups], Txn),
+                   Snapshot =
+                       chronicle_compat:txn_get_many(
+                         [nodes_wanted, server_groups, ns_bucket:root()], Txn),
 
+                   Buckets = ns_bucket:get_bucket_names(Snapshot),
                    NodeKeys = lists:flatten(
-                                [chronicle_compat:node_keys(RN) ||
+                                [chronicle_compat:node_keys(RN, Buckets) ||
                                     RN <- RemoteNodes]),
                    {commit,
                     [{set, nodes_wanted,

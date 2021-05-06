@@ -24,7 +24,7 @@
          enabled/0,
          enabled/1,
          default_manifest/0,
-         default_kvs/1,
+         default_kvs/2,
          uid/1,
          uid/2,
          manifest_json/2,
@@ -50,7 +50,9 @@
          get_collection_uid/3,
          get_scopes/1,
          get_collections/1,
-         diff_manifests/2]).
+         diff_manifests/2,
+         last_seen_ids_key/2,
+         last_seen_ids_set/3]).
 
 %% rpc from other nodes
 -export([wait_for_manifest_uid/4]).
@@ -58,7 +60,22 @@
 -define(EPOCH, 16#1000).
 
 start_link() ->
-    work_queue:start_link(?MODULE).
+    work_queue:start_link(
+      ?MODULE,
+      fun () ->
+              work_queue:submit_work(?MODULE,
+                                     fun update_last_seen_ids/0),
+              chronicle_compat_events:subscribe(
+                fun (Key) ->
+                        case key_match(Key) of
+                            {true, Bucket} ->
+                                work_queue:submit_work(
+                                  ?MODULE, ?cut(update_last_seen_ids(Bucket)));
+                            false ->
+                                ok
+                        end
+                end)
+      end).
 
 enabled() ->
     cluster_compat_mode:is_enabled(?VERSION_70).
@@ -94,9 +111,14 @@ default_manifest() ->
           [{"_default",
             [{uid, 0}]}]}]}]}].
 
-default_kvs(Buckets) ->
-    [{key(Bucket), default_manifest()} ||
-        Bucket <- ns_bucket:get_bucket_names_of_type(membase, Buckets)].
+default_kvs(Buckets, Nodes) ->
+    lists:flatmap(
+      fun (Bucket) ->
+              Manifest = default_manifest(),
+              [{key(Bucket), Manifest} |
+               [{last_seen_ids_key(Node, Bucket), get_next_uids(Manifest)} ||
+                   Node <- Nodes]]
+      end,  ns_bucket:get_bucket_names_of_type(membase, Buckets)).
 
 with_scope(Fun, ScopeName, Manifest) ->
     Scopes = get_scopes(Manifest),
@@ -710,6 +732,60 @@ set_manifest(Bucket, Identity, RequiredScopes, RequestedUid) ->
                     {Scope} <- RequiredScopes],
             update(Bucket, {set_manifest, Roles, Scopes, Uid})
     end.
+
+last_seen_ids_key(Node, Bucket) ->
+    {node, Node, {Bucket, last_seen_collection_ids}}.
+
+get_next_uids(Manifest) ->
+    [proplists:get_value(next_uid, Manifest),
+     proplists:get_value(next_scope_uid, Manifest),
+     proplists:get_value(next_coll_uid, Manifest)].
+
+update_last_seen_ids(Bucket) ->
+    Node = node(),
+    Key = last_seen_ids_key(Node, Bucket),
+    {ok, {Snapshot, _}} =
+        chronicle_kv:get_snapshot(kv, [Key, key(Bucket)]),
+    case maps:find(Key, Snapshot) of
+        error ->
+            ok;
+        {ok, {_V, Rev}} ->
+            update_last_seen_ids(Key, get_manifest(Bucket, Snapshot), Rev)
+    end.
+
+update_last_seen_ids(_Key, undefined, _Rev) ->
+    ok;
+update_last_seen_ids(Key, Manifest, Rev) ->
+    RV =
+        chronicle_kv:transaction(
+          kv, [Key],
+          fun (Snapshot) ->
+                  Ids = get_next_uids(Manifest),
+                  case maps:find(Key, Snapshot) of
+                      {ok, {V, Rev}} when V =/= Ids ->
+                          {commit, [{set, Key, Ids}]};
+                      _ ->
+                          {abort, skip}
+                  end
+          end),
+    case RV of
+        {ok, _} ->
+            ok;
+        skip ->
+            ok
+    end.
+
+update_last_seen_ids() ->
+    case enabled() of
+        true ->
+            [update_last_seen_ids(Bucket) ||
+                Bucket <- ns_bucket:get_bucket_names()];
+        false ->
+            ok
+    end.
+
+last_seen_ids_set(Node, Bucket, Manifest) ->
+    {set, last_seen_ids_key(Node, Bucket), get_next_uids(Manifest)}.
 
 -ifdef(TEST).
 get_operations_test_() ->

@@ -36,7 +36,7 @@
          pull/1,
          config_sync/2,
          config_sync/3,
-         node_keys/1,
+         node_keys/2,
          service_keys/1,
          upgrade/1,
          get_latest_vclock_unix_timestamp/1]).
@@ -293,12 +293,13 @@ config_sync(push, Nodes, Timeout) ->
             end
     end.
 
-node_keys(Node) ->
+node_keys(Node, Buckets) ->
     [{node, Node, membership},
      {node, Node, services},
      {node, Node, recovery_type},
      {node, Node, failover_vbuckets},
-     {node, Node, buckets_with_data}].
+     {node, Node, buckets_with_data} |
+     [collections:last_seen_ids_key(Node, Bucket) || Bucket <- Buckets]].
 
 service_keys(Service) ->
     [{service_map, Service},
@@ -335,7 +336,8 @@ cleanup_value(_) ->
     ?DELETED_MARKER.
 
 upgrade(Config) ->
-    OtherNodes = ns_node_disco:nodes_wanted(Config) -- [node()],
+    NodesWanted = ns_node_disco:nodes_wanted(Config),
+    OtherNodes = NodesWanted -- [node()],
     ok = chronicle_master:upgrade_cluster(OtherNodes),
 
     {ToSet, Cleanup} =
@@ -343,7 +345,8 @@ upgrade(Config) ->
           fun (buckets, Buckets, {ToSetAcc, CleanupAcc}) ->
                   {maps:merge(
                      ToSetAcc, maps:from_list(
-                                 ns_bucket:upgrade_to_chronicle(Buckets))),
+                                 ns_bucket:upgrade_to_chronicle(
+                                   Buckets, NodesWanted))),
                    [{buckets, cleanup_value(buckets)} | CleanupAcc]};
               (Key, Value, {ToSetAcc, CleanupAcc} = Acc) ->
                   case should_move(Key) of

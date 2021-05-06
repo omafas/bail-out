@@ -110,7 +110,7 @@
          deactivate_bucket_data_on_this_node/1,
          config_upgrade_to_65/1,
          config_upgrade_to_66/1,
-         upgrade_to_chronicle/1]).
+         upgrade_to_chronicle/2]).
 
 
 %%%===================================================================
@@ -177,10 +177,10 @@ get_snapshot(Bucket) ->
 get_snapshot(Bucket, Opts) ->
     chronicle_compat:get_snapshot([fetch_snapshot(Bucket, _)], Opts).
 
-upgrade_to_chronicle(Buckets) ->
+upgrade_to_chronicle(Buckets, NodesWanted) ->
     BucketConfigs = proplists:get_value(configs, Buckets, []),
     bucket_configs_to_chronicle(BucketConfigs) ++
-        collections:default_kvs(BucketConfigs).
+        collections:default_kvs(BucketConfigs, NodesWanted).
 
 bucket_configs_to_chronicle(BucketConfigs) ->
     [{root(), [N || {N, _} <- BucketConfigs]} |
@@ -804,7 +804,7 @@ do_create_bucket(ns_config, BucketName, Config) ->
 do_create_bucket(chronicle, BucketName, Config) ->
     {ok, _} =
         chronicle_kv:transaction(
-          kv, [root()],
+          kv, [root(), nodes_wanted],
           fun (Snapshot) ->
                   BucketNames = get_bucket_names(Snapshot),
                   case lists:member(BucketName, BucketNames) of
@@ -812,15 +812,26 @@ do_create_bucket(chronicle, BucketName, Config) ->
                           {abort, already_exists};
                       false ->
                           {commit, create_bucket_sets(
-                                     BucketName, BucketNames, Config)}
+                                     BucketName, BucketNames, Config) ++
+                               collections_sets(BucketName, Config, Snapshot)}
                   end
           end).
 
-create_bucket_sets(Name, Buckets, Config) ->
-    [{set, root(), lists:usort([Name | Buckets])},
-     {set, sub_key(Name, props), Config} |
-     [{set, collections:key(Name), collections:default_manifest()} ||
-         collections:enabled(Config)]].
+create_bucket_sets(Bucket, Buckets, Config) ->
+    [{set, root(), lists:usort([Bucket | Buckets])},
+     {set, sub_key(Bucket, props), Config}].
+
+collections_sets(Bucket, Config, Snapshot) ->
+    case collections:enabled(Config) of
+        true ->
+            Nodes = ns_cluster_membership:nodes_wanted(Snapshot),
+            Manifest = collections:default_manifest(),
+            [{set, collections:key(Bucket), Manifest} |
+             [collections:last_seen_ids_set(Node, Bucket, Manifest) ||
+                 Node <- Nodes]];
+        false ->
+            []
+    end.
 
 -spec delete_bucket(bucket_name()) ->
                            {ok, BucketConfig :: list()} |
@@ -856,7 +867,7 @@ do_delete_bucket(chronicle, BucketName) ->
     RootKey = root(),
     PropsKey = sub_key(BucketName, props),
     RV = chronicle_kv:transaction(
-           kv, [RootKey, PropsKey],
+           kv, [RootKey, PropsKey, nodes_wanted],
            fun (Snapshot) ->
                    BucketNames = get_bucket_names(Snapshot),
                    case lists:member(BucketName, BucketNames) of
@@ -866,9 +877,16 @@ do_delete_bucket(chronicle, BucketName) ->
                            {ok, BucketConfig} =
                                get_bucket(BucketName, Snapshot),
                            CollectionsKey = collections:key(BucketName),
+
+                           NodesWanted =
+                               ns_cluster_membership:nodes_wanted(Snapshot),
+                           KeysToDelete =
+                               [CollectionsKey, PropsKey |
+                                [collections:last_seen_ids_key(N, BucketName) ||
+                                    N <- NodesWanted]],
                            {commit,
                             [{set, RootKey, BucketNames -- [BucketName]} |
-                             [{delete, K} || K <- [CollectionsKey, PropsKey]]],
+                             [{delete, K} || K <- KeysToDelete]],
                             BucketConfig}
                    end
            end),
