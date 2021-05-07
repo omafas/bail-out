@@ -683,13 +683,25 @@ is_valid_protocol(P) ->
                      inet6_tls_dist]).
 
 conf(Prop, Conf) ->
-    proplists:get_value(Prop, Conf, proplists:get_value(Prop, defaults())).
+    %% See comments for how we determine defaults.
+    proplists:get_value(Prop, Conf, proplists:get_value(Prop, defaults(Conf))).
 
-defaults() ->
+%% From 6.6.4,
+%% 1. we do not start both [inet_tcp_dist, inet6_tcp_dist] protos for
+%% local_listeners and external_listeners by default as we introduced the
+%% address family only feature.
+%% 2. we write the local_listeners to the dist_cfg file.
+%%
+%% In cases, like on upgrade from pre 7.0 we don't find local_listeners in the
+%% dist_cfg and we always need to start the preferred proto for local and
+%% external. Therefore, the defaults should reflect that for listeners.
+defaults(Conf) ->
     [{preferred_external_proto, inet_tcp_dist},
      {preferred_local_proto, inet_tcp_dist},
-     {local_listeners, [inet_tcp_dist]},
-     {external_listeners, [inet_tcp_dist]}].
+     {local_listeners, [proplists:get_value(preferred_local_proto, Conf,
+                                            inet_tcp_dist)]},
+     {external_listeners, [proplists:get_value(preferred_external_proto, Conf,
+                                               inet_tcp_dist)]}].
 
 transform_old_to_new_config(Dist) ->
     DistType = list_to_atom((atom_to_list(Dist) ++ "_dist")),
@@ -819,7 +831,7 @@ validate_config_file(CfgFile) ->
         Cfg = read_config(CfgFile, false),
         is_list(Cfg) orelse throw(not_list),
         ([E || {_, _} = E <- Cfg] == Cfg) orelse throw(not_proplist),
-        Unknown = proplists:get_keys(Cfg) -- proplists:get_keys(defaults()),
+        Unknown = proplists:get_keys(Cfg) -- proplists:get_keys(defaults(Cfg)),
         (Unknown == []) orelse throw({unknown_props, Unknown}),
         ExtPreferred = conf(preferred_external_proto, Cfg),
         is_valid_protocol(ExtPreferred)
