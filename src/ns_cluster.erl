@@ -577,7 +577,7 @@ terminate(_Reason, _State) ->
 
 leave() ->
     RemoteNode = ns_node_disco:another_live_node(),
-    ?cluster_log(?NODE_EJECTED, "Node ~s left cluster", [node()]),
+    ?cluster_log(?NODE_EJECTED, "Node ~s asked to leave the cluster", [node()]),
     %% MB-3160: sync any pending config before we leave, to make sure,
     %% say, deactivation of membership isn't lost
     ok = ns_config_rep:ensure_config_seen_by_nodes([RemoteNode]),
