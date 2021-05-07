@@ -104,6 +104,7 @@
          get_view_nodes/1,
          get_num_vbuckets/0,
          get_max_buckets/0,
+         uuid_key/1,
          uuid/2,
          uuids/0,
          uuids/1,

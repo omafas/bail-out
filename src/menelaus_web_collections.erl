@@ -271,6 +271,9 @@ get_err_code_msg({max_number_exceeded, num_collections}) ->
 get_err_code_msg(exceeded_retries) ->
     {"Exceeded retries due to conflicting operations on bucket properties.",
      503};
+get_err_code_msg({nodes_are_behind, Nodes}) ->
+    {"Operation is not possible due to following nodes being too far behind: "
+     "~p.", [Nodes], 503};
 get_err_code_msg(Error) ->
     {"Unknown error ~p", [Error], 400}.
 

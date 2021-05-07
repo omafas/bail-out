@@ -266,7 +266,19 @@ bump_epoch(Bucket) ->
 
 update(Bucket, Operation) ->
     work_queue:submit_sync_work(
-      ?MODULE, ?cut(do_update(Bucket, Operation))).
+      ?MODULE, ?cut(update_inner(Bucket, Operation))).
+
+update_inner(Bucket, Operation) ->
+    case do_update(Bucket, Operation) of
+        {ok, _Rev, UID} ->
+            {ok, UID};
+        {not_changed, UID} ->
+            {ok, UID};
+        {error, Error} = RV ->
+            ?log_debug("Operation ~p for bucket ~p failed with ~p",
+                       [Operation, Bucket, RV]),
+            Error
+    end.
 
 do_update(Bucket, Operation) ->
     ?log_debug("Performing operation ~p on bucket ~p", [Operation, Bucket]),
@@ -274,31 +286,35 @@ do_update(Bucket, Operation) ->
     %% bucket context. We will use this information to check_cluster_limits
     %% later on.
     OtherBucketCounts = other_bucket_counts(Bucket),
-    case chronicle_kv:transaction(kv, [key(Bucket)],
-                                  update_txn(Bucket, Operation,
-                                             OtherBucketCounts, _)) of
-        {ok, _Rev, UID} ->
-            {ok, UID};
-        {not_changed, UID} ->
-            {ok, UID};
-        {user_error, Error} = RV ->
-            ?log_debug("Operation ~p for bucket ~p failed with ~p",
-                       [Operation, Bucket, RV]),
-            Error;
-        {error, exceeded_retries} ->
-            exceeded_retries
+
+    case get_last_seen_uids(Bucket, Operation) of
+        not_found ->
+            {error, not_found};
+        LastSeenIdsWithUUID ->
+            chronicle_kv:transaction(
+              kv, [key(Bucket), ns_bucket:uuid_key(Bucket)],
+              update_txn(Bucket, Operation, OtherBucketCounts,
+                         LastSeenIdsWithUUID, _))
     end.
 
-update_txn(Bucket, Operation, OtherBucketCounts, Snapshot) ->
-    case get_manifest(Bucket, Snapshot) of
-        undefined ->
-            {abort, not_found};
-        Manifest ->
-            do_update_with_manifest(Bucket, Manifest, Operation,
-                                    OtherBucketCounts)
+update_txn(Bucket, Operation, OtherBucketCounts, {LastSeenIds, UUID},
+           Snapshot) ->
+    case UUID =:= no_check orelse
+        ns_bucket:uuid(Bucket, Snapshot) =:= UUID of
+        true ->
+            case get_manifest(Bucket, Snapshot) of
+                undefined ->
+                    {abort, {error, not_found}};
+                Manifest ->
+                    do_update_with_manifest(Bucket, Manifest, Operation,
+                                            OtherBucketCounts, LastSeenIds)
+            end;
+        false ->
+            {abort, {error, not_found}}
     end.
 
-do_update_with_manifest(Bucket, Manifest, Operation, OtherBucketCounts) ->
+do_update_with_manifest(Bucket, Manifest, Operation, OtherBucketCounts,
+                        LastSeenIds) ->
     ?log_debug("Perform operation ~p on manifest ~p of bucket ~p",
                [Operation, get_uid(Manifest), Bucket]),
     case perform_operations(Manifest,
@@ -309,13 +325,19 @@ do_update_with_manifest(Bucket, Manifest, Operation, OtherBucketCounts) ->
             case check_cluster_limits(NewManifest, OtherBucketCounts) of
                 ok ->
                     FinalManifest = advance_manifest_id(Operation, NewManifest),
-                    {commit, [{set, key(Bucket), FinalManifest}],
-                     uid(FinalManifest)};
+                    case check_ids_limit(FinalManifest, LastSeenIds) of
+                        [] ->
+                            {commit, [{set, key(Bucket), FinalManifest}],
+                             uid(FinalManifest)};
+                        BehindNodes ->
+                            {abort, {error, {nodes_are_behind,
+                                             [N || {N, _} <- BehindNodes]}}}
+                    end;
                 Error ->
-                    {abort, {user_error, Error}}
+                    {abort, {error, Error}}
             end;
         Error ->
-            {abort, {user_error, Error}}
+            {abort, {error, Error}}
     end.
 
 advance_manifest_id(bump_epoch, Manifest) ->
@@ -337,6 +359,16 @@ perform_operations(Manifest, [Operation | Rest]) ->
             ?log_debug("Operation ~p failed with error ~p", [Operation, Error]),
             Error
     end.
+
+check_ids_limit(_Manifest, no_check) ->
+    [];
+check_ids_limit(Manifest, LastSeenIds) ->
+    IdsFromManifest = get_next_uids(Manifest),
+    lists:filter(
+      fun ({_, SeenByNode}) ->
+              lists:any(fun ({A, B}) -> A - B >= ?EPOCH end,
+                        lists:zip(IdsFromManifest, SeenByNode))
+      end, LastSeenIds).
 
 bump_id(Manifest, ID, Increment) ->
     misc:key_update(ID, Manifest, _ + Increment).
@@ -740,6 +772,34 @@ get_next_uids(Manifest) ->
     [proplists:get_value(next_uid, Manifest),
      proplists:get_value(next_scope_uid, Manifest),
      proplists:get_value(next_coll_uid, Manifest)].
+
+get_last_seen_uids(_Bucket, bump_epoch) ->
+    {no_check, no_check};
+get_last_seen_uids(Bucket, _Operation) ->
+    {ok, {RV, _}} =
+        chronicle_kv:ro_txn(
+          kv,
+          fun (Txn) ->
+                  {ok, {Nodes, _}} =
+                      chronicle_kv:txn_get(nodes_wanted, Txn),
+                  case chronicle_kv:txn_get(ns_bucket:uuid_key(Bucket), Txn) of
+                      {ok, {UUID, _}} ->
+                          RVs =
+                              [{N, chronicle_kv:txn_get(
+                                     last_seen_ids_key(N, Bucket), Txn)} ||
+                                  N <- Nodes],
+                          Ids = [{N, V} || {N, {ok, {V, _}}} <- RVs],
+                          case length(RVs) =:= length(Ids) of
+                              true ->
+                                  {Ids, UUID};
+                              false ->
+                                  not_found
+                          end;
+                      {error, not_found} ->
+                          not_found
+                  end
+          end),
+    RV.
 
 update_last_seen_ids(Bucket) ->
     Node = node(),
