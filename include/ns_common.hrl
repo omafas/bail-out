@@ -110,15 +110,19 @@
 -define(ALE_LOG(Level, Format, Args),
         ale:log(?NS_SERVER_LOGGER, Level, Format, Args)).
 
+-define(log_debug(Format, Args, Opts), ale:debug(?NS_SERVER_LOGGER, Format, Args, Opts)).
 -define(log_debug(Format, Args), ale:debug(?NS_SERVER_LOGGER, Format, Args)).
 -define(log_debug(Msg), ale:debug(?NS_SERVER_LOGGER, Msg)).
 
+-define(log_info(Format, Args, Opts), ale:info(?NS_SERVER_LOGGER, Format, Args, Opts)).
 -define(log_info(Format, Args), ale:info(?NS_SERVER_LOGGER, Format, Args)).
 -define(log_info(Msg), ale:info(?NS_SERVER_LOGGER, Msg)).
 
+-define(log_warning(Format, Args, Opts), ale:warn(?NS_SERVER_LOGGER, Format, Args, Opts)).
 -define(log_warning(Format, Args), ale:warn(?NS_SERVER_LOGGER, Format, Args)).
 -define(log_warning(Msg), ale:warn(?NS_SERVER_LOGGER, Msg)).
 
+-define(log_error(Format, Args, Opts), ale:error(?NS_SERVER_LOGGER, Format, Args, Opts)).
 -define(log_error(Format, Args), ale:error(?NS_SERVER_LOGGER, Format, Args)).
 -define(log_error(Msg), ale:error(?NS_SERVER_LOGGER, Msg)).
 

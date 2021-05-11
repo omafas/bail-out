@@ -28,11 +28,11 @@
          %% counterparts of pseudo-functions handled by ale_transform
          get_effective_loglevel/1, is_loglevel_enabled/2, sync/1,
 
-         debug/2, debug/3, xdebug/4, xdebug/5,
-         info/2, info/3, xinfo/4, xinfo/5,
-         warn/2, warn/3, xwarn/4, xwarn/5,
-         error/2, error/3, xerror/4, xerror/5,
-         critical/2, critical/3, xcritical/4, xcritical/5]).
+         debug/2, debug/3, debug/4, xdebug/5, xdebug/6,
+         info/2, info/3, info/4, xinfo/5, xinfo/6,
+         warn/2, warn/3, warn/4, xwarn/5, xwarn/6,
+         error/2, error/3, error/4, xerror/5, xerror/6,
+         critical/2, critical/3, critical/4, xcritical/5, xcritical/6]).
 
 %% logger callbacks.
 -export([adding_handler/1, removing_handler/1, log/2]).
@@ -143,11 +143,23 @@ debug(LoggerName, Msg) ->
 debug(LoggerName, Fmt, Args) ->
     xdebug(LoggerName, undefined, Fmt, Args).
 
+debug(LoggerName, Fmt, Args, Opts) ->
+    xdebug(LoggerName, undefined, Fmt, Args, Opts).
+
 xdebug(LoggerName, Data, Fmt, Args) ->
-    xdebug(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args).
+    xdebug(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args, []).
 
 xdebug(LoggerName, {M, F, L}, Data, Fmt, Args) ->
-    call_logger_impl(LoggerName, xdebug, [M, F, L, Data, Fmt, Args]).
+    xdebug(LoggerName, {M, F, L}, Data, Fmt, Args, []);
+xdebug(LoggerName, Data, Fmt, Args, Opts) ->
+    xdebug(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args, Opts).
+
+-spec xdebug(atom(), {module(), atom(), integer()},
+             term(), io:format(), [term()], Options) -> term() when
+      Options :: [Option],
+      Option :: {'chars_limit', integer()}.
+xdebug(LoggerName, {M, F, L}, Data, Fmt, Args, Opts) ->
+    call_logger_impl(LoggerName, xdebug, [M, F, L, Data, Fmt, Args, Opts]).
 
 
 info(LoggerName, Msg) ->
@@ -156,11 +168,23 @@ info(LoggerName, Msg) ->
 info(LoggerName, Fmt, Args) ->
     xinfo(LoggerName, undefined, Fmt, Args).
 
+info(LoggerName, Fmt, Args, Opts) ->
+    xinfo(LoggerName, undefined, Fmt, Args, Opts).
+
 xinfo(LoggerName, Data, Fmt, Args) ->
-    xinfo(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args).
+    xinfo(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args, []).
 
 xinfo(LoggerName, {M, F, L}, Data, Fmt, Args) ->
-    call_logger_impl(LoggerName, xinfo, [M, F, L, Data, Fmt, Args]).
+    xinfo(LoggerName, {M, F, L}, Data, Fmt, Args, []);
+xinfo(LoggerName, Data, Fmt, Args, Opts) ->
+    xinfo(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args, Opts).
+
+-spec xinfo(atom(), {module(), atom(), integer()},
+            term(), io:format(), [term()], Options) -> term() when
+      Options :: [Option],
+      Option :: {'chars_limit', integer()}.
+xinfo(LoggerName, {M, F, L}, Data, Fmt, Args, Opts) ->
+    call_logger_impl(LoggerName, xinfo, [M, F, L, Data, Fmt, Args, Opts]).
 
 
 warn(LoggerName, Msg) ->
@@ -169,11 +193,23 @@ warn(LoggerName, Msg) ->
 warn(LoggerName, Fmt, Args) ->
     xwarn(LoggerName, undefined, Fmt, Args).
 
+warn(LoggerName, Fmt, Args, Opts) ->
+    xwarn(LoggerName, undefined, Fmt, Args, Opts).
+
 xwarn(LoggerName, Data, Fmt, Args) ->
-    xwarn(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args).
+    xwarn(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args, []).
 
 xwarn(LoggerName, {M, F, L}, Data, Fmt, Args) ->
-    call_logger_impl(LoggerName, xwarn, [M, F, L, Data, Fmt, Args]).
+    xwarn(LoggerName, {M, F, L}, Data, Fmt, Args, []);
+xwarn(LoggerName, Data, Fmt, Args, Opts) ->
+    xwarn(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args, Opts).
+
+-spec xwarn(atom(), {module(), atom(), integer()},
+            term(), io:format(), [term()], Options) -> term() when
+      Options :: [Option],
+      Option :: {'chars_limit', integer()}.
+xwarn(LoggerName, {M, F, L}, Data, Fmt, Args, Opts) ->
+    call_logger_impl(LoggerName, xwarn, [M, F, L, Data, Fmt, Args, Opts]).
 
 
 error(LoggerName, Msg) ->
@@ -182,11 +218,23 @@ error(LoggerName, Msg) ->
 error(LoggerName, Fmt, Args) ->
     xerror(LoggerName, undefined, Fmt, Args).
 
+error(LoggerName, Fmt, Args, Opts) ->
+    xerror(LoggerName, undefined, Fmt, Args, Opts).
+
 xerror(LoggerName, Data, Fmt, Args) ->
-    xerror(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args).
+    xerror(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args, []).
 
 xerror(LoggerName, {M, F, L}, Data, Fmt, Args) ->
-    call_logger_impl(LoggerName, xerror, [M, F, L, Data, Fmt, Args]).
+    xerror(LoggerName, {M, F, L}, Data, Fmt, Args, []);
+xerror(LoggerName, Data, Fmt, Args, Opts) ->
+    xerror(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args, Opts).
+
+-spec xerror(atom(), {module(), atom(), integer()},
+             term(), io:format(), [term()], Options) -> term() when
+      Options :: [Option],
+      Option :: {'chars_limit', integer()}.
+xerror(LoggerName, {M, F, L}, Data, Fmt, Args, Opts) ->
+    call_logger_impl(LoggerName, xerror, [M, F, L, Data, Fmt, Args, Opts]).
 
 
 critical(LoggerName, Msg) ->
@@ -195,12 +243,23 @@ critical(LoggerName, Msg) ->
 critical(LoggerName, Fmt, Args) ->
     xcritical(LoggerName, undefined, Fmt, Args).
 
+critical(LoggerName, Fmt, Args, Opts) ->
+    xcritical(LoggerName, undefined, Fmt, Args, Opts).
+
 xcritical(LoggerName, Data, Fmt, Args) ->
-    xcritical(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args).
+    xcritical(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args, []).
 
 xcritical(LoggerName, {M, F, L}, Data, Fmt, Args) ->
-    call_logger_impl(LoggerName, xcritical, [M, F, L, Data, Fmt, Args]).
+    xcritical(LoggerName, {M, F, L}, Data, Fmt, Args, []);
+xcritical(LoggerName, Data, Fmt, Args, Opts) ->
+    xcritical(LoggerName, {unknown, unknown, -1}, Data, Fmt, Args, Opts).
 
+-spec xcritical(atom(), {module(), atom(), integer()},
+                term(), io:format(), [term()], Options) -> term() when
+      Options :: [Option],
+      Option :: {'chars_limit', integer()}.
+xcritical(LoggerName, {M, F, L}, Data, Fmt, Args, Opts) ->
+    call_logger_impl(LoggerName, xcritical, [M, F, L, Data, Fmt, Args, Opts]).
 
 sync(LoggerName) ->
     call_logger_impl(LoggerName, sync, []).

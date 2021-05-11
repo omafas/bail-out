@@ -13,6 +13,8 @@
 
 -include("ale.hrl").
 
+-define(CHARS_LIMIT_DEFAULT, 50000).
+
 logger_impl(Logger) when is_atom(Logger) ->
     logger_impl(atom_to_list(Logger));
 logger_impl(Logger) ->
@@ -41,8 +43,8 @@ exports() ->
     ["-export([sync/0]).\n",
      "-export([get_effective_loglevel/0]).\n",
      "-export([is_loglevel_enabled/1]).\n",
-     [io_lib:format("-export([~p/4, ~p/5, x~p/5, x~p/6]).~n",
-                    [LogLevel, LogLevel, LogLevel, LogLevel]) ||
+     [io_lib:format("-export([~p/4, ~p/5, x~p/5, x~p/6, x~p/7]).~n",
+                    [LogLevel, LogLevel, LogLevel, LogLevel, LogLevel]) ||
          LogLevel <- ?LOGLEVELS]].
 
 definitions(LoggerName, LoggerLogLevel, Formatter, Sinks) ->
@@ -110,23 +112,26 @@ loglevel_definitions(LoggerName, LoggerLogLevel, LogLevel, Formatter, Sinks) ->
      "\n",
      xloglevel_1(LogLevel),
      xloglevel_2(LogLevel),
+     xloglevel_3(LogLevel),
      "\n"].
 
 generic_loglevel(LoggerName, LogLevel, Formatter, Preformatted, Raw) ->
     %% inline generated function
-    [io_lib:format("-compile({inline, [generic_~p/6]}).~n", [LogLevel]),
+    [io_lib:format("-compile({inline, [generic_~p/7]}).~n", [LogLevel]),
 
-     io_lib:format("generic_~p(M, F, L, Data, Fmt, Args) -> ", [LogLevel]),
+     io_lib:format("generic_~p(M, F, L, Data, Fmt, Args, Opts) ->~n", [LogLevel]),
 
      case Preformatted =/= [] orelse Raw =/= [] of
          true ->
              io_lib:format(
                "Info = ale_utils:assemble_info(~s, ~p, M, F, L, Data),"
-               "UserMsg = case Args =/= [] of "
-               "              true -> io_lib:format(Fmt, Args);"
+               "UserMsg = case Args =/= [] of"
+               "              true ->"
+               "                  CharsLimit = proplists:get_value(chars_limit, Opts, ~B),"
+               "                  io_lib:format(Fmt, Args, [{chars_limit, CharsLimit}]);"
                "              false -> Fmt"
                "          end,",
-               [LoggerName, LogLevel]);
+               [LoggerName, LogLevel, ?CHARS_LIMIT_DEFAULT]);
          false ->
              ""
      end,
@@ -178,23 +183,29 @@ generic_loglevel(LoggerName, LogLevel, Formatter, Preformatted, Raw) ->
 loglevel_1(LogLevel) ->
     io_lib:format(
       "~p(M, F, L, Msg) -> "
-      "generic_~p(M, F, L, undefined, Msg, []).~n",
+      "generic_~p(M, F, L, undefined, Msg, [], []).~n",
       [LogLevel, LogLevel]).
 
 xloglevel_1(LogLevel) ->
     io_lib:format(
       "x~p(M, F, L, Data, Msg) -> "
-      "generic_~p(M, F, L, Data, Msg, []).~n",
+      "generic_~p(M, F, L, Data, Msg, [], []).~n",
       [LogLevel, LogLevel]).
 
 loglevel_2(LogLevel) ->
     io_lib:format(
       "~p(M, F, L, Fmt, Args) -> "
-      "generic_~p(M, F, L, undefined, Fmt, Args).~n",
+      "generic_~p(M, F, L, undefined, Fmt, Args, []).~n",
       [LogLevel, LogLevel]).
 
 xloglevel_2(LogLevel) ->
     io_lib:format(
       "x~p(M, F, L, Data, Fmt, Args) -> "
-      "generic_~p(M, F, L, Data, Fmt, Args).~n",
+      "generic_~p(M, F, L, Data, Fmt, Args, []).~n",
+      [LogLevel, LogLevel]).
+
+xloglevel_3(LogLevel) ->
+    io_lib:format(
+      "x~p(M, F, L, Data, Fmt, Args, Opts) -> "
+      "generic_~p(M, F, L, Data, Fmt, Args, Opts).~n",
       [LogLevel, LogLevel]).
