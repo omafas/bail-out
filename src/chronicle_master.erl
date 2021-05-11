@@ -129,8 +129,16 @@ init([]) ->
             ok
     end,
 
-    {ok, arm_janitor_timer(#state{self_ref = SelfRef,
-                                  events = Events})}.
+    State = #state{self_ref = SelfRef,
+                   events = Events},
+    case is_delegated_operation() of
+        true ->
+            %% If we have a delegated operation run janitor immediately.
+            Self ! janitor,
+            {ok, State};
+        false ->
+            {ok, arm_janitor_timer(State)}
+    end.
 
 handle_call({upgrade_cluster, NodesToAdd}, _From,
             State = #state{self_ref = SelfRef, events = Events}) ->
@@ -291,8 +299,24 @@ failover_opaque_key() ->
 operation_key() ->
     unfinished_topology_operation.
 
+delegate_operation({remove_peer, Node}) when Node =:= node() ->
+    true;
+delegate_operation(_) ->
+    false.
+
 operation_key_set(Oper, Lock, SelfRef) ->
-    {set, operation_key(), {Oper, Lock, SelfRef}}.
+    case delegate_operation(Oper) of
+        true ->
+            {set, operation_key(), {delegated, Oper, Lock, SelfRef}};
+        false ->
+            {set, operation_key(), {regular, Oper, Lock, SelfRef}}
+    end.
+
+is_delegated_operation() ->
+    case chronicle_compat:get(operation_key(), #{}) of
+        {ok, {delegated, _, _, _}} -> true;
+        _ -> false
+    end.
 
 get_prev_failover_nodes(Snapshot) ->
     case chronicle_compat:get(Snapshot, failover_opaque_key(), #{}) of
@@ -313,7 +337,7 @@ transaction(Oper, Lock, SelfRef, Fun) ->
                       {abort, unfinished_failover};
                   _ ->
                       case maps:find(operation_key(), Snapshot) of
-                          {ok, {{AnotherOper, _Lock, _SelfRef}, _Rev}}
+                          {ok, {{_, AnotherOper, _Lock, _SelfRef}, _Rev}}
                             when AnotherOper =/= Oper ->
                               RecoveryOper = recovery_oper(AnotherOper),
                               {commit, [operation_key_set(
@@ -360,7 +384,7 @@ remove_oper_key(Lock) ->
     ?log_debug("Removing operation key with lock ~p", [Lock]),
     {ok, _} =
         transaction_with_key_remove(
-          operation_key(), fun({_, L, _}) -> L =:= Lock end,
+          operation_key(), fun({_, _, L, _}) -> L =:= Lock end,
           fun (_) -> {commit, []} end).
 
 handle_kv_oper({add_replica, Node, GroupUUID, Services}, Transaction) ->
@@ -402,8 +426,17 @@ handle_oper(Oper, Lock, SelfRef) ->
             ?log_debug("Starting topology operation ~p with lock ~p",
                        [Oper, Lock]),
             RV = handle_topology_oper(Oper, Lock),
-            remove_oper_key(Lock),
-            RV;
+            case delegate_operation(Oper) of
+                true ->
+                    %% nodes_wanted should have been updated to not include
+                    %% current master node(i.e., this node). New master will
+                    %% takover and redo the operation.
+                    ?log_debug("Will surrender mastership"),
+                    delegated_operation;
+                false ->
+                    remove_oper_key(Lock),
+                    RV
+            end;
         {ok, _, {need_recovery, RecoveryOper}} ->
             ?log_debug("Recovery is needed for operation ~p", [RecoveryOper]),
             ok = handle_oper(RecoveryOper, Lock, SelfRef),
@@ -437,7 +470,13 @@ subscribe_to_chronicle_events(SelfRef) ->
     OperationKey = operation_key(),
     ns_pubsub:subscribe_link(
       chronicle_kv:event_manager(kv),
-      fun ({{key, Key}, _, {updated, {_, _, Ref}}} = Evt)
+      fun ({{key, Key}, _, {updated, {delegated, _, _, Ref}}} = Evt)
+            when Key =:= OperationKey,
+                 Ref =/= SelfRef ->
+              ?log_debug("Detected delegated operation: ~p. "
+                         "Running janitor immediately.", [Evt]),
+              Self ! janitor;
+          ({{key, Key}, _, {updated, {_, _, _, Ref}}} = Evt)
             when Key =:= OperationKey,
                  Ref =/= SelfRef ->
               ?log_debug("Detected update on operation key: ~p. "

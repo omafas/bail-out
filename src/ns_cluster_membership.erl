@@ -349,6 +349,7 @@ remove_nodes(ns_config, [RemoteNode], _Transaction) ->
                    skip
            end);
 
+%% Note: We do not delete the node keys for this node.
 remove_nodes(chronicle, RemoteNodes, Transaction) ->
     RV = Transaction(
            fun (Txn) ->
@@ -359,7 +360,8 @@ remove_nodes(chronicle, RemoteNodes, Transaction) ->
                    Buckets = ns_bucket:get_bucket_names(Snapshot),
                    NodeKeys = lists:flatten(
                                 [chronicle_compat:node_keys(RN, Buckets) ||
-                                    RN <- RemoteNodes]),
+                                    RN <- RemoteNodes,
+                                    RN =/= node()]),
                    {commit,
                     [{set, nodes_wanted,
                       nodes_wanted(Snapshot) -- RemoteNodes},
@@ -372,7 +374,8 @@ remove_nodes(chronicle, RemoteNodes, Transaction) ->
         {ok, _} ->
             ok = ns_config:update(
                    fun ({{node, Node, _}, _}) ->
-                           case lists:member(Node, RemoteNodes) of
+                           case lists:member(Node, RemoteNodes) andalso
+                                Node =/= node() of
                                true ->
                                    delete;
                                false ->

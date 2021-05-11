@@ -634,8 +634,12 @@ shun(RemoteNode) ->
         false ->
             try
                 ?cluster_debug("Shunning ~p", [RemoteNode]),
-                ok = chronicle_master:remove_peer(RemoteNode),
-                ns_config_rep:ensure_config_pushed()
+                case chronicle_master:remove_peer(RemoteNode) of
+                    ok ->
+                        ns_config_rep:ensure_config_pushed();
+                    delegated_operation ->
+                        ok
+                end
             catch T:E:Stack ->
                     ?log_error("Shun failed with ~p", [{T,E,Stack}]),
                     exit(shun_failed)
