@@ -51,7 +51,6 @@
          start_failover/2,
          try_autofailover/1,
          needs_rebalance/0,
-         request_janitor_run/1,
          rebalance_progress/0,
          rebalance_progress/1,
          start_link/0,
@@ -1255,6 +1254,7 @@ handle_rebalance_completion(ExitReason, State) ->
     update_rebalance_status(ExitReason, State),
     rpc:eval_everywhere(diag_handler, log_all_dcp_stats, []),
     terminate_observer(State),
+    maybe_request_janitor_run(ExitReason, State),
 
     R = compat_mode_manager:consider_switching_compat_mode(),
     case maybe_start_service_upgrader(ExitReason, R, State) of
@@ -1267,6 +1267,14 @@ handle_rebalance_completion(ExitReason, State) ->
             %% based on the reason for aborting rebalance.
             rebalance_completed_next_state(State#rebalancing_state.abort_reason)
     end.
+
+maybe_request_janitor_run({failover_failed, Bucket, _},
+                          #rebalancing_state{type = failover}) ->
+    ?log_debug("Requesting janitor run for bucket ~p after unsuccessful "
+               "failover", [Bucket]),
+    request_janitor_run({bucket, Bucket});
+maybe_request_janitor_run(_, _) ->
+    ok.
 
 maybe_retry_rebalance(ExitReason,
                       #rebalancing_state{type = Type,

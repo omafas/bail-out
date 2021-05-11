@@ -110,11 +110,13 @@ finish_failover(Nodes) ->
 config_sync_and_orchestrate(Nodes, Options) ->
     case pre_failover_config_sync(Nodes, Options) of
         ok ->
-            case failover(Nodes, Options) of
+            try failover(Nodes, Options) of
                 [] ->
                     ok;
                 ErrorNodes ->
                     {failover_incomplete, ErrorNodes}
+            catch throw:{failed, Bucket, Msg} ->
+                    {failover_failed, Bucket, Msg}
             end;
         Error ->
             Error
@@ -174,8 +176,7 @@ failover_buckets(Nodes, Options) ->
                   catch throw:{failed, Msg} ->
                           ?log_error("Caught failover exception: ~p", [Msg]),
                           update_failover_vbuckets(Acc),
-                          ns_orchestrator:request_janitor_run({bucket, Bucket}),
-                          throw({failover_failed, Msg})
+                          throw({failed, Bucket, Msg})
                   end
           end, [], ns_bucket:get_buckets()),
     update_failover_vbuckets(Results),
