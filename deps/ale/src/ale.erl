@@ -251,6 +251,10 @@ init([]) ->
     {ok, State2} = do_start_logger(?ALE_LOGGER, ?DEFAULT_LOGLEVEL,
                                    ?DEFAULT_FORMATTER, State1),
     _ = logger:remove_handler(?ERROR_LOGGER),
+
+    %% Erlang starts this for us when we disable default handler.
+    _ = logger:remove_handler(simple),
+
     ok = set_error_logger_handler(),
     {ok, State2}.
 
