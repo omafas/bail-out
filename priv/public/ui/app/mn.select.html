@@ -1,0 +1,71 @@
+<!--
+Copyright 2021-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div
+   ngbDropdown
+   #ngbSelect="ngbDropdown"
+   display="dynamic"
+   class="mn-select relative">
+  <div ngbDropdownToggle>
+    <button
+       [attr.title]="labels ? labels[values.indexOf(value | async)] : valuesMapping(value | async) || mnPlaceholder"
+       type="button"
+       class="outline btn-small dropdown-btn ng-binding margin-top-0 ellipsis"
+       [class.active]="ngbSelect.isOpen()"
+       [disabled]="disabled | async">
+      {{labels ? labels[values.indexOf(value | async)] : valuesMapping(value | async) || mnPlaceholder}}
+    </button>
+  </div>
+  <div ngbDropdownMenu
+       class="panel margin-0 fit-content-width">
+    <mn-input-filter
+       *ngIf="hasSearchInput | async"
+       [group]="searchFilter.group"
+       mnPlaceholder="filter options"
+       class="row flex-left sticky position-top-0">
+    </mn-input-filter>
+    <span
+       *ngIf="!(hasSearchInput | async)">
+      <a
+         ngbDropdownItem
+         class="block option"
+         href="javascript:void(0)"
+         (click)="optionSelected(value)"
+         (keydown.enter)="optionSelected(value);"
+         *ngFor="let value of values; index as i;">
+      {{labels ? labels[i] : valuesMapping(value)}}
+      </a>
+    </span>
+    <span
+       *ngIf="(hasSearchInput | async) && !labels">
+      <a
+         ngbDropdownItem
+         class="block option"
+         href="javascript:void(0)"
+         (click)="selectOptionClickStream.next(value)"
+         (keydown.enter)="selectOptionClickStream.next(value)"
+         *ngFor="let value of preparedValues | async">
+        {{valuesMapping(value)}}
+      </a>
+    </span>
+    <span
+       *ngIf="(hasSearchInput | async) && labels">
+      <a
+         ngbDropdownItem
+         class="block option"
+         href="javascript:void(0)"
+         (click)="selectLabelClickStream.next(label)"
+         (keydown.enter)="selectLabelClickStream.next(label)"
+         *ngFor="let label of preparedLabels | async">
+        {{label}}
+      </a>
+    </span>
+  </div>
+</div>

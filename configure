@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2011-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+
+# Note: This script is provided as a convenience wrapper to CMake, which
+# is the build tool used for configuring this project. Please do not make
+# any substantive changes only in this script or in the top-level
+# GNUmakefile, as the normal process of building Couchbase server uses
+# only CMake.
+
+usage() {
+cat <<EOF
+\`$0' configures ns_server to adapt to many kinds of systems.
+
+Usage: $0 [OPTION]...
+
+Configuration:
+  -h, --help              display this help and exit
+
+Installation directories:
+  --prefix=PREFIX         install files in PREFIX (required)
+  --couchdb-src-dir=PATH  path to couchdb source directory (../couchdb)
+  --couchdb-bin-dir=PATH  path to couchdb build directory (../build/couchdb)
+
+EOF
+}
+
+prefix=
+couchdb_src_dir=../couchdb
+couchdb_bin_dir=../build/couchdb
+
+for config_arg do
+  case "$config_arg" in
+      --help|-h)
+          usage
+          exit 0
+          ;;
+      --prefix=/*)
+          prefix=${config_arg##--prefix=}
+          ;;
+      --prefix=*)
+          echo "--prefix needs to be absolute path"
+          exit 1
+          ;;
+      --couchdb-src-dir=*)
+          couchdb_src_dir=${config_arg##--couchdb-src-dir=}
+          ;;
+      --couchdb-bin-dir=*)
+          couchdb_bin_dir=${config_arg##--couchdb-bin-dir=}
+          ;;
+      *)
+          echo "Unknown option: ${config_arg}"
+          exit 1
+          ;;
+  esac
+done
+
+if test -z "$prefix" ; then
+    usage
+    echo "Error: --prefix option is required"
+    exit 1
+fi
+
+if test '!' -f "$couchdb_src_dir/src/couchdb/couch_db.hrl"; then
+    echo "could not find couch_db.hrl in given couchdb-src path: $couchdb_src_dir"
+    exit 1
+fi
+
+
+# Patch up relative couchdb_src_dir, since cmake executes in a subdirectory
+couchdb_src_dir=`cmake -D "dir=${couchdb_src_dir}" -P cmake_modules/abspath.cmake`
+couchdb_bin_dir=`cmake -D "dir=${couchdb_bin_dir}" -P cmake_modules/abspath.cmake`
+
+mkdir -p build
+cd build
+cmake -D "COUCHDB_SRC_DIR=${couchdb_src_dir}" \
+    -D "COUCHDB_BIN_DIR=${couchdb_bin_dir}" -D "CMAKE_INSTALL_PREFIX=${prefix}" ..
+
+if test $? = 0; then
+    echo
+    echo "ns_server is configured and is ready to be built!"
+    echo "PREFIX: ${prefix}"
+    echo "couchdb-src-dir: ${couchdb_src_dir}"
+    echo "couchdb-bin-dir: ${couchdb_bin_dir}"
+    echo
+fi

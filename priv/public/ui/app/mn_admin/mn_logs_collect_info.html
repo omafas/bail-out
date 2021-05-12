@@ -1,0 +1,36 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="relative">
+  <div class="row flex-right" style="min-height:0;position:absolute;top:0;right:0;z-index:1">
+    <span>
+      <button
+         ng-show="!('app.admin.logs.collectInfo.form' | isState)"
+         ui-sref="app.admin.logs.collectInfo.form"
+         class="outline">
+        Start New Collection
+      </button>
+      <button
+         ng-show="logsCollectInfoCtl.state.status === 'running'"
+         ng-click="logsCollectInfoCtl.stopCollection()"
+         ng-disabled="logsCollectInfoCtl.disabledStopCollect"
+         class="outline">
+        Stop Collection
+      </button>
+      <button
+         ng-show="logsCollectInfoCtl.state.status !== 'idle' && !('app.admin.logs.collectInfo.result' | isState)"
+         ui-sref="app.admin.logs.collectInfo.result"
+         class="outline">
+        Show Current Collection
+      </button>
+    </span>
+  </div>
+  <div ui-view=""></div>
+</div>

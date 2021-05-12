@@ -1,0 +1,63 @@
+<!--
+Copyright 2021-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div
+   uib-dropdown
+   class="mn-select relative min-width-3-5"
+   ng-class="{'mn-align-left': vm.mnHorizontalAlign === 'left', 'mn-align-right': vm.mnHorizontalAlign === 'right', 'open-on-top': vm.openOnTop}"
+   is-open="vm.isOpened">
+  <div
+     uib-dropdown-toggle
+     ng-disabled="vm.mnDisabled">
+    <button
+       ng-attr-title="{{vm.values.indexOf(vm.ngModel) >= 0 ? (vm.labels ? vm.labels[vm.values.indexOf(vm.ngModel)] : vm.valuesMapping(vm.ngModel)) : (vm.mnPlaceholder || '')}}"
+       ng-disabled="vm.mnDisabled"
+       class="outline btn-small dropdown-btn ellipsis"
+       ng-class="{'active': vm.isOpened}"
+       type="button">
+      {{vm.values.indexOf(vm.ngModel) >= 0 ? (vm.labels ? vm.labels[vm.values.indexOf(vm.ngModel)] : vm.valuesMapping(vm.ngModel)) : (vm.mnPlaceholder || '')}}
+    </button>
+  </div>
+  <div
+     uib-dropdown-menu
+     class="panel absolute fit-content-width margin-0">
+    <div
+       ng-if="vm.hasSearchInput()"
+       class="sticky position-top-0"
+       mn-search="vm.mnSearchValue"
+       mn-hide-button="true"
+       ng-click="vm.clickSearch($event)">
+    </div>
+    <a
+       ng-if="!vm.hasSearchInput()"
+       class="block option"
+       href="javascript:void(0)"
+       ng-repeat="value in vm.values track by value"
+       ng-click="vm.optionClicked(value)">
+      {{vm.labels ? vm.labels[$index] : vm.valuesMapping(value)}}
+    </a>
+    <a
+       ng-if="vm.hasSearchInput() && !vm.labels"
+       class="block option"
+       href="javascript:void(0)"
+       ng-repeat="value in vm.getPreparedValues() | filter: vm.mnSearchValue track by value"
+       ng-click="vm.optionClicked(vm.values[vm.preparedValues.indexOf(value)])">
+      {{value}}
+    </a>
+    <a
+       ng-if="vm.hasSearchInput() && vm.labels"
+       class="block option"
+       href="javascript:void(0)"
+       ng-repeat="label in vm.labels | filter: vm.mnSearchValue track by label"
+       ng-click="vm.optionClicked(vm.values[vm.labels.indexOf(label)])">
+      {{label}}
+    </a>
+  </div>
+</div>

@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2011-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+import os
+import sys
+import getopt
+import urllib.request
+import urllib.error
+import traceback
+
+currentdir = os.path.dirname(os.path.realpath(__file__))
+pylib = os.path.join(currentdir, "pylib")
+sys.path.append(pylib)
+
+import cluster_run_lib
+
+valid_index_storage_modes = ["forestdb", "plasma", "memory_optimized"]
+
+
+def usage():
+    print("usage: \n\
+            -n <number of nodes>\n\
+            -T <services to run. kv if unspecified>\n\
+               (eg: n0:kv,n1:index+n1ql+fts+eventing+cbas+backup)\n\
+            -s <memory size> (min 256) default: 256\n\
+            -I <index memory size> default: 256\n\
+            -M <index storage mode> (forestdb, plasma, memory_optimized)\n\
+               default: None\n\
+            -t <bucket type> (ephemeral, membase, memcached)\n\
+               default: membase\n\
+            -S <storage backend> (couchstore, magma)\n\
+               default: couchstore\n\
+            -r <num replicas> (max 3) default: 1\n\
+               (Only for ephemeral or membase buckets!)\n\
+            -i (don't index replicas) default: replica index enabled\n\
+            -p <networking protocol to use> (ipv4, ipv6) default: ipv4")
+
+
+def main():
+    try:
+        opts, args = getopt.getopt(sys.argv[1:],
+                                   "n:t:s:r:iT:S:I:M:p:",
+                                   ["dont-rebalance", "afamily=",
+                                    "enable-encryption"])
+    except getopt.GetoptError as err:
+        print(str(err))
+        usage()
+        sys.exit()
+
+    params = {}
+
+    params['protocol'] = "ipv6" if (os.getenv("IPV6", "false") == "true") else "ipv4"
+
+    for o, a in opts:
+        if o == "-n":
+            params['num_nodes'] = int(a)
+        elif o == "-t":
+            params['buckettype'] = a
+        elif o == "-s":
+            params['memsize'] = a
+        elif o == "-I":
+            params['indexmemsize'] = a
+        elif o == "-M":
+            if a not in valid_index_storage_modes:
+                assert False, "invalid index storage mode"
+            params['index_storage_mode'] = a
+        elif o == "-r":
+            params['replicas'] = a
+        elif o == "-i":
+            params['replica_index'] = False
+        elif o == "-T":
+            plan = a.replace(' ', '').split(',')
+
+            if len(plan) == 1 and len(plan[0].split(':')) == 1:
+                params['deploy'] = plan[0].split('+')
+            else:
+                plan = dict(e.split(':') for e in plan)
+                params['deploy'] = dict([(k, v.split('+'))
+                                         for k, v in plan.items()])
+        elif o in ("-p", "--afamily"):
+            if a not in ("ipv4", "ipv6"):
+                assert False, "invalid address family"
+            params['protocol'] = a
+        elif o == "--enable-encryption":
+            params['encryption'] = True
+        elif o == "--dont-rebalance":
+            params['do_rebalance'] = False
+        elif o == "-S":
+            if a not in ("couchstore", "magma"):
+                assert False, "invalid storage backend"
+            params['storage_backend'] = a
+        else:
+            usage()
+            sys.exit()
+
+    cluster_run_lib.connect(**params)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except urllib.error.HTTPError as e:
+        traceback.print_exc()
+        print("\nError {}: {} ({})".format(e.code, e.reason, e.read()))
+        sys.exit(1)

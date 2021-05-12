@@ -1,0 +1,49 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div mn-main-spinner="sessionCtl.viewLoading || !sessionCtl.state">
+  <form
+     ng-submit="sessionCtl.submit()"
+     name="sessionForm"
+     class="forms">
+
+    <div class="formrow">
+      <label>Session Timeout</label>
+      <div class="desc">
+        Minutes until an inactive browser session is closed. <br>Leave empty (or zero) for no timeout.
+      </div>
+      <div class="form-inline">
+        <input
+           id="session-filed"
+           type="number"
+           class="input-short-1"
+           autocorrect="off"
+           spellcheck="false"
+           autocapitalize="off"
+           ng-disabled="!rbac.cluster.admin.security.write"
+           ng-model="sessionCtl.state.uiSessionTimeout">
+        <small>
+          min
+        </small>
+      </div>
+      <div
+         class="error error-field"
+         ng-show="sessionCtl.errors.error">
+        {{sessionCtl.errors.error}}
+      </div>
+    </div>
+
+    <button
+       ng-show="rbac.cluster.admin.security.write"
+       type="submit">
+      Save
+    </button>
+  </form>
+</div>

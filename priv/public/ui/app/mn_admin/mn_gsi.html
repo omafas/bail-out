@@ -1,0 +1,113 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<mn-element-cargo depot="alerts">
+  <div
+     class="interim alert alert-warning"
+     ng-repeat="message in gsiCtl.state.warnings">
+    <p>Warning: {{message}}</p>
+  </div>
+</mn-element-cargo>
+
+<div mn-spinner="!gsiCtl.state" style="padding-bottom: 120px;">
+
+  <div class="row items-bottom margin-bottom-half flex-wrap">
+    <div class="column flex-grow-1-5"
+       ng-if="adminCtl.poolDefault.compat.atLeast70">
+      <h5>Bucket & Scope</h5>
+      <mn-keyspace-selector-downgrade
+         class="mn-keyspace-selector"
+         [service]="gsiCtl.mnCollectionSelectorService">
+      </mn-keyspace-selector-downgrade>
+    </div>
+
+      <mn-select
+         class="margin-right-half flex-grow-0"
+         ng-model="gsiCtl.viewBy"
+         on-select="gsiCtl.setIndexesView(selectedOption)"
+         values="['viewByIndex', 'viewByNode']"
+         labels="['view by index', 'view by server node']">
+      </mn-select>
+
+    <div
+       class="row flex-right flex-grow-1 margin-top-quarter"
+       mn-placeholder="filter indexes..."
+       mn-hide-button="true"
+       mn-search="gsiCtl.filterField">
+    </div>
+  </div>
+
+  <div ng-if="gsiCtl.state.indexes.length">
+    <div
+       ng-if="gsiCtl.viewBy == 'viewByNode'"
+       ng-repeat="(nodeName, group) in gsiCtl.state.byNodes track by nodeName">
+      <h4 class="margin-top-1-5">{{nodeName}}</h4>
+      <mn-gsi-table
+         list="group"
+         rbac="rbac"
+         node-name="{{nodeName}}"
+         pools="pools"
+         hide-column="node"
+         filter-field="gsiCtl.filterField">
+      </mn-gsi-table>
+    </div>
+
+    <mn-gsi-table
+       ng-if="gsiCtl.viewBy == 'viewByIndex'"
+       list="gsiCtl.state.filtered"
+       rbac="rbac"
+       pools="pools"
+       hide-column="index"
+       filter-field="gsiCtl.filterField">
+    </mn-gsi-table>
+  </div>
+
+  <div ng-if="!gsiCtl.state.indexes.length" class="zero-content">
+    You have no GSI indexes yet.
+  </div>
+
+  <div>
+    <footer
+       class="footer-indexes"
+       ng-controller="mnGsiFooterController as footerStatsCtl"
+       ng-if="gsiCtl.state.indexes.length &&
+              rbac.bucketNames['.stats!read'].length && !destroyGsiFooter">
+      <div class="column vertical-divider">
+        <span class="width-6">Index Service RAM Quota</span>
+        <span class="text-right width-6">{{footerStatsCtl.getLatestStat('@index.index_memory_quota') | mnFormatQuantity}}</span><br>
+        <span class="width-6">RAM Used/Remaining</span>
+        <span class="text-right width-6">{{footerStatsCtl.getLatestStat('@index.index_memory_used') | mnFormatQuantity}}/{{footerStatsCtl.getLatestStat('@index.index_remaining_ram')| mnFormatQuantity}}</span><br>
+        <span class="width-6">Index Service RAM Percent</span>
+        <span class="text-right width-6">{{footerStatsCtl.getLatestStat('@index.index_ram_percent') | number:1}}%</span>
+      </div>
+      <div class="column vertical-divider">
+        <span class="width-6">Total Scan Rate</span>
+        <span class="text-right width-6">{{footerStatsCtl.getLatestStat('@index-.index/num_rows_returned') | number:0}}/sec</span><br>
+        <span class="width-6">Indexes Fragmentation</span>
+        <span class="text-right width-6">{{footerStatsCtl.getLatestStat('@index-.index/fragmentation') | number:1}}%</span>
+      </div>
+      <div class="column">
+        <mn-select
+           class="mn-select-small block"
+           ng-model="footerStatsCtl.currentBucket"
+           values="rbac.bucketNames['.stats!read']"
+           mn-disabled="!rbac.bucketNames['.stats!read'].length"
+           on-select="footerStatsCtl.onSelectBucket(selectedOption)"
+           has-search="true"
+           open-on-top="true">
+        </mn-select>
+        <span class="width-6">Indexes Data Size</span>
+        <span class="text-right width-6">{{footerStatsCtl.getLatestStat('@index-.index/data_size') | mnFormatQuantity}}</span><br>
+        <span class="width-6">Indexes Disk Size</span>
+        <span class="text-right width-6">{{footerStatsCtl.getLatestStat('@index-.index/disk_size') | mnFormatQuantity}}</span>
+      </div>
+    </footer>
+  </div>
+</div>

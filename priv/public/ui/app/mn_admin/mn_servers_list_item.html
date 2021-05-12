@@ -1,0 +1,202 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<!-- the "dynamic_ + X" style is added w/ ng-class to either the section container or the cbui-tablerow depending on node status and whether the row is expanded or not -->
+<section
+   ng-click="rbac.cluster.nodes.read && serversCtl.toggleDetails(node.hostname)"
+   ng-class="{['dynamic_' + node.clusterMembership] : serversCtl.isDetailsOpened(node.hostname) || serversItemCtl.isNodeInactiveFailed || serversItemCtl.isNodeInactiveAdded || serversItemCtl.isNodeUnhealthy || (adminCtl.tasks.inRebalance && adminCtl.tasks.tasksRebalance.status === 'running' && rbac.cluster.tasks.read),
+              ['dynamic_' + node.status] : serversCtl.isDetailsOpened(node.hostname) || serversItemCtl.isNodeInactiveFailed || serversItemCtl.isNodeInactiveAdded || serversItemCtl.isNodeUnhealthy || (adminCtl.tasks.inRebalance && adminCtl.tasks.tasksRebalance.status === 'running' && rbac.cluster.tasks.read) || (!serversItemCtl.isNodeInactiveAdded && !serversItemCtl.isNodeUnhealthy && node.pendingEject),
+               'eject-node' : !serversItemCtl.isNodeInactiveAdded && !serversItemCtl.isNodeUnhealthy && node.pendingEject}">
+  <div
+     class="cbui-tablerow has-hover resp-sml"
+     ng-class="{['dynamic_' + node.status] : !serversCtl.isDetailsOpened(node.hostname) && !(serversItemCtl.isNodeInactiveFailed || serversItemCtl.isNodeInactiveAdded || serversItemCtl.isNodeUnhealthy || (adminCtl.tasks.inRebalance && adminCtl.tasks.tasksRebalance.status === 'running' && rbac.cluster.tasks.read) || (!serversItemCtl.isNodeInactiveAdded && !serversItemCtl.isNodeUnhealthy && node.pendingEject)),
+                ['dynamic_' + node.clusterMembership] : !serversCtl.isDetailsOpened(node.hostname) && !(serversItemCtl.isNodeInactiveFailed || serversItemCtl.isNodeInactiveAdded || serversItemCtl.isNodeUnhealthy || (adminCtl.tasks.inRebalance && adminCtl.tasks.tasksRebalance.status === 'running' && rbac.cluster.tasks.read))}">
+    <span class="cbui-table-cell flex-grow-2-5 cbui-tablerow-title flex-left">
+      <span class="ellipsis padding-right-min" title="{{node.hostname | mnStripPortHTML:serversCtl.nodes.allNodes}}">
+       {{node.configuredHostname | mnStripPortHTML:serversCtl.nodes.allNodes}}
+      </span>
+    </span>
+    <span
+       class="cbui-table-cell flex-grow-1-5 flex-left"
+       ng-show="rbac.cluster.server_groups.read && serversCtl.mnPoolDefault.value.isGroupsAvailable"
+       title="{{serversCtl.getGroupsByHostname[node.hostname].name}}">
+        {{serversCtl.getGroupsByHostname[node.hostname].name | mnLimitTo: 20}}
+    </span>
+    <span class="cbui-table-cell flex-grow-3 wrap resp-hide-xsml" style="display:flex;flex-wrap:wrap;">
+      <span
+         ng-repeat="service in (node.services | mnOrderServices)"
+         class="label neutral nocaps">
+        {{service | mnFormatServices}}
+      </span>
+    </span>
+    <span class="cbui-table-cell flex-grow-half flex-basis-2 resp-hide-sml">
+      <span ng-show="!serversItemCtl.getCpuUsageConf.exist">
+        ---
+      </span>
+      <span ng-show="serversItemCtl.getCpuUsageConf.exist">
+        {{serversItemCtl.getCpuUsageConf.value | number:1}}%
+      </span>
+    </span>
+    <span class="cbui-table-cell flex-grow-half flex-basis-2 resp-hide-sml">
+      <span ng-show="!serversItemCtl.getRamUsageConf.exist">
+        ---
+      </span>
+      <span ng-show="serversItemCtl.getRamUsageConf.exist">
+        {{serversItemCtl.getRamUsageConf.value | number:1}}%
+      </span>
+    </span>
+    <span class="cbui-table-cell flex-grow-half flex-basis-2 resp-hide-med">
+      <span ng-show="!serversItemCtl.getSwapUsageConf.exist">
+        ---
+      </span>
+      <span ng-show="serversItemCtl.getSwapUsageConf.exist">
+        {{serversItemCtl.getSwapUsageConf.value | number:1}}%
+      </span>
+    </span>
+    <span class="cbui-table-cell resp-hide-med">
+      <span ng-show="!serversItemCtl.couchDiskUsage">
+        ---
+      </span>
+      <span ng-show="serversItemCtl.couchDiskUsage">
+        {{serversItemCtl.couchDiskUsage | mnFormatQuantity}}
+      </span>
+    </span>
+    <span class="cbui-table-cell resp-hide-med" title="all active items / all replica items">
+      {{node.interestingStats.curr_items || 0 | mnFormatQuantity:1000 }}/{{node.interestingStats.vb_replica_curr_items || 0 | mnFormatQuantity:1000 }}
+    </span>
+    <span class="cbui-table-cell text-right resp-hide-sml">
+      <a
+         ng-if="!serversItemCtl.isNodeInactiveFailed && !serversItemCtl.isNodeUnhealthy && rbac.cluster.stats.read && rbac.cluster.bucket['.'].stats.read"
+         title="{{'View Statistics for ' + node.hostname}}"
+         ng-click="$event.stopPropagation()"
+         ui-state="'app.admin.overview.statistics'"
+         ui-state-params="{statsHostname: node.hostname}">
+        Statistics
+      </a>
+    </span>
+  </div>
+
+<!-- InactiveFailed, InactiveAdded and Unhealthy states -------------------- -->
+  <div
+     class="cbui-tablerow resp-xsml error"
+     ng-show="!adminCtl.tasks.inRebalance && rbac.cluster.tasks.read &&
+              (serversItemCtl.isNodeInactiveFailed || serversItemCtl.isNodeInactiveAdded || serversItemCtl.isNodeUnhealthy)">
+    <span>
+      <span>
+        {{serversItemCtl.isNodeInactiveAdded && node.recoveryType === 'none' ?
+        'New node' :
+        'Node'}}</span>
+      <span ng-show="serversItemCtl.isNodeUnhealthy">unresponsive</span><span ng-show="serversItemCtl.isNodeUnhealthy &&
+                                                                                       (serversItemCtl.isNodeInactiveFailed ||
+                                                                                       (serversItemCtl.isNodeInactiveAdded && node.recoveryType !== 'none'))">,</span>
+      <span ng-show="serversItemCtl.isNodeInactiveFailed ||
+                     (serversItemCtl.isNodeInactiveAdded && node.recoveryType !== 'none')">
+        failed-over
+      </span>
+      <span>
+        | Not available for traffic
+      </span>
+      <span ng-show="serversItemCtl.isNodeUnhealthy &&
+                     rbac.cluster.pools.write &&
+                     !serversItemCtl.isNodeInactiveFailed &&
+                     !serversItemCtl.isNodeInactiveAdded &&
+                     node.recoveryType === 'none'">
+        | FAILOVER to activate any available replicas
+      </span>
+      <span ng-show="serversItemCtl.isNodeInactiveAdded && node.recoveryType === 'none'">
+        |
+        <span class="bold" ng-click="serversCtl.postRebalance(); $event.stopPropagation()">
+          REBALANCE</span> to finish adding node
+      </span>
+      <span ng-show="serversItemCtl.isNodeInactiveFailed">
+        |
+        <span class="bold" ng-click="serversCtl.postRebalance(); $event.stopPropagation()">
+          REBALANCE</span> to finish removing node
+      </span>
+      <span ng-show="serversItemCtl.isNodeInactiveAdded && node.recoveryType !== 'none'">
+        |
+        <span class="bold" ng-click="serversCtl.postRebalance(); $event.stopPropagation()">
+          REBALANCE</span> to finish {{node.recoveryType}} recovery
+      </span>
+    </span>
+    <button
+       ng-show="serversItemCtl.isNodeInactiveAdded &&
+                node.recoveryType !== 'none' &&
+                rbac.cluster.pools.write"
+       class="outline"
+       ng-disabled="adminCtl.tasks.inRecoveryMode"
+       ng-click="$event.stopPropagation(); serversItemCtl.cancelFailOverNode(node.otpNode)">
+      Cancel Add Back
+    </button>
+    <button
+       ng-show="serversItemCtl.isNodeUnhealthy &&
+                rbac.cluster.pools.write &&
+                !serversItemCtl.isNodeInactiveFailed &&
+                !serversItemCtl.isNodeInactiveAdded &&
+                node.recoveryType === 'none'"
+       ng-click="serversItemCtl.failOverNode(node);$event.stopPropagation();">
+      Failover
+    </button>
+    <button
+       ng-show="rbac.cluster.pools.write &&
+                serversItemCtl.isNodeInactiveAdded &&
+                node.recoveryType === 'none'"
+       class="outline"
+       ng-disabled="adminCtl.tasks.inRecoveryMode"
+       ng-click="$event.stopPropagation(); serversItemCtl.ejectServer(node)">
+      Cancel Add
+    </button>
+  </div>
+  <div
+     class="cbui-tablerow"
+     ng-if="serversItemCtl.isNodeInactiveFailed && !serversItemCtl.isNodeUnhealthy">
+    <span>
+      This server is now reachable. Do you want to add it back to the cluster on the next rebalance?
+    </span>
+
+    <span
+       class="nowrap"
+       ng-show="rbac.cluster.pools.write">
+      <span ng-click="serversItemCtl.reAddNode('full', node.otpNode);$event.stopPropagation()">
+        <button class="outline" ng-show="serversItemCtl.isKVNode">Add Back: Full Recovery</button>
+        <button class="outline" ng-show="!serversItemCtl.isKVNode">Add Back</button>
+      </span>
+      <span
+         ng-show="serversItemCtl.isKVNode"
+         ng-click="serversItemCtl.reAddNode('delta', node.otpNode); $event.stopPropagation()">
+        <button class="outline">Add Back: Delta Recovery</button>
+      </span>
+    </span>
+  </div>
+
+  <!-- active node flagged for removal -->
+  <div
+     class="cbui-tablerow"
+     ng-if="!adminCtl.tasks.inRebalance && !serversItemCtl.isNodeInactiveAdded && !serversItemCtl.isNodeUnhealthy && node.pendingEject && rbac.cluster.tasks.read">
+    <span class="error">
+      Node flagged for removal | Still available to take traffic |
+      <span class="bold" ng-click="serversCtl.postRebalance(); $event.stopPropagation()">
+        REBALANCE</span> to finish removing node
+    </span>
+    <button
+       ng-show="rbac.cluster.pools.write"
+       class="outline"
+       ng-disabled="adminCtl.tasks.inRecoveryMode"
+       ng-click="$event.stopPropagation(); serversItemCtl.cancelEjectServer(node)">
+      Cancel Remove
+    </button>
+  </div>
+
+  <!-- server details section -->
+  <div
+     ui-view="details"
+     class="cbui-tablerow-expanded"
+     ng-if="serversCtl.isDetailsOpened(node.hostname) && rbac.cluster.nodes.read"></div>
+</section>

@@ -1,0 +1,171 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div mn-main-spinner="settingsAlertsCtl.viewLoading || !settingsAlertsCtl.state">
+  <form class="forms" ng-submit="settingsAlertsCtl.submit()">
+    <div class="row flex-left items-stretch resp-flex-column-med margin-bottom-2">
+      <div>
+        <div class="row flex-left margin-bottom-1-5">
+          <label
+             class="toggle-control margin-0"
+             for="for-email-alert-enable">
+            <input
+               type="checkbox"
+               id="for-email-alert-enable"
+               ng-disabled="!rbac.cluster.settings.write"
+               ng-model="settingsAlertsCtl.state.enabled">
+            <span class="toggle-control-body"></span>
+          </label>
+          <span class="text-small">&nbsp; Enable email alerts</span>
+        </div>
+
+        <div class="formrow width-300">
+          <label for="email_alerts_host">Email Server Host</label>
+          <input
+             type="text"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             id="email_alerts_host"
+             ng-model="settingsAlertsCtl.state.emailServer.host"
+             ng-disabled="settingsAlertsCtl.isFormElementsDisabled() || !rbac.cluster.settings.write">
+        </div>
+        <div class="formrow width-300">
+          <label for="email_alerts_port">Port</label>
+          <input
+             type="number"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             id="email_alerts_port"
+             ng-model="settingsAlertsCtl.state.emailServer.port"
+             ng-disabled="settingsAlertsCtl.isFormElementsDisabled() || !rbac.cluster.settings.write">
+          <div
+             class="error error-field"
+             ng-if="settingsAlertsCtl.errors.email_port">
+            {{settingsAlertsCtl.errors.email_port}}
+          </div>
+        </div>
+        <div class="formrow width-300">
+          <label for="email_alerts_user">Username</label>
+          <input
+             type="text"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             id="email_alerts_user"
+             ng-model="settingsAlertsCtl.state.emailServer.user"
+             ng-disabled="settingsAlertsCtl.isFormElementsDisabled() || !rbac.cluster.settings.write">
+        </div>
+        <div class="formrow width-300">
+          <label for="email_alerts_pass">Password</label>
+          <input
+             type="password"
+             autocorrect="off"
+             spellcheck="false"
+             id="email_alerts_pass"
+             ng-model="settingsAlertsCtl.state.emailServer.pass"
+             ng-disabled="settingsAlertsCtl.isFormElementsDisabled() || !rbac.cluster.settings.write"
+             mn-autocomplete-off>
+        </div>
+        <div class="formrow checkbox-list width-300">
+          <input
+             type="checkbox"
+             id="for-email-alerts-encrypt"
+             ng-model="settingsAlertsCtl.state.emailServer.encrypt"
+             ng-disabled="settingsAlertsCtl.isFormElementsDisabled() || !rbac.cluster.settings.write">
+          <label for="for-email-alerts-encrypt">
+            Require encryption (TLS)
+          </label>
+        </div>
+
+        <div class="formrow width-300">
+          <label for="email_alerts_sender">
+            Sender Email <small>the FROM field</small>
+          </label>
+          <input
+             type="text"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             id="email_alerts_sender"
+             ng-model="settingsAlertsCtl.state.sender"
+             ng-disabled="settingsAlertsCtl.isFormElementsDisabled() || !rbac.cluster.settings.write">
+          <div
+             class="error error-field"
+             ng-if="settingsAlertsCtl.errors.sender">
+            {{settingsAlertsCtl.errors.sender}}
+          </div>
+        </div>
+        <div class="formrow width-300">
+          <label for="email_alerts_sender">Recipients</label>
+          <p class="desc">separate addresses with comma "," or spaces " "</p>
+          <textarea
+             id="email_alerts_recipients"
+             autocorrect="off"
+             autocapitalize="off"
+             spellcheck="false"
+             ng-disabled="!settingsAlertsCtl.state.enabled || !rbac.cluster.settings.write"
+             ng-model="settingsAlertsCtl.state.recipients"></textarea>
+          <div
+             class="error error-field"
+             ng-if="settingsAlertsCtl.errors.recipients">
+            {{settingsAlertsCtl.errors.recipients}}
+          </div>
+        </div>
+        <div class="margin-bottom-1-5">
+          <button
+             class="outline"
+             type="button"
+             ng-disabled="!settingsAlertsCtl.state.enabled || !rbac.cluster.settings.write"
+             ng-click="settingsAlertsCtl.testEmail()">Send Test Email</button>
+        </div>
+      </div>
+
+      <div class="vertical-page-splitter resp-hide-med">&nbsp;</div>
+
+      <div class="margin-bottom-2">
+        <h4 class="margin-bottom-half">Available Alerts</h4>
+        <div class="row flex-left margin-bottom-half"
+           ng-repeat="alert in settingsAlertsCtl.state.knownAlerts">
+          <div class="nowrap">
+            <input
+               type="checkbox"
+               ng-attr-id="for-alerts-{{$index}}"
+               ng-model="settingsAlertsCtl.state.alerts[alert]"
+               ng-disabled="settingsAlertsCtl.isFormElementsDisabled() || !rbac.cluster.settings.write">
+            <label ng-attr-for="for-alerts-{{$index}}">
+              Email
+            </label>
+            <input
+               type="checkbox"
+               ng-disabled="!rbac.cluster.settings.write"
+               ng-model="settingsAlertsCtl.state.popUpAlerts[alert]"
+               ng-attr-id="popup-alert-{{$index}}">
+            <label ng-attr-for="popup-alert-{{$index}}">
+              UI popup
+            </label>
+          </div>
+          <span class="text-medium margin-left-1">{{alert | alertsLabel}}</span>
+        </div>
+      </div>
+    </div>
+    <footer class="footer-save">
+      <button
+         type="submit"
+         ng-show="rbac.cluster.settings.write"
+         ng-disabled="!('isEmpty' | lodash:settingsAlertsCtl.errors)"
+         class="margin-right-2">
+        Save
+      </button>
+      <a class="text-medium" ng-click="settingsAlertsCtl.reloadState()">Cancel/Reset</a>
+    </footer>
+  </form>
+</div>

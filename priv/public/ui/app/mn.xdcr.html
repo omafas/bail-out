@@ -1,0 +1,85 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<mn-element-cargo depot="actions">
+  <div class="header-controls resp-sml">
+    <a
+       [hidden]="!(((permissions | async)?.cluster.xdcr.remote_clusters.read && (references | async)?.length) && (permissions | async)?.cluster.xdcr.settings.read && (permissions | async)?.cluster.xdcr.settings.write && (permissions | async)?.cluster.bucket['.'].xdcr.write)"
+       uiSref="app.admin.replications.add"
+       class="resp-hide-sml">
+      ADD REPLICATION
+    </a>
+    <a
+       [hidden]="!(permissions | async)?.cluster.xdcr.remote_clusters.write"
+       (click)="onAddReference.next()"
+       class="resp-hide-sml">
+      ADD REMOTE
+    </a>
+  </div>
+</mn-element-cargo>
+
+<div [hidden]="!(permissions | async)?.cluster.xdcr.remote_clusters.read">
+  <h4>Remote Clusters</h4>
+  <div class="cbui-table" [hidden]="!(references | async)?.length">
+    <div class="cbui-table-header padding-left">
+      <span class="cbui-table-cell flex-grow-1-5">
+        <span
+           class="sorter"
+           [ngClass]="{
+                  'dynamic-active': (referenceSorter.click | async) == 'name',
+                  'dynamic-inverted': (referenceSorter.state | async)
+                  }"
+           (click)="referenceSorter.click.next('name')">name</span>
+      </span>
+      <span class="cbui-table-cell flex-grow-1-5">IP/hostname</span>
+      <span class="cbui-table-cell flex-grow-1-5 resp-hide-sml"></span>
+      <span class="cbui-table-cell flex-grow-half resp-hide-sml"></span>
+    </div>
+    <mn-xdcr-ref-item
+       *ngFor="let ref of (references | async); trackBy: trackByFn"
+       [item]="ref"></mn-xdcr-ref-item>
+  </div>
+  <div
+     [hidden]="(references | async)?.length"
+     class="zero-content">
+    No remote clusters defined. Use ADD REMOTE to set one up.
+  </div>
+</div>
+
+<!-- Outgoing Replications ************************************************ -->
+<div
+   [hidden]="!((permissions | async)?.cluster.tasks.read && (references | async)?.length)"
+   class="margin-top-1-5">
+  <h4>Outgoing Replications
+    <span
+       *ngIf="(permissions | async)?.cluster.stats.read"
+       [hidden]="!(getChangesLeftTotal | async)"
+       class="label raised neutral">{{getChangesLeftTotal | async | mnFormatQuantity:1000}} mutations remaining</span></h4>
+  <div
+     class="cbui-table"
+     [hidden]="!(tasksXDCR | async)?.length">
+    <div class="cbui-table-header">
+      <span class="cbui-table-cell">
+        source bucket
+      </span>
+      <span class="cbui-table-cell">
+        destination bucket
+      </span>
+      <span class="cbui-table-cell">remote cluster</span>
+      <span class="cbui-table-cell">status</span>
+    </div>
+    <mn-xdcr-item
+       *ngFor="let item of (tasksXDCR | async); trackBy: tasksTrackByFn;"
+       [item]="item"></mn-xdcr-item>
+  </div>
+  <div [hidden]="(tasksXDCR | async)?.length" class="zero-content">
+    There are currently no replications defined. Use ADD REPLICATION to set one up.
+  </div>
+</div>

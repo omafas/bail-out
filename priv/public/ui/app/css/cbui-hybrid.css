@@ -1,0 +1,34 @@
+ng-component, ui-view {display: block;}
+.items-center {justify-content: center! important;}
+
+.modal {
+  position: fixed;
+  overflow: auto;
+  height: 100%;
+  top: 0;
+  width: 100%;
+  z-index: 1050;
+  justify-content: center;
+  align-items: flex-start;
+  display: flex!important;
+  min-height: 1rem;
+  opacity: 1;
+}
+
+.modal-dialog {
+  position: relative;
+  z-index: 101;
+  top: 2.5rem;
+  background-color: #fff;
+  border: none;
+  border-radius: 3px 3px 2px 2px;
+  box-shadow: 0px 1px 1px 1px rgba(0,0,0,0.25);
+}
+
+input[type="checkbox"][disabled] + label:before,
+input[type="radio"][disabled] + label:before {
+  opacity: .5;
+}
+input[type="checkbox"][disabled] + label {
+  cursor: default !important;
+}

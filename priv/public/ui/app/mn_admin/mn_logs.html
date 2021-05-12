@@ -1,0 +1,25 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<mn-element-cargo depot="subnav">
+  <nav
+  class="sub-nav"
+  ng-show="rbac.cluster.admin.logs.read">
+    <a
+       ui-sref="app.admin.logs.list"
+       ui-sref-active="selected">Logs</a>
+    <a
+       ng-show="rbac.cluster.admin.logs.read"
+       ui-sref="app.admin.logs.collectInfo.form"
+       ng-class="{'selected': ('app.admin.logs.collectInfo' | includedByState)}">Collect Information</a>
+  </nav>
+</mn-element-cargo>
+
+<div ui-view=""></div>

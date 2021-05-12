@@ -1,0 +1,11 @@
+In our tradition of advertising hyperlinks to various information &
+services we need to publish links to POST requests that forcefully
+trigger bucket compaction.
+
+It's now done as part of controllers field of bucket info. E.g.:
+
+       "controllers": {
+            "flush": "/pools/default/buckets/default/controller/doFlush",
+            "compactAll": "/pools/default/buckets/default/controller/compactBucket",
+            "compactDB": "/pools/default/buckets/default/controller/compactDatabases"
+        },

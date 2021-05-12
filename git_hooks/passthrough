@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2018-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+#
+# Pass-through the hook invocation to a hook from .git/hooks.old directory,
+# that's created by git hooks --install and contains whatever hooks existed in
+# the filesystem before. One example of such a hook would be a commit-msg hook
+# that repo installs to add Change-Id to the commit message.
+
+HOOKNAME=$(basename "$(dirname "$0")")
+OLD_HOOK=".git/hooks.old/$HOOKNAME"
+
+if test -x "$OLD_HOOK"; then
+    "$OLD_HOOK" "$@"
+fi

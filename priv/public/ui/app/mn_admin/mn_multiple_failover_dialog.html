@@ -1,0 +1,61 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="fix-width-8">
+  <div class="panel-header">
+    <h2>Failover Multiple Nodes<span ng-if="multipleFailoverDialogCtl.allowUnsafe">: Unsafe Mode</span></h2>
+  </div>
+  <form
+     ng-submit="multipleFailoverDialogCtl.onSubmit()"
+     mn-spinner="multipleFailoverDialogCtl.viewLoading">
+    <div class="panel-content forms" style="padding:1rem 1.5rem .5rem 1.5rem;">
+      <div
+         class="error error-form"
+         ng-show="multipleFailoverDialogCtl.errors">{{multipleFailoverDialogCtl.errors}}</div>
+      <div
+         class="hide-select-all"
+         mn-selectable-nodes-list=""
+         nodes="multipleFailoverDialogCtl.nodes"
+         mn-selected-nodes-holder="multipleFailoverDialogCtl.mnSelectedNodesHolder"
+         mn-groups="multipleFailoverDialogCtl.mnGroups">
+      </div>
+      <p class="text-smaller row margin-bottom-0 margin-top-1">
+        <span class="icon fa-2x fa-warning orange-3 margin-right-1"></span>
+        <span>
+          <strong>Data Loss Warning:</strong> For hard failover of multiple nodes,
+          each Couchbase bucket must have at least as many replicas as the total
+          number of nodes failed over or you WILL lose data. Since hard failover
+          removes nodes immediately it may also result in failure of in-flight operations.
+        </span>
+      </p>
+      <p class="text-smaller row margin-top-1" ng-if="multipleFailoverDialogCtl.allowUnsafe">
+        <span class="icon fa-warning fa-2x red-3 margin-right-1"></span>
+        <span>
+          <strong>Unsafe Failover Warning:</strong>
+          Some servers cannot be contacted (this could be for multiple reasons such
+          as network delays or unresponsive hardware). You can perform an Unsafe
+          Failover on any nodes previously recognized by your cluster (even
+          if they are unreachable, you will now be able to select them for failover in
+          this dialog). BUT, failover coordination throughout the cluster could be
+          compromised and data loss may occur. Do you wish to proceed with the Unsafe
+          Failover?
+        </span>
+      </p>
+    </div>
+    <div class="panel-footer">
+      <span class="row">
+        <a  ng-click="$dismiss()">Cancel</a>
+        <button type="submit" ng-class="{orange: multipleFailoverDialogCtl.allowUnsafe}">
+          Failover Nodes<span ng-if="multipleFailoverDialogCtl.allowUnsafe">: Unsafe Mode</span>
+        </button>
+      </span>
+    </div>
+  </form>
+</div>

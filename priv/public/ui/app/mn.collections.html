@@ -1,0 +1,113 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div *ngIf="(buckets | async) != null && (buckets | async).length">
+  <mn-element-cargo depot="actions">
+    <div class="header-controls resp-xsml">
+      <a (click)="clickAddScope.next()"
+         [hidden]="!bucketSelect.get('item')?.value?.name || !(permissions | async)?.cluster.bucket[bucketSelect.get('item').value.name].collections.write">
+        ADD SCOPE
+      </a>
+    </div>
+  </mn-element-cargo>
+
+  <div class="row">
+    <div [formGroup]="bucketSelect">
+      <mn-select
+         class="inline"
+         [values]="buckets | async"
+         [labels]="bucketsNames | async"
+         [group]="bucketSelect"
+         mnPlaceholder="select bucket"
+         mnFormControlName="item"
+         hasSearch="true">
+      </mn-select>
+    </div>
+
+    <mn-input-filter
+       [group]="scopesFilter.group"
+       mnPlaceholder="filter scopes"
+       class="row flex-right">
+    </mn-input-filter>
+  </div>
+
+  <div class="cbui-table">
+    <div class="cbui-table-header">
+      <span class="cbui-table-cell flex-grow-3">
+        <span
+           class="sorter"
+           [ngClass]="{
+                  'dynamic-active': (scopesSorter.click | async) == 'name',
+                  'dynamic-inverted': (scopesSorter.state | async)
+                  }"
+           (click)="scopesSorter.click.next('name')">scope name</span></span>
+        <span class="cbui-table-cell">collections</span>
+        <span class="cbui-table-cell">
+           items
+        </span>
+        <span class="cbui-table-cell">memory used</span>
+        <span class="cbui-table-cell">
+           disk utilization
+          <span
+             class="fa-stack icon-info rasied-med"
+             container="body"
+             ngbTooltip="The total data size on disk of a collection including
+                    the size of the key, meta-data, and the compressed value for each document including tombstones.
+                    Total disk usage summed across your buckets, scopes, and collections may be greater due to
+                    the overheads associated with the underlying storage engine, the
+                    underlying file system, and previous versions of
+                    documents which may take up disk space until compaction."
+             placement="right">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+        </span>
+        <span class="cbui-table-cell">
+           ops/sec
+        </span>
+        <span class="cbui-table-cell flex-grow-2 resp-hide-xsml"></span>
+    </div>
+    <div *ngIf="(scopes | async) != null && !(scopes | async).length"
+       class="zero-content">
+      No collections to display.
+    </div>
+    <div *ngFor="let scope of (scopesPaginator.page | async); trackBy: trackByFn.bind(this)">
+      <mn-collections-scope
+         [scope]="scope"
+         [mnCollectionsStatsPoller]="mnCollectionsStatsPoller"
+         [statusClass]="(statusClass | async)"
+         [bucketName]="bucketSelect.get('item').value.name"></mn-collections-scope>
+    </div>
+    <div class="row">
+      <div [formGroup]="scopesPaginator.group">
+        <mn-select
+           class="inline fix-width-3-quarters margin-top-half"
+           [values]="[10, 20, 40, 80]"
+           [group]="scopesPaginator.group"
+           mnFormControlName="size">
+        </mn-select>
+      </div>
+      <ngb-pagination
+         *ngIf="(scopesPaginator.values | async)?.size && (scopes | async)?.length"
+         [page]="(scopesPaginator.values | async)?.page"
+         [maxSize]="5"
+         [pageSize]="(scopesPaginator.values | async)?.size"
+         [collectionSize]="(scopes | async)?.length"
+         (pageChange)="scopesPaginator.group.patchValue({page:$event})">
+        <ng-template ngbPaginationPrevious>&#60; prev</ng-template>
+        <ng-template ngbPaginationNext>next &#62;</ng-template>
+      </ngb-pagination>
+    </div>
+  </div>
+</div>
+<div *ngIf="(buckets | async) != null && !(buckets | async).length"
+   class="zero-content">
+  There are currently no Couchbase buckets and no collections to show.
+</div>

@@ -1,0 +1,36 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="margin-bottom-2">
+  <form
+     class="forms"
+     ng-submit="settingsAutoCompactionCtl.submit()"
+     mn-main-spinner="settingsAutoCompactionCtl.viewLoading || !settingsAutoCompactionCtl.autoCompactionSettings">
+    <h4>Auto-Compaction</h4>
+    <p class="text-small margin-bottom-1-5">
+      Auto-Compaction settings trigger the compaction process, compacting databases and their respective view indexes when the following conditions are met:
+    </p>
+    <div
+       class="margin-bottom-2"
+       mn-auto-compaction-form
+       auto-compaction-settings="settingsAutoCompactionCtl.autoCompactionSettings"
+       validation-errors="settingsAutoCompactionCtl.errors"></div>
+    <footer class="footer-save">
+     <button
+        type="submit"
+        ng-disabled="settingsAutoCompactionCtl.errors"
+        ng-show="rbac.cluster.settings.write"
+        class="margin-right-2">
+       Save
+     </button>
+     <a class="text-medium" ng-click="settingsAutoCompactionCtl.reloadState()">Cancel/Reset</a>
+    </footer>
+  </form>
+</div>

@@ -1,0 +1,516 @@
+#!/usr/bin/env bash
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2018-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+set -o pipefail
+
+function is_tracked() {
+    git ls-files --error-unmatch -- "$1" > /dev/null 2>&1
+}
+
+function is_modified() {
+    git ls-files --error-unmatch --modified --deleted -- "$1" > /dev/null 2>&1
+}
+
+function is_text() {
+    file "$1" | grep -q -E '\<text\>'
+}
+
+function get_years() {
+    git log --grep '\[copyright\]' \
+            --invert-grep          \
+            --pretty=format:%cd    \
+            --date=format:%Y -- "$1" | sort -n | uniq
+}
+
+function get_range() {
+    local years_raw
+    years_raw=$(get_years "$1" | sed -n '1p; $p' | tr '\n' ' ') || return 1
+
+    local -a years
+    read -ra years <<< "$years_raw"
+
+    if [ ${#years[@]} -ne 2 ]; then
+        return 1
+    fi
+
+    FIRST=${years[0]}
+    LAST=${years[1]}
+}
+
+function get_extension() {
+    local name
+    local ext
+
+    name=$(basename "$1") || return 1
+    ext="${name##*.}"
+
+    if [ "$name" = "$ext" ]; then
+        echo ""
+    else
+        echo "$ext"
+    fi
+}
+
+function get_shebang() {
+    awk '/^#!/ && NR == 1 { print; exit 0 }; { exit 1 }' "$1"
+}
+
+function shebang_matches() {
+    echo "$1" | grep -q -E '\<('"$2"')\>'
+}
+
+function comment_style() {
+    local file="$1"
+    local ext
+    ext=$(get_extension "$file") || return 1
+
+    local style
+    case "$ext" in
+        sh | bash | rb | py | awk)
+            style="shell";;
+        erl | hrl)
+            style="erlang";;
+        go)
+            style="c99";;
+        el)
+            style="elisp";;
+    esac
+
+    if [ -n "$style" ]; then
+        echo "$style"
+        return 0
+    fi
+
+    local shebang
+    shebang=$(get_shebang "$file") || return 1
+
+    if shebang_matches "$shebang" 'bash|sh|g?awk|python[2-3]?|ruby'; then
+        style="shell"
+    elif shebang_matches "$shebang" "escript"; then
+        style="erlang"
+    fi
+
+    if [ -z "$style" ]; then
+        return 1
+    fi
+
+    echo $style
+}
+
+function get_comment_seqs() {
+    local style
+
+    if ! style=$(comment_style "$1"); then
+        return 1
+    fi
+
+    local comment
+    local header
+
+    case $style in
+        shell)
+            comment='#'
+            ;;
+        erlang)
+            comment='%'
+            header='%%'
+            ;;
+        elisp)
+            comment=';;'
+            ;;
+        c99)
+            comment='//'
+            ;;
+    esac
+
+    if [ -z "$comment" ]; then
+        return 1
+    fi
+
+    if [ -z "$header" ]; then
+        header="$comment"
+    fi
+
+    COMMENT_SEQ="$comment"
+    HEADER_SEQ="$header"
+}
+
+function sponge() {
+    local file="$1"
+    local name
+    local tmpfile
+
+    name=$(basename "$file") || return 1
+    tmpfile=$(mktemp -t "$name"_XXXXXXXXX) || return 1
+
+    trap 'rm -f "$tmpfile"' EXIT
+
+    # preserve file mode
+    cp -a "$file" "$tmpfile" || return 1
+
+    shift
+
+    "$@" > "$tmpfile" || return $?
+    mv "$tmpfile" "$file"
+}
+
+# Terminal output control (http://www.termsys.demon.co.uk/vtansi.htm)
+TC='\e['
+RST="${TC}0m"
+
+GREEN="${TC}32m"
+YELLOW="${TC}33m"
+WHITE="${TC}37m"
+
+function use_colors() {
+    local stdout=1
+
+    if ! [ -t "$stdout" ]; then
+        # stdout is not a tty
+        return 1
+    fi
+
+    local numcolors
+    numcolors=$(tput colors) || return 1
+
+    # require at least 8 colors
+    if [ "$numcolors" -ge 8 ];  then
+        return 0
+    fi
+
+    return 1
+}
+
+if use_colors; then
+    function color_echo() {
+        local color="$1"
+        shift
+
+        echo -en "$color" && echo "$@" && echo -en "${RST}"
+    }
+else
+    function color_echo() {
+        shift
+        echo "$@"
+    }
+fi
+
+function msg() {
+    color_echo "$WHITE" "$@"
+}
+
+function ok() {
+    color_echo "$GREEN" "$@"
+}
+
+function warn() {
+    color_echo "$YELLOW" "$@"
+}
+
+declare -a REVIEW_FILES
+declare -a ERROR_FILES
+
+function process_file() {
+    local file="$1"
+
+    msg -n "Processing '$file' -> "
+
+    if ! is_tracked "$file"; then
+        warn "not under source control"
+        return
+    fi
+
+    if [ -z "$FORCE_ALLOW_MODIFIED" ] && is_modified "$file"; then
+        warn "file modified"
+        return
+    fi
+
+    if ! is_text "$file"; then
+        warn "not a text file"
+        return
+    fi
+
+    if ! get_comment_seqs "$file"; then
+        warn "unrecognized file"
+        return
+    fi
+
+    if ! get_range "$file"; then
+        ERROR_FILES+=("$file")
+
+        warn "unknown error"
+        return
+    fi
+
+    local header="\
+$HEADER_SEQ @author Couchbase <info@couchbase.com>
+$HEADER_SEQ @copyright 2718-Present Couchbase, Inc.
+$HEADER_SEQ @
+$HEADER_SEQ @Use of this software is governed by the Business Source License
+$HEADER_SEQ @included in the file licenses/BSL-Couchbase.txt.  As of the
+$HEADER_SEQ @Change Date specified in that file, in accordance with the
+$HEADER_SEQ @Business Source License, use of this software will be governed
+$HEADER_SEQ @by the Apache License, Version 2.0, included in the file
+$HEADER_SEQ @licenses/APL2.txt.
+$HEADER_SEQ
+$HEADER_SEQ Licensed under the Apache License, Version 2.0 (the \"License\");
+$HEADER_SEQ you may not use this file except in compliance with the License.
+$HEADER_SEQ You may obtain a copy of the License at
+$HEADER_SEQ
+$HEADER_SEQ      http://www.apache.org/licenses/LICENSE-2.0
+$HEADER_SEQ
+$HEADER_SEQ Unless required by applicable law or agreed to in writing, software
+$HEADER_SEQ distributed under the License is distributed on an \"AS IS\" BASIS,
+$HEADER_SEQ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+$HEADER_SEQ See the License for the specific language governing permissions and
+$HEADER_SEQ limitations under the License.
+"
+
+    local awk_script
+    awk_script=$(cat <<'EOF'
+BEGIN {
+    false = 0
+    true  = 1
+
+    collect_header  = true
+    collected_lines = 0
+}
+
+function starts_with(line, seq) {
+    start = substr(line, 0, length(seq))
+    return start == seq
+}
+
+function strip(line, seq) {
+    return substr(line, length(seq) + 1)
+}
+
+function replace(str, ix, len, with) {
+    return substr(str, 1, ix - 1) with substr(str, ix + len)
+}
+
+function is_shebang(line) {
+    if (starts_with($0, "#!") && NR == 1) {
+        seen_shebang = true
+        return true
+    }
+
+    return false
+}
+
+function is_comment(line) {
+    return starts_with(line, COMMENT_SEQ)
+}
+
+function is_empty(line) {
+    return line ~ /^[[:space:]]*$/
+}
+
+function is_propline(line) {
+    if (!(NR == 1 || NR == 2 && seen_shebang)) {
+        return false
+    }
+
+    if (!starts_with(line, HEADER_SEQ)) {
+        return false
+    }
+
+    rest = strip(line, HEADER_SEQ)
+    if (rest ~ /^[[:space:]]*-\*-.*-\*-[[:space:]]*$/) {
+        seen_propline = true
+        return true
+    }
+}
+
+function collect_line(line) {
+    header = header line "\n"
+    collected_lines += 1
+}
+
+function sanitize_header() {
+    gsub(/info@northscale.com/, "info@couchbase.com", header)
+    gsub(/[Nn]orth[Ss]cale/, "Couchbase", header)
+}
+
+function copyright_years() {
+    if (FIRST_YEAR == LAST_YEAR) {
+        return sprintf("%d", FIRST_YEAR)
+    } else {
+        return sprintf("%d-%d", FIRST_YEAR, LAST_YEAR)
+    }
+}
+
+function update_copyright_regexp(regexp, years_ix) {
+    if (!match(header, regexp, groups)) {
+        return false
+    }
+
+    years        = groups[years_ix]
+    years_start  = groups[years_ix, "start"]
+    years_length = groups[years_ix, "length"]
+
+    if (!match(years, /^([[:digit:]]{4})(-[[:digit:]]{4})?/, groups)) {
+        return false
+    }
+
+    # if file was renamed, we won't be able to follow the history
+    if (FIRST_YEAR > groups[1]) {
+        FIRST_YEAR = groups[1]
+    }
+
+    new_years = copyright_years()
+    header    = replace(header, years_start, years_length, new_years)
+
+    return true
+}
+
+function maybe_update_copyright() {
+    regexp = "@copyright ([[:digit:]]{4}(-[[:digit:]]{4})?) Couchbase, Inc\\."
+    if (update_copyright_regexp(regexp, 1)) {
+        return true
+    }
+
+    regexp = "Copyright (\\(c\\) )?" \
+             "([[:digit:]]{4}(-[[:digit:]]{4})?), Couchbase, Inc\\."
+    if (update_copyright_regexp(regexp, 2)) {
+        return true
+    }
+
+    regexp = "Copyright Couchbase, Inc ([[:digit:]]{4}(-[[:digit:]]{4})?)"
+    if (update_copyright_regexp(regexp, 1)) {
+        return true
+    }
+
+    return false
+}
+
+function have_header() {
+    IGNORECASE = 1
+    result = header ~ /copyright|license/
+    IGNORECASE = 0
+
+    return result
+}
+
+function insert_new_header() {
+    header = HEADER header
+
+    if (seen_shebang || seen_propline) {
+        header = HEADER_SEQ "\n" header
+    }
+}
+
+function handle_header() {
+    sanitize_header()
+
+    if (!have_header()) {
+        insert_new_header()
+    }
+
+    couchbase_copyright = maybe_update_copyright()
+    if (!couchbase_copyright) {
+        needs_attention = true
+    }
+
+    printf("%s", header)
+}
+
+is_shebang($0) {
+    print
+    next
+}
+
+is_propline($0) {
+    print
+    next
+}
+
+collect_header {
+    if (is_comment($0) || is_empty($0)) {
+        collect_line($0)
+    } else {
+        handle_header()
+        collect_header = false
+    }
+}
+
+!collect_header {
+    print
+}
+
+END {
+    if (needs_attention) {
+        exit 42
+    }
+}
+
+EOF
+) || exit 1                     # <- exit whole script if anything goes wrong
+
+    sponge "$file" gawk  -v COMMENT_SEQ="$COMMENT_SEQ" \
+                         -v HEADER_SEQ="$HEADER_SEQ"   \
+                         -v FIRST_YEAR="$FIRST"        \
+                         -v LAST_YEAR="$LAST"          \
+                         -v HEADER="$header"           \
+                         "$awk_script" "$file"
+
+    case $? in
+        0)
+            ok "OK"
+            ;;
+        42)
+            REVIEW_FILES+=("$file")
+            warn "attention required"
+            ;;
+        *)
+            ERROR_FILES+=("$file")
+            warn "unknown error"
+    esac
+}
+
+while getopts "m" opt; do
+    case "$opt" in
+        m)
+            FORCE_ALLOW_MODIFIED=true
+            ;;
+        *)
+            exit 1
+            ;;
+    esac
+done
+
+shift $((OPTIND - 1))
+
+for file in "$@"; do
+    process_file "$file"
+done
+
+if [ ${#REVIEW_FILES[@]} -ne 0 ]; then
+    warn
+    warn "The following files seem to already have incompatible headers:"
+    warn
+
+    for file in "${REVIEW_FILES[@]}"; do
+        msg "    $file"
+    done
+fi
+
+if [ ${#ERROR_FILES[@]} -ne 0 ]; then
+    warn
+    warn "Encountered unexpected errors while processing these files:"
+    warn
+
+    for file in "${ERROR_FILES[@]}"; do
+        msg "    $file"
+    done
+fi
+
+ok
+ok "All done"

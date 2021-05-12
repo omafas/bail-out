@@ -1,0 +1,59 @@
+#!/bin/sh
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2019-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+#
+# A script that groups master events for a rebalance by bucket and vbucket and
+# adds some information as to how long each move took.
+#
+# Examples.
+#
+#  - For the last bucket that got rebalanced, display the moves sorted
+#    by duration:
+#
+#    $ ./read master_events.log | ./last-rebalance | ./group-moves | \
+#          jq '.[-1].moves | sort_by(.duration)'
+#
+#  - For the last bucket that got rebalance, show individual vbucket
+#    move steps that took longest:
+#
+#    $ ./read master_events.log | ./last-rebalance | ./group-moves | \
+#          jq '.[-1].moves | map(.events) | flatten |
+#              sort_by(.sincePrevEvent) |
+#              map(select(.type != "vbucketMoveStart"))'
+#
+
+exec jq '
+def handle_move_events:
+  length as $n |
+  [range(0, $n-1) as $i |
+   .[$i] +
+   {prevEvent: (if $i == 0 then null else .[$i-1] end),
+    sincePrevEvent: (if $i == 0 then null else .[$i].ts - .[$i-1].ts end)}];
+
+def handle_one_move:
+  select(any(.type == "vbucketMoveStart")) |
+  map(select(.type == "vbucketMoveStart"))[0] as $moveStart |
+  map(select(.type == "vbucketMoveDone"))[0] as $moveDone |
+  {vbucket: $moveStart.vbucket,
+   chainBefore: $moveStart.chainBefore,
+   chainAfter: $moveStart.chainAfter,
+   moveStartTS: $moveStart.ts,
+   moveEndTS: $moveDone.ts,
+   state: (if $moveDone then "done" else "in-flight" end),
+   duration: (if $moveDone then $moveDone.ts - $moveStart.ts else null end),
+   events: handle_move_events};
+
+def handle_moves:
+  group_by(.vbucket) | map(handle_one_move);
+
+map(select(has("bucket") and has("vbucket"))) |
+group_by([.bucket]) |
+map({bucket: .[0].bucket, moves: (. | handle_moves)})
+' "$@"

@@ -1,0 +1,46 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div
+  ng-if="buckets.length"
+  class="row filter-server"
+  mn-placeholder="filter buckets..."
+  mn-search="bucketsListCtl.filterField"
+  mn-hide-button="true">
+</div>
+<div
+   class="cbui-table"
+   mn-sortable-table>
+  <div class="cbui-table-header" ng-if="buckets.length">
+    <span class="cbui-table-cell flex-grow-3">
+      <span
+         mn-sortable-title="name"
+         sort-by-default="true"
+         class="sorter">
+        name
+      </span>
+    </span>
+    <span class="cbui-table-cell">items</span>
+    <span class="cbui-table-cell">resident</span>
+    <span class="cbui-table-cell">ops/sec</span>
+    <span class="cbui-table-cell flex-grow-1-5 resp-hide-sml">RAM used/quota</span>
+    <span class="cbui-table-cell resp-hide-med">disk used</span>
+    <span class="cbui-table-cell flex-grow-2-5 resp-hide-xsml"></span>
+  </div>
+  <div class="zero-content" ng-if="!buckets.length">
+    You have no data buckets. Use "ADD BUCKET" above to create one,
+    or load a <a ui-sref="app.admin.settings.sampleBuckets">sample bucket</a> with data & indexes.
+  </div>
+  <div
+     ng-if="buckets.length"
+     ng-repeat="bucket in buckets | orderBy:mnSortableTable.sortableTableProperties.orderBy:mnSortableTable.sortableTableProperties.invert | filter:{name: bucketsListCtl.filterField} track by bucket.name"
+     ui-view="item">
+  </div>
+</div>

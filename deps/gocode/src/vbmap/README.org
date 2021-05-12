@@ -1,0 +1,25 @@
+* Vbucket Map Constraints
+
+  Input parameters:
+    - /num_nodes/ — number of nodes
+    - /num_vbuckets/ — number of vbuckets
+    - /num_replicas/ — number of replicas each vbucket has
+    - /max_slaves/ — maximum number of nodes each node replicates to
+
+  Given these input parameters, following are the constraints we try to
+  satisfy:
+
+    1. Each node replicates to exactly /max_slaves/ nodes.
+    2. Each node has replica vbuckets from exactly /max_slaves/ nodes.
+    3. Number of active vbuckets on each node is either
+       ⌊num_vbuckets / num_nodes⌋ or ⌊num_vbuckets / num_nodes⌋ + 1.
+    4. Number of replica vbuckets on each node is either
+       ⌊(num_replicas * num_vbuckets) / num_nodes⌋ or
+       ⌊(num_replicas * num_vbuckets) / num_nodes⌋ + 1.
+    5. For each vbucket its active copy and all the replica copies reside on
+       different tags (racks).
+    6. For each node for all pairs of its slaves sᵢ and sⱼ, the probability of
+       sⱼ following (potentially indirectly) sᵢ in some replica chain is
+       minimized.
+    7. For each node its slaves are spread across the tags (racks) as evenly
+       as possible.

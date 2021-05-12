@@ -1,0 +1,353 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div ng-show="rbac.cluster.stats.read" mn-main-spinner="!statisticsNewCtl.scenarios">
+  <div class="row margin-bottom-1-5">
+    <div class="row flex-left flex-wrap">
+      <span>
+        <h5>Choose Dashboard <small> or create your own</small></h5>
+        <div class="margin-right-half"
+           ng-controller="mnScenarioDialogController as scenarioCtrl">
+          <mn-dropdown
+             ng-click="$event.stopPropagation();"
+             on-select="statisticsNewCtl.onSelectScenario(scenarioId);"
+             model="statisticsNewCtl.scenarioId"
+             class="scenario-dropdown">
+            <inner-select>
+              {{statisticsNewCtl.getSelectedScenario().name}}
+            </inner-select>
+            <inner-body ng-class="{'body-shorter' : scenarioCtrl.showRestOfMenu}">
+              <mn-dropdown-item
+                 ng-repeat="scenario in statisticsNewCtl.scenarios | orderBy:'-preset' track by scenario.id"
+                 mn-item="scenario.id">
+                <p>{{scenario.name}}</p>
+                <p ng-if="scenario.desc">{{scenario.desc}}</p>
+                <div
+                   ng-if="!scenario.preset"
+                   class="scenario-controls"
+                   ng-click="$event.stopPropagation();">
+                  <span
+                     title="delete scenario"
+                     class="icon fa-trash dashboard-delete"
+                     ng-click="scenarioCtrl.deleteScenario(scenario.id)"></span>
+                  <span
+                     title="edit scenario"
+                     class="icon fa-edit adder"
+                     ng-click="scenarioCtrl.editScenario(scenario)"></span>
+                </div>
+              </mn-dropdown-item>
+            </inner-body>
+            <inner-footer>
+              <form
+                 novalidate
+                 ng-submit="scenarioCtrl.onSubmit(statisticsNewCtl.getSelectedScenario())"
+                 name="add_scenario_form"
+                 class="forms">
+                <div class="scenario-add" ng-class="{'scenario-add-ext' : scenarioCtrl.showRestOfMenu}">
+                  <input
+                     type="text"
+                     ng-model="scenarioCtrl.scenario.name"
+                     placeholder="new dashboard..."
+                     ng-class="{'borderless cursor-pointer' : !scenarioCtrl.showRestOfMenu}"
+                     autocorrect="off"
+                     ng-click="scenarioCtrl.showRestOfMenu = true"
+                     spellcheck="false"
+                     autocapitalize="off"
+                     ng-disabled="!rbac.bucketNames['.stats!read'].length"
+                     required>
+                  <span class="icon fa-plus-square" ng-show="!scenarioCtrl.showRestOfMenu"></span>
+                </div>
+                <input
+                   type="text"
+                   ng-model="scenarioCtrl.scenario.desc"
+                   placeholder="optional description..."
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   ng-disabled="!rbac.bucketNames['.stats!read'].length"
+                   ng-show="scenarioCtrl.showRestOfMenu"
+                   class="scenario-desc">
+                <div class="checkbox-list margin-bottom-half"
+                   ng-show="!scenarioCtrl.isEditingMode && scenarioCtrl.showRestOfMenu">
+                  <input
+                     type="radio"
+                     value="true"
+                     ng-model="scenarioCtrl.copyScenario"
+                     id="for-bucket-type-current">
+                  <label for="for-bucket-type-current">start w/ current charts</label>
+                  <input
+                     type="radio"
+                     value="false"
+                     ng-model="scenarioCtrl.copyScenario"
+                     id="for-bucket-type-blank">
+                  <label for="for-bucket-type-blank">start blank</label>
+                </div>
+                <div class="scenario-save-controls" ng-show="scenarioCtrl.showRestOfMenu">
+                  <button
+                     type="submit"
+                     ng-disabled="add_scenario_form.$invalid">
+                    Save</button>
+                  <a class="width-12 text-center" ng-click="scenarioCtrl.clear()">Cancel</a>
+                </div>
+              </form>
+            </inner-footer>
+          </mn-dropdown>
+        </div>
+      </span>
+
+      <span>
+        <h5>Stat Interval</h5>
+        <mn-select
+           class="inline fix-width-1-5 margin-right-half"
+           ng-model="statisticsNewCtl.zoom"
+           values="['minute', 'hour', 'day', 'week', 'month']"
+           on-select="statisticsNewCtl.onSelectZoom(selectedOption)"
+           capitalize="true">
+        </mn-select>
+      </span>
+
+      <span>
+        <h5>Bucket</h5>
+        <mn-select
+           class="inline margin-right-half"
+           ng-model="statisticsNewCtl.selectedBucket"
+           values="rbac.bucketNames['.stats!read']"
+           has-search="true"
+           on-select="statisticsNewCtl.onBucketChange(selectedOption)">
+        </mn-select>
+      </span>
+
+      <span>
+        <h5>Node(s)</h5>
+        <mn-select
+           ng-model="statisticsNewCtl.nodes.nodesNames.selected"
+           values="statisticsNewCtl.nodes.nodesNames"
+           has-search="true"
+           on-select="statisticsNewCtl.onSelectNode(selectedOption)">
+        </mn-select>
+      </span>
+    </div>
+    <div class="row flex-right flex-wrap">
+      <button
+         ng-click="statisticsNewCtl.resetDashboardConfiguration();"
+         class="light dashboard-delete"
+         title="reset & delete customizations">
+        <span class="icon fa-trash"></span> Reset
+      </button>
+      <button
+         ng-disabled="!statisticsNewCtl.scenarios.length"
+         ng-click="statisticsNewCtl.openGroupDialog()"
+         class="light adder"
+         ng-hide="statisticsNewCtl.getSelectedScenario().preset"
+         title="add chart group">
+        <span class="icon fa-plus-circle"></span> Add Group
+      </button>
+    </div>
+  </div>
+
+  <div
+     class="width-12 margin-bottom-4"
+     ng-show="rbac.cluster.stats.read"> <!-- wrapper around all chart groups -->
+    <div
+       ng-repeat="groupID in statisticsNewCtl.getSelectedScenario().groups track by ($index + groupID)"
+       ng-attr-id="group-{{groupID}}"
+       ng-controller="mnStatisticsGroupsController as mnStatsGroupsCtl"
+       ng-if="statisticsNewCtl.selectedBucket"
+       class="charts-group">
+      <div
+         ng-if="mnStatsGroupsCtl.getGroup() && ((mnStatsGroupsCtl.getGroup().enterprise == undefined) || poolDefault.isEnterprise)"
+         ng-click="statisticsNewCtl.toggleDetails(groupID);"
+         class="charts-group-row disclosure nowrap has-hover"
+         ng-class="{disclosed: statisticsNewCtl.isDetailsOpened(groupID)}">
+        <form novalidate
+           ng-if="!mnStatsGroupsCtl.getGroup().preset"
+           class="inline"
+           ng-mouseleave="mnStatsGroupsCtl.hideGroupControls();"
+           ng-click="$event.stopPropagation();"
+           ng-submit="mnStatsGroupsCtl.onGroupSubmit();">
+          <input
+             ng-model="mnStatsGroupsCtl.getGroup().name"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             type="text"
+             class="charts-group-name"
+             ng-focus="mnStatsGroupsCtl.onGroupFocus();"
+             ng-blur="mnStatsGroupsCtl.onGroupNameBlur();"
+             ng-attr-size="{{mnStatsGroupsCtl.getGroup().name.length + 3}}">
+          <button
+             type="submit"
+             title="save group name"
+             class="light adder"
+             mn-focus="mnStatsGroupsCtl.focusOnSubmit"
+             ng-show="mnStatsGroupsCtl.showGroupControls"
+             ng-mousedown="mnStatsGroupsCtl.onControlClick = true;">
+            <span class="icon fa-check"></span>
+          </button>
+          <button
+             title="delete group"
+             class="light dashboard-delete margin-0"
+             ng-show="mnStatsGroupsCtl.showGroupControls"
+             ng-mousedown="mnStatsGroupsCtl.onGroupDelete();">
+            <span class="icon fa-trash"></span>
+          </button>
+        </form>
+        <span class="charts-preset-group-name ellipsis"
+           ng-if="mnStatsGroupsCtl.getGroup().preset">{{mnStatsGroupsCtl.getGroup().name}}</span>
+
+        <!-- if stats can be sub-divided by "item", they show in these menus ---------->
+        <div
+           ng-if="statisticsNewCtl.isDetailsOpened(groupID)"
+           class="chart-group-row-items"
+           ng-click="$event.stopPropagation();">
+          <div
+             ng-if="mnStatsGroupsCtl.enabledItems['@index-'] && statisticsNewCtl.indexItems.values.length"
+             ng-init="mnStatsGroupsCtl.items.index = statisticsNewCtl.indexItems.values[0]"
+             class="row flex-wrap">
+
+            <strong class="margin-right-quarter">Indexes</strong>
+            <mn-select
+               class="inline max-width-2"
+               ng-model="mnStatsGroupsCtl.items.index"
+               values="statisticsNewCtl.indexItems.values"
+               labels="statisticsNewCtl.indexItems.labels"
+               mn-horizontal-align="'right'"
+               has-search="true">
+            </mn-select>
+
+          </div>
+          <div
+             ng-if="mnStatsGroupsCtl.enabledItems['@kv-'] && statisticsNewCtl.viewItems.values.length"
+             ng-init="mnStatsGroupsCtl.items.kv = statisticsNewCtl.viewItems.values[0]"
+             class="row flex-wrap margin-left-1">
+
+            <strong class="margin-right-quarter" class="margin-right-quarter">Views</strong>
+            <mn-select
+               class="inline max-width-2"
+               ng-model="mnStatsGroupsCtl.items.kv"
+               values="statisticsNewCtl.viewItems.values"
+               labels="statisticsNewCtl.viewItems.labels"
+               mn-horizontal-align="'right'">
+            </mn-select>
+
+          </div>
+          <div
+             ng-if="mnStatsGroupsCtl.enabledItems['@xdcr-'] && statisticsNewCtl.xdcrItems.values.length"
+             ng-init="mnStatsGroupsCtl.items.xdcr = statisticsNewCtl.xdcrItems.values[0]"
+             class="row flex-wrap margin-left-1">
+
+            <strong class="margin-right-quarter">Replications</strong>
+            <mn-select
+               class="inline max-width-2"
+               ng-model="mnStatsGroupsCtl.items.xdcr"
+               values="statisticsNewCtl.xdcrItems.values"
+               labels="statisticsNewCtl.xdcrItems.labels"
+               mn-horizontal-align="'right'">
+            </mn-select>
+
+          </div>
+          <div
+             ng-if="mnStatsGroupsCtl.enabledItems['@eventing-'] && statisticsNewCtl.eventingItems.values.length"
+             ng-init="mnStatsGroupsCtl.items.eventing = statisticsNewCtl.eventingItems.values[0]"
+             class="row flex-wrap margin-left-1">
+
+            <strong class="margin-right-quarter">Eventing</strong>
+            <mn-select
+               class="inline max-width-2"
+               ng-model="mnStatsGroupsCtl.items.eventing"
+               values="statisticsNewCtl.eventingItems.values"
+               mn-horizontal-align="'right'">
+            </mn-select>
+
+          </div>
+
+          <div
+             ng-if="mnStatsGroupsCtl.enabledItems['@fts-'] && statisticsNewCtl.ftsItems.values.length"
+             ng-init="mnStatsGroupsCtl.items.fts = statisticsNewCtl.ftsItems.values[0]"
+             class="row flex-wrap margin-left-1">
+
+            <strong class="margin-right-quarter">Search Indexes</strong>
+            <mn-select
+               class="inline max-width-2"
+               ng-model="mnStatsGroupsCtl.items.fts"
+               values="statisticsNewCtl.ftsItems.values"
+               labels="statisticsNewCtl.ftsItems.labels"
+               mn-horizontal-align="'right'">
+            </mn-select>
+
+          </div>
+        </div>
+
+        <button
+           class="light adder margin-right-half margin-left-1"
+           ng-show="!statisticsNewCtl.getSelectedScenario().preset"
+           ng-click="$event.stopPropagation();
+                  statisticsNewCtl.openChartBuilderDialog(
+                  mnStatsGroupsCtl.getGroup(),
+                  statisticsNewCtl.getSelectedScenario(),
+                  mnStatsGroupsCtl)"
+           title="add chart">
+          <span class="icon fa-plus-circle"></span> Add a Chart
+        </button>
+      </div>
+
+      <div ng-if="statisticsNewCtl.isDetailsOpened(groupID)" class="row charts">
+        <div
+           ng-repeat="chartID in mnStatsGroupsCtl.getGroup().charts track by ($index + chartID)"
+           ng-controller="mnStatisticsChartsController as mnStatsChartsCtl"
+           ng-class="'statistics-' + (mnStatsChartsCtl.getChart().size || 'small')"
+           class="panel relative">
+          <div class="chart-controls" ng-show="!mnStatsChartsCtl.getChart().preset">
+            <span
+               title="delete chart"
+               class="icon fa-trash"
+               ng-click="mnStatsChartsCtl.deleteChart()"
+               title="delete chart"></span>
+            <span
+               ng-if="mnStatsChartsCtl.getChart()"
+               title="edit chart"
+               class="icon fa-edit"
+               ng-click="mnStatsChartsCtl.editChart(mnStatsGroupsCtl.getGroup(),
+                      statisticsNewCtl.getSelectedScenario())"></span>
+          </div>
+          <div ng-if="!mnStatsChartsCtl.getChart()" class="statistics-not-available">
+            Chart not available
+          </div>
+          <mn-statistics-chart
+             ng-click="mnStatsChartsCtl.api.chart.inititalized &&
+                       mnStatsChartsCtl.openDetailedChartDialog();"
+             ng-if="mnStatsChartsCtl.getChart() && !mnStatsChartsCtl.reloadChartDirective && !mnStatsGroupsCtl.reloadChartDirective"
+             stats-poller="statisticsNewCtl.mnAdminStatsPoller"
+             sync-scope="statisticsNewCtl.mnStatisticsNewScope"
+             bucket="{{statisticsNewCtl.bucket}}"
+             zoom="{{statisticsNewCtl.zoom}}"
+             node="{{statisticsNewCtl.node}}"
+             items="mnStatsGroupsCtl.items"
+             rbac="rbac"
+             api="mnStatsChartsCtl.api"
+             config="mnStatsChartsCtl.getChart()"></mn-statistics-chart>
+        </div>
+      </div>
+    </div>
+    <div
+       ng-if="statisticsNewCtl.getSelectedScenario() &&
+              !statisticsNewCtl.getSelectedScenario().groups.length"
+       class="zero-content">
+      No charts to display yet.
+      <a ng-click="statisticsNewCtl.openGroupDialog()">
+        Add a Group
+      </a> to start, then add charts.<br>
+      NOTE: All your changes will be auto-saved.
+    </div>
+  </div>
+</div>
+<div ng-show="!rbac.cluster.stats.read">
+  <img src="../cb_logo_bug_white_2.svg" class="filter-gray" style="margin: 0 auto; width: 40%; display: block;">
+</div>

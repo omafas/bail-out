@@ -1,0 +1,45 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<mn-element-cargo depot="alerts">
+  <div ng-show="bucketsCtl.areThereCreationWarnings()">
+    <div
+       class="interim alert alert-warning"
+       ng-show="bucketsCtl.isBucketCreationWarning()">
+      <p>Attention: Cannot create, delete or edit buckets while rebalance is running.</p>
+    </div>
+    <div
+       class="interim alert alert-warning"
+       ng-show="!bucketsCtl.hideMaxBucketWarning && bucketsCtl.isMaxBucketCountWarning()">
+      <p>Attention: Maximum number of buckets has been reached. For optimal performance, no more than {{bucketsCtl.maxBucketCount}} buckets are allowed.</p>
+      <a ng-click="bucketsCtl.hideMaxBucketWarning = !bucketsCtl.hideMaxBucketWarning"
+         class="close">X</a>
+    </div>
+  </div>
+</mn-element-cargo>
+<mn-element-cargo depot="actions">
+  <div class="header-controls resp-xsml">
+    <a
+       ng-hide="bucketsCtl.isCreateNewDataBucketDisabled() || !rbac.cluster.buckets.create"
+       ng-click="bucketsCtl.addBucket()">
+      ADD BUCKET
+    </a>
+  </div>
+</mn-element-cargo>
+
+<div mn-main-spinner="!buckets.details">
+  <div
+     admin-ctl="adminCtl"
+     mn-buckets-list
+     buckets="buckets.details"
+     pool-default="poolDefault"
+     rbac="rbac">
+  </div>
+</div>
