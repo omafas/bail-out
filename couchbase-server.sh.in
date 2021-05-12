@@ -204,7 +204,8 @@ _start() {
         +A 16 \
         -smp enable \
         +sbwt none \
-        -kernel inetrc "\"$HOSTS_CFG_FILE\"" \
+        -kernel logger '[{handler, default, undefined}]' \
+                inetrc "\"$HOSTS_CFG_FILE\"" \
                 dist_config_file "\"$CB_DIST_CFG_FILE\"" \
         -hidden \
         -name 'babysitter_of_ns_1@cb.local' \

@@ -243,6 +243,7 @@ def erlang_args_for_node(i, ebin_path, extra_args, args_prefix, root_dir):
                           "+P", "327680", "-pa"] + ebin_path
     args += [
         "-setcookie", "nocookie",
+        "-kernel", "logger", "[{handler, default, undefined}]",
         "-couch_ini"] + couch_configs(i, root_dir)
 
     datadir = abs_path_join(root_dir, 'data', f'n_{i}')

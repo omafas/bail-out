@@ -118,6 +118,7 @@ create_ns_couchdb_spec() ->
          "-smp", "enable",
          "+P", "327680",
          "+K", "true",
+         "-kernel", "logger", "[{handler, default, undefined}]",
          "-nouser",
          "-hidden",
          "-proto_dist", "cb",

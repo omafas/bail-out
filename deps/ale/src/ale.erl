@@ -251,7 +251,7 @@ init([]) ->
     {ok, State2} = do_start_logger(?ALE_LOGGER, ?DEFAULT_LOGLEVEL,
                                    ?DEFAULT_FORMATTER, State1),
     _ = logger:remove_handler(?ERROR_LOGGER),
-    set_error_logger_handler(),
+    ok = set_error_logger_handler(),
     {ok, State2}.
 
 handle_call(get_state, _From, State) ->
@@ -317,7 +317,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({removing_handler, ?ERROR_LOGGER}, State) ->
     ale:error(?ALE_LOGGER, "~p has been removed. Setting it up again.",
               [?ERROR_LOGGER]),
-    set_error_logger_handler(),
+    ok = set_error_logger_handler(),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -525,12 +525,11 @@ do_get_sink_loglevel(LoggerName, SinkName, State) ->
       end).
 
 set_error_logger_handler() ->
-    ok = logger:add_handler(
-           ?ERROR_LOGGER, ?MODULE,
-           #{level => info,
-             filter_default => log,
-             filters => [{remote_gl, {fun logger_filters:remote_gl/2, stop}}]}),
-    logger:remove_handler(default).
+    logger:add_handler(
+      ?ERROR_LOGGER, ?MODULE,
+      #{level => info,
+        filter_default => log,
+        filters => [{remote_gl, {fun logger_filters:remote_gl/2, stop}}]}).
 
 compile(#state{compile_frozen = Frozen,
                loggers=Loggers} = State,
