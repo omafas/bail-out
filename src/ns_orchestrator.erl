@@ -927,7 +927,10 @@ rebalancing({timeout, _Tref, stop_timeout},
             {'EXIT', Pid, R} ->
                 R
         end,
-    handle_rebalance_completion(Reason, State).
+    handle_rebalance_completion(Reason, State);
+rebalancing({request_janitor_run, _Item} = Msg, _State) ->
+    ?log_debug("Message ~p ignored", [Msg]),
+    keep_state_and_data.
 
 %% Synchronous rebalancing events
 rebalancing({try_autofailover, Nodes}, From,
