@@ -635,56 +635,52 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
                   "@kv-.cmd_set": true,
                   "@kv-.delete_hits": true
                  },
-          size: "large",
-          specificStat: false
+          size: "medium",
+          specificStat: false // false for multi-stat chart
         }, {
           stats: {"@kv-.mem_used": true,
                   "@kv-.ep_mem_low_wat": true,
                   "@kv-.ep_mem_high_wat": true},
           size: "medium",
-          specificStat: false // false for multi-stat chart
+          specificStat: false
         }, {
           stats: {"@kv-.curr_items": true,
                   "@kv-.vb_replica_curr_items": true,
                   "@kv-.vb_active_resident_items_ratio": true,
-                  "@kv-.vb_replica_resident_items_ratio": true},
+                  "@kv-.vb_replica_resident_items_ratio": true,
+                "@kv-.couch_docs_fragmentation": true},
           size: "medium",
           specificStat: false
         }, {
-          stats: {"@kv-.disk_write_queue": true},
+          stats: {"@kv-.disk_write_queue": true,
+                  "@kv-.couch_docs_actual_disk_size": true},
           size: "small",
-          specificStat: true
+          specificStat: false
         }, {
           stats: {"@kv-.ep_dcp_replica_items_remaining": true},
           size: "small",
-          specificStat: true
+          specificStat: false
         }, {
           stats: {"@kv-.ep_data_read_failed": true,
                   "@kv-.ep_data_write_failed": true,
                   "@query.query_errors": true,
-                  "@query.total_queries_error": true,
+                  "@fts-.@items.total_queries_error": true,
                   "@eventing.eventing/failed_count": true},
-          size: "small",
+          size: "medium",
           specificStat: false
         }, {
           stats: {"@query.query_requests_250ms": true,
                   "@query.query_requests_500ms": true,
                   "@query.query_requests_1000ms": true,
                   "@query.query_requests_5000ms": true},
-          size: "small",
+          size: "medium",
           specificStat: false
         }, {
-          stats: {"@xdcr-.replication_changes_left": true},
-          size: "small",
-          specificStat: true
-        }, {
-          stats: {"@index-.@items.num_docs_pending+queued": true},
-          size: "small",
-          specificStat: true
-        }, {
-          stats: {"@fts-.@items.num_mutations_to_index": true},
-          size: "small",
-          specificStat: true
+          stats: {"@xdcr-.replication_changes_left": true,
+                  "@index-.@items.num_docs_pending+queued": true,
+                  "@fts-.@items.num_mutations_to_index": true},
+          size: "medium",
+          specificStat: false
         }]
       }, {
         name: "Node Resources",
@@ -729,7 +725,6 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
                   "@kv-.cmd_get": true,
                   "@kv-.cmd_set": true,
                   "@kv-.delete_hits": true,
-                  "@kv-.@items.accesses": true,
                   "@kv-.ep_num_ops_set_meta": true
                  },
           size: "medium",
