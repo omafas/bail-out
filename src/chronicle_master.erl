@@ -85,8 +85,8 @@ call(Oper) ->
             call(Oper, 3);
         ns_config ->
             ?log_debug("Performing operation ~p on ns_config", [Oper]),
-            case handle_kv_oper(
-                   Oper, chronicle_compat:transaction(ns_config, _, _)) of
+            case handle_kv_oper(Oper,
+                                chronicle_compat:txn(ns_config, _, #{})) of
                 {ok, _} ->
                     ok;
                 Error ->
@@ -200,7 +200,7 @@ handle_call({complete_failover, Nodes, Ref}, _From, State) ->
         ns_cluster_membership:remove_nodes(
           Nodes,
           transaction_with_key_remove(
-            failover_opaque_key(), _, fun ({ORef, _}) -> ORef =:= Ref end, _)),
+            failover_opaque_key(), fun ({ORef, _}) -> ORef =:= Ref end, _)),
     NewState = cancel_janitor_timer(State),
     self() ! janitor,
     {reply, ok, NewState};
@@ -223,7 +223,7 @@ handle_info(janitor, #state{self_ref = SelfRef} = State) ->
     NewState =
         case acquire_lock() of
             {ok, Lock} ->
-                case transaction([], undefined, Lock, SelfRef,
+                case transaction(undefined, Lock, SelfRef,
                                  fun (_) -> {abort, clean} end) of
                     {ok, _, {need_recovery, RecoveryOper}} ->
                         ?log_debug("Janitor found that recovery is needed for "
@@ -301,10 +301,11 @@ get_prev_failover_nodes(Snapshot) ->
             []
     end.
 
-transaction(Keys, Oper, Lock, SelfRef, Fun) ->
-    chronicle_kv:transaction(
-      kv, [operation_key(), failover_opaque_key() | Keys],
-      fun (Snapshot) ->
+transaction(Oper, Lock, SelfRef, Fun) ->
+    chronicle_compat:txn(
+      fun (Txn) ->
+              Snapshot = chronicle_compat:txn_get_many(
+                           [operation_key(), failover_opaque_key()], Txn),
               case maps:find(failover_opaque_key(), Snapshot) of
                   {ok, {V, _Rev}} ->
                       ?log_info("Unfinished failover ~p is detected.", [V]),
@@ -318,7 +319,7 @@ transaction(Keys, Oper, Lock, SelfRef, Fun) ->
                                           RecoveryOper, Lock, SelfRef)],
                                {need_recovery, RecoveryOper}};
                           _ ->
-                              case Fun(Snapshot) of
+                              case Fun(Txn) of
                                   {commit, Sets} ->
                                       {commit,
                                        [operation_key_set(Oper, Lock, SelfRef)
@@ -330,14 +331,18 @@ transaction(Keys, Oper, Lock, SelfRef, Fun) ->
               end
       end, #{read_consistency => quorum}).
 
-transaction_with_key_remove(Key, Keys, Verify, Do) ->
-    chronicle_kv:transaction(
-      kv, [Key | Keys],
-      fun (Snapshot) ->
-              {V, _Rev} = maps:get(Key, Snapshot, {undefined, no_rev}),
-              case Verify(V) of
+transaction_with_key_remove(Key, Verify, Do) ->
+    chronicle_compat:txn(
+      fun (Txn) ->
+              Value = case chronicle_compat:txn_get(Key, Txn) of
+                          {ok, {V, _}} ->
+                              V;
+                          {error, not_found} ->
+                              undefined
+                      end,
+              case Verify(Value) of
                   true ->
-                      case Do(Snapshot) of
+                      case Do(Txn) of
                           {commit, Sets} ->
                               {commit, [{delete, Key} | Sets]};
                           {abort, Error} ->
@@ -345,8 +350,8 @@ transaction_with_key_remove(Key, Keys, Verify, Do) ->
                       end;
                   false ->
                       ?log_warning("Incompatible value for key ~p found: ~p",
-                                   [Key, V]),
-                      {abort, {incompatible_key_value, Key, V}}
+                                   [Key, Value]),
+                      {abort, {incompatible_key_value, Key, Value}}
               end
       end).
 
@@ -354,7 +359,7 @@ remove_oper_key(Lock) ->
     ?log_debug("Removing operation key with lock ~p", [Lock]),
     {ok, _} =
         transaction_with_key_remove(
-          operation_key(), [], fun({_, L, _}) -> L =:= Lock end,
+          operation_key(), fun({_, L, _}) -> L =:= Lock end,
           fun (_) -> {commit, []} end).
 
 handle_kv_oper({add_replica, Node, GroupUUID, Services}, Transaction) ->
@@ -391,7 +396,7 @@ handle_topology_oper({deactivate_nodes, Nodes}, Lock) ->
 
 handle_oper(Oper, Lock, SelfRef) ->
     ?log_debug("Starting kv operation ~p with lock ~p", [Oper, Lock]),
-    case handle_kv_oper(Oper, transaction(_, Oper, Lock, SelfRef, _)) of
+    case handle_kv_oper(Oper, transaction(Oper, Lock, SelfRef, _)) of
         {ok, _} ->
             ?log_debug("Starting topology operation ~p with lock ~p",
                        [Oper, Lock]),

@@ -181,7 +181,7 @@ update_membership_sets(Nodes, Membership) ->
 
 update_membership(Nodes, Type, Transaction) ->
     Sets = [{set, K, V} || {K, V} <- update_membership_sets(Nodes, Type)],
-    Transaction([], fun (_) -> {commit, Sets} end).
+    Transaction(fun (_) -> {commit, Sets} end).
 
 is_newly_added_node(Node) ->
     get_cluster_membership(Node) =:= inactiveAdded andalso
@@ -260,8 +260,9 @@ add_node(Node, GroupUUID, Services, Transaction) ->
     ?log_debug("Add node ~p, GroupUUID = ~p, Services = ~p",
                [Node, GroupUUID, Services]),
     Transaction(
-      [nodes_wanted, server_groups],
-      fun (Snapshot) ->
+      fun (Txn) ->
+              Snapshot = chronicle_compat:txn_get_many(
+                           [nodes_wanted, server_groups], Txn),
               NodesWanted = nodes_wanted(Snapshot),
               case lists:member(Node, NodesWanted) of
                   true ->
@@ -331,8 +332,10 @@ remove_nodes(ns_config, [RemoteNode], _Transaction) ->
 
 remove_nodes(chronicle, RemoteNodes, Transaction) ->
     RV = Transaction(
-           [nodes_wanted, server_groups],
-           fun (Snapshot) ->
+           fun (Txn) ->
+                   Snapshot = chronicle_compat:txn_get_many(
+                                [nodes_wanted, server_groups], Txn),
+
                    NodeKeys = lists:flatten(
                                 [chronicle_compat:node_keys(RN) ||
                                     RN <- RemoteNodes]),

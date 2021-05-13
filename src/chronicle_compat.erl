@@ -23,7 +23,6 @@
          set/2,
          set_multiple/1,
          transaction/2,
-         transaction/3,
          txn/1,
          txn/2,
          txn/3,
