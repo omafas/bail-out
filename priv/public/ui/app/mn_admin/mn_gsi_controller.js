@@ -17,6 +17,7 @@ import mnPromiseHelper from "/ui/app/components/mn_promise_helper.js";
 import mnHelper from "/ui/app/components/mn_helper.js";
 import mnFilters from "/ui/app/components/mn_filters.js";
 import mnSpinner from "/ui/app/components/directives/mn_spinner.js";
+import mnMainSpinner from "/ui/app/components/directives/mn_main_spinner.js";
 import mnPoll from "/ui/app/components/mn_poll.js";
 import mnPoolDefault from "/ui/app/components/mn_pool_default.js";
 import mnAlertsService from "/ui/app/components/mn_alerts.js";
@@ -44,6 +45,7 @@ angular
     mnHelper,
     mnFilters,
     mnSpinner,
+    mnMainSpinner,
     mnPoll,
     mnPoolDefault,
     mnAlertsService,
