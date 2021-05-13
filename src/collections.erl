@@ -99,9 +99,9 @@ change(Key) ->
 
 default_manifest() ->
     [{uid, 0},
-     {next_uid, 0},
-     {next_scope_uid, 7},
-     {next_coll_uid, 7},
+     {next_uid, 1},
+     {next_scope_uid, 8},
+     {next_coll_uid, 8},
      {num_scopes, 0},
      {num_collections, 0},
      {scopes,
@@ -351,9 +351,9 @@ do_update_with_manifest(Bucket, Manifest, Operation, OtherBucketCounts,
 advance_manifest_id(bump_epoch, Manifest) ->
     Manifest;
 advance_manifest_id(_Operation, Manifest) ->
-    Manifest1 = bump_id(Manifest, next_uid),
-    lists:keyreplace(uid, 1, Manifest1,
-                     {uid, proplists:get_value(next_uid, Manifest1)}).
+    bump_id(lists:keyreplace(uid, 1, Manifest,
+                             {uid, proplists:get_value(next_uid, Manifest)}),
+            next_uid).
 
 perform_operations(_Manifest, {error, Error}) ->
     Error;
@@ -573,8 +573,8 @@ handle_oper({check_uid, _CheckUid}, Manifest) ->
 handle_oper({create_scope, Name}, Manifest) ->
     functools:chain(
       Manifest,
-      [bump_id(_, next_scope_uid),
-       add_scope(_, Name),
+      [add_scope(_, Name),
+       bump_id(_, next_scope_uid),
        update_counter(_, num_scopes, 1)]);
 handle_oper({drop_scope, Name}, Manifest) ->
     NumCollections = length(get_collections(get_scope(Name, Manifest))),
@@ -586,8 +586,8 @@ handle_oper({drop_scope, Name}, Manifest) ->
 handle_oper({create_collection, Scope, Name, Props}, Manifest) ->
     functools:chain(
       Manifest,
-      [bump_id(_, next_coll_uid),
-       add_collection(_, Name, Scope, Props),
+      [add_collection(_, Name, Scope, Props),
+       bump_id(_, next_coll_uid),
        update_counter(_, num_collections, 1)]);
 handle_oper({drop_collection, Scope, Name}, Manifest) ->
     NumCollections = case Name of
