@@ -59,9 +59,9 @@ licenses/APL2.txt.
             </span>
           </p>
           <div class="alert margin-bottom-1 row"
-               ng-if="adminCtl.tasks.tasksRebalance.completionMessage"
-               ng-class="{'alert-error': adminCtl.tasks.tasksRebalance.errorMessage,
-                         'alert-success': !adminCtl.tasks.tasksRebalance.errorMessage}">
+             ng-if="adminCtl.tasks.tasksRebalance.completionMessage"
+             ng-class="{'alert-error': adminCtl.tasks.tasksRebalance.errorMessage,
+                      'alert-success': !adminCtl.tasks.tasksRebalance.errorMessage}">
             <p>
               {{adminCtl.tasks.tasksRebalance.completionMessage}}
             </p>
@@ -75,7 +75,7 @@ licenses/APL2.txt.
             </div>
           </div>
 
-<!-- rebalance per stage info ********************************************** -->
+          <!-- rebalance per stage info ********************************************** -->
           <div
              ng-if="adminCtl.poolDefault.isEnterprise"
              ng-repeat="service in adminCtl.tasks.tasksRebalance.stageInfo.services track by (service.name + $index)">
@@ -107,7 +107,7 @@ licenses/APL2.txt.
               <span ng-show="service.timeTaken === false">- - -</span>
             </div>
 
-<!-- delta recovery info *************************************************** -->
+            <!-- delta recovery info *************************************************** -->
             <div
                ng-repeat="(name, subStage) in service.subStages track by name"
                class="row margin-left-half margin-bottom-half margin-top-half">
@@ -135,14 +135,14 @@ licenses/APL2.txt.
               <span ng-show="subStage.timeTaken === false">- - -</span>
             </div>
 
-<!-- per bucket info ******************************************************* -->
+            <!-- per bucket info ******************************************************* -->
             <div ng-repeat="bucketInfo in service.details track by bucketInfo.name">
               <div class="row margin-bottom-half">
                 <label
                    ng-click="showBucket = !showBucket"
                    class="disclosure cursor-pointer margin-left-half ellipsis"
                    ng-class="{disclosed: showBucket}">
-                    {{bucketInfo.name}}
+                  {{bucketInfo.name}}
                 </label>
                 <span class="nowrap text-smaller text-right">
                   vBuckets moved: {{(bucketInfo.vbucketLevelInfo.move.totalCount - bucketInfo.vbucketLevelInfo.move.remainingCount) + ' of ' + bucketInfo.vbucketLevelInfo.move.totalCount}}
@@ -152,7 +152,7 @@ licenses/APL2.txt.
               <div
                  class="indent-1-5 margin-bottom-1 margin-top-half"
                  ng-if="showBucket">
-<!-- replication info ************************************************ -->
+                <!-- replication info ************************************************ -->
                 <div
                    class="rebalance-stage-details"
                    ng-if="bucketInfo.replicationInfo">
@@ -169,7 +169,7 @@ licenses/APL2.txt.
                     <div class="cbui-table-cell">{{(details.outDocsTotal - details.outDocsLeft) + ' of ' + details.outDocsTotal}}</div>
                   </div>
                 </div>
-<!-- compaction info ******************************************************* -->
+                <!-- compaction info ******************************************************* -->
                 <h6
                    ng-show="bucketInfo.compactionInfo"
                    ng-click="showCompaction = !showCompaction"
@@ -178,14 +178,14 @@ licenses/APL2.txt.
                   Views Compaction
                 </h6>
                 <div ng-if="showCompaction && bucketInfo.compactionInfo"
-                     class="rebalance-stage-details">
+                   class="rebalance-stage-details">
                   <div class="cbui-table-header padding-left-0 border-0 min-height-0">
                     <div class="cbui-table-cell grayblack-0 bold">node</div>
                     <div class="cbui-table-cell">&nbsp;</div>
                     <div class="cbui-table-cell grayblack-0 bold">average time</div>
                   </div>
                   <div class="cbui-tablerow padding-left-0"
-                       ng-repeat="(node, v) in bucketInfo.compactionInfo.perNode track by node">
+                     ng-repeat="(node, v) in bucketInfo.compactionInfo.perNode track by node">
                     <div class="cbui-table-cell">{{node}}</div>
                     <div class="cbui-table-cell">&nbsp;</div>
                     <div class="cbui-table-cell">{{v.averageTime / 1000 | number:4}}</div>
@@ -226,7 +226,7 @@ licenses/APL2.txt.
         </div>
       </div>
     </div>
-<!-- End of rebalance/activity menu **************************************** -->
+    <!-- End of rebalance/activity menu **************************************** -->
     <a
        ng-click="adminCtl.runInternalSettingsDialog();"
        ng-show="adminCtl.enableInternalSettings && rbac.cluster.admin.settings.write">
@@ -297,8 +297,8 @@ licenses/APL2.txt.
     </span>
     <span ng-if="adminCtl.$state.current.data.parent">
       <a
-        ui-state="adminCtl.$state.current.data.parent.link"
-        ui-state-params="('merge' | lodash:{}:adminCtl.$state.params:adminCtl.$state.current.data.parentParams)">
+         ui-state="adminCtl.$state.current.data.parent.link"
+         ui-state-params="('merge' | lodash:{}:adminCtl.$state.params:adminCtl.$state.current.data.parentParams)">
         {{adminCtl.$state.current.data.parent.name}} <!-- the back-to-parent page name -->
       </a>
     </span>
