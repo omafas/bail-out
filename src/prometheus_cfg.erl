@@ -28,6 +28,10 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3, format_status/2]).
 
+%% Making it a fun to make sure it doesn't get dumped in logs accidentally
+-type prom_creds() :: fun(() -> {User :: string(), Pass :: string()} |
+                                undefined).
+
 -record(s, {cur_settings = [],
             specs = undefined,
             prometheus_port = undefined,
@@ -37,7 +41,8 @@
             pruning_pid = undefined,
             pruning_start_time = undefined,
             last_pruning_time = undefined,
-            decimation_levels = []}).
+            decimation_levels = [],
+            prom_creds = fun () -> undefined end :: prom_creds()}).
 
 -define(RELOAD_RETRY_PERIOD, 10000). %% in milliseconds
 -define(DEFAULT_PROMETHEUS_TIMEOUT, 5000). %% in milliseconds
@@ -175,12 +180,15 @@ default_settings() ->
      {derived_metrics_interval, ?USE_SCRAPE_INTERVAL},
      {rules_config_file, "prometheus_rules.yml"}].
 
--spec build_settings() -> stats_settings().
-build_settings() -> build_settings(ns_config:get(), direct, node()).
+-spec build_settings(CredsFun :: prom_creds()) -> stats_settings().
+build_settings(CredsFun) ->
+    build_settings(CredsFun, ns_config:get(), direct, node()).
 
--spec build_settings(Config :: term(), Snapshot :: direct | map(),
+-spec build_settings(CredsFun :: prom_creds(),
+                     Config :: term(),
+                     Snapshot :: direct | map(),
                      Node :: atom()) -> stats_settings().
-build_settings(Config, Snapshot, Node) ->
+build_settings(CredsFun, Config, Snapshot, Node) ->
     AFamily = ns_config:search_node_with_default(Node, Config, address_family,
                                                  inet),
     Port = service_ports:get_port(prometheus_http_port, Config, Node),
@@ -195,10 +203,7 @@ build_settings(Config, Snapshot, Node) ->
                         end
                 end, [ns_server, xdcr | Services]),
 
-    NsToPrometheusAuthInfo = ns_config:search_node_with_default(
-                               Node, Config, ns_to_prometheus_auth_info, []),
-    {pass, Creds} = proplists:get_value(creds, NsToPrometheusAuthInfo,
-                                        {pass, undefined}),
+    Creds = CredsFun(),
 
     %% Dynamic scrape intervals are used for high cardinality metrics endpoints
     %% where scrape intervals are not set explicitly.
@@ -389,7 +394,7 @@ authenticate(User, Pass) ->
 %% This function should work even when prometheus_cfg is down
 -spec wipe() -> ok | {error, Reason :: term()}.
 wipe() ->
-    Settings = build_settings(),
+    Settings = build_settings(fun () -> undefined end),
     StoragePath = storage_path(Settings),
     Result = misc:rm_rf(StoragePath),
     case Result of
@@ -420,11 +425,6 @@ init([]) ->
             ({node, Node, address_family}) when Node == node() -> true;
             ({node, Node, services}) when Node == node() -> true;
             ({node, Node, rest}) when Node == node() -> true;
-            %% ns_to_prometheus_auth_info doesn't change normally.
-            %% Nevertheless we need to subscribe to this key to correctly
-            %% recover after node rename
-            ({node, Node, ns_to_prometheus_auth_info}) when Node == node() ->
-                true;
             ({node, Node, stats_scrape_dynamic_intervals})
               when Node == node() -> true;
             (rest) -> true;
@@ -435,11 +435,11 @@ init([]) ->
                                                   settings_updated),
 
     process_flag(trap_exit,true),
-    generate_ns_to_prometheus_auth_info(),
-    Settings = build_settings(),
+    CredsFun = generate_ns_to_prometheus_auth_info(),
+    Settings = build_settings(CredsFun),
     ensure_prometheus_config(Settings),
     generate_prometheus_auth_info(Settings),
-    State = apply_config(#s{cur_settings = Settings}),
+    State = apply_config(#s{cur_settings = Settings, prom_creds = CredsFun}),
     State1 = init_pruning_timer(State),
     {ok, restart_intervals_calculation_timer(State1)}.
 
@@ -570,10 +570,7 @@ generate_ns_to_prometheus_auth_info() ->
 
     AuthFile = ns_to_prometheus_filename(),
     ok = misc:atomic_write_file(AuthFile, AuthInfoJson),
-
-    ns_config:set({node, node(), ns_to_prometheus_auth_info},
-                  [{creds, {pass, {?NS_TO_PROMETHEUS_USERNAME,
-                                   Password}}}]).
+    fun () -> {?NS_TO_PROMETHEUS_USERNAME, Password} end.
 
 ns_to_prometheus_filename() ->
     filename:join(path_config:component_path(data, "config"),
@@ -592,8 +589,9 @@ token_file(Settings) ->
     filename:join(path_config:component_path(data, "config"),
                   proplists:get_value(token_file, Settings)).
 
-maybe_apply_new_settings(#s{cur_settings = OldSettings} = State) ->
-    case build_settings() of
+maybe_apply_new_settings(#s{cur_settings = OldSettings,
+                            prom_creds = PromCreds} = State) ->
+    case build_settings(PromCreds) of
         OldSettings ->
             ?log_debug("Settings didn't change, ignoring update"),
             State;
@@ -1636,12 +1634,11 @@ randomly_test_calculate_dynamic_intervals() ->
 -define(NODE, nodename).
 
 generate_prometheus_test_config(ExtraConfig, Services) ->
-    BaseConfig = [{{node, ?NODE, ns_to_prometheus_auth_info},
-                   [{creds, {pass, {"user", "pass"}}}]}
-                  | service_ports:default_config(true, ?NODE)],
+    BaseConfig = service_ports:default_config(true, ?NODE),
     NsConfig = [misc:update_proplist(BaseConfig, ExtraConfig)],
     Snapshot = #{{node, ?NODE, services} => {Services, no_rev}},
-    Settings = build_settings(NsConfig, Snapshot, ?NODE),
+    CredsFun = fun () -> {"user", "pass"} end,
+    Settings = build_settings(CredsFun, NsConfig, Snapshot, ?NODE),
     Configs = generate_prometheus_configs(Settings),
     [{F, yaml:preprocess(Yaml)} || {F, Yaml} <- Configs].
 
