@@ -160,7 +160,7 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
 
     function subscribeUIStatsPoller(config, scope) {
       if (mnPoolDefault.export.compat.atLeast70 && !mnPermissions.export.cluster.stats.read) {
-        return
+        return;
       }
       let config1 = packStatsConfig(config);
 
