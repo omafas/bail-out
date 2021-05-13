@@ -120,7 +120,7 @@ cancel_retry_timer(undefined) ->
 cancel_retry_timer(TRef) ->
     erlang:cancel_timer(TRef),
     %% Just in case message came in right before the cancel attempt
-    misc:flush({retry_rename_and_refresh, _, _}),
+    ?flush({retry_rename_and_refresh, _, _}),
     ok.
 
 initiate_write(#state{retry_timer = TRef} = State) ->
