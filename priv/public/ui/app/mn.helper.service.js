@@ -150,7 +150,7 @@ class MnHelperService {
     };
   }
 
-  createPagenator(component, arrayStream, stateParam, perItem, ajsScope) {
+  createPagenator(component, arrayStream, stateParam, perItem, ajsScope, defaultPageSize) {
     var paramsToExport = new BehaviorSubject();
 
     var group = this.formBuilder.group({size: null, page: null});
@@ -181,7 +181,7 @@ class MnHelperService {
     };
 
     var unpackPerItemPaginationParams = (page) => ({
-      size: page[perItem + "s"] || 10,
+      size: page[perItem + "s"] || defaultPageSize || 10,
       page: page[perItem + "p"] || 1
     });
 

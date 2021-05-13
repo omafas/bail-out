@@ -51,7 +51,8 @@ function mnGsiTableDirective(mnHelper) {
       paginationStream,
       $scope.nodeName ? "perNodePage" : "perIndexPage",
       $scope.nodeName || null,
-      vm
+      vm,
+      15
     );
 
     vm.mnGsiStatsPoller = mnStatisticsNewService.createStatsPoller($scope);
