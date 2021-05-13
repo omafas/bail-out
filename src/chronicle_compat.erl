@@ -24,6 +24,9 @@
          set_multiple/1,
          transaction/2,
          transaction/3,
+         txn/1,
+         txn/2,
+         txn/3,
          ro_txn/2,
          txn_get/2,
          txn_get_many/2,
@@ -139,19 +142,26 @@ set_multiple(List) ->
 transaction(Keys, Fun) ->
     transaction(backend(), Keys, Fun).
 
-transaction(chronicle, Keys, Fun) ->
-    chronicle_kv:transaction(kv, Keys, Fun, #{});
+transaction(Type, Keys, Fun) ->
+    txn(Type, ?cut(Fun(txn_get_many(Keys, _))), #{}).
 
-transaction(ns_config, Keys, Fun) ->
+txn(Fun) ->
+    txn(Fun, #{}).
+
+txn(Fun, Opts) ->
+    txn(backend(), Fun, Opts).
+
+txn(chronicle, Fun, Opts) ->
+    chronicle_kv:txn(kv, ?cut(Fun({chronicle, _})), Opts);
+txn(ns_config, Fun, _Opts) ->
     TXNRV =
         ns_config:run_txn(
           fun (Cfg, SetFn) ->
-                  Snapshot = txn_get_many(Keys, {ns_config, Cfg}),
                   BuildCommit =
                       lists:foldl(
                         fun ({set, K, V}, Acc) -> SetFn(K, V, Acc) end,
                         Cfg, _),
-                  case Fun(Snapshot) of
+                  case Fun({ns_config, Cfg}) of
                       {abort, _} = Abort ->
                           Abort;
                       {commit, Sets, Extra} ->
