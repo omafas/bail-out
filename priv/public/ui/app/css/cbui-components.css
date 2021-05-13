@@ -1300,9 +1300,13 @@ section.error {
 .z-index-10001 {
   z-index: 10001!important;
 }
-.fixed-spinner > .spinner {
+.main-spinner > .spinner {
   background-attachment: fixed;
   background-position: center 50%;
+  top: -1rem;
+  left: -1rem;
+  right: -1rem;
+  bottom: -1rem;
 
 }
 .spinner {
