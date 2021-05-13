@@ -292,25 +292,33 @@ do_update(Bucket, Operation) ->
             {error, not_found};
         LastSeenIdsWithUUID ->
             chronicle_kv:transaction(
-              kv, [key(Bucket), ns_bucket:uuid_key(Bucket)],
+              kv, [key(Bucket), ns_bucket:uuid_key(Bucket),
+                   chronicle_master:failover_opaque_key()],
               update_txn(Bucket, Operation, OtherBucketCounts,
                          LastSeenIdsWithUUID, _))
     end.
 
 update_txn(Bucket, Operation, OtherBucketCounts, {LastSeenIds, UUID},
            Snapshot) ->
-    case UUID =:= no_check orelse
-        ns_bucket:uuid(Bucket, Snapshot) =:= UUID of
+    case Operation =/= bump_epoch andalso
+        maps:is_key(chronicle_master:failover_opaque_key(), Snapshot) of
         true ->
-            case get_manifest(Bucket, Snapshot) of
-                undefined ->
-                    {abort, {error, not_found}};
-                Manifest ->
-                    do_update_with_manifest(Bucket, Manifest, Operation,
-                                            OtherBucketCounts, LastSeenIds)
-            end;
+            {abort, {error, unfinished_failover}};
         false ->
-            {abort, {error, not_found}}
+            case UUID =:= no_check orelse
+                ns_bucket:uuid(Bucket, Snapshot) =:= UUID of
+                true ->
+                    case get_manifest(Bucket, Snapshot) of
+                        undefined ->
+                            {abort, {error, not_found}};
+                        Manifest ->
+                            do_update_with_manifest(
+                              Bucket, Manifest, Operation, OtherBucketCounts,
+                              LastSeenIds)
+                    end;
+                false ->
+                    {abort, {error, not_found}}
+            end
     end.
 
 do_update_with_manifest(Bucket, Manifest, Operation, OtherBucketCounts,

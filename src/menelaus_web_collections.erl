@@ -274,6 +274,8 @@ get_err_code_msg(exceeded_retries) ->
 get_err_code_msg({nodes_are_behind, Nodes}) ->
     {"Operation is not possible due to following nodes being too far behind: "
      "~p.", [Nodes], 503};
+get_err_code_msg(unfinished_failover) ->
+    {"Operation is not possible during unfinished failover.", 503};
 get_err_code_msg(Error) ->
     {"Unknown error ~p", [Error], 400}.
 

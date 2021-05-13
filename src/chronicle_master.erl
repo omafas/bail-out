@@ -29,7 +29,8 @@
          complete_failover/2,
          upgrade_cluster/1,
          get_prev_failover_nodes/1,
-         fetch_snapshot/1]).
+         fetch_snapshot/1,
+         failover_opaque_key/0]).
 
 -define(CALL_TIMEOUT, ?get_timeout(call, 60000)).
 -define(JANITOR_TIMEOUT, ?get_timeout(janitor, 60000)).
