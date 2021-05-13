@@ -505,5 +505,8 @@ licenses/APL2.txt.
      ui-view="main"
      autoscroll="false"
      class="main-content min-width-zero width-12 fixed-spinner"
+     ng-class="{
+              'mn-main-spinner-active': adminCtl.mainSpinnerCounter.value()
+              }"
      mn-spinner="adminCtl.mainSpinnerCounter.value()"></div>
 </main>
