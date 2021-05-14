@@ -42,81 +42,57 @@ gather_stats(Bucket, Nodes, ClientTStamp, Window, StatList) ->
                     {gather_stats, Bucket, Nodes, ClientTStamp, Window,
                      StatList}, infinity).
 
-gather_op_stats(FirstNode, Bucket, Nodes, ClientTStamp, Window) ->
-    gather_op_stats(FirstNode, Bucket, Nodes, ClientTStamp, Window, all).
+gather_op_stats(Bucket, Nodes, ClientTStamp, Window) ->
+    gather_op_stats(Bucket, Nodes, ClientTStamp, Window, all).
 
-gather_op_stats(FirstNode, Bucket, Nodes, ClientTStamp, {_, Period, _} = Window, StatList) ->
-    Self = self(),
-    Ref = make_ref(),
-    Subscription = ns_pubsub:subscribe_link(
-                     ns_stats_event,
-                     fun (_, done) -> done;
-                         ({sample_archived, Name, _}, _)
-                           when Name =:= Bucket ->
-                             Self ! Ref,
-                             done;
-                         (_, X) -> X
-                     end, []),
-    %% don't wait next sample for anything other than real-time stats
-    RefToPass = case Period of
-                    minute -> Ref;
-                    _ -> []
-                end,
-    try gather_op_stats_body(FirstNode, Bucket, Nodes, ClientTStamp, RefToPass, Window, StatList) of
-        Something -> Something
-    after
-        ns_pubsub:unsubscribe(Subscription),
-
-        misc:flush(Ref)
+gather_op_stats(Bucket, Nodes, ClientTStamp, Window, StatList) ->
+    %% Immitating old stats system behavior here.
+    %% We don't have log archiver anymore, so we can't subscribe to stats events
+    case Window of
+        {_, minute, _} when ClientTStamp =/= undefined ->
+            Now = os:system_time(millisecond),
+            %% this is an approximation, not an exact next sample timestamp
+            NextSampleTimestamp = ClientTStamp + 1000,
+            case NextSampleTimestamp > Now of
+                true ->
+                    SleepTime = min(NextSampleTimestamp - Now, 2000),
+                    timer:sleep(SleepTime);
+                false -> ok
+            end;
+        _ -> ok
+    end,
+    RV = invoke_archiver(Bucket, Nodes, Window, StatList),
+    MaxCommonTS = lists:foldl(
+                    fun ({_, []}, Acc) -> Acc;
+                        ({_, SL}, Acc) ->
+                            min((lists:last(SL))#stat_entry.timestamp, Acc)
+                    end, undefined, RV),
+    case MaxCommonTS of
+        undefined -> {node(), [], []};
+        _ ->
+            lists:foldl(
+              fun ({N, []}, {MainNode, MainSamples, OtherSamples}) ->
+                      {MainNode, MainSamples, [{N, []} | OtherSamples]};
+                  ({N, SL}, {undefined, _MainSamples, OtherSamples}) ->
+                      SL2 = case ClientTStamp of
+                                undefined -> SL;
+                                _ ->
+                                    lists:dropwhile(
+                                      fun (E) ->
+                                          E#stat_entry.timestamp < ClientTStamp
+                                      end, SL)
+                            end,
+                      SL2Reversed = lists:reverse(SL2),
+                      SL3 = lists:dropwhile(
+                              fun (E) ->
+                                  E#stat_entry.timestamp > MaxCommonTS
+                              end, SL2Reversed),
+                      {N, SL3, OtherSamples};
+                  ({N, SL}, {MainNode, MainSamples, OtherSamples}) ->
+                      {MainNode, MainSamples, [{N, SL} | OtherSamples]}
+              end, {undefined, undefined, []}, RV)
     end.
 
-gather_op_stats_body(FirstNode, Bucket, Nodes, ClientTStamp,
-                     Ref, Window, StatList) ->
-    case invoke_archiver(Bucket, FirstNode, Window, StatList) of
-        [] -> {FirstNode, [], []};
-        [_] -> {FirstNode, [], []};
-        RV ->
-            OtherNodes = lists:delete(FirstNode, Nodes),
-
-            %% only if we aggregate more than one node
-            %% we throw out last sample 'cause it might be missing on other nodes yet
-            %% previous samples should be ok on all live nodes
-            Samples = case OtherNodes of
-                          [] ->
-                              lists:reverse(RV);
-                          _ ->
-                              tl(lists:reverse(RV))
-                      end,
-            LastTStamp = (hd(Samples))#stat_entry.timestamp,
-            case LastTStamp of
-                %% wait if we don't yet have fresh sample
-                ClientTStamp when Ref =/= [] ->
-                    receive
-                        Ref ->
-                            gather_op_stats_body(FirstNode, Bucket, Nodes, ClientTStamp, [], Window, StatList)
-                    after 2000 ->
-                            {FirstNode, [], []}
-                    end;
-                _ ->
-                    %% cut samples up-to and including ClientTStamp
-                    CutSamples = lists:dropwhile(fun (Sample) ->
-                                                         Sample#stat_entry.timestamp =/= ClientTStamp
-                                                 end, lists:reverse(Samples)),
-                    MainSamples = case CutSamples of
-                                      [] -> Samples;
-                                      _ -> lists:reverse(CutSamples)
-                                  end,
-
-                    Replies = case OtherNodes of
-                                  [] ->
-                                      [];
-                                  _ ->
-                                      invoke_archiver(Bucket, OtherNodes, Window, StatList)
-                              end,
-
-                    {FirstNode, MainSamples, Replies}
-            end
-    end.
 invoke_archiver(Bucket, NodeS, Window) ->
     invoke_archiver(Bucket, NodeS, Window, all).
 invoke_archiver(Bucket, NodeS, {Step, Period, Count}, StatList) ->
@@ -148,14 +124,14 @@ code_change(_OldVsn, State, _Extra) ->
 handle_call({gather_stats, Bucket, Nodes, ClientTStamp, Window}, From, State) ->
     proc_lib:spawn_link(
       fun () ->
-              RV = gather_op_stats(node(), Bucket, Nodes, ClientTStamp, Window),
+              RV = gather_op_stats(Bucket, Nodes, ClientTStamp, Window),
               gen_server:reply(From, RV)
       end),
     {noreply, State};
 handle_call({gather_stats, Bucket, Nodes, ClientTStamp, Window, StatList}, From, State) ->
     proc_lib:spawn_link(
       fun () ->
-              RV = gather_op_stats(node(), Bucket, Nodes, ClientTStamp, Window, StatList),
+              RV = gather_op_stats(Bucket, Nodes, ClientTStamp, Window, StatList),
               gen_server:reply(From, RV)
       end),
     {noreply, State};

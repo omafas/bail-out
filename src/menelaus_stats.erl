@@ -2920,7 +2920,7 @@ retrieve_samples_from_archive(Archive, Stat,
                 {AccNodes =:= undefined orelse Nodes =:= AccNodes,
                  AccNodes, Nodes},
             NewContinue =
-                case latest_start_timestamp(Samples, StartTS) > StartTS of
+                case latest_start_timestamp(Samples, StartTS) - StartTS > 1000 of
                     true ->
                         Continue;
                     false ->
