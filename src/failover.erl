@@ -105,6 +105,7 @@ restore_chronicle_quorum(FailedNodes) ->
         ok ->
             case check_chronicle_quorum() of
                 true ->
+                    ns_cluster:counter_inc(quorum_failover_success),
                     {ok, [{quorum_failover, Ref}]};
                 false ->
                     orchestration_unsafe

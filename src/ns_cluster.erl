@@ -63,6 +63,7 @@
 -export([do_change_address/2]).
 
 -export([counters/0,
+         counter/3,
          counter_inc/1,
          counter_inc/2]).
 
@@ -332,6 +333,9 @@ change_address(Address) ->
 %% @doc Returns proplist of cluster-wide counters.
 counters() ->
     ns_config:search(ns_config:latest(), counters, []).
+
+counter(Config, CounterName, Default) ->
+    ns_config:search_prop(Config, counters, CounterName, Default).
 
 %% @doc Increment a cluster-wide counter.
 counter_inc(CounterName) ->

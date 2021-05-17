@@ -48,6 +48,8 @@ cache_init() ->
 
 handle_config_event(buckets) ->
     submit_new_buckets();
+handle_config_event(counters) ->
+    submit_full_reset();
 handle_config_event(Key) ->
     case ns_bucket:sub_key_match(Key) of
         {true, Bucket, _} ->
@@ -69,6 +71,7 @@ is_interesting(cluster_compat_version) -> true;
 is_interesting(developer_preview_enabled) -> true;
 is_interesting({node, _, services}) -> true;
 is_interesting({service_map, _}) -> true;
+is_interesting(counters) -> true;
 is_interesting(Key) ->
     case ns_bucket:sub_key_match(Key) of
         {true, _, _} ->
@@ -296,6 +299,10 @@ compute_global_rev(Config, {_, ChronicleRev}) ->
 compute_global_rev(Config, no_rev) ->
     ns_config:compute_global_rev(Config).
 
+compute_global_rev_epoch(Config) ->
+    Failovers = ns_cluster:counter(Config, quorum_failover_success, 0),
+    Failovers + 1.
+
 compute_bucket_info_with_config(Id, Config, Snapshot, BucketConfig,
                                 ChronicleRev) ->
     %% we do sorting to make nodes list match order of servers inside
@@ -309,10 +316,12 @@ compute_bucket_info_with_config(Id, Config, Snapshot, BucketConfig,
     %% We're computing rev using config's global rev which allows us
     %% to track changes to node services and set of active nodes.
     Rev = compute_global_rev(Config, ChronicleRev),
+    RevEpoch = compute_global_rev_epoch(Config),
 
     Json =
         {lists:flatten(
            [{rev, Rev},
+            {revEpoch, RevEpoch},
             build_short_bucket_info(Id, BucketConfig, Snapshot),
             build_ddocs(Id, BucketConfig),
             build_vbucket_map(?LOCALHOST_MARKER_STRING, BucketConfig),
@@ -413,7 +422,9 @@ do_build_node_services() ->
                            Config, Snapshot, []),
     Caps = build_cluster_capabilities(Config),
     Rev = compute_global_rev(Config, ChronicleRev),
+    RevEpoch = compute_global_rev_epoch(Config),
     J = {[{rev, Rev},
+          {revEpoch, RevEpoch},
           {nodesExt, NEIs}] ++ Caps},
     {Rev, ejson:encode(J)}.
 
