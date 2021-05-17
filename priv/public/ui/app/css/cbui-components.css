@@ -1300,14 +1300,17 @@ section.error {
 .z-index-10001 {
   z-index: 10001!important;
 }
-.main-spinner > .spinner {
-  background-attachment: fixed;
-  background-position: center 50%;
-  top: -1rem;
-  left: -1rem;
-  right: -1rem;
-  bottom: -1rem;
 
+@keyframes delay-spinner {
+  0% {
+    opacity: 0;
+  }
+  99% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 .spinner {
   position: absolute;
@@ -1316,7 +1319,30 @@ section.error {
   left: 0;
   right: 0;
   bottom: 0;
-  background: url(/spinner_3.gif) center 43% no-repeat #fff;
+  background: #fff;
+}
+.spinner:after {
+  position: absolute;
+  content: "";
+  display: block;
+  height: 2rem;
+  width: 2rem;
+  left: 50%;
+  top: 43%;
+  margin: -1rem 0 0 -1rem;
+  background: url(/spinner_3.gif) center no-repeat #fff;
+}
+.fixed-spinner > .spinner:after {
+  position: fixed;
+}
+.delayed-spinner > .spinner:after {
+  animation: delay-spinner 0.5s;
+}
+.expanded-spinner > .spinner {
+  top: -0.5rem;
+  left: -0.5rem;
+  right: -0.5rem;
+  bottom: -0.5rem;
 }
 
 /* dropdown menus - custom selectize styles ----------------------------- */

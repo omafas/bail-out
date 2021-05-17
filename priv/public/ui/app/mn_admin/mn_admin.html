@@ -1,11 +1,11 @@
 <!--
-Copyright 2015-Present Couchbase, Inc.
+     Copyright 2015-Present Couchbase, Inc.
 
-Use of this software is governed by the Business Source License included in
-the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
-file, in accordance with the Business Source License, use of this software will
-be governed by the Apache License, Version 2.0, included in the file
-licenses/APL2.txt.
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
 -->
 
 <div
@@ -30,7 +30,7 @@ licenses/APL2.txt.
         {{adminCtl.filterTasks(adminCtl.tasks.running, true).length}}
       </span>
     </a>
-<!-- activity menu ******************************************************** -->
+    <!-- activity menu ******************************************************** -->
     <div class="relative inline" ng-if="rbac.cluster.tasks.read">
       <div
          mn-drag-and-drop
@@ -55,7 +55,7 @@ licenses/APL2.txt.
             </span>
             <span class="nowrap margin-left-half" ng-class="{'rebalance-status-inprogress' : adminCtl.tasks.tasksRebalance.status == 'running'}">
               <strong>status</strong> {{adminCtl.tasks.tasksRebalance.status == "running" ? "in progress" :
-              adminCtl.tasks.tasksRebalance.errorMessage ? "failed" : "completed"}}
+                                      adminCtl.tasks.tasksRebalance.errorMessage ? "failed" : "completed"}}
             </span>
           </p>
           <div class="alert margin-bottom-1 row"
@@ -488,9 +488,9 @@ licenses/APL2.txt.
        ng-class="{currentnav: ('app.admin.views' | includedByState)}">Views</a>
 
     <div
-        class="sidebar-closer resp-hide-med"
-        title="hide sidebar"
-        ng-click="poolDefault.hideNavSidebar = true">
+       class="sidebar-closer resp-hide-med"
+       title="hide sidebar"
+       ng-click="poolDefault.hideNavSidebar = true">
       <span class="icon fa-chevron-left"></span>
     </div>
   </nav>
@@ -504,12 +504,12 @@ licenses/APL2.txt.
   </div>
 
   <!-- all page content goes here -->
-  <div
-     ui-view="main"
-     autoscroll="false"
-     class="main-content min-width-zero width-12 main-spinner"
-     ng-class="{
-              'mn-main-spinner-active': adminCtl.mainSpinnerCounter.value()
-              }"
-     mn-spinner="adminCtl.mainSpinnerCounter.value()"></div>
+  <div class="delayed-spinner expanded-spinner fixed-spinner width-12"
+     ng-class="{'mn-main-spinner-active': adminCtl.mainSpinnerCounter.value()}"
+     mn-spinner="adminCtl.mainSpinnerCounter.value()">
+    <div
+       ui-view="main"
+       autoscroll="false"
+       class="main-content min-width-zero width-12"></div>
+  </div>
 </main>
