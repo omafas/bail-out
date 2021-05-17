@@ -24,6 +24,7 @@ licenses/APL2.txt.
     </div>
   </div>
 </mn-element-cargo>
+
 <mn-element-cargo depot="actions">
   <div class="header-controls resp-xsml">
     <a
@@ -34,7 +35,11 @@ licenses/APL2.txt.
   </div>
 </mn-element-cargo>
 
-<div mn-main-spinner="!buckets.details">
+<mn-main-spinner
+   mn-spinner-value="!buckets.details">
+</mn-main-spinner>
+
+<div>
   <div
      admin-ctl="adminCtl"
      mn-buckets-list

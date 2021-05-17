@@ -1,15 +1,17 @@
 <!--
-Copyright 2020-Present Couchbase, Inc.
+     Copyright 2020-Present Couchbase, Inc.
 
-Use of this software is governed by the Business Source License included in
-the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
-file, in accordance with the Business Source License, use of this software will
-be governed by the Apache License, Version 2.0, included in the file
-licenses/APL2.txt.
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
 -->
+<mn-main-spinner
+   mn-spinner-value="(settingsClusterCtl.clusterName === undefined) || !settingsClusterCtl.memoryQuotaConfig || (rbac.cluster.settings.indexes.read && !settingsClusterCtl.indexSettings) || (poolDefault.value.isEnterprise && !settingsClusterCtl.certificate)">
+</mn-main-spinner>
 
-<div
-   mn-main-spinner="(settingsClusterCtl.clusterName === undefined) || !settingsClusterCtl.memoryQuotaConfig || (rbac.cluster.settings.indexes.read && !settingsClusterCtl.indexSettings) || (poolDefault.value.isEnterprise && !settingsClusterCtl.certificate)">
+<div>
   <form
      ng-submit="settingsClusterCtl.saveVisualInternalSettings()"
      class="forms">
@@ -162,36 +164,36 @@ licenses/APL2.txt.
             Advanced Data Settings
           </p>
           <div
-            ng-show="settingsClusterCtl.showDataService"
-            class="indent-1-5">
+             ng-show="settingsClusterCtl.showDataService"
+             class="indent-1-5">
 
             <label class="margin-top-half">Reader Thread Settings</label>
             <input
-              type="radio"
-              id="for-reader-default"
-              name="reader_thread_options"
-              ng-model="settingsClusterCtl.readerThreads"
-              value="default">
+               type="radio"
+               id="for-reader-default"
+               name="reader_thread_options"
+               ng-model="settingsClusterCtl.readerThreads"
+               value="default">
             <label for="for-reader-default">
               Default
             </label>
             <br>
             <input
-              type="radio"
-              id="for-reader-optimized"
-              name="reader_thread_options"
-              ng-model="settingsClusterCtl.readerThreads"
-              value="disk_io_optimized">
+               type="radio"
+               id="for-reader-optimized"
+               name="reader_thread_options"
+               ng-model="settingsClusterCtl.readerThreads"
+               value="disk_io_optimized">
             <label for="for-reader-optimized">
               Disk i/o optimized
             </label>
             <div class="row flex-left">
               <input
-                type="radio"
-                id="for-reader-fixed"
-                name="reader_thread_options"
-                ng-model="settingsClusterCtl.readerThreads"
-                value="fixed">
+                 type="radio"
+                 id="for-reader-fixed"
+                 name="reader_thread_options"
+                 ng-model="settingsClusterCtl.readerThreads"
+                 value="fixed">
               <label for="for-reader-fixed">
                 Fixed value
               </label>
@@ -209,38 +211,38 @@ licenses/APL2.txt.
               setting these values.
             </p>
             <div
-              class="error"
-              ng-show="settingsClusterCtl.dataServiceSettingsErrors.num_reader_threads">
+               class="error"
+               ng-show="settingsClusterCtl.dataServiceSettingsErrors.num_reader_threads">
               {{settingsClusterCtl.dataServiceSettingsErrors.num_reader_threads}}
             </div>
 
             <label class="margin-top-half">Writer Thread Settings</label>
             <input
-              type="radio"
-              id="for-writer-default"
-              name="writer_thread_options"
-              ng-model="settingsClusterCtl.writerThreads"
-              value="default">
+               type="radio"
+               id="for-writer-default"
+               name="writer_thread_options"
+               ng-model="settingsClusterCtl.writerThreads"
+               value="default">
             <label for="for-writer-default">
               Default
             </label>
             <br>
             <input
-              type="radio"
-              id="for-writer-optimized"
-              name="writer_thread_options"
-              ng-model="settingsClusterCtl.writerThreads"
-              value="disk_io_optimized">
+               type="radio"
+               id="for-writer-optimized"
+               name="writer_thread_options"
+               ng-model="settingsClusterCtl.writerThreads"
+               value="disk_io_optimized">
             <label for="for-writer-optimized">
               Disk i/o optimized
             </label>
             <div class="row flex-left">
               <input
-                type="radio"
-                id="for-writer-fixed"
-                name="writer_thread_options"
-                ng-model="settingsClusterCtl.writerThreads"
-                value="fixed">
+                 type="radio"
+                 id="for-writer-fixed"
+                 name="writer_thread_options"
+                 ng-model="settingsClusterCtl.writerThreads"
+                 value="fixed">
               <label for="for-writer-fixed">
                 Fixed value
               </label>
@@ -334,7 +336,7 @@ licenses/APL2.txt.
               </label>
             </div>
             <div class="formrow margin-bottom-half"
-                 ng-if="!settingsClusterCtl.querySettings.queryCurlWhitelist.all_access">
+               ng-if="!settingsClusterCtl.querySettings.queryCurlWhitelist.all_access">
               <label>Allowed CURL URLs</label>
               <div
                  class="margin-bottom-half row"
@@ -368,7 +370,7 @@ licenses/APL2.txt.
               </div>
             </div>
             <div class="formrow"
-                 ng-if="!settingsClusterCtl.querySettings.queryCurlWhitelist.all_access">
+               ng-if="!settingsClusterCtl.querySettings.queryCurlWhitelist.all_access">
               <label>Disallowed CURL URLs</label>
               <div
                  class="margin-bottom-half row"
@@ -415,9 +417,9 @@ licenses/APL2.txt.
                      ng-disabled="!rbac.cluster.settings.write"
                      ng-model="settingsClusterCtl.querySettings.queryTmpSpaceDir">
                   <div
-                    class="error error-form"
-                    ng-show="!!settingsClusterCtl.querySettingsErrors.queryTmpSpaceDir">
-                   {{settingsClusterCtl.querySettingsErrors.queryTmpSpaceDir}}
+                     class="error error-form"
+                     ng-show="!!settingsClusterCtl.querySettingsErrors.queryTmpSpaceDir">
+                    {{settingsClusterCtl.querySettingsErrors.queryTmpSpaceDir}}
                   </div>
                 </div>
                 <div class="width-3">
@@ -599,10 +601,10 @@ licenses/APL2.txt.
           </div>
         </div>
         <p
-          ng-if="rbac.cluster.settings.read"
-          class="disclosure"
-          ng-class="{disclosed: settingsClusterCtl.showAdvancedSettings}"
-          ng-click="settingsClusterCtl.showAdvancedSettings = !settingsClusterCtl.showAdvancedSettings">
+           ng-if="rbac.cluster.settings.read"
+           class="disclosure"
+           ng-class="{disclosed: settingsClusterCtl.showAdvancedSettings}"
+           ng-click="settingsClusterCtl.showAdvancedSettings = !settingsClusterCtl.showAdvancedSettings">
           Advanced Index Settings
         </p>
         <div

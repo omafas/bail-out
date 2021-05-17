@@ -25,7 +25,11 @@ licenses/APL2.txt.
   </div>
 </mn-element-cargo>
 
-<div mn-main-spinner="!documentsControlCtl.state">
+<mn-main-spinner
+   mn-spinner-value="!documentsControlCtl.state">
+</mn-main-spinner>
+
+<div>
   <ui-view></ui-view>
 
   <div class="row" ng-if="!buckets.details.byName[documentsCtl.currentBucketName].isEphemeral">

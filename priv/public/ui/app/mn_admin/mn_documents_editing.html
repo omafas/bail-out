@@ -38,9 +38,12 @@ licenses/APL2.txt.
        ng-click="documentsEditingCtl.save()">Save</button>
   </div>
 </div>
-<div
-   class="row items-top text-small"
-   mn-main-spinner="documentsEditingCtl.viewLoading || !documentsEditingCtl.state">
+
+<mn-main-spinner
+   mn-spinner-value="documentsEditingCtl.viewLoading || !documentsEditingCtl.state">
+</mn-main-spinner>
+
+<div class="row items-top text-small">
   <div
      class="width-8 column height-100"
      spellcheck="false"

@@ -20,10 +20,12 @@ licenses/APL2.txt.
   </div>
 </mn-element-cargo>
 
-<div
-   class="margin-top-quarter padding-bottom-6"
-   mn-main-spinner="!overviewCtl.nodes || (rbac.cluster.bucket['.'].settings.read && !buckets.details)">
+<mn-main-spinner
+   mn-spinner-value="!overviewCtl.nodes ||
+                     (rbac.cluster.bucket['.'].settings.read && !buckets.details)">
+</mn-main-spinner>
 
+<div class="margin-top-quarter padding-bottom-6">
   <div class="zero-content max-width-12" ng-show="!buckets.details.length">
     You have no data buckets.
     <span ng-show="rbac.cluster.buckets.create">

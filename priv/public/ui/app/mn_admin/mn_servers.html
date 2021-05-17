@@ -31,8 +31,13 @@ licenses/APL2.txt.
     </a>
   </div>
 </mn-element-cargo>
-<div
-   mn-main-spinner="!serversCtl.nodes || (rbac.cluster.tasks.read && !adminCtl.tasks) || (rbac.cluster.server_groups.read && !serversCtl.getGroupsByHostname)">
+
+<mn-main-spinner
+   mn-spinner-value="!serversCtl.nodes || (rbac.cluster.tasks.read && !adminCtl.tasks) ||
+                     (rbac.cluster.server_groups.read && !serversCtl.getGroupsByHostname)">
+</mn-main-spinner>
+
+<div>
   <div class="row">
     <div
        class="row filter-server"

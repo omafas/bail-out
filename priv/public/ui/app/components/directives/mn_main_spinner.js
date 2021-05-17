@@ -12,41 +12,45 @@ import angular from "/ui/web_modules/angular.js";
 import mnSpinner from "/ui/app/components/directives/mn_spinner.js";
 import mnHelper from "/ui/app/components/mn_helper.js";
 
-export default "mnMainSpinner";
+export default "mnMainSpinnerModule";
 
 angular
-  .module('mnMainSpinner', [mnSpinner, mnHelper])
-  .directive('mnMainSpinner', mnMainSpinnerDirective);
-
-function mnMainSpinnerDirective(mnHelper) {
-  var directive = {
-    restrict: 'A',
-    scope: {
-      mnMainSpinner: '=',
+  .module('mnMainSpinnerModule', [
+    mnSpinner,
+    mnHelper
+  ])
+  .component('mnMainSpinner', {
+    bindings: {
+      mnSpinnerValue: "<"
     },
     controller: controller
-  };
-  return directive;
+  });
 
-  function controller($scope) {
-    let initialized;
-    $scope.$watch("mnMainSpinner", (mainSpinner) => {
-      if (!initialized && mainSpinner) {
-        initialized = true;
-      }
-      if (!initialized) {
-        return;
-      }
-      if (mainSpinner) {
-        mnHelper.mainSpinnerCounter.increase();
-      } else {
-        mnHelper.mainSpinnerCounter.decrease();
-      }
-    });
-    $scope.$on("$destroy", () => {
-      if (initialized && $scope.mnMainSpinner) {
-        mnHelper.mainSpinnerCounter.decrease();
-      }
-    });
+function controller($scope, mnHelper) {
+  let initialized;
+  let vm = this;
+
+  this.$onChanges = onChanges;
+  this.$onDestroy = onDestroy;
+
+  function onChanges(v) {
+    let value = v.mnSpinnerValue.currentValue;
+    if (!initialized && value) {
+      initialized = true;
+    }
+    if (!initialized) {
+      return;
+    }
+    if (value) {
+      mnHelper.mainSpinnerCounter.increase();
+    } else {
+      mnHelper.mainSpinnerCounter.decrease();
+    }
+  }
+
+  function onDestroy() {
+    if (initialized && vm.mnSpinnerValue) {
+      mnHelper.mainSpinnerCounter.decrease();
+    }
   }
 }

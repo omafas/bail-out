@@ -1,18 +1,18 @@
 <!--
-Copyright 2020-Present Couchbase, Inc.
+     Copyright 2020-Present Couchbase, Inc.
 
-Use of this software is governed by the Business Source License included in
-the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
-file, in accordance with the Business Source License, use of this software will
-be governed by the Apache License, Version 2.0, included in the file
-licenses/APL2.txt.
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
 -->
+<mn-main-spinner
+   mn-spinner-value="!rolesGroupsCtl.state || rolesGroupsCtl.viewLoading">
+</mn-main-spinner>
 
-<div
-   mn-main-spinner="!rolesGroupsCtl.state || rolesGroupsCtl.viewLoading"
-   class="margin-top-neg-half margin-left-neg-1">
-  <div
-     class="row resp-sml margin-bottom-half">
+<div class="margin-top-neg-half margin-left-neg-1">
+  <div class="row resp-sml margin-bottom-half">
     <div
        class="row"
        mn-placeholder="filter groups..."
@@ -47,10 +47,10 @@ licenses/APL2.txt.
       </span>
       <span class="cbui-table-cell resp-hide-xsml">
         <span class="sorter"
-              ng-click="rolesGroupsCtl.sortByChanged('ldap_group_ref')"
-              ng-class="{'dynamic-active': rolesGroupsCtl.isOrderBy('ldap_group_ref'),
-                        'dynamic-inverted': rolesGroupsCtl.isOrderBy('ldap_group_ref')
-                        && rolesGroupsCtl.isDesc()}">external mapping</span>
+           ng-click="rolesGroupsCtl.sortByChanged('ldap_group_ref')"
+           ng-class="{'dynamic-active': rolesGroupsCtl.isOrderBy('ldap_group_ref'),
+                     'dynamic-inverted': rolesGroupsCtl.isOrderBy('ldap_group_ref')
+                     && rolesGroupsCtl.isDesc()}">external mapping</span>
       </span>
     </div>
     <section
@@ -101,7 +101,7 @@ licenses/APL2.txt.
 
   </div>
   <div class="row pagination"
-       ng-if="rolesGroupsCtl.state.groups.length">
+     ng-if="rolesGroupsCtl.state.groups.length">
     <mn-select
        class="fix-width-1"
        ng-model="rolesGroupsCtl.pageSize"

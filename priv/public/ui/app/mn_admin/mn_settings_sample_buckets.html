@@ -27,11 +27,14 @@ licenses/APL2.txt.
      class="alert alert-warning"><p>This cluster does not contain an index or query node. Sample data will be installed without creating indexes.</p></div>
 </mn-element-cargo>
 
+<mn-main-spinner
+   mn-spinner-value="!settingsSampleBucketsCtl.state || settingsSampleBucketsCtl.viewLoading">
+</mn-main-spinner>
+
 <div>
   <form
      class="forms"
-     ng-submit="settingsSampleBucketsCtl.installSampleBuckets()"
-     mn-main-spinner="!settingsSampleBucketsCtl.state || settingsSampleBucketsCtl.viewLoading">
+     ng-submit="settingsSampleBucketsCtl.installSampleBuckets()">
     <h4>Sample Buckets</h4>
     <p class="text-small">
       Sample buckets contain example data, views, and indexes for your experimentation.

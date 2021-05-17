@@ -1,20 +1,21 @@
 <!--
-Copyright 2020-Present Couchbase, Inc.
+     Copyright 2020-Present Couchbase, Inc.
 
-Use of this software is governed by the Business Source License included in
-the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
-file, in accordance with the Business Source License, use of this software will
-be governed by the Apache License, Version 2.0, included in the file
-licenses/APL2.txt.
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
 -->
+<mn-main-spinner
+   mn-spinner-value="!rootCertificateCtl.certificate">
+</mn-main-spinner>
 
-<div
-   mn-main-spinner="!rootCertificateCtl.certificate"
-   class="forms max-width-6">
+<div class="forms max-width-6">
   <h4>Root Certificate</h4>
-    <p class="text-small margin-bottom-1-5">
-      This cluster is currently using a <strong>{{(rootCertificateCtl.certificate.cert.type == "generated") ? "self-signed" : "signed"}}</strong> SSL/TLS certificate.
-    </p>
+  <p class="text-small margin-bottom-1-5">
+    This cluster is currently using a <strong>{{(rootCertificateCtl.certificate.cert.type == "generated") ? "self-signed" : "signed"}}</strong> SSL/TLS certificate.
+  </p>
   <span ng-show="rootCertificateCtl.certificate.cert.subject || rootCertificateCtl.certificate.cert.expires">
     <div ng-show="rootCertificateCtl.certificate.cert.subject">
       Subject: {{rootCertificateCtl.certificate.cert.subject}}

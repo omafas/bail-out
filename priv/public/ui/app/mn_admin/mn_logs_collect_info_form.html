@@ -7,9 +7,12 @@
      be governed by the Apache License, Version 2.0, included in the file
      licenses/APL2.txt.
 -->
+<mn-main-spinner
+   mn-spinner-value="logsCollectInfoCtl.counterSpinner.value() ||
+                     !logsCollectInfoCtl.state.nodes">
+</mn-main-spinner>
 
-<div
-   mn-main-spinner="logsCollectInfoCtl.counterSpinner.value() || !logsCollectInfoCtl.state.nodes">
+<div>
   <div class="max-width-11 margin-top-half padding-bottom-6 padding-left-1">
     <div
        class="error error-field"

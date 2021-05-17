@@ -1,14 +1,17 @@
 <!--
-Copyright 2020-Present Couchbase, Inc.
+     Copyright 2020-Present Couchbase, Inc.
 
-Use of this software is governed by the Business Source License included in
-the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
-file, in accordance with the Business Source License, use of this software will
-be governed by the Apache License, Version 2.0, included in the file
-licenses/APL2.txt.
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
 -->
+<mn-main-spinner
+   mn-spinner-value="!logsListCtl.logs">
+</mn-main-spinner>
 
-<div mn-main-spinner="!logsListCtl.logs">
+<div>
   <div
      class="row flex-left margin-bottom-half filter-log"
      mn-search="logsListCtl.filterField"
@@ -38,11 +41,11 @@ licenses/APL2.txt.
           <span
              ng-if="!logsListCtl.isOpened($index) && logsListCtl.isOverLimit(row)"
              class="pre-line"
-             >{{row.text | mnLimitTo: logsListCtl.textLimit}}</span>
+          >{{row.text | mnLimitTo: logsListCtl.textLimit}}</span>
           <span
              class="pre-line"
              ng-if="logsListCtl.isOpened($index) || !logsListCtl.isOverLimit(row)"
-             >{{row.text}}</span>
+          >{{row.text}}</span>
           <span ng-show="logsListCtl.isOverLimit(row)">
             <a
                ng-show="!logsListCtl.isOpened($index)"
@@ -62,7 +65,7 @@ licenses/APL2.txt.
              tooltip-trigger="outsideClick">
             {{row.node}}
           </span>
-         </span>
+        </span>
         <span class="cbui-table-cell flex-grow-1-5 wrap resp-sml">
           <span class="semi-bold nowrap">{{row.time}}</span> &nbsp;
           <span class="nowrap">{{row.date}}</span>

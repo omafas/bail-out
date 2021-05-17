@@ -1,18 +1,21 @@
 <!--
-Copyright 2020-Present Couchbase, Inc.
+     Copyright 2020-Present Couchbase, Inc.
 
-Use of this software is governed by the Business Source License included in
-the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
-file, in accordance with the Business Source License, use of this software will
-be governed by the Apache License, Version 2.0, included in the file
-licenses/APL2.txt.
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
 -->
+<mn-main-spinner
+   mn-spinner-value="logsCollectInfoCtl.loadingResult">
+</mn-main-spinner>
 
-<div mn-main-spinner="logsCollectInfoCtl.loadingResult">
+<div>
   <div
      class="collection_status dynamic_{{logsCollectInfoCtl.state.status}}">
     <p>Collection {{logsCollectInfoCtl.state.status}}<span
-      ng-if="logsCollectInfoCtl.state.status === 'running'"><span class="loading"></span>
+                                                        ng-if="logsCollectInfoCtl.state.status === 'running'"><span class="loading"></span>
     </p>
   </div>
   <div ng-if="logsCollectInfoCtl.state.nodesByStatus.started">
@@ -49,7 +52,7 @@ licenses/APL2.txt.
   </div>
   <div ng-if="logsCollectInfoCtl.state.nodesByStatus.cancelled">
     <p class="error">Cancelled nodes:</p>
-      <div ng-repeat="node in logsCollectInfoCtl.state.nodesByStatus.cancelled track by node.nodeName">{{node.nodeName}}</div>
+    <div ng-repeat="node in logsCollectInfoCtl.state.nodesByStatus.cancelled track by node.nodeName">{{node.nodeName}}</div>
   </div>
   <div ng-if="logsCollectInfoCtl.state.nodeErrors.length">
     <p class="error">Node errors:</p>
