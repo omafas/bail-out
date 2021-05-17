@@ -100,8 +100,7 @@
 -define(WINDOW_SIZE, 5).
 
 compute_sec_headers() ->
-    {value, Headers} = ns_config:search(secure_headers),
-    compute_sec_headers(Headers).
+    compute_sec_headers(ns_config:read_key_fast(secure_headers, [])).
 
 compute_sec_headers(Headers) ->
     case proplists:get_value(enabled, Headers, true) of
@@ -707,8 +706,7 @@ response_headers_test() ->
     BaseSecHeaders = ?BASE_HEADERS ++ ?SEC_HEADERS,
     AllHeaders = ?NO_CACHE_HEADERS ++ BaseSecHeaders,
     meck:new(ns_config, [passthrough]),
-    meck:expect(ns_config, latest, fun() -> [] end),
-    meck:expect(ns_config, search, fun(_) -> {value, []} end),
+    meck:expect(ns_config, read_key_fast, fun(secure_headers, []) -> [] end),
     ?assertEqual(lists:keysort(1, AllHeaders),
                  response_headers([])),
     ?assertEqual(lists:keysort(1, AllHeaders),
@@ -729,11 +727,11 @@ response_headers_test() ->
     ?assertEqual(lists:keysort( 1, [{"Duplicate", "first"}] ++ AllHeaders),
                  response_headers([{"Duplicate", "first"},
                                    {"Duplicate", "second"}])),
-    meck:expect(ns_config, search, fun(_) -> {value, [{enabled, false}]} end),
+    meck:expect(ns_config, read_key_fast, fun(secure_headers, []) ->
+                                                  [{enabled, false}] end),
     ?assertEqual(lists:keysort( 1, [{"Duplicate", "first"}] ++
                                     ?NO_CACHE_HEADERS ++ ?BASE_HEADERS),
                  response_headers([{"Duplicate", "first"},
                                    {"Duplicate", "second"}])),
-    true = meck:validate(ns_config),
     meck:unload(ns_config).
 -endif.
