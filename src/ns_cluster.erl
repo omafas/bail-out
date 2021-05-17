@@ -469,44 +469,7 @@ handle_cast(leave, State) ->
     %% stop nearly everything
     ok = ns_server_cluster_sup:stop_ns_server(),
 
-    chronicle_local:leave_cluster(),
-
-    prometheus_cfg:wipe(),
-
-    %% in order to disconnect from rest of nodes we need new cookie
-    %% and explicit disconnect_node calls
-    {ok, _} = ns_cookie_manager:cookie_init(),
-
-    %% reset_address() below drops user_assigned flag (if any) which makes
-    %% it possible for the node to be renamed if necessary
-    ok = dist_manager:reset_address(),
-    %% and then we clear config. In fact better name would be 'reset',
-    %% because as seen above we actually re-initialize default config
-    tombstone_agent:wipe(),
-
-    ns_config:clear([directory,
-                     %% Preserve these directories as they may have been
-                     %% changed from their defaults and their handling
-                     %% should be consistent with the way we retain the
-                     %% index and data directories.
-                     {node, node(), cbas_dirs},
-                     {node, node(), eventing_dir},
-                     %% we preserve rest settings, so if the server runs on a
-                     %% custom port, it doesn't revert to the default
-                     rest,
-                     {node, node(), rest},
-                     {node, node(), address_family},
-                     {node, node(), address_family_only},
-                     {node, node(), node_encryption},
-                     {node, node(), erl_external_listeners}]),
-
-
-    %% set_initial here clears vclock on nodes_wanted. Thus making
-    %% sure that whatever nodes_wanted we will get through initial
-    %% config replication (right after joining cluster next time) will
-    %% not conflict with this value.
-    ns_config:set_initial(nodes_wanted, [node()]),
-    {ok, _} = ns_cookie_manager:cookie_sync(),
+    perform_leave(),
 
     ?cluster_debug("Leaving cluster", []),
 
@@ -519,6 +482,13 @@ handle_cast(leave, State) ->
     misc:remove_marker(start_marker_path()),
 
     {noreply, State};
+handle_cast(repair_join, State) ->
+    ?log_debug("Repair after unsuccessful join."),
+    perform_leave(),
+
+    misc:remove_marker(join_marker_path()),
+    {noreply, State};
+
 handle_cast(retry_start_ns_server, State) ->
     case ns_server_cluster_sup:start_ns_server() of
         {ok, _} ->
@@ -581,6 +551,16 @@ init([]) ->
         false ->
             case misc:marker_exists(start_marker_path()) of
                 true ->
+                    case misc:marker_exists(join_marker_path()) of
+                        true ->
+                            ?log_info("Found marker ~p. "
+                                      "Looks like we failed in process of "
+                                      "joining cluster. Will restore config "
+                                      "to clean state. ", [join_marker_path()]),
+                            gen_server:cast(Self, repair_join);
+                        false ->
+                            ok
+                    end,
                     ?log_info("Found marker ~p. "
                               "Looks like we failed to restart ns_server "
                               "after leaving or joining a cluster. "
@@ -1402,24 +1382,27 @@ perform_actual_join(RemoteNode, NewCookie, ChronicleInfo) ->
     misc:create_marker(start_marker_path()),
     ok = ns_server_cluster_sup:stop_ns_server(),
     ns_log:delete_log(),
-    Status = try
-        ?cluster_debug("ns_cluster: joining cluster. Child has exited.", []),
-        ns_cluster_membership:prepare_to_join(RemoteNode, NewCookie),
-        ok = chronicle_local:prepare_join(ChronicleInfo),
 
-        %% reload is needed to reinitialize ns_config's cache after
-        %% config cleanup ('erase' causes the problem, but it looks like
-        %% it's not worth it to add proper 'erase' support to ns_config)
-        ns_config:reload(),
-        ns_config:merge_dynamic_and_static(),
-        ?cluster_debug("pre-join cleaned config is:~n~p", [ns_config_log:sanitize(ns_config:get())]),
+    ?cluster_debug("ns_cluster: joining cluster. Child has exited.", []),
+    misc:create_marker(join_marker_path()),
+    ns_cluster_membership:prepare_to_join(RemoteNode, NewCookie),
 
-        {ok, _Cookie} = ns_cookie_manager:cookie_sync(),
-        %% Let's verify connectivity.
+    ok = chronicle_local:prepare_join(ChronicleInfo),
 
-        Connected =
-            misc:poll_for_condition(
-              fun () ->
+    %% reload is needed to reinitialize ns_config's cache after
+    %% config cleanup ('erase' causes the problem, but it looks like
+    %% it's not worth it to add proper 'erase' support to ns_config)
+    ns_config:reload(),
+    ns_config:merge_dynamic_and_static(),
+    ?cluster_debug("pre-join cleaned config is:~n~p",
+                   [ns_config_log:sanitize(ns_config:get())]),
+
+    {ok, _Cookie} = ns_cookie_manager:cookie_sync(),
+    %% Let's verify connectivity.
+
+    Connected =
+        misc:poll_for_condition(
+          fun () ->
                   ?log_debug("Trying to connect to node ~p...", [RemoteNode]),
                   case catch net_kernel:connect_node(RemoteNode) of
                       true -> true;
@@ -1428,48 +1411,74 @@ perform_actual_join(RemoteNode, NewCookie, ChronicleInfo) ->
                                      [RemoteNode, Res]),
                           false
                   end
-              end, 10000, 500),
+          end, 10000, 500),
 
-        ?cluster_debug("Connection from ~p to ~p:  ~p",
-                       [node(), RemoteNode, Connected]),
+    ?cluster_debug("Connection from ~p to ~p:  ~p",
+                   [node(), RemoteNode, Connected]),
 
-        ok = chronicle_local:join_cluster(ChronicleInfo),
+    ok = chronicle_local:join_cluster(ChronicleInfo),
 
-        %% Make sure that latest timestamps are published synchronously.
-        tombstone_agent:refresh(),
+    %% Make sure that latest timestamps are published synchronously.
+    tombstone_agent:refresh(),
 
-        ok = ns_config_rep:pull_from_one_node_directly(RemoteNode),
-        ?cluster_debug("pre-join merged config is:~n~p",
-                       [ns_config_log:sanitize(ns_config:get())]),
+    ok = ns_config_rep:pull_from_one_node_directly(RemoteNode),
+    ?cluster_debug("pre-join merged config is:~n~p",
+                   [ns_config_log:sanitize(ns_config:get())]),
 
-        {ok, ok}
-    catch
-        Type:Error:Stack ->
-            ?cluster_error("Error during join: ~p", [{Type, Error, Stack}]),
-            {ok, _} = ns_server_cluster_sup:start_ns_server(),
-            misc:remove_marker(start_marker_path()),
+    misc:remove_marker(join_marker_path()),
 
-            erlang:raise(Type, Error, Stack)
-    end,
-    ?cluster_debug("Join status: ~p, starting ns_server_cluster back",
-                   [Status]),
-    Status2 = case ns_server_cluster_sup:start_ns_server() of
-                  {error, _} ->
-                      {error, start_cluster_failed,
-                       <<"Failed to start ns_server cluster processes back. "
-                         "Logs might have more details.">>};
-                  {ok, _} ->
-                      misc:remove_marker(start_marker_path()),
-                      Status
-              end,
-
-    case Status2 of
+    ?cluster_debug("Join succeded, starting ns_server_cluster back", []),
+    case ns_server_cluster_sup:start_ns_server() of
+        {error, _} = Error ->
+            ?cluster_error("Failed to join cluster because of: ~p", [Error]),
+            {error, start_cluster_failed,
+             <<"Failed to start ns_server cluster processes back. "
+               "Logs might have more details.">>};
         {ok, _} ->
-            ?cluster_log(?NODE_JOINED, "Node ~s joined cluster", [node()]);
-        _ ->
-            ?cluster_error("Failed to join cluster because of: ~p", [Status2])
-    end,
-    Status2.
+            misc:remove_marker(start_marker_path()),
+            ?cluster_log(?NODE_JOINED, "Node ~s joined cluster", [node()]),
+            {ok, ok}
+    end.
+
+perform_leave() ->
+    chronicle_local:leave_cluster(),
+
+    prometheus_cfg:wipe(),
+
+    %% in order to disconnect from rest of nodes we need new cookie
+    %% and explicit disconnect_node calls
+    {ok, _} = ns_cookie_manager:cookie_init(),
+
+    %% reset_address() below drops user_assigned flag (if any) which makes
+    %% it possible for the node to be renamed if necessary
+    ok = dist_manager:reset_address(),
+    %% and then we clear config. In fact better name would be 'reset',
+    %% because as seen above we actually re-initialize default config
+    tombstone_agent:wipe(),
+
+    ns_config:clear([directory,
+                     %% Preserve these directories as they may have been
+                     %% changed from their defaults and their handling
+                     %% should be consistent with the way we retain the
+                     %% index and data directories.
+                     {node, node(), cbas_dirs},
+                     {node, node(), eventing_dir},
+                     %% we preserve rest settings, so if the server runs on a
+                     %% custom port, it doesn't revert to the default
+                     rest,
+                     {node, node(), rest},
+                     {node, node(), address_family},
+                     {node, node(), address_family_only},
+                     {node, node(), node_encryption},
+                     {node, node(), erl_external_listeners}]),
+
+
+    %% set_initial here clears vclock on nodes_wanted. Thus making
+    %% sure that whatever nodes_wanted we will get through initial
+    %% config replication (right after joining cluster next time) will
+    %% not conflict with this value.
+    ns_config:set_initial(nodes_wanted, [node()]),
+    {ok, _} = ns_cookie_manager:cookie_sync().
 
 leave_marker_path() ->
     path_config:component_path(data, "leave_marker").
@@ -1479,6 +1488,9 @@ start_marker_path() ->
 
 rename_marker_path() ->
     path_config:component_path(data, "rename_marker").
+
+join_marker_path() ->
+    path_config:component_path(data, "join_marker").
 
 -ifdef(TEST).
 community_allowed_topologies_test() ->
