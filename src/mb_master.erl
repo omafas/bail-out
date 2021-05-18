@@ -31,7 +31,8 @@
 -record(state, {child :: undefined | pid(),
                 master :: node(),
                 peers :: [node()],
-                last_heard :: integer()}).
+                last_heard :: integer(),
+                higher_priority_nodes = [] :: [{node(), integer()}]}).
 
 
 %% API
@@ -95,7 +96,12 @@ init([]) ->
         Peers when is_list(Peers) ->
             %% We're a candidate
             ?log_debug("Starting as candidate. Peers: ~p", [Peers]),
-            {ok, candidate, #state{last_heard=Now, peers=Peers}}
+            {ok, candidate, #state{last_heard = Now,
+                                   %% Prevent new node from becoming master by
+                                   %% accident, and wait for TIMEOUT amount of
+                                   %% time before making a decision.
+                                   higher_priority_nodes = [{node(), Now}],
+                                   peers = Peers}}
     end.
 
 maybe_invalidate_current_master() ->
@@ -311,13 +317,21 @@ terminate(_Reason, _StateName, StateData) ->
 
 candidate(info, peers_changed, StateData) ->
     Peers = ns_node_disco:nodes_wanted(),
-    S = update_peers(StateData, Peers),
+    S = refresh_high_priority_nodes(update_peers(StateData, Peers)),
     case Peers of
         [N] when N == node() ->
             ale:info(?USER_LOGGER, "I'm now the only node, so I'm the master.", []),
             {next_state, master, start_master(S)};
         _ ->
-            {keep_state, S}
+            case can_be_master(S) of
+                true ->
+                    ale:info(?USER_LOGGER,
+                             "Master has been removed from cluster. "
+                             "I'm taking over as the master.", []),
+                    {next_state, master, start_master(S)};
+                false ->
+                    {keep_state, S}
+            end
     end;
 candidate(info, {send_heartbeat, LastHBInterval},
           #state{peers=Peers} = StateData) ->
@@ -363,7 +377,10 @@ candidate(info, {heartbeat, NodeInfo, master, _H},
             NewState =
                 case strongly_lower_priority_node(NodeInfo) of
                     false ->
-                        State#state{last_heard=erlang:monotonic_time(), master=Node};
+                        Now = erlang:monotonic_time(),
+                        update_high_priority_nodes(
+                          {Node, Now}, State#state{last_heard = Now,
+                                                   master = Node});
                     true ->
                         case rebalance:status() of
                             running ->
@@ -406,8 +423,11 @@ candidate(info, {heartbeat, NodeInfo, candidate, _H},
         true ->
             case higher_priority_node(NodeInfo) of
                 true ->
+                    Now = erlang:monotonic_time(),
                     %% Higher priority node
-                    {keep_state, State#state{last_heard=erlang:monotonic_time()}};
+                    {keep_state, update_high_priority_nodes(
+                                   {Node, Now},
+                                   State#state{last_heard = Now})};
                 false ->
                     %% Lower priority, so ignore it
                     keep_state_and_data
@@ -424,7 +444,7 @@ candidate(Type, Msg, State) ->
 
 master(info, peers_changed, StateData) ->
     Peers = ns_node_disco:nodes_wanted(),
-    S = update_peers(StateData, Peers),
+    S = refresh_high_priority_nodes(update_peers(StateData, Peers)),
     case lists:member(node(), Peers) of
         true ->
             {keep_state, S};
@@ -449,8 +469,11 @@ master(info, {heartbeat, NodeInfo, master, _H}, #state{peers=Peers} = State) ->
                     ?log_info("Surrendering mastership to ~p", [Node]),
                     NewState = shutdown_master_sup(State),
                     announce_leader(Node),
-                    {next_state, candidate, NewState#state{last_heard=Now,
-                                                           master=Node}};
+                    {next_state, candidate,
+                     update_high_priority_nodes(
+                       {Node, Now},
+                       NewState#state{last_heard = Now,
+                                      master = Node})};
                 false ->
                     ?log_info("Got master heartbeat from ~p when I'm master",
                               [Node]),
@@ -527,7 +550,9 @@ send_heartbeat_with_peers(Nodes, StateName, Peers) ->
 start_master(StateData) ->
     announce_leader(node()),
     {ok, Pid} = mb_master_sup:start_link(),
-    StateData#state{child=Pid, master=node()}.
+    StateData#state{child = Pid,
+                    master = node(),
+                    higher_priority_nodes = []}.
 
 
 %% @private
@@ -612,6 +637,36 @@ send_heartbeat_msg(LastHBInterval) ->
 
     erlang:send_after(CurHBInterval, self(), {send_heartbeat, CurHBInterval}).
 
+can_be_master(#state{master = Master,
+                     peers = Peers,
+                     higher_priority_nodes = HigherPriorityNodes}) ->
+    not lists:member(Master, Peers) andalso
+        HigherPriorityNodes =:= [] andalso
+        lists:member(node(), Peers).
+
+update_high_priority_nodes({Node, Now},
+                           #state{higher_priority_nodes = Nodes} = State) ->
+    NewNodes = lists:keystore(Node, 1, Nodes, {Node, Now}),
+    State#state{higher_priority_nodes = NewNodes}.
+
+refresh_high_priority_nodes(#state{higher_priority_nodes = Nodes,
+                                   peers = Peers} = State) ->
+    Now = erlang:monotonic_time(),
+    NewNodes = lists:filter(
+                 fun ({N, LastSeen}) ->
+                         SinceHeard  = erlang:convert_time_unit(
+                                         Now - LastSeen,
+                                         native, millisecond),
+                         SinceHeard < ?TIMEOUT andalso
+                             (lists:member(N, Peers) orelse
+
+                              %% This forces the a newly initialized node to
+                              %% wait for TIMEOUT before it can become the
+                              %% master. Don't clear it we are not part of the
+                              %% cluster yet.
+                              N =:= node())
+                 end, Nodes),
+    State#state{higher_priority_nodes = NewNodes}.
 
 -ifdef(TEST).
 priority_test() ->
