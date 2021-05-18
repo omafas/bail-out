@@ -3460,7 +3460,7 @@ mn-dropdown-item .scenario-controls:hover {
 }
 .scenario-add .icon {
   font-size: 1.5rem;
-  color: #a1a1a1;
+  color:#b3cfef;
   position: absolute;
   right: .5rem;
   top: .25rem;
@@ -3468,7 +3468,7 @@ mn-dropdown-item .scenario-controls:hover {
 }
 .scenario-add:hover .icon {
   font-size: 1.5rem;
-  color: #333;
+  color: #689fde;
 }
 input[type=text].scenario-desc  {
   border: 1px solid #d1d1d1;
