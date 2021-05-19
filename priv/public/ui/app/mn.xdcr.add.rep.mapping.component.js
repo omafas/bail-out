@@ -104,7 +104,8 @@ class MnXDCRAddRepMappingComponent extends MnLifeCycleHooksToStream {
     this.postRegexpValidationErrors =
       merge(this.postRegexpValidationExpression.success,
             this.postRegexpValidationExpression.error)
-      .pipe(map(errors => {
+      .pipe(startWith(null),
+            map(errors => {
         return errors &&
           (errors.error ? errors.error._ ? errors.error._ :
             errors.error : errors.key);
