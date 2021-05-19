@@ -26,8 +26,8 @@
          get_snapshot/1,
          sync/0]).
 
-%% exported chronicle log fun
--export([log/4]).
+%% exported callbacks used by chronicle
+-export([log/4, report_stats/1]).
 
 %% exported for log formatting
 -export([format_msg/2, format_time/1]).
@@ -41,6 +41,14 @@ init([]) ->
     application:set_env(chronicle, data_dir,
                         path_config:component_path(data, "config")),
     application:set_env(chronicle, logger_function, {?MODULE, log}),
+
+    case misc:get_env_default(enable_chronicle_stats, true) of
+        true ->
+            application:set_env(chronicle,
+                                stats_function, {?MODULE, report_stats});
+        false ->
+            ok
+    end,
 
     ?log_debug("Ensure chronicle is started"),
     ok = application:ensure_started(chronicle, permanent),
@@ -163,3 +171,10 @@ format_msg(#log_info{user_data = #{module := M, function := F, line := L}}
            = Info, UserMsg) ->
     ale_default_formatter:format_msg(
       Info#log_info{module = M, function = F, line = L}, UserMsg).
+
+report_stats({histo, Metric, Max, Unit, Value}) ->
+    ns_server_stats:notify_histogram(Metric, Max, Unit, Value);
+report_stats({counter, Metric, By}) ->
+    ns_server_stats:notify_counter(Metric, By);
+report_stats({gauge, Metric, Value}) ->
+    ns_server_stats:notify_gauge(Metric, Value).
