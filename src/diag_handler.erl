@@ -328,6 +328,10 @@ get_ets_table_sanitizer(menelaus_ui_auth, _Info) ->
     skip;
 get_ets_table_sanitizer(menelaus_ui_auth_by_expiration, _Info) ->
     skip;
+get_ets_table_sanitizer(chronicle_mem_log, _Info) ->
+    skip;
+get_ets_table_sanitizer(kv, _Info) ->
+    skip;
 get_ets_table_sanitizer(menelaus_web_cache, _Info) ->
     {ok, fun ns_cluster:sanitize_node_info/1};
 get_ets_table_sanitizer(_, Info) ->
