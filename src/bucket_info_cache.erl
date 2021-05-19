@@ -152,7 +152,8 @@ build_nodes_ext([Node | RestNodes], Config, Snapshot, NodesExtAcc) ->
 do_compute_bucket_info(Bucket, Config) ->
     {Snapshot, Rev} = chronicle_compat:get_snapshot_with_revision(
                         [ns_bucket:fetch_snapshot(Bucket, _),
-                         ns_cluster_membership:fetch_snapshot(_)],
+                         ns_cluster_membership:fetch_snapshot(_),
+                         chronicle_compat:txn_get_many([counters], _)],
                         #{ns_config => Config}),
 
     case ns_bucket:get_bucket(Bucket, Snapshot) of
@@ -299,8 +300,8 @@ compute_global_rev(Config, {_, ChronicleRev}) ->
 compute_global_rev(Config, no_rev) ->
     ns_config:compute_global_rev(Config).
 
-compute_global_rev_epoch(Config) ->
-    Failovers = ns_cluster:counter(Config, quorum_failover_success, 0),
+compute_global_rev_epoch(Snapshot) ->
+    Failovers = ns_cluster:counter(Snapshot, quorum_failover_success, 0),
     Failovers + 1.
 
 compute_bucket_info_with_config(Id, Config, Snapshot, BucketConfig,
@@ -316,7 +317,7 @@ compute_bucket_info_with_config(Id, Config, Snapshot, BucketConfig,
     %% We're computing rev using config's global rev which allows us
     %% to track changes to node services and set of active nodes.
     Rev = compute_global_rev(Config, ChronicleRev),
-    RevEpoch = compute_global_rev_epoch(Config),
+    RevEpoch = compute_global_rev_epoch(Snapshot),
 
     Json =
         {lists:flatten(
@@ -414,15 +415,17 @@ build_cluster_capabilities(Config) ->
 
 do_build_node_services() ->
     Config = ns_config:get(),
-    {ok, {Snapshot, ChronicleRev}} =
-        chronicle_compat:ro_txn(fun ns_cluster_membership:fetch_snapshot/1,
-                                #{ns_config => Config}),
+    {Snapshot, ChronicleRev} =
+        chronicle_compat:get_snapshot_with_revision(
+          [fun ns_cluster_membership:fetch_snapshot/1,
+           chronicle_compat:txn_get_many([counters], _)],
+          #{ns_config => Config}),
 
     NEIs = build_nodes_ext(ns_cluster_membership:active_nodes(Snapshot),
                            Config, Snapshot, []),
     Caps = build_cluster_capabilities(Config),
     Rev = compute_global_rev(Config, ChronicleRev),
-    RevEpoch = compute_global_rev_epoch(Config),
+    RevEpoch = compute_global_rev_epoch(Snapshot),
     J = {[{rev, Rev},
           {revEpoch, RevEpoch},
           {nodesExt, NEIs}] ++ Caps},

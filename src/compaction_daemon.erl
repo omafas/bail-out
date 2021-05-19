@@ -85,21 +85,28 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-
 get_last_rebalance_or_failover_timestamp() ->
-    case ns_config:search_with_vclock(ns_config:get(), counters) of
-        {value, _, {_, VClock}} ->
-            case vclock:get_latest_timestamp(VClock) of
-                0 ->
-                    0;
-                GregorianSecondsTS ->
-                    UnixEpochStart = {{1970, 1, 1}, {0, 0, 0}},
-                    UnixEpochStartTS =
-                        calendar:datetime_to_gregorian_seconds(UnixEpochStart),
-                    GregorianSecondsTS - UnixEpochStartTS
+    case chronicle_kv:get(kv, counters) of
+        {ok, {Counters, _Rev}} ->
+            case [TS || {_Name, {TS, _V}} <- Counters] of
+                [] -> 0;
+                TSList -> lists:max(TSList)
             end;
-        false ->
+        {error, not_found} ->
             0
+    end.
+
+get_last_rebalance_or_failover_timestamp_compat() ->
+    case chronicle_compat:backend() of
+        chronicle ->
+            get_last_rebalance_or_failover_timestamp();
+        ns_config ->
+            case ns_config:search_with_vclock(ns_config:get(), counters) of
+                {value, _, {_, VClock}} ->
+                    chronicle_compat:get_latest_vclock_unix_timestamp(VClock);
+                false ->
+                    0
+            end
     end.
 
 %% While Pid is alive prevents autocompaction of views for given
@@ -638,7 +645,7 @@ spawn_dbs_compactor(BucketName, Config, Force, OriginalTarget) ->
 
                           PurgeTS0 = NowEpoch - Interval,
 
-                          RebTS = get_last_rebalance_or_failover_timestamp(),
+                          RebTS = get_last_rebalance_or_failover_timestamp_compat(),
 
                           PurgeTS = case RebTS > PurgeTS0 of
                                         true ->

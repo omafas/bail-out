@@ -36,7 +36,8 @@
          config_sync/3,
          node_keys/1,
          service_keys/1,
-         upgrade/1]).
+         upgrade/1,
+         get_latest_vclock_unix_timestamp/1]).
 
 %% RPC from another nodes
 -export([do_pull/1]).
@@ -345,11 +346,34 @@ upgrade(Config) ->
                   end
           end, {#{}, []}, Config),
 
-    Sets = [{set, K, V} || {K, V} <- maps:to_list(ToSet)],
+    {CountersSet, CountersCleanup} = upgrade_counters(Config),
+    Sets = [{set, K, V} || {K, V} <- [CountersSet | maps:to_list(ToSet)]],
 
     {ok, Rev} = chronicle_kv:multi(kv, Sets),
     ?log_info("Keys are migrated to chronicle. Rev = ~p. Sets = ~p",
               [Rev, Sets]),
 
     ok = remote_pull(OtherNodes, ?UPGRADE_PULL_TIMEOUT),
-    [{set, after_upgrade_cleanup, Cleanup}].
+    [{set, after_upgrade_cleanup, [CountersCleanup|Cleanup]}].
+
+upgrade_counters(Config) ->
+    {Counters, Timestamp} =
+        case ns_config:search_with_vclock(Config, counters) of
+            {value, V, {_, VClock}} ->
+                {V, get_latest_vclock_unix_timestamp(VClock)};
+            false ->
+                {[], 0}
+        end,
+    {{counters, [{K, {Timestamp, V}} || {K, V} <- Counters]},
+     {counters, ?DELETED_MARKER}}.
+
+get_latest_vclock_unix_timestamp(VClock) ->
+    case vclock:get_latest_timestamp(VClock) of
+        0 ->
+            0;
+        GregorianSecondsTS ->
+            UnixEpochStart = {{1970, 1, 1}, {0, 0, 0}},
+            UnixEpochStartTS =
+                calendar:datetime_to_gregorian_seconds(UnixEpochStart),
+            GregorianSecondsTS - UnixEpochStartTS
+    end.

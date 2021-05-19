@@ -331,20 +331,49 @@ change_address(Address) ->
     end.
 
 %% @doc Returns proplist of cluster-wide counters.
-counters() ->
-    ns_config:search(ns_config:latest(), counters, []).
+counters() -> counters(direct).
 
-counter(Config, CounterName, Default) ->
-    ns_config:search_prop(Config, counters, CounterName, Default).
+counters(Snapshot) ->
+    Counters = chronicle_compat:get(Snapshot, counters, #{default => []}),
+    lists:map(
+      fun ({Name, {_Timestamp, Value}}) -> {Name, Value};
+          %% backward compat for counters that we kept in ns_config:
+          (Pair) -> Pair
+      end, Counters).
+
+counter(Snapshot, CounterName, Default) ->
+    proplists:get_value(CounterName, counters(Snapshot), Default).
 
 %% @doc Increment a cluster-wide counter.
 counter_inc(CounterName) ->
     % We expect counters to be slow moving (num rebalances, num failovers,
     % etc), and favor efficient reads over efficient writes.
-    PList = counters(),
-    ok = ns_config:set(counters,
-                       [{CounterName, proplists:get_value(CounterName, PList, 0) + 1} |
-                        proplists:delete(CounterName, PList)]).
+    case chronicle_compat:backend() of
+        chronicle ->
+            chronicle_kv:transaction(
+              kv,
+              [counters],
+              fun (Snapshot) ->
+                  {Counters, _} = maps:get(counters, Snapshot, {[], undefined}),
+                  {_, OldValue} = proplists:get_value(CounterName, Counters,
+                                                      {undefined, 0}),
+                  TS = os:system_time(second),
+                  NewCounters = [{CounterName, {TS, OldValue + 1}} |
+                                 proplists:delete(CounterName, Counters)],
+                  {commit, [{set, counters, NewCounters}]}
+              end);
+        ns_config ->
+            %% Here we assume that counters can't be modified between upgrade
+            %% start and change of compat mode (because both things are done by
+            %% the orchestrator), so if we get to this point it means that
+            %% upgrade hasn't started yet and it's safe to store data in
+            %% ns_config
+            PList = counters(),
+            Value = proplists:get_value(CounterName, PList, 0) + 1,
+            ok = ns_config:set(counters,
+                               [{CounterName, Value} |
+                                proplists:delete(CounterName, PList)])
+    end.
 
 counter_inc(Type, Name)
   when is_atom(type), is_atom(Name) ->
