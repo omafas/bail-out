@@ -17,10 +17,12 @@
 
 -define(SERVER, {via, leader_registry, ?MODULE}).
 
--export([start_link/0,
-         init/1,
+%% genserver callbacks
+-export([init/1,
          handle_call/3,
-         handle_info/2,
+         handle_info/2]).
+
+-export([start_link/0,
          add_replica/3,
          remove_peer/1,
          activate_nodes/1,
@@ -108,7 +110,31 @@ call(Oper, Tries) ->
             call(Oper, Tries - 1)
     end.
 
+%% -------------------------------------
+%% genserver callbacks.
+%% -------------------------------------
 init([]) ->
+    case is_cluster_node() of
+        true ->
+            do_init();
+        false ->
+            %% We expect to be taking down soon anyway.
+            ignore
+    end.
+
+handle_call(Call, From, State) ->
+    true = is_cluster_node(),
+    do_handle_call(Call, From, State).
+
+handle_info(Msg, State) ->
+    true = is_cluster_node(),
+    do_handle_info(Msg, State).
+%% -------------------------------------
+
+is_cluster_node() ->
+    lists:member(node(), ns_cluster_membership:nodes_wanted()).
+
+do_init() ->
     erlang:process_flag(trap_exit, true),
     Self = self(),
     SelfRef = erlang:make_ref(),
@@ -140,7 +166,7 @@ init([]) ->
             {ok, arm_janitor_timer(State)}
     end.
 
-handle_call({upgrade_cluster, NodesToAdd}, _From,
+do_handle_call({upgrade_cluster, NodesToAdd}, _From,
             State = #state{self_ref = SelfRef, events = Events}) ->
     ?log_debug("Reinitialize chronicle before the upgrade"),
     chronicle_compat_events:hush_chronicle(),
@@ -176,7 +202,7 @@ handle_call({upgrade_cluster, NodesToAdd}, _From,
     ?log_info("Cluster successfully upgraded to chronicle"),
     {reply, ok, State#state{events = NewEvents}};
 
-handle_call({start_failover, Nodes, Ref}, _From, State) ->
+do_handle_call({start_failover, Nodes, Ref}, _From, State) ->
     PreviousFailoverNodes = get_prev_failover_nodes(direct),
 
     case PreviousFailoverNodes -- Nodes of
@@ -202,7 +228,7 @@ handle_call({start_failover, Nodes, Ref}, _From, State) ->
             {reply, {incompatible_with_previous, PreviousFailoverNodes}, State}
     end;
 
-handle_call({complete_failover, Nodes, Ref}, _From, State) ->
+do_handle_call({complete_failover, Nodes, Ref}, _From, State) ->
     ?log_info("Completing quorum loss failover with ref = ~p "
               "removing nodes ~p", [Ref, Nodes]),
     {ok, _} =
@@ -214,7 +240,7 @@ handle_call({complete_failover, Nodes, Ref}, _From, State) ->
     self() ! janitor,
     {reply, ok, NewState};
 
-handle_call(Oper, _From, #state{self_ref = SelfRef} = State) ->
+do_handle_call(Oper, _From, #state{self_ref = SelfRef} = State) ->
     NewState = cancel_janitor_timer(State),
     RV = case acquire_lock() of
              {ok, Lock} ->
@@ -224,10 +250,10 @@ handle_call(Oper, _From, #state{self_ref = SelfRef} = State) ->
          end,
     {reply, RV, NewState}.
 
-handle_info(arm_janitor_timer, State) ->
+do_handle_info(arm_janitor_timer, State) ->
     {noreply, arm_janitor_timer(State)};
 
-handle_info(janitor, #state{self_ref = SelfRef} = State) ->
+do_handle_info(janitor, #state{self_ref = SelfRef} = State) ->
     CleanState = cancel_janitor_timer(State),
     NewState =
         case acquire_lock() of
@@ -250,7 +276,7 @@ handle_info(janitor, #state{self_ref = SelfRef} = State) ->
         end,
     {noreply, NewState};
 
-handle_info(after_upgrade_cleanup, State) ->
+do_handle_info(after_upgrade_cleanup, State) ->
     RV =
         ns_config:run_txn(
           fun (Config, SetFn) ->
@@ -274,7 +300,7 @@ handle_info(after_upgrade_cleanup, State) ->
     end,
     {noreply, State};
 
-handle_info({'EXIT', From, Reason}, State) ->
+do_handle_info({'EXIT', From, Reason}, State) ->
     ?log_debug("Received exit from ~p with reason ~p. Exiting.",
                [From, Reason]),
     {stop, Reason, State}.
