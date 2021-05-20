@@ -57,7 +57,7 @@ handle_info(Info, Master) ->
     {noreply, Master}.
 
 handle_cast({tick, FromNode, TS}, Master) ->
-    {noreply, handle_tick(Master, FromNode, TS)};
+    {noreply, handle_tick(FromNode, Master, TS)};
 handle_cast(Cast, Master) ->
     ?log_warning("Received an unexpected cast ~p", [Cast]),
     {noreply, Master}.
