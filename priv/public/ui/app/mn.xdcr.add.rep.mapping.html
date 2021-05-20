@@ -1,14 +1,15 @@
 <!--
-Copyright 2020-Present Couchbase, Inc.
+     Copyright 2020-Present Couchbase, Inc.
 
-Use of this software is governed by the Business Source License included in
-the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
-file, in accordance with the Business Source License, use of this software will
-be governed by the Apache License, Version 2.0, included in the file
-licenses/APL2.txt.
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
 -->
 
-<div [formGroup]="group"
+<div
+   [formGroup]="group"
    class="row flex-left margin-bottom-1">
   <label class="toggle-control margin-0">
     <input
@@ -17,7 +18,8 @@ licenses/APL2.txt.
        type="checkbox">
     <span class="toggle-control-body"></span>
   </label>
-  <span class="text-small margin-left-half">
+  <span
+     class="text-small margin-left-half">
     Specify Scopes, Collections, and Mappings
   </span>
 </div>
@@ -37,12 +39,19 @@ licenses/APL2.txt.
   <div class="row">
     <span class="column">
       <h4>Scopes & Collections to Replicate</h4>
-      <p class="desc">
+      <p class="desc"
+         [hidden]="!(mnPermissions.stream | async)?.cluster.collection[(sourceBucketName | async) + ':.:.']?.collections.read">
         <span class="icon fa-warning warning margin-right-half"></span>
         Leave scopes & collections unchecked if you simply want to replicate everything.
         Checking anything here explicitly excludes anything left unchecked.<br>
         <span class="icon fa-warning warning margin-right-half"></span>
         Scopes and collections to be removed by filtering rules set above will STILL BE SHOWN in this list.
+      </p>
+      <p class="desc"
+         [hidden]="(mnPermissions.stream | async)?.cluster.collection[(sourceBucketName | async) + ':.:.']?.collections.read">
+        <span class="icon fa-warning warning margin-right-half"></span>
+        User needs the following permissions to be able to specify the mappings:
+        cluster.collection[{{(sourceBucketName | async) + ':.:.'}}].collections!read
       </p>
     </span>
   </div>

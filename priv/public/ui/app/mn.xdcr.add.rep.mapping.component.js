@@ -9,9 +9,9 @@ licenses/APL2.txt.
 */
 
 import {Component, ChangeDetectionStrategy} from '/ui/web_modules/@angular/core.js';
-import {Subject, of, merge} from '/ui/web_modules/rxjs.js';
-import {map, filter, switchMap, shareReplay, takeUntil, startWith,
-  distinctUntilChanged, debounceTime, withLatestFrom} from '/ui/web_modules/rxjs/operators.js';
+import {Subject, of, merge, NEVER} from '/ui/web_modules/rxjs.js';
+import {map, filter, switchMap, shareReplay, takeUntil, startWith, distinctUntilChanged,
+        debounceTime, withLatestFrom} from '/ui/web_modules/rxjs/operators.js';
 
 import {MnLifeCycleHooksToStream} from "./mn.core.js";
 
@@ -19,6 +19,8 @@ import {MnPoolsService} from "./mn.pools.service.js";
 import {MnXDCRService} from "./mn.xdcr.service.js";
 import {MnCollectionsService} from './mn.collections.service.js';
 import {MnHelperService} from "./mn.helper.service.js";
+
+import {MnPermissions} from '/ui/app/ajs.upgraded.providers.js';
 
 export {MnXDCRAddRepMappingComponent};
 
@@ -42,10 +44,12 @@ class MnXDCRAddRepMappingComponent extends MnLifeCycleHooksToStream {
     MnPoolsService,
     MnXDCRService,
     MnHelperService,
-    MnCollectionsService
+    MnCollectionsService,
+    MnPermissions
   ]}
 
-  constructor(mnPoolsService, mnXDCRService, mnHelperService, mnCollectionsService) {
+  constructor(mnPoolsService, mnXDCRService, mnHelperService, mnCollectionsService,
+              mnPermissions) {
     super();
 
     this.mnCollectionsService = mnCollectionsService;
@@ -61,6 +65,7 @@ class MnXDCRAddRepMappingComponent extends MnLifeCycleHooksToStream {
 
     this.addExplicitMappingMigrationRules = new Subject();
 
+    this.mnPermissions = mnPermissions;
   }
 
   ngOnInit() {
@@ -93,11 +98,17 @@ class MnXDCRAddRepMappingComponent extends MnLifeCycleHooksToStream {
         });
     }
 
-    this.scopes =
-      (this.bucket ? of(this.bucket) : this.group.get("fromBucket").valueChanges)
+    this.sourceBucketName =
+      (this.bucket ? of(this.bucket) : this.group.get("fromBucket").valueChanges);
+
+    this.scopes = this.sourceBucketName
       .pipe(filter(v => !!v),
             distinctUntilChanged(),
-            switchMap(bucketName => this.mnCollectionsService.getManifest(bucketName)),
+            withLatestFrom(this.mnPermissions.stream),
+            switchMap(([bucketName, permission]) =>
+                      permission.cluster.collection[bucketName + ':.:.'].collections.read ?
+                      this.mnCollectionsService.getManifest(bucketName) :
+                      NEVER),
             map(v => [v.scopes]),
             shareReplay({refCount: true, bufferSize: 1}));
 
