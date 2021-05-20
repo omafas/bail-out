@@ -300,9 +300,14 @@ compute_global_rev(Config, {_, ChronicleRev}) ->
 compute_global_rev(Config, no_rev) ->
     ns_config:compute_global_rev(Config).
 
-compute_global_rev_epoch(Snapshot) ->
-    Failovers = ns_cluster:counter(Snapshot, quorum_failover_success, 0),
-    Failovers + 1.
+build_global_rev_epoch(Config, Snapshot) ->
+    case cluster_compat_mode:is_cluster_70(Config) of
+         true ->
+            Failovers = ns_cluster:counter(Snapshot, quorum_failover_success,
+                                           0),
+            [{revEpoch, Failovers + 1}];
+         false -> []
+    end.
 
 compute_bucket_info_with_config(Id, Config, Snapshot, BucketConfig,
                                 ChronicleRev) ->
@@ -317,12 +322,11 @@ compute_bucket_info_with_config(Id, Config, Snapshot, BucketConfig,
     %% We're computing rev using config's global rev which allows us
     %% to track changes to node services and set of active nodes.
     Rev = compute_global_rev(Config, ChronicleRev),
-    RevEpoch = compute_global_rev_epoch(Snapshot),
 
     Json =
         {lists:flatten(
            [{rev, Rev},
-            {revEpoch, RevEpoch},
+            build_global_rev_epoch(Config, Snapshot),
             build_short_bucket_info(Id, BucketConfig, Snapshot),
             build_ddocs(Id, BucketConfig),
             build_vbucket_map(?LOCALHOST_MARKER_STRING, BucketConfig),
@@ -425,10 +429,9 @@ do_build_node_services() ->
                            Config, Snapshot, []),
     Caps = build_cluster_capabilities(Config),
     Rev = compute_global_rev(Config, ChronicleRev),
-    RevEpoch = compute_global_rev_epoch(Snapshot),
+    RevEpoch = build_global_rev_epoch(Config, Snapshot),
     J = {[{rev, Rev},
-          {revEpoch, RevEpoch},
-          {nodesExt, NEIs}] ++ Caps},
+          {nodesExt, NEIs}] ++ Caps ++ RevEpoch},
     {Rev, ejson:encode(J)}.
 
 terse_bucket_info_with_local_addr(BucketName, LocalAddr) ->
