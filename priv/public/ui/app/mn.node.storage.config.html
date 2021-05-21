@@ -1,12 +1,18 @@
 <!--
-Copyright 2020-Present Couchbase, Inc.
+     Copyright 2020-Present Couchbase, Inc.
 
-Use of this software is governed by the Business Source License included in
-the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
-file, in accordance with the Business Source License, use of this software will
-be governed by the Apache License, Version 2.0, included in the file
-licenses/APL2.txt.
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
 -->
+
+<div
+   class="error error-form"
+   [hidden]="!(postNodeInitHttp.error | async)?.errors?._">
+  {{(postNodeInitHttp.error | async)?.errors?._}}
+</div>
 
 <div [formGroup]="group">
   <div formGroupName="storage">
@@ -19,14 +25,6 @@ licenses/APL2.txt.
          [control]="group.get('storage.path')"
          controlName="setup_db_path_input">
       </mn-path-field>
-    </div>
-
-    <div
-       class="error error-form"
-       [hidden]="!(diskStorageHttp.error | async)">
-      <div *ngFor="let error of (diskStorageHttp.error | async)">
-        Attention: {{error}}<br>
-      </div>
     </div>
 
     <div class="formrow">

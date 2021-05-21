@@ -49,7 +49,6 @@ class MnWizardJoinClusterComponent extends MnLifeCycleHooksToStream {
     this.focusFieldSubject = new BehaviorSubject("hostname");
     this.joinClusterForm = mnWizardService.wizardForm.joinCluster;
     this.hostnameHttp = mnWizardService.stream.hostnameHttp;
-    this.diskStorageHttp = mnWizardService.stream.diskStorageHttp;
     this.joinClusterHttp = mnWizardService.stream.joinClusterHttp;
 
     this.certificate = mnPoolsService.stream.isEnterprise
