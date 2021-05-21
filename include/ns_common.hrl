@@ -110,6 +110,12 @@
 -define(ALE_LOG(Level, Format, Args),
         ale:log(?NS_SERVER_LOGGER, Level, Format, Args)).
 
+%% ale:{log, error, debug, warning, critical} are parse transformed to
+%% add the Module, Function, Line of the caller.
+%%
+%% If new definitions are added to the loggers defined below, make sure
+%% the parse transform logic works on those too.
+
 -define(log_debug(Format, Args, Opts), ale:debug(?NS_SERVER_LOGGER, Format, Args, Opts)).
 -define(log_debug(Format, Args), ale:debug(?NS_SERVER_LOGGER, Format, Args)).
 -define(log_debug(Msg), ale:debug(?NS_SERVER_LOGGER, Msg)).

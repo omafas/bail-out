@@ -43,8 +43,8 @@ exports() ->
     ["-export([sync/0]).\n",
      "-export([get_effective_loglevel/0]).\n",
      "-export([is_loglevel_enabled/1]).\n",
-     [io_lib:format("-export([~p/4, ~p/5, x~p/5, x~p/6, x~p/7]).~n",
-                    [LogLevel, LogLevel, LogLevel, LogLevel, LogLevel]) ||
+     [io_lib:format("-export([~p/4, ~p/5, ~p/6, x~p/5, x~p/6, x~p/7]).~n",
+                    [LogLevel, LogLevel, LogLevel, LogLevel, LogLevel, LogLevel]) ||
          LogLevel <- ?LOGLEVELS]].
 
 definitions(LoggerName, LoggerLogLevel, Formatter, Sinks) ->
@@ -109,6 +109,7 @@ loglevel_definitions(LoggerName, LoggerLogLevel, LogLevel, Formatter, Sinks) ->
      "\n",
      loglevel_1(LogLevel),
      loglevel_2(LogLevel),
+     loglevel_3(LogLevel),
      "\n",
      xloglevel_1(LogLevel),
      xloglevel_2(LogLevel),
@@ -202,6 +203,12 @@ xloglevel_2(LogLevel) ->
     io_lib:format(
       "x~p(M, F, L, Data, Fmt, Args) -> "
       "generic_~p(M, F, L, Data, Fmt, Args, []).~n",
+      [LogLevel, LogLevel]).
+
+loglevel_3(LogLevel) ->
+    io_lib:format(
+      "~p(M, F, L, Fmt, Args, Opts) -> "
+      "generic_~p(M, F, L, undefined, Fmt, Args, Opts).~n",
       [LogLevel, LogLevel]).
 
 xloglevel_3(LogLevel) ->

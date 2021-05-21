@@ -32,28 +32,38 @@
 %%
 %% ale:debug(Logger, Msg),
 %% ale:debug(Logger, Fmt, Args)
+%% ale:debug(Logger, Fmt, Args, Opts)
 %% ale:xdebug(Logger, UserData, Msg),
 %% ale:xdebug(Logger, UserData, Fmt, Args)
+%% ale:xdebug(Logger, UserData, Fmt, Args, Opts)
 %%
 %% ale:info(Logger, Msg),
 %% ale:info(Logger, Fmt, Args)
+%% ale:info(Logger, Fmt, Args, Opts)
 %% ale:xinfo(Logger, UserData, Msg),
 %% ale:xinfo(Logger, UserData, Fmt, Args)
+%% ale:xinfo(Logger, UserData, Fmt, Args, Opts)
 %%
 %% ale:warn(Logger, Msg),
 %% ale:warn(Logger, Fmt, Args)
+%% ale:warn(Logger, Fmt, Args, Opts)
 %% ale:xwarn(Logger, UserData, Msg),
 %% ale:xwarn(Logger, UserData, Fmt, Args)
+%% ale:xwarn(Logger, UserData, Fmt, Args, Opts)
 %%
 %% ale:error(Logger, Msg),
 %% ale:error(Logger, Fmt, Args)
+%% ale:error(Logger, Fmt, Args, Opts)
 %% ale:xerror(Logger, UserData, Msg),
 %% ale:xerror(Logger, UserData, Fmt, Args)
+%% ale:xerror(Logger, UserData, Fmt, Args, Opts)
 %%
 %% ale:critical(Logger, Msg),
 %% ale:critical(Logger, Fmt, Args)
+%% ale:critical(Logger, Fmt, Args, Opts)
 %% ale:xcritical(Logger, UserData, Msg),
 %% ale:xcritical(Logger, UserData, Fmt, Args)
+%% ale:xcritical(Logger, UserData, Fmt, Args, Opts)
 %%
 %% Logs a message to a `Logger` with a specific log level. x* versions
 %% take an `UserData` argument that is passed as is to formatter and
@@ -231,9 +241,9 @@ valid_args(ExtendedCall, Args) ->
 
     case ExtendedCall of
         false ->
-            N =:= 1 orelse N =:= 2;
+            N =:= 1 orelse N =:= 2 orelse N =:= 3;
         true ->
-            N =:= 2 orelse N =:= 3
+            N =:= 2 orelse N =:= 3 orelse N =:= 4
     end.
 
 logger_impl_expr(LoggerExpr) ->
