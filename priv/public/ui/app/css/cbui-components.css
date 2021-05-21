@@ -1866,10 +1866,20 @@ mn-select[disabled] .mn-select,
   height: 100%;
   width: 100%;
 }
-.mn-select .dropdown-menu {
-  max-height: 40vh;
-  overflow-y: scroll;
+
+.mn-select .scrollable {
+  max-height: calc(40vh - 2.5rem);
+  overflow-y: auto;
 }
+.mn-select .scrollable::-webkit-scrollbar {
+  visibility: visible;
+}
+.mn-select .scrollable::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  border: 5px solid white;
+  background-color: rgba(0, 0, 0, 0.45);
+}
+
 .mn-select div[uib-dropdown-menu] .option,
 .mn-select div[ngbDropdownMenu] .option {
   padding: 0.5rem;

@@ -31,41 +31,43 @@ licenses/APL2.txt.
        mnPlaceholder="filter options"
        class="row flex-left sticky position-top-0">
     </mn-input-filter>
-    <span
-       *ngIf="!(hasSearchInput | async)">
-      <a
-         ngbDropdownItem
-         class="block option"
-         href="javascript:void(0)"
-         (click)="optionSelected(value)"
-         (keydown.enter)="optionSelected(value);"
-         *ngFor="let value of values; index as i;">
-      {{labels ? labels[i] : valuesMapping(value)}}
-      </a>
-    </span>
-    <span
-       *ngIf="(hasSearchInput | async) && !labels">
-      <a
-         ngbDropdownItem
-         class="block option"
-         href="javascript:void(0)"
-         (click)="selectOptionClickStream.next(value)"
-         (keydown.enter)="selectOptionClickStream.next(value)"
-         *ngFor="let value of preparedValues | async">
-        {{valuesMapping(value)}}
-      </a>
-    </span>
-    <span
-       *ngIf="(hasSearchInput | async) && labels">
-      <a
-         ngbDropdownItem
-         class="block option"
-         href="javascript:void(0)"
-         (click)="selectLabelClickStream.next(label)"
-         (keydown.enter)="selectLabelClickStream.next(label)"
-         *ngFor="let label of preparedLabels | async">
-        {{label}}
-      </a>
-    </span>
+    <div class="scrollable">
+      <span
+         *ngIf="!(hasSearchInput | async)">
+        <a
+           ngbDropdownItem
+           class="block option"
+           href="javascript:void(0)"
+           (click)="optionSelected(value)"
+           (keydown.enter)="optionSelected(value);"
+           *ngFor="let value of values; index as i;">
+          {{labels ? labels[i] : valuesMapping(value)}}
+        </a>
+      </span>
+      <span
+         *ngIf="(hasSearchInput | async) && !labels">
+        <a
+           ngbDropdownItem
+           class="block option"
+           href="javascript:void(0)"
+           (click)="selectOptionClickStream.next(value)"
+           (keydown.enter)="selectOptionClickStream.next(value)"
+           *ngFor="let value of preparedValues | async">
+          {{valuesMapping(value)}}
+        </a>
+      </span>
+      <span
+         *ngIf="(hasSearchInput | async) && labels">
+        <a
+           ngbDropdownItem
+           class="block option"
+           href="javascript:void(0)"
+           (click)="selectLabelClickStream.next(label)"
+           (keydown.enter)="selectLabelClickStream.next(label)"
+           *ngFor="let label of preparedLabels | async">
+          {{label}}
+        </a>
+      </span>
+    </div>
   </div>
 </div>

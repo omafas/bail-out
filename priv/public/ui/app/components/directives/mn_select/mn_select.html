@@ -35,29 +35,31 @@ licenses/APL2.txt.
        mn-hide-button="true"
        ng-click="vm.clickSearch($event)">
     </div>
-    <a
-       ng-if="!vm.hasSearchInput()"
-       class="block option"
-       href="javascript:void(0)"
-       ng-repeat="value in vm.values track by value"
-       ng-click="vm.optionClicked(value)">
-      {{vm.labels ? vm.labels[$index] : vm.valuesMapping(value)}}
-    </a>
-    <a
-       ng-if="vm.hasSearchInput() && !vm.labels"
-       class="block option"
-       href="javascript:void(0)"
-       ng-repeat="value in vm.getPreparedValues() | filter: vm.mnSearchValue track by value"
-       ng-click="vm.optionClicked(vm.values[vm.preparedValues.indexOf(value)])">
-      {{value}}
-    </a>
-    <a
-       ng-if="vm.hasSearchInput() && vm.labels"
-       class="block option"
-       href="javascript:void(0)"
-       ng-repeat="label in vm.labels | filter: vm.mnSearchValue track by label"
-       ng-click="vm.optionClicked(vm.values[vm.labels.indexOf(label)])">
-      {{label}}
-    </a>
+    <div class="scrollable">
+      <a
+         ng-if="!vm.hasSearchInput()"
+         class="block option"
+         href="javascript:void(0)"
+         ng-repeat="value in vm.values track by value"
+         ng-click="vm.optionClicked(value)">
+        {{vm.labels ? vm.labels[$index] : vm.valuesMapping(value)}}
+      </a>
+      <a
+         ng-if="vm.hasSearchInput() && !vm.labels"
+         class="block option"
+         href="javascript:void(0)"
+         ng-repeat="value in vm.getPreparedValues() | filter: vm.mnSearchValue track by value"
+         ng-click="vm.optionClicked(vm.values[vm.preparedValues.indexOf(value)])">
+        {{value}}
+      </a>
+      <a
+         ng-if="vm.hasSearchInput() && vm.labels"
+         class="block option"
+         href="javascript:void(0)"
+         ng-repeat="label in vm.labels | filter: vm.mnSearchValue track by label"
+         ng-click="vm.optionClicked(vm.values[vm.labels.indexOf(label)])">
+        {{label}}
+      </a>
+    </div>
   </div>
 </div>
