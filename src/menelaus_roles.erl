@@ -733,14 +733,14 @@ substitute_param(Param, ParamPairs) ->
 compile_param(bucket_name, Name, Snapshot) ->
     find_object(Name,
                 fun (BucketName) ->
-                        case ns_bucket:get_bucket(BucketName, Snapshot) of
+                        case ns_bucket:uuid(BucketName, Snapshot) of
                             not_present ->
                                 undefined;
-                            {ok, Props} ->
-                                {Props,
+                            UUID ->
+                                {UUID,
                                  collections:get_manifest(BucketName, Snapshot)}
                         end
-                end, fun ns_bucket:bucket_uuid/1);
+                end);
 compile_param(scope_name, Name, Manifest) ->
     find_object(Name,
                 fun (ScopeName) ->
@@ -748,32 +748,33 @@ compile_param(scope_name, Name, Manifest) ->
                             undefined ->
                                 undefined;
                             _ ->
-                                collections:get_scope(ScopeName, Manifest)
+                                maybe_add_id(collections:get_scope(ScopeName,
+                                                                   Manifest))
                         end
-                end, fun collections:get_uid/1);
+                end);
 compile_param(collection_name, Name, Scope) ->
-    find_object(Name, collections:get_collection(_, Scope),
-                fun collections:get_uid/1).
+    find_object(Name, ?cut(maybe_add_id(collections:get_collection(_, Scope)))).
 
-find_object(any, _Find, _GetId) ->
+maybe_add_id(undefined) ->
+    undefined;
+maybe_add_id(Props) ->
+    {collections:get_uid(Props), Props}.
+
+find_object(any, _Find) ->
     {any, any};
-find_object({Name, Id}, Find, GetId) ->
-    case find_object(Name, Find, GetId) of
+find_object({Name, Id}, Find) ->
+    case find_object(Name, Find) of
         RV = {{Name, Id}, _} ->
             RV;
         _ ->
             undefined
     end;
-find_object(Name, Find, GetId) when is_list(Name) ->
+find_object(Name, Find) when is_list(Name) ->
     case Find(Name) of
         undefined ->
             undefined;
-        {undefined, _} ->
-            undefined;
-        {Props, Ctx} ->
-            {{Name, GetId(Props)}, Ctx};
-        Props ->
-            {{Name, GetId(Props)}, Props}
+        {UUID, Props} ->
+            {{Name, UUID}, Props}
     end.
 
 params_version() ->
@@ -781,11 +782,11 @@ params_version() ->
 
 -spec params_version(map()) -> term().
 params_version(Snapshot) ->
-    [{Name, ns_bucket:bucket_uuid(Props),
+    [{Name, ns_bucket:uuid(Name, Snapshot),
       collections:get_uid(
         collections:get_manifest(Name, Snapshot,
                                  collections:default_manifest()))} ||
-        {Name, Props} <- ns_bucket:get_buckets(Snapshot)].
+        Name <- ns_bucket:get_bucket_names(Snapshot)].
 
 compile_params([], [], Acc, _) ->
     lists:reverse(Acc);
@@ -1110,7 +1111,7 @@ filter_out_invalid_roles_test() ->
                     [{name,<<"">>},{desc, <<"">>}],
                     [{[{bucket,bucket_name},n1ql,update],[execute]}]}],
     Snapshot = ns_bucket:toy_buckets([{"bucket1",
-                                       [{props, [{uuid, <<"id1">>}]}]}]),
+                                       [{uuid, <<"id1">>}, {props, []}]}]),
     ?assertEqual([{role1, [{"bucket1", <<"id1">>}]}],
                  filter_out_invalid_roles(Roles, Definitions, Snapshot)).
 
@@ -1162,8 +1163,8 @@ object_match_with_collections_test() ->
                                      [{collection, ["b1", any, any]}])).
 
 toy_buckets_props() ->
-    [{"test", [{props, [{uuid, <<"test_id">>}]}]},
-     {"default", [{props, [{uuid, <<"default_id">>}]},
+    [{"test", [{uuid, <<"test_id">>}, {props, []}]},
+     {"default", [{uuid, <<"default_id">>}, {props, []},
                   {collections, toy_manifest()}]}].
 
 toy_buckets() ->
@@ -1608,8 +1609,8 @@ params_version_test() ->
 
     Version1 = Test(toy_buckets_props()),
     Version2 = Test(lists:keydelete("test", 1, toy_buckets_props())),
-    Version3 = Test(Update([{props, [{uuid, <<"test_id1">>}]}])),
-    Version4 = Test(Update([{props, [{uuid, <<"test_id">>}]},
+    Version3 = Test(Update([{uuid, <<"test_id1">>}, {props, []}])),
+    Version4 = Test(Update([{uuid, <<"test_id">>}, {props, []},
                             {collections, toy_manifest()}])),
     ?assertNotEqual(Version1, Version2),
     ?assertNotEqual(Version1, Version3),

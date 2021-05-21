@@ -290,12 +290,11 @@ build_unstable_params(Ctx) ->
     end.
 
 build_buckets_info(Id, UUID, Nodes, Snapshot) ->
-    BucketsConfig = ns_bucket:get_buckets(Snapshot),
     BucketsVer =
-       erlang:phash2([ns_bucket:bucket_uuid(Props) || {_, Props} <- BucketsConfig])
-       bxor erlang:phash2(
-              [{proplists:get_value(hostname, KV),
-                proplists:get_value(status, KV)} || {struct, KV} <- Nodes]),
+        erlang:phash2(ns_bucket:uuids(Snapshot))
+        bxor erlang:phash2(
+               [{proplists:get_value(hostname, KV),
+                 proplists:get_value(status, KV)} || {struct, KV} <- Nodes]),
     {buckets, {struct,
                [{uri, bin_concat_path(["pools", Id, "buckets"],
                                       [{"v", BucketsVer},

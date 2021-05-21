@@ -41,14 +41,13 @@ do_db_req(#httpd{path_parts=[DbName | _]} = Req, Fun) ->
                                       {<<"reason">>, couch_util:to_binary(Reason)}]})
       end).
 
-verify_bucket_uuid(_, undefined) ->
+verify_bucket_uuid(_, _, undefined) ->
     ok;
-verify_bucket_uuid(BucketConfig, MaybeUUID) ->
-    BucketUUID = ns_bucket:bucket_uuid(BucketConfig),
-    case BucketUUID =:= MaybeUUID of
-        true ->
+verify_bucket_uuid(BucketName, Snapshot, MaybeUUID) ->
+    case ns_bucket:uuid(BucketName, Snapshot) of
+        MaybeUUID ->
             ok;
-        false ->
+        _ ->
             erlang:throw({not_found, uuids_dont_match})
     end.
 
@@ -167,10 +166,12 @@ send_no_active_vbuckets(CouchReq, Bucket0) ->
 
     {ok, couch_httpd:send_json(CouchReq, 302, Headers, RespJson)}.
 
-with_verify_bucket_auth(Req, BucketName, UUID, Fun) ->
-    case verify_bucket_auth(Req, BucketName) of
+with_verify_bucket_auth(Req, BinBucketName, UUID, Fun) ->
+    BucketName = ?b2l(BinBucketName),
+    Snapshot = ns_bucket:get_snapshot(BucketName),
+    case verify_bucket_auth(Req, BucketName, Snapshot) of
         {allowed, BucketConfig} ->
-            verify_bucket_uuid(BucketConfig, UUID),
+            verify_bucket_uuid(BucketName, Snapshot, UUID),
             Fun(BucketConfig);
         {not_found, _} = NotFound ->
             throw(NotFound);
@@ -189,12 +190,11 @@ verify_bucket_type_support(_OperType, BucketConfig) ->
 verify_bucket_auth(#httpd{method = Method,
                           path_parts = Path,
                           mochi_req = MochiReq},
-                   BucketName) ->
-    ListBucketName = ?b2l(BucketName),
+                   BucketName, Snapshot) ->
     Type = get_oper_type(Path),
-    Permission = get_required_permission(ListBucketName, Method, Type),
+    Permission = get_required_permission(BucketName, Method, Type),
 
-    case ns_bucket:get_bucket(ListBucketName) of
+    case ns_bucket:get_bucket(BucketName, Snapshot) of
         not_present ->
             {not_found, missing};
         {ok, BucketConfig} ->

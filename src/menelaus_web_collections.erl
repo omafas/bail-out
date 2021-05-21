@@ -135,10 +135,11 @@ validate_collections(Name, State) ->
 handle_ensure_manifest(Bucket, Uid, Req) ->
     assert_api_available(Bucket),
     UidInt = convert_uid(Uid),
-    {ok, BucketConfig} = ns_bucket:get_bucket(Bucket),
+    Snapshot = ns_bucket:get_snapshot(Bucket),
+    {ok, BucketConfig} = ns_bucket:get_bucket(Bucket, Snapshot),
 
     BucketNodes = ns_bucket:live_bucket_nodes_from_config(BucketConfig),
-    BucketUuid = ns_bucket:bucket_uuid(BucketConfig),
+    BucketUuid = ns_bucket:uuid(Bucket, Snapshot),
 
     validator:handle(
       fun (Values) ->

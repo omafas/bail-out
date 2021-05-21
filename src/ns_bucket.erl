@@ -104,7 +104,9 @@
          get_view_nodes/1,
          get_num_vbuckets/0,
          get_max_buckets/0,
-         bucket_uuid/1,
+         uuid/2,
+         uuids/0,
+         uuids/1,
          buckets_with_data_on_this_node/0,
          activate_bucket_data_on_this_node/1,
          deactivate_bucket_data_on_this_node/1,
@@ -154,19 +156,19 @@ names_change(bucket_names) ->
 names_change(_) ->
     false.
 
+all_sub_keys(Names) ->
+    [sub_key(B, SubKey) || B <- Names,
+                           SubKey <- [uuid, props, collections]].
+
 fetch_snapshot(_Bucket, {ns_config, Config}) ->
     Converted = bucket_configs_to_chronicle(get_buckets(Config)),
     maps:from_list([{K, {V, no_rev}} || {K, V} <- Converted]);
 fetch_snapshot(all, Txn) ->
     {ok, {Names, _} = NamesRev} = chronicle_compat:txn_get(root(), Txn),
-    Snapshot =
-        chronicle_compat:txn_get_many(
-          [sub_key(B, SubKey) || B <- Names,
-                                 SubKey <- [props, collections]], Txn),
+    Snapshot = chronicle_compat:txn_get_many(all_sub_keys(Names), Txn),
     Snapshot#{root() => NamesRev};
 fetch_snapshot(Bucket, Txn) ->
-    chronicle_compat:txn_get_many(
-      [root(), sub_key(Bucket, props), collections:key(Bucket)], Txn).
+    chronicle_compat:txn_get_many([root() | all_sub_keys([Bucket])], Txn).
 
 get_snapshot() ->
     get_snapshot(all).
@@ -184,21 +186,18 @@ upgrade_to_chronicle(Buckets, NodesWanted) ->
 
 bucket_configs_to_chronicle(BucketConfigs) ->
     [{root(), [N || {N, _} <- BucketConfigs]} |
-     [{sub_key(B, props), scrubbed(BC)} || {B, BC} <- BucketConfigs]].
-
-deprecated_property(sasl_password) ->
-    true;
-deprecated_property(_) ->
-    false.
-
-scrubbed(BucketProperties) ->
-    [{Key, Value} || {Key, Value} <- BucketProperties,
-                     not deprecated_property(Key)].
+     lists:flatmap(
+       fun ({B, BC}) ->
+               {value, {uuid, UUID}, BC1} = lists:keytake(uuid, 1, BC),
+               [{sub_key(B, props), lists:keydelete(sasl_password, 1, BC1)},
+                {uuid_key(B), UUID}]
+       end, BucketConfigs)].
 
 remove_from_snapshot(BucketName, Snapshot) ->
     functools:chain(
       Snapshot,
       [maps:remove(sub_key(BucketName, props), _),
+       maps:remove(uuid_key(BucketName), _),
        maps:remove(collections:key(BucketName), _),
        maps:update_with(root(), fun ({List, Rev}) ->
                                         {List -- [BucketName], Rev}
@@ -779,9 +778,7 @@ create_bucket(BucketType, BucketName, NewConfig) ->
             MergedConfig0 =
                 misc:update_proplist(new_bucket_default_params(BucketType),
                                      NewConfig),
-            MergedConfig1 = [{auth_type, sasl} | MergedConfig0],
-            BucketUUID = couch_uuids:random(),
-            MergedConfig = [{uuid, BucketUUID} | MergedConfig1],
+            MergedConfig = [{auth_type, sasl} | MergedConfig0],
             do_create_bucket(chronicle_compat:backend(), BucketName,
                              MergedConfig),
             %% The janitor will handle creating the map.
@@ -799,7 +796,8 @@ do_create_bucket(ns_config, BucketName, Config) ->
                   Tuple ->
                       exit({already_exists, Tuple})
               end,
-              [{BucketName, Config} | List]
+              BucketUUID = couch_uuids:random(),
+              [{BucketName, [{uuid, BucketUUID} | Config]} | List]
       end);
 do_create_bucket(chronicle, BucketName, Config) ->
     {ok, _} =
@@ -819,7 +817,8 @@ do_create_bucket(chronicle, BucketName, Config) ->
 
 create_bucket_sets(Bucket, Buckets, Config) ->
     [{set, root(), lists:usort([Bucket | Buckets])},
-     {set, sub_key(Bucket, props), Config}].
+     {set, sub_key(Bucket, props), Config},
+     {set, uuid_key(Bucket), couch_uuids:random()}].
 
 collections_sets(Bucket, Config, Snapshot) ->
     case collections:enabled(Config) of
@@ -876,12 +875,12 @@ do_delete_bucket(chronicle, BucketName) ->
                        true ->
                            {ok, BucketConfig} =
                                get_bucket(BucketName, Snapshot),
-                           CollectionsKey = collections:key(BucketName),
 
                            NodesWanted =
                                ns_cluster_membership:nodes_wanted(Snapshot),
                            KeysToDelete =
-                               [CollectionsKey, PropsKey |
+                               [collections:key(BucketName),
+                                uuid_key(BucketName), PropsKey |
                                 [collections:last_seen_ids_key(N, BucketName) ||
                                     N <- NodesWanted]],
                            {commit,
@@ -1199,23 +1198,48 @@ get_view_nodes(BucketConfig) ->
             []
     end.
 
-bucket_uuid(BucketConfig) ->
+uuid(BucketConfig) ->
     UUID = proplists:get_value(uuid, BucketConfig),
     true = is_binary(UUID),
     UUID.
 
-bucket_uuid(Name, BucketConfigs) ->
-    {ok, BucketConfig} = get_bucket_from_configs(Name, BucketConfigs),
-    bucket_uuid(BucketConfig).
+uuid_key(Bucket) ->
+    sub_key(Bucket, uuid).
 
-filter_out_unknown_buckets(BucketsWithUUIDs, BucketConfigs) ->
+uuid(Bucket, direct) ->
+    case chronicle_compat:backend() of
+        chronicle ->
+            case chronicle_compat:get(uuid_key(Bucket), #{}) of
+                {ok, UUID} ->
+                    UUID;
+                {error, not_found} ->
+                    not_present
+            end;
+        ns_config ->
+            case get_bucket(Bucket, ns_config:latest()) of
+                {ok, Props} ->
+                    uuid(Props);
+                not_present ->
+                    not_present
+            end
+    end;
+uuid(Bucket, Snapshot) when is_map(Snapshot) ->
+    case maps:find(uuid_key(Bucket), Snapshot) of
+        {ok, {UUID, _}} ->
+            UUID;
+        error ->
+            not_present
+    end.
+
+uuids() ->
+    uuids(get_snapshot()).
+
+uuids(Snapshot) ->
+    [{Name, uuid(Name, Snapshot)} || Name <- get_bucket_names(Snapshot)].
+
+filter_out_unknown_buckets(BucketsWithUUIDs, Snapshot) ->
     lists:filter(fun ({Name, UUID}) ->
-                         case get_bucket_from_configs(Name, BucketConfigs) of
-                             {ok, BucketConfig} ->
-                                 bucket_uuid(BucketConfig) =:= UUID;
-                             not_present ->
-                                 false
-                         end
+                         uuid(Name, Snapshot) =:= UUID
                  end, BucketsWithUUIDs).
 
 buckets_with_data_key(Node) ->
@@ -1229,7 +1253,7 @@ buckets_with_data_on_this_node() ->
            chronicle_compat:txn_get_many([buckets_with_data_key(Node)], _)]),
     BucketConfigs = get_buckets(Snapshot),
     Stored = membase_buckets_with_data_on_node(Snapshot, Node),
-    Filtered = filter_out_unknown_buckets(Stored, BucketConfigs),
+    Filtered = filter_out_unknown_buckets(Stored, Snapshot),
     [B || {B, _} <- Filtered] ++
         get_bucket_names_of_type(memcached, BucketConfigs).
 
@@ -1238,62 +1262,34 @@ membase_buckets_with_data_on_node(Snapshot, Node) ->
                          #{default => []}).
 
 activate_bucket_data_on_this_node(Name) ->
-    activate_bucket_data_on_this_node(chronicle_compat:backend(), Name).
-
-txn_on_all_buckets(Fun, ExtraKeys) ->
-    chronicle_kv:txn(
-      kv,
-      fun (Txn) ->
-              Snapshot = chronicle_kv:txn_get_many([ns_bucket:root()], Txn),
-              Fun(chronicle_kv:txn_get_many(
-                    [ns_bucket:root() |
-                     [sub_key(B, props) || B <- get_bucket_names(Snapshot)]] ++
-                        ExtraKeys, Txn))
-      end).
-
-activate_bucket_data_on_this_node(chronicle, Name) ->
     NodeKey = buckets_with_data_key(node()),
-    case txn_on_all_buckets(
-           fun (Snapshot) ->
-                   case activate_bucket_data_on_this_node_txn(Name, Snapshot) of
-                       not_changed ->
-                           {abort, not_changed};
-                       {ok, Value} ->
-                           {commit, [{set, NodeKey, Value}]}
-                   end
-           end, [NodeKey]) of
+    RV =
+        chronicle_compat:txn(
+          fun (Txn) ->
+                  Snapshot = fetch_snapshot(all, Txn),
+                  BucketsWithData =
+                      case chronicle_compat:txn_get(NodeKey, Txn) of
+                          {ok, {V, _}} ->
+                              V;
+                          {error, not_found} ->
+                              []
+                      end,
+                  NewBuckets =
+                      lists:keystore(Name, 1, BucketsWithData,
+                                     {Name, uuid(Name, Snapshot)}),
+
+                  case filter_out_unknown_buckets(NewBuckets, Snapshot) of
+                      BucketsWithData ->
+                          {abort, not_changed};
+                      Other ->
+                          {commit, [{set, NodeKey, Other}]}
+                  end
+          end),
+    case RV of
         not_changed ->
             ok;
         {ok, _} ->
             ok
-    end;
-activate_bucket_data_on_this_node(ns_config, Name) ->
-    case ns_config:run_txn(
-           fun (Config, Set) ->
-                   case activate_bucket_data_on_this_node_txn(Name, Config) of
-                       not_changed ->
-                           {abort, not_changed};
-                       {ok, Value} ->
-                           {commit, Set(buckets_with_data_key(node()),
-                                        Value, Config)}
-                   end
-           end) of
-        {commit, _} ->
-            ok;
-        {abort, not_changed} ->
-            ok
-    end.
-
-activate_bucket_data_on_this_node_txn(Name, Snapshot) ->
-    BucketConfigs = get_buckets(Snapshot),
-    BucketsWithData = membase_buckets_with_data_on_node(Snapshot, node()),
-    NewBuckets = lists:keystore(Name, 1, BucketsWithData,
-                                {Name, bucket_uuid(Name, BucketConfigs)}),
-    case filter_out_unknown_buckets(NewBuckets, BucketConfigs) of
-        BucketsWithData ->
-            not_changed;
-        Other ->
-            {ok, Other}
     end.
 
 deactivate_bucket_data_on_this_node(Name) ->

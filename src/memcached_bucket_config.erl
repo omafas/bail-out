@@ -138,7 +138,7 @@ get(BucketName) ->
             BucketType = proplists:get_value(type, BucketConfig),
 
             MemQuota = proplists:get_value(ram_quota, BucketConfig),
-            UUID = ns_bucket:bucket_uuid(BucketConfig),
+            UUID = ns_bucket:uuid(BucketName, Snapshot),
 
             Params = params(BucketType, BucketName, BucketConfig, MemQuota,
                             UUID),
@@ -266,8 +266,7 @@ need_update_collections_manifest(Sock, BucketName, Snapshot) ->
             end
     end.
 
-ensure_collections(Sock, #cfg{name = BucketName, config = BucketConfig,
-                              snapshot = Snapshot}) ->
+ensure_collections(Sock, #cfg{name = BucketName, snapshot = Snapshot}) ->
     case need_update_collections_manifest(Sock, BucketName, Snapshot) of
         false ->
             ok;
@@ -280,7 +279,7 @@ ensure_collections(Sock, #cfg{name = BucketName, config = BucketConfig,
                    Sock, ejson:encode(Manifest)),
             gen_event:notify(buckets_events,
                              {set_collections_manifest,
-                              ns_bucket:bucket_uuid(BucketConfig),
+                              ns_bucket:uuid(BucketName, Snapshot),
                               collections:convert_uid_from_memcached(Next)})
     end.
 

@@ -1162,16 +1162,21 @@ check_uuid(F, Args, Req) ->
     end.
 
 check_bucket_uuid(Bucket, F, Args, Req) ->
-    case ns_bucket:get_bucket(Bucket) of
+    case ns_bucket:uuid(Bucket, direct) of
         not_present ->
             ?log_debug("Attempt to access non existent bucket ~p", [Bucket]),
             reply_not_found(Req);
-        {ok, BucketConfig} ->
-            menelaus_web_buckets:checking_bucket_uuid(
-              Req, BucketConfig,
-              fun () ->
-                      erlang:apply(F, Args ++ [Req])
-              end)
+        UUID ->
+            ReqUUID = proplists:get_value("bucket_uuid",
+                                          mochiweb_request:parse_qs(Req)),
+            case ReqUUID =:= undefined orelse
+                list_to_binary(ReqUUID) =:= UUID of
+                true ->
+                    erlang:apply(F, Args ++ [Req]);
+                false ->
+                    reply_text(
+                      Req, "Bucket uuid does not match the requested.\r\n", 404)
+            end
     end.
 
 %% Returns an UUID from the ns_config

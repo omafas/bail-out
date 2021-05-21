@@ -183,7 +183,7 @@ node_bucket_info(Node, Config, Snapshot, Bucket, BucketUUID, BucketConfig) ->
     {Info}.
 
 build_short_bucket_info(Id, BucketConfig, Snapshot) ->
-    BucketUUID = ns_bucket:bucket_uuid(BucketConfig),
+    BucketUUID = ns_bucket:uuid(Id, Snapshot),
     [build_name_and_locator(Id, BucketConfig),
      {uuid, BucketUUID},
      {uri, build_pools_uri(["buckets", Id], BucketUUID)},
@@ -314,7 +314,7 @@ compute_bucket_info_with_config(Id, Config, Snapshot, BucketConfig,
     %% we do sorting to make nodes list match order of servers inside
     %% vBucketServerMap
     Servers = lists:sort(ns_bucket:get_servers(BucketConfig)),
-    BucketUUID = ns_bucket:bucket_uuid(BucketConfig),
+    BucketUUID = ns_bucket:uuid(Id, Snapshot),
 
     AllServers = Servers ++
         ordsets:subtract(ns_cluster_membership:active_nodes(Snapshot), Servers),

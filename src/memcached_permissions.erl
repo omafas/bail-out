@@ -74,13 +74,10 @@ sync() ->
     memcached_cfg:sync(?MODULE).
 
 init() ->
-    #state{buckets = buckets_uids(ns_bucket:get_buckets()),
+    #state{buckets = ns_bucket:uuids(),
            users = spec_users(),
            cluster_admin = ns_config_auth:get_user(admin),
            prometheus_user = prom_user()}.
-
-buckets_uids(Buckets) ->
-    [{Name, ns_bucket:bucket_uuid(Props)} || {Name, Props} <- Buckets].
 
 prom_user() ->
     case prometheus_cfg:get_auth_info() of
@@ -130,7 +127,7 @@ handle_event(Key, #state{buckets = Buckets} = State) ->
     case collections:key_match(Key) of
         false ->
             true = ns_bucket:buckets_change(Key),
-            case buckets_uids(ns_bucket:get_buckets()) of
+            case ns_bucket:uuids() of
                 Buckets ->
                     unchanged;
                 NewBuckets ->
@@ -430,8 +427,8 @@ permissions_for_user_test_() ->
                    {"s1", [{uid, 2}, {collections, [{"c",  [{uid, 3}]}]}]}]}],
     Snapshot =
         ns_bucket:toy_buckets(
-          [{"test", [{props, [{uuid, <<"test_id">>}]}]},
-           {"default", [{props, [{uuid, <<"default_id">>}]},
+          [{"test", [{props, []}, {uuid, <<"test_id">>}]},
+           {"default", [{props, []}, {uuid, <<"default_id">>},
                         {collections, Manifest}]}]),
 
     All = fun (L) -> lists:usort([P || {_, P} <- L]) end,

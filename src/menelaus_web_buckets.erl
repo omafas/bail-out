@@ -23,8 +23,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--export([checking_bucket_uuid/3,
-         handle_bucket_list/1,
+-export([handle_bucket_list/1,
          handle_bucket_info/3,
          handle_sasl_buckets_streaming/2,
          handle_bucket_info_streaming/3,
@@ -62,23 +61,6 @@
 
 -define(MAX_BUCKET_NAME_LEN, 100).
 
-checking_bucket_uuid(Req, BucketConfig, Body) ->
-    ReqUUID0 = proplists:get_value("bucket_uuid", mochiweb_request:parse_qs(Req)),
-    case ReqUUID0 =/= undefined of
-        true ->
-            ReqUUID = list_to_binary(ReqUUID0),
-            BucketUUID = ns_bucket:bucket_uuid(BucketConfig),
-
-            case BucketUUID =:= ReqUUID of
-                true ->
-                    Body();
-                false ->
-                    reply_text(Req, "Bucket uuid does not match the requested.\r\n", 404)
-            end;
-        false ->
-            Body()
-    end.
-
 may_expose_bucket_auth(Name, Req) ->
     case menelaus_auth:get_token(Req) of
         undefined ->
@@ -112,7 +94,7 @@ handle_bucket_info(_PoolId, Id, Req) ->
     [Json] = build_buckets_info(Req, [Id], Ctx, get_info_level(Req)),
     reply_json(Req, Json).
 
-build_bucket_nodes_info(BucketName, BucketConfig, Ctx) ->
+build_bucket_nodes_info(BucketName, BucketUUID, BucketConfig, Ctx) ->
     %% Only list nodes this bucket is mapped to
     F = menelaus_web_node:build_nodes_info_fun(Ctx),
     Nodes = ns_bucket:get_servers(BucketConfig),
@@ -124,7 +106,6 @@ build_bucket_nodes_info(BucketName, BucketConfig, Ctx) ->
                {error, not_present} -> dict:new();
                {error, no_map} -> dict:new()
            end,
-    BucketUUID = ns_bucket:bucket_uuid(BucketConfig),
     LocalAddr = menelaus_web_node:get_local_addr(Ctx),
     add_couch_api_base_loop(Nodes, BucketName, BucketUUID, LocalAddr, F,
                             Dict, [], []).
@@ -257,6 +238,8 @@ build_buckets_info(Req, Buckets, Ctx, InfoLevel) ->
 build_bucket_info(Id, Ctx, InfoLevel, MayExposeAuth, SkipMap) ->
     Snapshot = menelaus_web_node:get_snapshot(Ctx),
     {ok, BucketConfig} = ns_bucket:get_bucket(Id, Snapshot),
+    BucketUUID = ns_bucket:uuid(Id, Snapshot),
+
     {lists:flatten(
        [bucket_info_cache:build_short_bucket_info(Id, BucketConfig, Snapshot),
         bucket_info_cache:build_ddocs(Id, BucketConfig),
@@ -270,7 +253,7 @@ build_bucket_info(Id, Ctx, InfoLevel, MayExposeAuth, SkipMap) ->
         {controllers, {build_controllers(Id, BucketConfig)}},
         {nodes,
          menelaus_util:strip_json_struct(
-           build_bucket_nodes_info(Id, BucketConfig, Ctx))},
+           build_bucket_nodes_info(Id, BucketUUID, BucketConfig, Ctx))},
         {stats,
          {[{uri, bucket_info_cache:build_pools_uri(["buckets", Id, "stats"])},
            {directoryURI,
