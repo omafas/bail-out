@@ -11,7 +11,7 @@ licenses/APL2.txt.
 import {Directive, ElementRef, Injector} from '/ui/web_modules/@angular/core.js';
 import {UpgradeComponent} from '/ui/web_modules/@angular/upgrade/static.js';
 
-export {MnDetailStatsDirective};
+export {MnDetailStatsDirective, MnMainSpinnerDirective};
 
 class MnDetailStatsDirective extends UpgradeComponent {
   static get annotations() { return [
@@ -36,5 +36,24 @@ class MnDetailStatsDirective extends UpgradeComponent {
   constructor(elementRef, injector) {
     super('mnDetailStats', elementRef, injector);
   }
+}
 
+class MnMainSpinnerDirective extends UpgradeComponent {
+  static get annotations() { return [
+    new Directive({
+      selector: "mn-main-spinner",
+      inputs: [
+        "mnSpinnerValue"
+      ]
+    })
+  ]}
+
+  static get parameters() { return [
+    ElementRef,
+    Injector
+  ]}
+
+  constructor(elementRef, injector) {
+    super('mnMainSpinner', elementRef, injector);
+  }
 }

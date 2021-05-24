@@ -113,20 +113,30 @@ function appConfig($httpProvider, $stateProvider, $urlRouterProvider, $transitio
     });
   });
 
+  function isThisTransitionBetweenTabs(trans) {
+    let toName = trans.to().name;
+    let fromName = trans.from().name;
+    return toName.indexOf(fromName) === -1 && fromName.indexOf(toName) === -1;
+  }
+
   $transitionsProvider.onFinish({
     from: "app.admin.**",
     to: "app.admin.**"
   }, function (trans) {
-    var mnHelper = trans.injector().get('mnHelper');
-    mnHelper.mainSpinnerCounter.decrease();
+    if (isThisTransitionBetweenTabs(trans)) {
+      let mnHelper = trans.injector().get('mnHelper');
+      mnHelper.mainSpinnerCounter.decrease();
+    }
   });
 
   $transitionsProvider.onError({
     from: "app.admin.**",
     to: "app.admin.**"
   }, function (trans) {
-    var mnHelper = trans.injector().get('mnHelper');
-    mnHelper.mainSpinnerCounter.decrease();
+    if (isThisTransitionBetweenTabs(trans)) {
+      let mnHelper = trans.injector().get('mnHelper');
+      mnHelper.mainSpinnerCounter.decrease();
+    }
   });
 
   $transitionsProvider.onBefore({
@@ -138,12 +148,11 @@ function appConfig($httpProvider, $stateProvider, $urlRouterProvider, $transitio
     var mnPendingQueryKeeper = trans.injector().get('mnPendingQueryKeeper');
     var $uibModalStack = trans.injector().get('$uibModalStack');
     var isModalOpen = !!$uibModalStack.getTop();
-    var toName = trans.to().name;
-    var fromName = trans.from().name;
+
     if ($rootScope.mnGlobalSpinnerFlag) {
       return false;
     }
-    if (!isModalOpen && toName.indexOf(fromName) === -1 && fromName.indexOf(toName) === -1) {
+    if (!isModalOpen && isThisTransitionBetweenTabs(trans)) {
       //cancel tabs specific queries in case toName is not child of fromName and vise versa
       mnPendingQueryKeeper.cancelTabsSpecificQueries();
       var mnHelper = trans.injector().get('mnHelper');

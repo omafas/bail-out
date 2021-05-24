@@ -35,12 +35,13 @@ class MnSecurityLogRedactionComponent extends MnLifeCycleHooksToStream {
     super();
 
     this.postLogRedaction = mnSecurityService.stream.postLogRedaction;
+    this.getLogRedaction = mnSecurityService.stream.getLogRedaction;
 
     this.form = mnFormService.create(this);
 
     this.form
       .setFormGroup({logRedactionLevel: ""})
-      .setSource(mnSecurityService.stream.getLogRedaction)
+      .setSource(this.getLogRedaction)
       .setPackPipe(map(this.getValue.bind(this)))
       .setPostRequest(this.postLogRedaction)
       .successMessage("Settings saved successfully!")

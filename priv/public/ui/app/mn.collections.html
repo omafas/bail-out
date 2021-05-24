@@ -1,12 +1,16 @@
 <!--
-Copyright 2020-Present Couchbase, Inc.
+     Copyright 2020-Present Couchbase, Inc.
 
-Use of this software is governed by the Business Source License included in
-the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
-file, in accordance with the Business Source License, use of this software will
-be governed by the Apache License, Version 2.0, included in the file
-licenses/APL2.txt.
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
 -->
+
+<mn-main-spinner
+   [mnSpinnerValue]="(buckets | async)?.length && (scopes | async) === null">
+</mn-main-spinner>
 
 <div *ngIf="(buckets | async) != null && (buckets | async).length">
   <mn-element-cargo depot="actions">
@@ -50,11 +54,11 @@ licenses/APL2.txt.
            (click)="scopesSorter.click.next('name')">scope name</span></span>
         <span class="cbui-table-cell">collections</span>
         <span class="cbui-table-cell">
-           items
+          items
         </span>
         <span class="cbui-table-cell">memory used</span>
         <span class="cbui-table-cell">
-           disk utilization
+          disk utilization
           <span
              class="fa-stack icon-info rasied-med"
              container="body"
@@ -70,7 +74,7 @@ licenses/APL2.txt.
           </span>
         </span>
         <span class="cbui-table-cell">
-           ops/sec
+          ops/sec
         </span>
         <span class="cbui-table-cell flex-grow-2 resp-hide-xsml"></span>
     </div>
