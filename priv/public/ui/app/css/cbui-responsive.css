@@ -81,9 +81,6 @@
     transition: transform 0.25s;
     transform: translateX(158px);
   }
-  .mn-element-depot-subnav {
-    min-height: 1.4rem;
-  }
   .nav-sidebar:hover .sidebar-closer-wrapper {
     opacity: 0!important;
   }
