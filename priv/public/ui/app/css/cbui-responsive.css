@@ -158,8 +158,10 @@
   .import-wrapper {
     flex-wrap: wrap !important;
   }
+  mn-dropdown[class*="scenario-dropdown"],
+  mn-select[class*="width-"],
   div[class*="width-"] {
-    width: 94vw;
+    width: 94vw !important;
   }
   .wb-main-wrapper.resp-small {
     width: 100% !important;

@@ -1867,7 +1867,7 @@ mn-select[disabled] .mn-select,
   width: 100%;
 }
 .mn-select .dropdown-menu {
-  max-height: 30vh;
+  max-height: 40vh;
   overflow-y: scroll;
 }
 .mn-select div[uib-dropdown-menu] .option,
