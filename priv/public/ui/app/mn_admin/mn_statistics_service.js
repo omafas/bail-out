@@ -97,6 +97,7 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
 
   function switchToFullStatInfo(config, originConfig) {
     config.step = rangeZoomToStep(originConfig.zoom);
+    config.timeWindow = Math.max(config.step * 2, 360);
     config.start = 0 - rangeZoomToSec(originConfig.zoom);
     if (originConfig.zoom == "minute") {
       //in order to make sure that we recieve 12 samples UI
@@ -110,6 +111,7 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
     let step = rangeZoomToStep(originConfig.zoom);
     config.start = -step;
     config.step = step;
+    config.timeWindow = Math.max(step * 2, 360);
   }
 
   function createStatsPoller(scope) {
