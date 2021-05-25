@@ -232,7 +232,16 @@ get_stats(Period, Step, N, StatList, #state{bucket=Bucket,
     StartTSms = misc:trunc_ts(Now - Step * (SamplesNum + 1) * 1000, Step),
     StartTS = StartTSms / 1000,
     EndTS = Now / 1000,
-    Queries = stat_names_mappings:pre_70_stats_to_prom_query(Bucket, StatList),
+    MaxScrapeInt = prometheus_cfg:max_scrape_int(),
+    %% In case of decimated stats MaxScrapeInt might be too small for range
+    %% interval, so we assume that 'step' is less than decimation interval in
+    %% this case.
+    RangeInterval = case Step > MaxScrapeInt of
+                        true -> Step * 2;
+                        false -> MaxScrapeInt * 2
+                    end,
+    Queries = stat_names_mappings:pre_70_stats_to_prom_query(
+                Bucket, StatList, #{range_interval => RangeInterval}),
     case Queries of
         [<<>>] ->
             %% Happens when menelaus_stats tries to guess stat section by

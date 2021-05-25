@@ -8,7 +8,7 @@
 %% the file licenses/APL2.txt.
 -module(stat_names_mappings).
 
--export([pre_70_stats_to_prom_query/2, prom_name_to_pre_70_name/2,
+-export([pre_70_stats_to_prom_query/3, prom_name_to_pre_70_name/2,
          handle_stats_mapping_get/3]).
 
 -include("ns_test.hrl").
@@ -29,30 +29,31 @@ handle_stats_mapping_get(Section, StatTokens, Req) ->
                 "all" -> all;
                 S -> [list_to_binary(S)]
             end,
-    [Query] = pre_70_stats_to_prom_query(Section, undefined, Stats),
+    [Query] = pre_70_stats_to_prom_query(Section, undefined, Stats, #{}),
     menelaus_util:reply_text(Req, Query, 200).
 
-pre_70_stats_to_prom_query(Section, Stats) ->
-    pre_70_stats_to_prom_query(Section, ?OR_GROUP_SIZE, Stats).
+pre_70_stats_to_prom_query(Section, Stats, Opts) ->
+    pre_70_stats_to_prom_query(Section, ?OR_GROUP_SIZE, Stats, Opts).
 
-pre_70_stats_to_prom_query("@system-processes" = Section, OrGroupSize, all) ->
+pre_70_stats_to_prom_query("@system-processes" = Section, OrGroupSize, all,
+                           Opts) ->
     SpecialMetrics =
         [<<"*/major_faults">>, <<"*/minor_faults">>, <<"*/page_faults">>],
     AstList =
         [{[{eq, <<"category">>, <<"system-processes">>}]}] ++
         [Ast || M <- SpecialMetrics,
-                {ok, Ast} <- [pre_70_stat_to_prom_query(Section, M)]],
+                {ok, Ast} <- [pre_70_stat_to_prom_query(Section, M, Opts)]],
     [promQL:format_promql({'or', SubGroup})
         || SubGroup <- misc:split(OrGroupSize, AstList)];
-pre_70_stats_to_prom_query("@global", _, all) ->
+pre_70_stats_to_prom_query("@global", _, all, _Opts) ->
     [<<"{category=`audit`}">>];
-pre_70_stats_to_prom_query(StatSection, OrGroupSize, all) ->
+pre_70_stats_to_prom_query(StatSection, OrGroupSize, all, Opts) ->
     pre_70_stats_to_prom_query(StatSection, OrGroupSize,
-                               default_stat_list(StatSection));
-pre_70_stats_to_prom_query(StatSection, OrGroupSize, List) ->
+                               default_stat_list(StatSection), Opts);
+pre_70_stats_to_prom_query(StatSection, OrGroupSize, List, Opts) ->
     AstList = lists:filtermap(
                 fun (S) ->
-                    case pre_70_stat_to_prom_query(StatSection, S) of
+                    case pre_70_stat_to_prom_query(StatSection, S, Opts) of
                         {ok, R} -> {true, R};
                         {error, not_found} -> false
                     end
@@ -61,22 +62,22 @@ pre_70_stats_to_prom_query(StatSection, OrGroupSize, List) ->
     [promQL:format_promql({'or', SubGroup})
         || SubGroup <- misc:split(OrGroupSize, AstList)].
 
-pre_70_stat_to_prom_query("@system", <<"rest_requests">>) ->
-    {ok, promQL:rate({[{eq, <<"name">>, <<"sys_rest_requests">>}]})};
-pre_70_stat_to_prom_query("@system", <<"hibernated_waked">>) ->
-    {ok, promQL:rate({[{eq, <<"name">>, <<"sys_hibernated_waked">>}]})};
-pre_70_stat_to_prom_query("@system", <<"hibernated_requests">>) ->
+pre_70_stat_to_prom_query("@system", <<"rest_requests">>, Opts) ->
+    {ok, promQL:rate({[{eq, <<"name">>, <<"sys_rest_requests">>}]}, Opts)};
+pre_70_stat_to_prom_query("@system", <<"hibernated_waked">>, Opts) ->
+    {ok, promQL:rate({[{eq, <<"name">>, <<"sys_hibernated_waked">>}]}, Opts)};
+pre_70_stat_to_prom_query("@system", <<"hibernated_requests">>, _Opts) ->
     {ok, promQL:named(<<"sys_hibernated_requests">>,
                       {'-', [{ignoring, [<<"name">>]}],
                        [{[{eq, <<"name">>, <<"sys_hibernated">>}]},
                         {[{eq, <<"name">>, <<"sys_hibernated_waked">>}]}]})};
-pre_70_stat_to_prom_query("@system", Stat) ->
+pre_70_stat_to_prom_query("@system", Stat, _Opts) ->
     case is_system_stat(Stat) of
         true -> {ok, {[{eq, <<"name">>, <<"sys_", Stat/binary>>}]}};
         false -> {error, not_found}
     end;
 
-pre_70_stat_to_prom_query("@system-processes", Stat) ->
+pre_70_stat_to_prom_query("@system-processes", Stat, Opts) ->
     case binary:split(Stat, <<"/">>) of
         [ProcName, Counter] when Counter == <<"major_faults">>;
                                  Counter == <<"minor_faults">>;
@@ -84,7 +85,7 @@ pre_70_stat_to_prom_query("@system-processes", Stat) ->
             Name = <<"sysproc_", Counter/binary>>,
             Metric = {[{eq, <<"name">>, <<Name/binary, "_raw">>}] ++
                       [{eq, <<"proc">>, ProcName} || ProcName =/= <<"*">>]},
-            {ok, promQL:named(Name, promQL:rate(Metric))};
+            {ok, promQL:named(Name, promQL:rate(Metric, Opts))};
         [ProcName, MetricName] ->
             case is_sysproc_stat(MetricName) of
                 true ->
@@ -97,60 +98,63 @@ pre_70_stat_to_prom_query("@system-processes", Stat) ->
             {error, not_found}
     end;
 
-pre_70_stat_to_prom_query("@global", Stat) ->
+pre_70_stat_to_prom_query("@global", Stat, _Opts) ->
     {ok, {[{eq, <<"name">>, Stat}]}};
 
-pre_70_stat_to_prom_query("@query", <<"query_", Stat/binary>>) ->
+pre_70_stat_to_prom_query("@query", <<"query_", Stat/binary>>, Opts) ->
     Gauges = [<<"active_requests">>, <<"queued_requests">>],
     case lists:member(Stat, Gauges) of
         true -> {ok, {[{eq, <<"name">>, <<"n1ql_", Stat/binary>>}]}};
         false ->
-            {ok, promQL:rate({[{eq, <<"name">>, <<"n1ql_", Stat/binary>>}]})}
+            {ok, promQL:rate({[{eq, <<"name">>, <<"n1ql_", Stat/binary>>}]},
+                             Opts)}
     end;
 
-pre_70_stat_to_prom_query("@fts", <<"fts_", _/binary>> = Stat) ->
+pre_70_stat_to_prom_query("@fts", <<"fts_", _/binary>> = Stat, _Opts) ->
     {ok, {[{eq, <<"name">>, Stat}]}};
 
-pre_70_stat_to_prom_query("@fts-" ++ Bucket, <<"fts/", Stat/binary>>) ->
-    map_index_stats(<<"fts">>, get_counters(fts), Bucket, Stat);
+pre_70_stat_to_prom_query("@fts-" ++ Bucket, <<"fts/", Stat/binary>>, Opts) ->
+    map_index_stats(<<"fts">>, get_counters(fts), Bucket, Stat, Opts);
 
-pre_70_stat_to_prom_query("@index", <<"index_ram_percent">>) ->
+pre_70_stat_to_prom_query("@index", <<"index_ram_percent">>, _Opts) ->
     {ok, promQL:named(
            <<"index_ram_percent">>,
            {'*', [{'/', [{ignoring, [<<"name">>]}],
                    [promQL:metric(<<"index_memory_used_total">>),
                     promQL:metric(<<"index_memory_quota">>)]}, 100]})};
-pre_70_stat_to_prom_query("@index", <<"index_remaining_ram">>) ->
+pre_70_stat_to_prom_query("@index", <<"index_remaining_ram">>, _Opts) ->
     {ok, promQL:named(<<"index_remaining_ram">>,
                       {'-', [{ignoring, [<<"name">>]}],
                        [promQL:metric(<<"index_memory_quota">>),
                         promQL:metric(<<"index_memory_used_total">>)]})};
-pre_70_stat_to_prom_query("@index", <<"index_memory_used">>) ->
+pre_70_stat_to_prom_query("@index", <<"index_memory_used">>, _Opts) ->
     {ok, promQL:metric(<<"index_memory_used_total">>)};
-pre_70_stat_to_prom_query("@index", <<"index_", _/binary>> = Stat) ->
+pre_70_stat_to_prom_query("@index", <<"index_", _/binary>> = Stat, _Opts) ->
     {ok, promQL:metric(Stat)};
 
-pre_70_stat_to_prom_query("@index-" ++ Bucket, <<"index/", Stat/binary>>) ->
-    map_index_stats(<<"index">>, get_counters(index), Bucket, Stat);
+pre_70_stat_to_prom_query("@index-" ++ Bucket, <<"index/", Stat/binary>>,
+                          Opts) ->
+    map_index_stats(<<"index">>, get_counters(index), Bucket, Stat, Opts);
 
-pre_70_stat_to_prom_query("@cbas", <<"cbas_disk_used">>) ->
+pre_70_stat_to_prom_query("@cbas", <<"cbas_disk_used">>, _Opts) ->
     {ok, promQL:metric(<<"cbas_disk_used_bytes_total">>)};
-pre_70_stat_to_prom_query("@cbas", <<"cbas_gc_count">>) ->
-    {ok, promQL:rate(promQL:metric(<<"cbas_gc_count_total">>))};
-pre_70_stat_to_prom_query("@cbas", <<"cbas_gc_time">>) ->
-    {ok, promQL:rate(promQL:metric(<<"cbas_gc_time_milliseconds_total">>))};
-pre_70_stat_to_prom_query("@cbas", <<"cbas_heap_used">>) ->
+pre_70_stat_to_prom_query("@cbas", <<"cbas_gc_count">>, Opts) ->
+    {ok, promQL:rate(promQL:metric(<<"cbas_gc_count_total">>), Opts)};
+pre_70_stat_to_prom_query("@cbas", <<"cbas_gc_time">>, Opts) ->
+    {ok, promQL:rate(promQL:metric(<<"cbas_gc_time_milliseconds_total">>),
+                     Opts)};
+pre_70_stat_to_prom_query("@cbas", <<"cbas_heap_used">>, _Opts) ->
     {ok, promQL:metric(<<"cbas_heap_memory_used_bytes">>)};
-pre_70_stat_to_prom_query("@cbas", <<"cbas_system_load_average">>) ->
+pre_70_stat_to_prom_query("@cbas", <<"cbas_system_load_average">>, _Opts) ->
     {ok, promQL:metric(<<"cbas_system_load_average">>)};
-pre_70_stat_to_prom_query("@cbas", <<"cbas_thread_count">>) ->
+pre_70_stat_to_prom_query("@cbas", <<"cbas_thread_count">>, _Opts) ->
     {ok, promQL:metric(<<"cbas_thread_count">>)};
-pre_70_stat_to_prom_query("@cbas", <<"cbas_io_reads">>) ->
-    {ok, promQL:rate(promQL:metric(<<"cbas_io_reads_total">>))};
-pre_70_stat_to_prom_query("@cbas", <<"cbas_io_writes">>) ->
-    {ok, promQL:rate(promQL:metric(<<"cbas_io_writes_total">>))};
+pre_70_stat_to_prom_query("@cbas", <<"cbas_io_reads">>, Opts) ->
+    {ok, promQL:rate(promQL:metric(<<"cbas_io_reads_total">>), Opts)};
+pre_70_stat_to_prom_query("@cbas", <<"cbas_io_writes">>, Opts) ->
+    {ok, promQL:rate(promQL:metric(<<"cbas_io_writes_total">>), Opts)};
 
-pre_70_stat_to_prom_query("@cbas-" ++ Bucket, <<"cbas/", Stat/binary>>) ->
+pre_70_stat_to_prom_query("@cbas-" ++ Bucket, <<"cbas/", Stat/binary>>, Opts) ->
     Incoming = {[{eq, <<"name">>, <<"cbas_incoming_records_count">>},
                  {eq, <<"bucket">>, Bucket},
                  {eq, <<"link">>, <<"Local">>}]},
@@ -172,31 +176,32 @@ pre_70_stat_to_prom_query("@cbas-" ++ Bucket, <<"cbas/", Stat/binary>>) ->
                               promQL:sum(Failed))};
         <<"incoming_records_count">> ->
             {ok, promQL:named(<<"cbas_incoming_records_count">>,
-                              promQL:sum(promQL:rate(Incoming)))};
+                              promQL:sum(promQL:rate(Incoming, Opts)))};
         <<"all/incoming_records_count">> ->
             {ok, promQL:named(<<"cbas_all_incoming_records_count">>,
-                              promQL:sum(promQL:rate(Incoming)))};
+                              promQL:sum(promQL:rate(Incoming, Opts)))};
         <<"failed_at_parser_records_count">> ->
             {ok, promQL:named(<<"cbas_failed_at_parser_records_count">>,
-                              promQL:sum(promQL:rate(Failed)))};
+                              promQL:sum(promQL:rate(Failed, Opts)))};
         <<"all/failed_at_parser_records_count">> ->
             {ok, promQL:named(<<"cbas_all_failed_at_parser_records_count">>,
-                              promQL:sum(promQL:rate(Failed)))};
+                              promQL:sum(promQL:rate(Failed, Opts)))};
         _ ->
             {error, not_found}
     end;
 
-pre_70_stat_to_prom_query("@xdcr-" ++ Bucket, <<"replication_changes_left">>) ->
+pre_70_stat_to_prom_query("@xdcr-" ++ Bucket, <<"replication_changes_left">>,
+                          _Opts) ->
     M = {[{eq, <<"name">>, <<"xdcr_changes_left_total">>},
           {eq, <<"sourceBucketName">>, Bucket}]},
     {ok, promQL:sum_by([<<"name">>], M)};
 pre_70_stat_to_prom_query("@xdcr-" ++ Bucket,
-                          <<"replication_docs_rep_queue">>) ->
+                          <<"replication_docs_rep_queue">>, _Opts) ->
     M = {[{eq, <<"name">>, <<"xdcr_docs_rep_queue_total">>},
           {eq, <<"sourceBucketName">>, Bucket}]},
     {ok, promQL:sum_by([<<"name">>], M)};
 pre_70_stat_to_prom_query("@xdcr-" ++ Bucket,
-                          <<"replications/", Stat/binary>>) ->
+                          <<"replications/", Stat/binary>>, Opts) ->
     BucketBin = list_to_binary(Bucket),
     [ReplId, Source, Target, Name] = binary:split(Stat, <<"/">>, [global]),
     Metric = fun (N) ->
@@ -227,23 +232,22 @@ pre_70_stat_to_prom_query("@xdcr-" ++ Bucket,
             M = Metric(<<"xdcr_dcp_dispatch_time_seconds">>),
             {ok, promQL:convert_units(seconds, nanoseconds, M)};
         <<"bandwidth_usage">> ->
-            M = promQL:rate(Metric(<<"xdcr_data_replicated_bytes">>)),
+            M = promQL:rate(Metric(<<"xdcr_data_replicated_bytes">>), Opts),
             {ok, promQL:named(<<"xdcr_bandwidth_usage_bytes_per_second">>, M)};
         <<"rate_doc_checks">> ->
             {ok, promQL:named(
                    <<"xdcr_rate_doc_checks_docs_per_second">>,
-                   {call, idelta, none,
-                    [{range_vector, Metric(<<"xdcr_docs_checked_total">>),
-                      ?IRATE_INTERVAL}]})};
+                   promQL:idelta(Metric(<<"xdcr_docs_checked_total">>), Opts))};
         <<"rate_received_from_dcp">> ->
-            M = promQL:rate(Metric(<<"xdcr_docs_received_from_dcp_total">>)),
+            M = promQL:rate(Metric(<<"xdcr_docs_received_from_dcp_total">>),
+                            Opts),
             {ok, promQL:named(<<"xdcr_rate_received_from_dcp_docs_per_second">>,
                               M)};
         <<"rate_doc_opt_repd">> ->
-            M = promQL:rate(Metric(<<"xdcr_docs_opt_repd_total">>)),
+            M = promQL:rate(Metric(<<"xdcr_docs_opt_repd_total">>), Opts),
             {ok, promQL:named(<<"xdcr_rate_doc_opt_repd_docs_per_second">>, M)};
         <<"rate_replicated">> ->
-            M = promQL:rate(Metric(<<"xdcr_docs_written_total">>)),
+            M = promQL:rate(Metric(<<"xdcr_docs_written_total">>), Opts),
             {ok, promQL:named(<<"xdcr_rate_replicated_docs_per_second">>, M)};
         N when N =:= <<"deletion_filtered">>;
                N =:= <<"expiry_received_from_dcp">>;
@@ -279,7 +283,7 @@ pre_70_stat_to_prom_query("@xdcr-" ++ Bucket,
             {ok, Metric(<<"xdcr_", N/binary, "_bytes">>)}
     end;
 
-pre_70_stat_to_prom_query("@eventing", <<"eventing/", Stat/binary>>) ->
+pre_70_stat_to_prom_query("@eventing", <<"eventing/", Stat/binary>>, _Opts) ->
     case binary:split(Stat, <<"/">>, [global]) of
         [<<"failed_count">>] ->
             Metrics = [eventing_metric(bin(M), <<"*">>)
@@ -315,128 +319,130 @@ pre_70_stat_to_prom_query("@eventing", <<"eventing/", Stat/binary>>) ->
 %% Starting from Chesire-Cat eventing functions are not necessarily associated
 %% with a bucket and the bucket label is removed from all metrics.
 %% Because of that @eventing-bucket stats don't make any sense anymore.
-pre_70_stat_to_prom_query("@eventing-" ++ _Bucket, _) ->
+pre_70_stat_to_prom_query("@eventing-" ++ _Bucket, _, _Opts) ->
     {error, not_found};
 
-pre_70_stat_to_prom_query("@" ++ _, _) ->
+pre_70_stat_to_prom_query("@" ++ _, _, _Opts) ->
     {error, not_found};
 
 %% "dcpagg :" stats
-pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_replica_", Stat/binary>>) ->
+pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_replica_", Stat/binary>>, Opts) ->
     TypeLabel = {eq, <<"connection_type">>, <<"replication">>},
-    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket)};
-pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_xdcr_", Stat/binary>>) ->
+    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket, Opts)};
+pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_xdcr_", Stat/binary>>, Opts) ->
     TypeLabel = {eq, <<"connection_type">>, <<"xdcr">>},
-    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket)};
-pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_2i_", Stat/binary>>) ->
+    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket, Opts)};
+pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_2i_", Stat/binary>>, Opts) ->
     TypeLabel = {eq, <<"connection_type">>, <<"secidx">>},
-    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket)};
-pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_fts_", Stat/binary>>) ->
+    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket, Opts)};
+pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_fts_", Stat/binary>>, Opts) ->
     TypeLabel = {eq, <<"connection_type">>, <<"fts">>},
-    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket)};
-pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_eventing_", Stat/binary>>) ->
+    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket, Opts)};
+pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_eventing_", Stat/binary>>, Opts) ->
     TypeLabel = {eq, <<"connection_type">>, <<"eventing">>},
-    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket)};
-pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_cbas_", Stat/binary>>) ->
+    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket, Opts)};
+pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_cbas_", Stat/binary>>, Opts) ->
     TypeLabel = {eq, <<"connection_type">>, <<"cbas">>},
-    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket)};
-pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_views_", Stat/binary>>) ->
+    {ok, map_dcpagg_stat(TypeLabel, Stat, Bucket, Opts)};
+pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_views_", Stat/binary>>, Opts) ->
     TypeLabel = {eq_any, <<"connection_type">>, [<<"mapreduce_view">>,
                                                  <<"spatial_view">>]},
     ViewsStats = promQL:sum_by([<<"name">>],
-                               map_dcpagg_stat(TypeLabel, Stat, Bucket)),
+                               map_dcpagg_stat(TypeLabel, Stat, Bucket, Opts)),
     {ok, promQL:with_label(<<"connection_type">>, <<"views">>, ViewsStats)};
-pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_other_", Stat/binary>>) ->
+pre_70_stat_to_prom_query(Bucket, <<"ep_dcp_other_", Stat/binary>>, Opts) ->
     TypeLabel = {not_any, <<"connection_type">>,
                  [<<"replication">>, <<"xdcr">>, <<"fts">>, <<"cbas">>,
                   <<"eventing">>, <<"secidx">>, <<"mapreduce_view">>,
                   <<"spatial_view">>]},
     ViewsStats = promQL:sum_by([<<"name">>],
-                               map_dcpagg_stat(TypeLabel, Stat, Bucket)),
+                               map_dcpagg_stat(TypeLabel, Stat, Bucket, Opts)),
     {ok, promQL:with_label(<<"connection_type">>, <<"other">>, ViewsStats)};
 %% Exceptions that are not handled by kv_stats_mappings for one reason
 %% on another
-pre_70_stat_to_prom_query(Bucket, <<"cmd_get">>) ->
+pre_70_stat_to_prom_query(Bucket, <<"cmd_get">>, Opts) ->
     M = {[{eq, <<"name">>, <<"kv_ops">>},
           {eq, <<"bucket">>, list_to_binary(Bucket)},
           {eq, <<"op">>, <<"get">>}]},
-    {ok, promQL:named(<<"kv_cmd_get">>, promQL:sum(promQL:rate(M)))};
-pre_70_stat_to_prom_query(Bucket, <<"couch_docs_disk_size">>) ->
+    {ok, promQL:named(<<"kv_cmd_get">>, promQL:sum(promQL:rate(M, Opts)))};
+pre_70_stat_to_prom_query(Bucket, <<"couch_docs_disk_size">>, _Opts) ->
     M = promQL:bucket_metric(<<"kv_ep_db_file_size_bytes">>, Bucket),
     {ok, promQL:named(<<"couch_docs_disk_size">>, promQL:sum(M))};
-pre_70_stat_to_prom_query(Bucket, <<"couch_docs_data_size">>) ->
+pre_70_stat_to_prom_query(Bucket, <<"couch_docs_data_size">>, _Opts) ->
     M = promQL:bucket_metric(<<"kv_ep_db_data_size_bytes">>, Bucket),
     {ok, promQL:named(<<"couch_docs_data_size">>, promQL:sum(M))};
-pre_70_stat_to_prom_query(Bucket, <<"disk_write_queue">>) ->
+pre_70_stat_to_prom_query(Bucket, <<"disk_write_queue">>, _Opts) ->
     M = {'or', [promQL:bucket_metric(<<"kv_ep_queue_size">>, Bucket),
                 promQL:bucket_metric(<<"kv_ep_flusher_todo">>, Bucket)]},
     {ok, promQL:named(<<"kv_disk_write_queue">>, promQL:sum(M))};
-pre_70_stat_to_prom_query(Bucket, <<"ep_ops_create">>) ->
-    M = promQL:rate(promQL:bucket_metric(<<"kv_vb_ops_create">>, Bucket)),
+pre_70_stat_to_prom_query(Bucket, <<"ep_ops_create">>, Opts) ->
+    M = promQL:rate(promQL:bucket_metric(<<"kv_vb_ops_create">>, Bucket), Opts),
     {ok, promQL:named(<<"kv_ep_ops_create">>, promQL:sum_by([], M))};
-pre_70_stat_to_prom_query(Bucket, <<"ep_ops_update">>) ->
-    M = promQL:rate(promQL:bucket_metric(<<"kv_vb_ops_update">>, Bucket)),
+pre_70_stat_to_prom_query(Bucket, <<"ep_ops_update">>, Opts) ->
+    M = promQL:rate(promQL:bucket_metric(<<"kv_vb_ops_update">>, Bucket), Opts),
     {ok, promQL:named(<<"kv_ep_ops_update">>, promQL:sum_by([], M))};
-pre_70_stat_to_prom_query(Bucket, <<"misses">>) ->
+pre_70_stat_to_prom_query(Bucket, <<"misses">>, Opts) ->
     M = {[{eq, <<"name">>, <<"kv_ops">>},
           {eq, <<"bucket">>, list_to_binary(Bucket)},
           {eq, <<"result">>, <<"miss">>}]},
-    {ok, promQL:named(<<"kv_misses">>, promQL:sum(promQL:rate(M)))};
-pre_70_stat_to_prom_query(Bucket, <<"ops">>) ->
-    Metrics = [promQL:rate(promQL:bucket_metric(<<"kv_cmd_lookup">>, Bucket)),
+    {ok, promQL:named(<<"kv_misses">>, promQL:sum(promQL:rate(M, Opts)))};
+pre_70_stat_to_prom_query(Bucket, <<"ops">>, Opts) ->
+    Metrics = [promQL:rate(promQL:bucket_metric(<<"kv_cmd_lookup">>, Bucket),
+                           Opts),
                promQL:rate({[{eq, <<"name">>, <<"kv_ops">>},
                              {eq, <<"bucket">>, list_to_binary(Bucket)},
                              {eq_any, <<"op">>,
                               [<<"set">>, <<"incr">>, <<"decr">>, <<"delete">>,
                                <<"del_meta">>, <<"get_meta">>,<<"set_meta">>,
-                               <<"set_ret_meta">>,<<"del_ret_meta">>]}]})],
+                               <<"set_ret_meta">>,<<"del_ret_meta">>]}]},
+                           Opts)],
     {ok, promQL:named(<<"kv_old_ops">>, promQL:sum({'or', Metrics}))};
-pre_70_stat_to_prom_query(Bucket, <<"vb_total_queue_age">>) ->
+pre_70_stat_to_prom_query(Bucket, <<"vb_total_queue_age">>, _Opts) ->
     M = promQL:bucket_metric(<<"kv_vb_queue_age_seconds">>,
                              list_to_binary(Bucket)),
     {ok, promQL:named(<<"kv_vb_total_queue_age">>,
                       promQL:convert_units(seconds, milliseconds,
                                            promQL:sum(M)))};
-pre_70_stat_to_prom_query(Bucket, <<"xdc_ops">>) ->
+pre_70_stat_to_prom_query(Bucket, <<"xdc_ops">>, Opts) ->
     M = {[{eq, <<"name">>, <<"kv_ops">>},
           {eq, <<"bucket">>, list_to_binary(Bucket)},
           {eq_any, <<"op">>, [<<"del_meta">>, <<"get_meta">>,
                               <<"set_meta">>]}]},
-    {ok, promQL:named(<<"kv_xdc_ops">>, promQL:sum(promQL:rate(M)))};
+    {ok, promQL:named(<<"kv_xdc_ops">>, promQL:sum(promQL:rate(M, Opts)))};
 %% Timings metrics:
-pre_70_stat_to_prom_query(Bucket, <<"bg_wait_count">>) ->
+pre_70_stat_to_prom_query(Bucket, <<"bg_wait_count">>, Opts) ->
     {ok, promQL:rate(promQL:bucket_metric(<<"kv_bg_wait_seconds_count">>,
-                                          Bucket))};
-pre_70_stat_to_prom_query(Bucket, <<"bg_wait_total">>) ->
+                                          Bucket), Opts)};
+pre_70_stat_to_prom_query(Bucket, <<"bg_wait_total">>, Opts) ->
     M = promQL:rate(promQL:bucket_metric(<<"kv_bg_wait_seconds_sum">>,
-                                         Bucket)),
+                                         Bucket), Opts),
     {ok, promQL:convert_units(seconds, microseconds, M)};
-pre_70_stat_to_prom_query(Bucket, <<"disk_commit_count">>) ->
+pre_70_stat_to_prom_query(Bucket, <<"disk_commit_count">>, Opts) ->
     {ok, promQL:rate({[{eq, <<"name">>, <<"kv_disk_seconds_count">>},
                        {eq, <<"op">>, <<"commit">>},
-                       {eq, <<"bucket">>, Bucket}]})};
-pre_70_stat_to_prom_query(Bucket, <<"disk_commit_total">>) ->
+                       {eq, <<"bucket">>, Bucket}]}, Opts)};
+pre_70_stat_to_prom_query(Bucket, <<"disk_commit_total">>, Opts) ->
     M = promQL:rate({[{eq, <<"name">>, <<"kv_disk_seconds_sum">>},
                       {eq, <<"op">>, <<"commit">>},
-                      {eq, <<"bucket">>, Bucket}]}),
+                      {eq, <<"bucket">>, Bucket}]}, Opts),
     {ok, promQL:convert_units(seconds, microseconds, M)};
-pre_70_stat_to_prom_query(Bucket, <<"disk_update_count">>) ->
+pre_70_stat_to_prom_query(Bucket, <<"disk_update_count">>, Opts) ->
     {ok, promQL:rate({[{eq, <<"name">>, <<"kv_disk_seconds_count">>},
                        {eq, <<"op">>, <<"update">>},
-                       {eq, <<"bucket">>, Bucket}]})};
-pre_70_stat_to_prom_query(Bucket, <<"disk_update_total">>) ->
+                       {eq, <<"bucket">>, Bucket}]}, Opts)};
+pre_70_stat_to_prom_query(Bucket, <<"disk_update_total">>, Opts) ->
     M = promQL:rate({[{eq, <<"name">>, <<"kv_disk_seconds_sum">>},
                       {eq, <<"op">>, <<"update">>},
-                      {eq, <<"bucket">>, Bucket}]}),
+                      {eq, <<"bucket">>, Bucket}]}, Opts),
     {ok, promQL:convert_units(seconds, microseconds, M)};
 %% Couchdb metrics:
-pre_70_stat_to_prom_query(Bucket, N) when N =:= <<"couch_views_ops">>;
-                                          N =:= <<"couch_spatial_ops">> ->
+pre_70_stat_to_prom_query(Bucket, N, Opts) when N =:= <<"couch_views_ops">>;
+                                                N =:= <<"couch_spatial_ops">> ->
     {ok, promQL:sum_by([<<"name">>],
-                       promQL:rate(promQL:bucket_metric(N, Bucket)))};
-pre_70_stat_to_prom_query(Bucket, <<"couch_", _/binary>> = N) ->
+                       promQL:rate(promQL:bucket_metric(N, Bucket), Opts))};
+pre_70_stat_to_prom_query(Bucket, <<"couch_", _/binary>> = N, _Opts) ->
     {ok, promQL:sum_by([<<"name">>], promQL:bucket_metric(N, Bucket))};
-pre_70_stat_to_prom_query(Bucket, <<"spatial/", Name/binary>>) ->
+pre_70_stat_to_prom_query(Bucket, <<"spatial/", Name/binary>>, Opts) ->
     Metric = fun (MetricName, Id) ->
                  {[{eq, <<"name">>, <<"couch_spatial_", MetricName/binary>>},
                    {eq, <<"bucket">>, list_to_binary(Bucket)}] ++
@@ -444,13 +450,13 @@ pre_70_stat_to_prom_query(Bucket, <<"spatial/", Name/binary>>) ->
              end,
     case binary:split(Name, <<"/">>) of
         [Id, <<"accesses">>] ->
-            {ok, promQL:rate(Metric(<<"ops">>, Id))};
+            {ok, promQL:rate(Metric(<<"ops">>, Id), Opts)};
         [Id, Stat] ->
             {ok, Metric(Stat, Id)};
         _ ->
             {error, not_found}
     end;
-pre_70_stat_to_prom_query(Bucket, <<"views/", Name/binary>>) ->
+pre_70_stat_to_prom_query(Bucket, <<"views/", Name/binary>>, Opts) ->
     Metric = fun (MetricName, Id) ->
                  {[{eq, <<"name">>, <<"couch_views_", MetricName/binary>>},
                    {eq, <<"bucket">>, list_to_binary(Bucket)}] ++
@@ -458,18 +464,18 @@ pre_70_stat_to_prom_query(Bucket, <<"views/", Name/binary>>) ->
              end,
     case binary:split(Name, <<"/">>) of
         [Id, <<"accesses">>] ->
-            {ok, promQL:rate(Metric(<<"ops">>, Id))};
+            {ok, promQL:rate(Metric(<<"ops">>, Id), Opts)};
         [Id, Stat] ->
             {ok, Metric(Stat, Id)};
         _ ->
             {error, not_found}
     end;
 %% Memcached "empty key" metrics:
-pre_70_stat_to_prom_query(_Bucket, <<"curr_connections">>) ->
+pre_70_stat_to_prom_query(_Bucket, <<"curr_connections">>, _Opts) ->
     %% curr_connections can't be handled like other metrics because
     %% it's not actually a "per-bucket" metric, but a global metric
     {ok, promQL:metric(<<"kv_curr_connections">>)};
-pre_70_stat_to_prom_query(Bucket, Stat) ->
+pre_70_stat_to_prom_query(Bucket, Stat, Opts) ->
     case kv_stats_mappings:old_to_new(Stat) of
         {ok, {Type, {Metric, Labels}, {OldUnit, NewUnit}}} ->
             M = {[{eq, <<"name">>, Metric},
@@ -478,7 +484,7 @@ pre_70_stat_to_prom_query(Bucket, Stat) ->
             case Type of
                 counter ->
                     {ok, promQL:convert_units(NewUnit, OldUnit,
-                                              promQL:rate(M))};
+                                              promQL:rate(M, Opts))};
                 gauge ->
                     {ok, promQL:convert_units(NewUnit, OldUnit, M)}
             end;
@@ -486,7 +492,7 @@ pre_70_stat_to_prom_query(Bucket, Stat) ->
             {error, not_found}
     end.
 
-map_dcpagg_stat(TypeLabel, Stat, Bucket) ->
+map_dcpagg_stat(TypeLabel, Stat, Bucket, Opts) ->
     Suffix = case Stat of
                 <<"count">> -> <<"connection_count">>;
                 <<"total_bytes">> -> <<"total_data_size_bytes">>;
@@ -502,12 +508,12 @@ map_dcpagg_stat(TypeLabel, Stat, Bucket) ->
                _ -> false
            end,
     case IsCounter of
-        true -> promQL:rate(Metric);
+        true -> promQL:rate(Metric, Opts);
         false -> Metric
     end.
 
 %% Works for fts and index, Prefix is the only difference
-map_index_stats(Prefix, Counters, Bucket, Stat) ->
+map_index_stats(Prefix, Counters, Bucket, Stat, Opts) ->
     IsCounter =
         fun (N) ->
             try
@@ -540,7 +546,8 @@ map_index_stats(Prefix, Counters, Bucket, Stat) ->
                 true ->
                     {ok, promQL:sum_by(
                            [<<"name">>],
-                           promQL:rate(promQL:bucket_metric(Name, Bucket)))};
+                           promQL:rate(promQL:bucket_metric(Name, Bucket),
+                                       Opts))};
                 false ->
                     {ok, promQL:sum_by([<<"name">>],
                                       promQL:bucket_metric(Name, Bucket))}
@@ -549,7 +556,7 @@ map_index_stats(Prefix, Counters, Bucket, Stat) ->
             Name = <<Prefix/binary, "_", N/binary>>,
             case IsCounter(N) of
                 true ->
-                    {ok, promQL:rate(index_metric(Name, Bucket, Index))};
+                    {ok, promQL:rate(index_metric(Name, Bucket, Index), Opts)};
                 false ->
                     {ok, index_metric(Name, Bucket, Index)}
             end;
@@ -947,10 +954,11 @@ eventing_failures() ->
 pre_70_to_prom_query_test_() ->
     Test = fun (Section, Stats, ExpectedQuery) ->
                Name = lists:flatten(io_lib:format("~s: ~p", [Section, Stats])),
+               Opts = #{range_interval => ?IRATE_INTERVAL},
                {Name, ?_assertBinStringsEqual(
                          list_to_binary(ExpectedQuery),
                          hd(pre_70_stats_to_prom_query(Section, undefined,
-                                                       Stats)))}
+                                                       Stats, Opts)))}
            end,
     [Test("@system", all,
           "{name=~`sys_allocstall|sys_cpu_cores_available|sys_cpu_irq_rate|"

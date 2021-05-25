@@ -16,11 +16,11 @@
          parse_time_duration/1, is_aggregation_op/1]).
 
 %% AST helpers
--export([metric/1, rate/1, sum/1, sum_by/2, sum_without/2, bucket_metric/2,
+-export([metric/1, rate/2, sum/1, sum_by/2, sum_without/2, bucket_metric/2,
          named/2, with_label/3, multiply_by_scalar/2, convert_units/3,
-         eq/2, eq/3, eq_any/2, re/3, op/2, clamp_min/2]).
+         eq/2, eq/3, eq_any/2, re/3, op/2, clamp_min/2, idelta/2]).
 
--define(IRATE_INTERVAL, "1m").
+-define(DEFAULT_RANGE_INTERVAL, "1m").
 
 eq(Name, Value) -> eq(Name, Value, {[]}).
 eq(Name, Value, {M}) -> {[{eq, Name, Value} | M]}.
@@ -33,9 +33,18 @@ metric(Name) -> eq(<<"name">>, Name).
 
 op(Op, Metrics) -> {Op, [{ignoring, [<<"name">>]}], Metrics}.
 
+rate(Ast, Opts) ->
+    {call, irate, none, [range(Ast, Opts)]}.
+
+idelta(Ast, Opts) ->
+    {call, idelta, none, [range(Ast, Opts)]}.
+
 %% range vector argument must be an instant vector
-rate({L} = Ast) when is_list(L) ->
-    {call, irate, none, [{range_vector, Ast, ?IRATE_INTERVAL}]}.
+range({L} = Ast, Opts) when is_list(L) ->
+    case Opts of
+        #{range_interval := I} -> {range_vector, Ast, I};
+        #{} -> {range_vector, Ast, ?DEFAULT_RANGE_INTERVAL}
+    end.
 
 clamp_min(Ast, Min) ->
     {call, clamp_min, none, [Ast, Min]}.
@@ -126,6 +135,8 @@ format_promql_ast({Op, Opts, Exprs0}) when ?BINOP(Op) ->
                                     (E) ->
                                         format_promql_ast(E)
                                 end, Exprs));
+format_promql_ast({range_vector, Expr, Duration}) when is_integer(Duration) ->
+    format_promql_ast({range_vector, Expr, integer_to_list(Duration) ++ "s"});
 format_promql_ast({range_vector, Expr, Duration}) ->
     [format_promql_ast(Expr), "[", Duration, "]"];
 format_promql_ast({Labels}) when is_list(Labels) ->
