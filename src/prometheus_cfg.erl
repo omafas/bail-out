@@ -57,6 +57,7 @@
 -define(SECS_IN_DAY, 24*60*60).
 -define(AUTO_CALCULATED, -1).
 -define(USE_SCRAPE_INTERVAL, -1).
+-define(MISSING_INT, -1).
 
 -type stats_settings() :: [stats_setting() | stats_derived_setting()].
 -type stats_setting() ::
@@ -103,7 +104,8 @@
     {log_queries, true | false} |
     {derived_metrics_filter, all | [MetricName :: string()]} |
     {derived_metrics_interval, integer()} |
-    {rules_config_file, string()}.
+    {rules_config_file, string()} |
+    {loopback_delta, integer()}.
 
 %% Those key-values are derived in the sense that they are calculated based
 %% on other settings from ns_config (for example, afamily is taken from
@@ -178,7 +180,8 @@ default_settings() ->
      {log_queries, false},
      {derived_metrics_filter, all}, %% all | [metric()]
      {derived_metrics_interval, ?USE_SCRAPE_INTERVAL},
-     {rules_config_file, "prometheus_rules.yml"}].
+     {rules_config_file, "prometheus_rules.yml"},
+     {loopback_delta, 600}].
 
 -spec build_settings(CredsFun :: prom_creds()) -> stats_settings().
 build_settings(CredsFun) ->
@@ -357,6 +360,14 @@ generate_prometheus_args(Settings) ->
                              []
                      end,
 
+    LoopbackDelta = case proplists:get_value(loopback_delta, Settings,
+                                             ?MISSING_INT) of
+                         ?MISSING_INT -> [];
+                         LB ->
+                            LBStr = integer_to_list(LB) ++ "s",
+                            ["--query.lookback-delta", LBStr]
+                    end,
+
     ["--config.file", ConfigFile,
      "--web.enable-admin-api",
      "--web.enable-lifecycle", %% needed for hot cfg reload
@@ -367,7 +378,8 @@ generate_prometheus_args(Settings) ->
      "--storage.tsdb.path", StoragePath,
      "--log.level", LogLevel,
      "--query.max-samples", QueryMaxSamples,
-     "--storage.tsdb.no-lockfile"] ++ PromAuthArgs ++ WalCompression.
+     "--storage.tsdb.no-lockfile"] ++
+     LoopbackDelta ++ PromAuthArgs ++ WalCompression.
 
 -spec get_auth_info() -> {rbac_user_id(), rbac_password()} | undefined.
 get_auth_info() ->

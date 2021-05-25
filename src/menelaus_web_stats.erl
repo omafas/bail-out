@@ -73,6 +73,8 @@ params() ->
       #{cfg_key => max_block_duration, type => pos_int}},
      {"prometheus.queryMaxSamples",
       #{cfg_key => query_max_samples, type => pos_int}},
+     {"prometheus.loopbackDelta",
+      #{cfg_key => loopback_delta, type => int}},
      {"prometheus.reportMetrics",
       #{cfg_key => prometheus_metrics_enabled, type => bool}},
      {"prometheus.reportMetricsInterval",
