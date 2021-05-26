@@ -191,8 +191,8 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
   }
   function unpackThreadsCount(value) {
     switch (typeof value) {
-    case "number": return value.toString();
-    default: return "4";
+    case "number": return value;
+    default: return 4;
     }
   }
   function saveVisualInternalSettings() {
