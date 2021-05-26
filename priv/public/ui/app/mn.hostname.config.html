@@ -26,8 +26,8 @@ licenses/APL2.txt.
        formControlName="hostname">
     <div
        class="error error-form"
-       [hidden]="!(hostnameHttp.error | async)">
-      <div *ngFor="let error of (hostnameHttp.error | async)">{{error}}</div>
+       [hidden]="!(postNodeInitHttp.error | async)?.errors?.hostname">
+      {{(postNodeInitHttp.error | async)?.errors?.hostname}}
     </div>
   </div>
 

@@ -48,7 +48,6 @@ class MnWizardJoinClusterComponent extends MnLifeCycleHooksToStream {
 
     this.focusFieldSubject = new BehaviorSubject("hostname");
     this.joinClusterForm = mnWizardService.wizardForm.joinCluster;
-    this.hostnameHttp = mnWizardService.stream.hostnameHttp;
     this.joinClusterHttp = mnWizardService.stream.joinClusterHttp;
 
     this.certificate = mnPoolsService.stream.isEnterprise
@@ -63,6 +62,7 @@ class MnWizardJoinClusterComponent extends MnLifeCycleHooksToStream {
         map(([_, isEnterprise]) => {
           let rv = {};
           var nodeStorage = this.joinClusterForm.get("clusterStorage");
+          rv.hostname = nodeStorage.get("hostname").value;
           rv.dataPath = nodeStorage.get("storage.path").value;
           rv.indexPath = nodeStorage.get("storage.index_path").value;
           rv.eventingPath = nodeStorage.get("storage.eventing_path").value;
