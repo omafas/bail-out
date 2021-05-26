@@ -67,7 +67,7 @@ licenses/APL2.txt.
   </div>
   <div
      class="cbui-tablerow-expanded"
-     *ngIf="(detailsHashObserver.stream.isOpened | async)">
+     [hidden]="!(detailsHashObserver.stream.isOpened | async)">
     <mn-collections-scope-details
        [scope]="scope"
        [mnCollectionsStatsPoller]="mnCollectionsStatsPoller"
