@@ -80,16 +80,20 @@ class MnCollectionsComponent extends MnLifeCycleHooksToStream {
         ).pipe(switchMap(([param, buckets]) => {
           var hasBucket = buckets.find(bucket => bucket.name === param);
           return hasBucket ? of(hasBucket) : NEVER;
-        }), distinctUntilChanged((a, b) => a.name === b.name));
+        }));
+
+    var getBucketUrlParamDefinedChanged =
+        getBucketUrlParamDefined.pipe(distinctUntilChanged((a, b) => a.name === b.name));
 
     var bucketsWithParams =
         getBuckets.pipe(withLatestFrom(getBucketUrlParam));
 
     var statusClass = getBucketUrlParamDefined
         .pipe(map(item =>
-                  ("dynamic_" + mnServersService.addNodesByStatus(item.nodes).statusClass)));
+                  ("dynamic_" + mnServersService.addNodesByStatus(item.nodes).statusClass)),
+              shareReplay({refCount: true, bufferSize: 1}));
 
-    getBucketUrlParamDefined
+    getBucketUrlParamDefinedChanged
       .pipe(takeUntil(this.mnOnDestroy))
       .subscribe(setBucket);
 
@@ -116,7 +120,7 @@ class MnCollectionsComponent extends MnLifeCycleHooksToStream {
     var scopesFilter = mnHelperService.createFilter(this);
 
     var scopes =
-        combineLatest(getBucketUrlParamDefined,
+        combineLatest(getBucketUrlParamDefinedChanged,
                       mnCollectionsService.stream.updateManifest,
                       timer(0, 5000))
         .pipe(switchMap(([bucket]) => mnCollectionsService.getManifest(bucket.name)),
@@ -141,7 +145,6 @@ class MnCollectionsComponent extends MnLifeCycleHooksToStream {
 
     this.permissions = mnPermissions.stream;
     this.buckets = getBuckets;
-    this.bucketsNames = getBuckets.pipe(map(buckets => buckets.map((bucket) => bucket.name)));
     this.bucketSelect = bucketSelect;
     this.scopes = scopes;
     this.clickAddScope = clickAddScope;
@@ -156,7 +159,11 @@ class MnCollectionsComponent extends MnLifeCycleHooksToStream {
     this.$scope.$destroy();
   }
 
-  trackByFn(_, scope) {
-    return this.bucketSelect.get('item').value.name + scope.uid + scope.name;
+  bucketValuesMapping(bucket) {
+    return bucket.name;
+  }
+
+  trackByFn(statusClass, _, scope) {
+    return this.bucketSelect.get('item').value.name + scope.uid + scope.name + statusClass;
   }
 }

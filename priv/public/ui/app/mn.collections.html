@@ -27,7 +27,7 @@
       <mn-select
          class="inline"
          [values]="buckets | async"
-         [labels]="bucketsNames | async"
+         [valuesMapping]="bucketValuesMapping"
          [group]="bucketSelect"
          mnPlaceholder="select bucket"
          mnFormControlName="item"
@@ -82,7 +82,7 @@
        class="zero-content">
       No collections to display.
     </div>
-    <div *ngFor="let scope of (scopesPaginator.page | async); trackBy: trackByFn.bind(this)">
+    <div *ngFor="let scope of (scopesPaginator.page | async); trackBy: trackByFn.bind(this, (statusClass | async))">
       <mn-collections-scope
          [scope]="scope"
          [mnCollectionsStatsPoller]="mnCollectionsStatsPoller"
