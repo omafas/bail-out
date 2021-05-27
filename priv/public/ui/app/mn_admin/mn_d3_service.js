@@ -26,7 +26,7 @@ angular
   .module('mnD3Service', [])
   .factory('mnD3Service', mnD3ServiceFactory);
 
-function mnD3ServiceFactory() {
+function mnD3ServiceFactory($timeout) {
   class mnD3 {
     constructor(options, rootElement) {
       this.opt = options;
@@ -280,7 +280,17 @@ function mnD3ServiceFactory() {
         this.updateYAxis(1);
       }
 
-      this.updateLine();
+      //Safari doesn't render initial chart. The issue disappears
+      //after update of the chart or after scroll of the page.
+      //Most likely this is due wrong chart initialization process or
+      //some issues with Safari renderer (search chart.updateData, onInit, init)
+
+      //Setting updateLine in the end of callback queue fixes this
+      //TODO: get rid of $timeout; investigate the initialization process issue;
+      $timeout(() => {
+        this.updateLine();
+      }, 0);
+
       return true;
     }
     showEmptyContent() {
