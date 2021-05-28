@@ -29,6 +29,7 @@ function mnServersFailOverDialogController(mnServersService, mnPromiseHelper, no
     var promise = mnServersService.postFailover(vm.status.failOver, node.otpNode, allowUnsafe);
     return mnPromiseHelper(vm, promise, $uibModalInstance)
       .showGlobalSpinner()
+      .catchGlobalErrors(null, allowUnsafe ? null : 10000)
       .closeFinally()
       .broadcast("reloadServersPoller");
   }
