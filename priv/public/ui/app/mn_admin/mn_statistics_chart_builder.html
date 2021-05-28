@@ -211,7 +211,11 @@ licenses/APL2.txt.
         </span>
       </div>
       <div class="row row-min">
-        <a ng-click="$dismiss()">Cancel</a>
+        <a
+           class="text-nowrap"
+           ng-click="$dismiss()">
+          Cancel
+        </a>
         <button
            type="submit"
            ng-disabled="!builderCtl.getSelectedStatsLength()">Save Chart</button>
