@@ -62,7 +62,7 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
 
     this.isButtonDisabled =
-      mnAdminService.stream.postPoolsDefault.error
+      mnAdminService.stream.postPoolsDefaultValidation.error
       .pipe(map((error) => error && !!Object.keys(error.errors).length));
 
     mnWizardService.stream.getSelfConfig
@@ -82,13 +82,13 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
           .setPostRequest(mnWizardService.stream.postNodeInitHttp)
           .setPackPipe(pipe(
             withLatestFrom(mnPoolsService.stream.isEnterprise),
-            map(this.getClusterInitConfig.bind(this))
+            map(this.getPoolsDefaultConfig.bind(this))
           ))
-          .setPostRequest(new MnHttpGroupRequest({
-            postPoolsDefault: mnAdminService.stream.postPoolsDefault,
-            statsHttp: mnWizardService.stream.statsHttp,
-            servicesHttp: mnWizardService.stream.servicesHttp
-          }).addSuccess().addError());
+          .setPostRequest(mnAdminService.stream.postPoolsDefault)
+          .setPackPipe(map(this.getStatsConfig.bind(this)))
+          .setPostRequest(mnWizardService.stream.statsHttp)
+          .setPackPipe(map(this.getServicesHttpConfig.bind(this)))
+          .setPostRequest(mnWizardService.stream.servicesHttp);
 
         if (isEnterprise) {
           this.form
@@ -153,17 +153,17 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
     return rv;
   }
 
-  getClusterInitConfig(isEnterprise) {
-    let rv = new Map();
-    let nodeStorage = this.wizardForm.newClusterConfig.get("clusterStorage");
+  getStatsConfig() {
+    return this.wizardForm.termsAndConditions.get("enableStats").value;
+  }
+
+  getServicesHttpConfig() {
     let services = this.wizardForm.newClusterConfig.get("services.flag");
-    let poolsDefault = [this.getPoolsDefaultValues.bind(this)(isEnterprise[1]), false];
+    return {services: this.getServicesValues(services).join(",")};
+  }
 
-    rv.set("postPoolsDefault", poolsDefault);
-    rv.set("statsHttp", this.wizardForm.termsAndConditions.get("enableStats").value);
-    rv.set("servicesHttp", {services: this.getServicesValues(services).join(",")});
-
-    return rv;
+  getPoolsDefaultConfig(isEnterprise) {
+    return this.getPoolsDefaultValues.bind(this)(isEnterprise[1]);
   }
 
   getPoolsDefaultValues(isEnterprise) {

@@ -11,8 +11,8 @@ licenses/APL2.txt.
 <div [formGroup]="group">
   <div
      class="error"
-     [hidden]="!(postPoolsDefault.error | async)?.errors._">
-    {{(postPoolsDefault.error | async)?.errors._}}
+     [hidden]="!(postPoolsDefaultValidation.error | async)?.errors._">
+    {{(postPoolsDefaultValidation.error | async)?.errors._}}
   </div>
 
   <div *ngFor="let service of (mnServices | async)">
@@ -53,7 +53,7 @@ licenses/APL2.txt.
            [attr.id]="service + '-service-field'"
            [formControlName]="service"
            [mnFocus]="focusFieldSubject"
-           type="number"
+           type="text"
            mnName="{{service}}">
         <!-- ng-disabled="config.services && !config.services.model.kv || (rbac && !rbac.cluster.pools.write)" -->
         <!-- ng-model="config.memoryQuota" -->
@@ -63,8 +63,8 @@ licenses/APL2.txt.
 
     <div
        class="error"
-       [hidden]="!(postPoolsDefault.error | async)?.errors[getServiceErrorName(service)]">
-      {{(postPoolsDefault.error | async)?.errors[getServiceErrorName(service)]}}
+       [hidden]="!(postPoolsDefaultValidation.error | async)?.errors[getServiceErrorName(service)]">
+      {{(postPoolsDefaultValidation.error | async)?.errors[getServiceErrorName(service)]}}
     </div>
   </div>
 </div>

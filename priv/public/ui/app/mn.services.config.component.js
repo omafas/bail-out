@@ -42,7 +42,7 @@ class MnServicesConfigComponent extends MnLifeCycleHooksToStream {
 
   constructor(mnHelperService, mnAdminService, mnPoolsService) {
     super();
-    this.postPoolsDefault = mnAdminService.stream.postPoolsDefault;
+    this.postPoolsDefaultValidation = mnAdminService.stream.postPoolsDefaultValidation;
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
     this.quotaServices = mnPoolsService.stream.quotaServices;
     this.mnServices = mnPoolsService.stream.mnServices;
@@ -97,8 +97,8 @@ class MnServicesConfigComponent extends MnLifeCycleHooksToStream {
   }
 
   validate(source) {
-    this.postPoolsDefault.post([
-      source[1].reduce(this.packQuotas.bind(this), {}), true]);
+    this.postPoolsDefaultValidation.post(
+      source[1].reduce(this.packQuotas.bind(this), {}));
   }
 
   packQuotas(acc, name) {
@@ -113,7 +113,7 @@ class MnServicesConfigComponent extends MnLifeCycleHooksToStream {
   getQuota(acc, name) {
     var flag = this.getFlag(name);
     var field = this.getField(name);
-    return acc + (((!flag || flag.value) && field.value) || 0);
+    return acc + (((!flag || flag.value) && Number(field.value)) || 0);
   }
 
   createToggleFieldStream(serviceGroupName) {

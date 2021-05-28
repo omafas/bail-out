@@ -144,8 +144,11 @@ class MnAdminService {
       combineLatest(this.stream.compatVersion51, this.stream.compatVersion55)
       .pipe(map(R.all(R.equals(true))));
 
+    this.stream.postPoolsDefaultValidation =
+      new MnHttpRequest(this.postPoolsDefault(true).bind(this)).addSuccess().addError();
+
     this.stream.postPoolsDefault =
-      new MnHttpRequest(this.postPoolsDefault.bind(this)).addSuccess().addError();
+      new MnHttpRequest(this.postPoolsDefault(false).bind(this)).addSuccess().addError();
 
   }
 
@@ -163,9 +166,11 @@ class MnAdminService {
     });
   }
 
-  postPoolsDefault(data) {
-    return this.http.post('/pools/default', data[0], {
-      params: new HttpParams().set("just_validate", data[1] ? 1 : 0)
-    });
+  postPoolsDefault(validate) {
+    return function (data) {
+      return this.http.post('/pools/default', data, {
+        params: new HttpParams().set("just_validate", validate ? 1 : 0)
+      });
+    }
   }
 }

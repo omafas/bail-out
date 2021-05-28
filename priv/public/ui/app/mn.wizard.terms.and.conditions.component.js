@@ -151,9 +151,9 @@ class MnWizardTermsAndConditionsComponent extends MnLifeCycleHooksToStream {
 
   getValues(isEnterprise) {
     return {
-      postPoolsDefault: [{
+      postPoolsDefault: {
         clusterName: this.wizardForm.newCluster.get("clusterName").value
-      }, false],
+      },
       statsHttp: this.wizardForm.termsAndConditions.get("enableStats").value
     };
   }
