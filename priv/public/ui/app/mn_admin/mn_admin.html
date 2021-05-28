@@ -501,12 +501,12 @@
   </div>
 
   <!-- all page content goes here -->
-  <div class="delayed-spinner expanded-spinner fixed-spinner width-12"
+  <div class="main-content min-width-zero delayed-spinner expanded-spinner fixed-spinner width-12"
      ng-class="{'mn-main-spinner-active': adminCtl.mainSpinnerCounter.value()}"
      mn-spinner="adminCtl.mainSpinnerCounter.value()">
     <div
        ui-view="main"
        autoscroll="false"
-       class="main-content min-width-zero width-12"></div>
+       class="width-12"></div>
   </div>
 </main>
