@@ -228,9 +228,16 @@ deactivate_nodes(Nodes, Options) ->
 %% @doc Fail one or more nodes. Doesn't eject the node from the cluster. Takes
 %% effect immediately.
 failover(Nodes, Options) ->
+    not proplists:is_defined(quorum_failover, Options) orelse
+        failover_collections(),
     KVNodes = ns_cluster_membership:service_nodes(Nodes, kv),
     lists:umerge([failover_buckets(KVNodes, Options),
                   failover_services(Nodes)]).
+
+failover_collections() ->
+    [collections:bump_epoch(BucketName) ||
+        {BucketName, BucketConfig} <- ns_bucket:get_buckets(),
+        collections:enabled(BucketConfig)].
 
 failover_buckets([], _Options) ->
     [];
@@ -409,8 +416,6 @@ failover_membase_bucket_with_no_map(Nodes, Bucket, BucketConfig) ->
     ok.
 
 failover_membase_bucket_with_map(Nodes, Bucket, BucketConfig, Map, Options) ->
-    not proplists:is_defined(quorum_failover, Options) orelse
-        collections:bump_epoch(Bucket),
     NewMap = fix_vbucket_map(Nodes, Bucket, Map, Options),
     true = (NewMap =/= undefined),
 
