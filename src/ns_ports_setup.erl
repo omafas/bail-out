@@ -565,7 +565,6 @@ goport_args(cbas, Config, Cmd, NodeUUID) ->
          "-bindHttpAddress=" ++ Host,
          "-cbasExecutable=" ++ Cmd,
          "-memoryQuotaMb=" ++ integer_to_list(MemoryQuota),
-         "-ipv6=" ++ atom_to_list(misc:is_ipv6()),
          "-logDir=" ++ LogDir,
          "-tmpDir=" ++ path_config:component_path(tmp),
          "-logRotationSize=" ++ integer_to_list(RotSize),
@@ -573,6 +572,7 @@ goport_args(cbas, Config, Cmd, NodeUUID) ->
          "-logLevel=" ++ atom_to_list(LogLevel)
         ] ++
         ["-dataDir=" ++ Dir || Dir <- CBASDirs] ++
+        build_afamily_requirement("-") ++
         ["-javaHome=" ++ JavaHome || JavaHome =/= undefined].
 
 saslauthd_port_spec(Config) ->
