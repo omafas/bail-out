@@ -39,13 +39,11 @@ licenses/APL2.txt.
         <span class="icon fa-warning fa-2x red-3 margin-right-1"></span>
         <span>
           <strong>Unsafe Failover Warning:</strong>
-          Some servers cannot be contacted (this could be for multiple reasons such
-          as network delays or unresponsive hardware). You can perform an Unsafe
-          Failover on any nodes previously recognized by your cluster (even
-          if they are unreachable, you will now be able to select them for failover in
-          this dialog). BUT, failover coordination throughout the cluster could be
-          compromised and data loss may occur. Do you wish to proceed with the Unsafe
-          Failover?
+          Failover cannot be performed safely as a majority of servers in the cluster can't be reached.
+          If you wish you may unsafely failover the unreachable nodes. If so, all nodes that survive
+          the unsafe failover must be reachable. Additionally, unsafely failed over nodes will be
+          immediately removed from the cluster and administrators should ensure they are brought
+          down and reinitialized. See <a href="https://docs.couchbase.com/server/{{multipleFailoverDialogCtl.implementationVersion | mnMajorMinorVersion}}/learn/clusters-and-availability/hard-failover.html#performing-an-unsafe-failover" target="_blank">Performing an Unsafe Failover</a> in the Couchbase documentation. Do you wish to perform an unsafe failover?
         </span>
       </p>
     </div>

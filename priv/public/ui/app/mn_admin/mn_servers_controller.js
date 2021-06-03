@@ -135,7 +135,7 @@ function configure($stateProvider) {
     });
 }
 
-function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller, mnServersService, mnHelper, mnGroupsService, mnPromiseHelper, permissions, mnStatisticsNewService) {
+function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller, mnServersService, mnHelper, mnGroupsService, mnPromiseHelper, permissions, mnStatisticsNewService, pools) {
   var vm = this;
   vm.mnPoolDefault = mnPoolDefault.latestValue();
 
@@ -193,8 +193,8 @@ function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller,
           });
         },
         nodes: mnHelper.wrapInFunction(vm.nodes),
-        allowUnsafe: mnHelper.wrapInFunction(false)
-
+        allowUnsafe: mnHelper.wrapInFunction(false),
+        implementationVersion: mnHelper.wrapInFunction(pools.implementationVersion)
       }
     });
   }
