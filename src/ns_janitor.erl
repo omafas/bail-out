@@ -468,7 +468,7 @@ sanify_chain(Bucket, States,
             CurrentMasterState =
                 janitor_agent:find_vbucket_state(CurrentMaster, NodeStates),
             ?log_info("Setting vbucket ~p in ~p on ~p from ~p to active.",
-                      [VBucket, Bucket, CurrentMaster, CurrentMasterState]),
+                      [VBucket, Bucket, CurrentMaster, CurrentMasterState], [{chars_limit, -1}]),
             %% Let's activate according to vbucket map.
             CurrentChain;
 
