@@ -127,6 +127,7 @@ function mnServersListItemController($scope, $rootScope, $uibModal, mnServersSer
       };
       if (mnPoolDefault.export.isEnterprise) {
         warnings.isLastCBAS = mnMemoryQuotaService.isOnlyOneNodeWithService(nodes.allNodes, node.services, 'cbas', true);
+        warnings.isLastBackup = mnMemoryQuotaService.isOnlyOneNodeWithService(nodes.allNodes, node.services, 'backup', true);
       }
       return mnPermissions.export.cluster.bucket['.'].n1ql.index.read ? mnGsiService.getIndexStatus().then(function (indexStatus) {
         warnings.isThereIndex = !!_.find(indexStatus.indexes, function (index) {
