@@ -14,6 +14,7 @@
 -export([get_port/1,
          get_port/2,
          get_port/3,
+         offline_upgrade/1,
          default/2,
          default_config/1,
          default_config/2,
@@ -121,6 +122,18 @@ all_ports() ->
                   backup_http_port),
      ?define_port(backup_grpc_port,  backupGRPC,     backup, 9124)
     ].
+
+offline_upgrade(Config) ->
+    IsEnterprise= cluster_compat_mode:is_enterprise(Config),
+    lists:filtermap(
+      fun ({Key, Default}) ->
+              case ns_config:search(Config, Key) of
+                  {value, _} ->
+                      false;
+                  false ->
+                      {true, {set, Key, Default}}
+              end
+      end, default_config(IsEnterprise)).
 
 config_key(memcached_port) ->
     {memcached, port};

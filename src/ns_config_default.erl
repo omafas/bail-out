@@ -373,8 +373,11 @@ upgrade_config(Config) ->
             [{set, {node, node(), config_version}, {6,5,1}} |
              upgrade_config_from_6_5_to_6_5_1(Config)];
         {6,5,1} ->
-            [{set, {node, node(), config_version}, CurrentVersion} |
-             upgrade_config_from_6_5_1_to_70(Config)];
+            %% When upgrading to the latest config_version always upgrade
+            %% service_ports.
+            service_ports:offline_upgrade(Config) ++
+                [{set, {node, node(), config_version}, CurrentVersion} |
+                 upgrade_config_from_6_5_1_to_70(Config)];
         OldVersion ->
             ?log_error("Detected an attempt to offline upgrade from "
                        "unsupported version ~p. Terminating.", [OldVersion]),
