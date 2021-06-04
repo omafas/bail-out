@@ -419,6 +419,9 @@ failover_membase_bucket_with_map(Nodes, Bucket, BucketConfig, Map, Options) ->
     NewMap = fix_vbucket_map(Nodes, Bucket, Map, Options),
     true = (NewMap =/= undefined),
 
+    ?log_debug("Original vbucket map: ~p~n"
+               "VBucket map with failover applied: ~p", [Map, NewMap], [{chars_limit, -1}]),
+
     case [I || {I, [undefined|_]} <- misc:enumerate(NewMap, 0)] of
         [] -> ok; % Phew!
         MissingVBuckets ->
