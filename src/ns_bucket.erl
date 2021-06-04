@@ -773,13 +773,27 @@ cleanup_bucket_props(Props) ->
             Props
     end.
 
+generate_sasl_password() ->
+    binary_to_list(couch_uuids:random()).
+
+generate_sasl_password(Props) ->
+    [{auth_type, sasl} |
+     case cluster_compat_mode:is_cluster_70() of
+         false ->
+             %% Older releases still require this property
+             lists:keystore(sasl_password, 1, Props,
+                            {sasl_password, generate_sasl_password()});
+         true ->
+             Props
+     end].
+
 create_bucket(BucketType, BucketName, NewConfig) ->
     case is_valid_bucket_name(BucketName) of
         true ->
             MergedConfig0 =
                 misc:update_proplist(new_bucket_default_params(BucketType),
                                      NewConfig),
-            MergedConfig = [{auth_type, sasl} | MergedConfig0],
+            MergedConfig = generate_sasl_password(MergedConfig0),
             do_create_bucket(chronicle_compat:backend(), BucketName,
                              MergedConfig),
             %% The janitor will handle creating the map.
