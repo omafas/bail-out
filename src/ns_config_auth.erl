@@ -109,12 +109,7 @@ authenticate(Username, Password) ->
                 true ->
                     {ok, {Username, local}};
                 false ->
-                    case is_bucket_auth(Username, Password) of
-                        true ->
-                            {ok, {Username, bucket}};
-                        false ->
-                            false
-                    end
+                    false
             end
     end.
 
@@ -138,20 +133,6 @@ hash_password(Password) ->
 
 hash_password(Salt, Password) ->
     crypto:hmac(sha, Salt, list_to_binary(Password)).
-
-is_bucket_auth(User, Password) ->
-    case ns_bucket:get_bucket(User) of
-        {ok, BucketConf} ->
-            case {proplists:get_value(auth_type, BucketConf),
-                  proplists:get_value(sasl_password, BucketConf)} of
-                {none, _} ->
-                    Password =:= "";
-                {sasl, P} ->
-                    misc:compare_secure(Password, P)
-            end;
-        not_present ->
-            false
-    end.
 
 get_no_auth_buckets() ->
     get_no_auth_buckets(ns_bucket:get_snapshot()).
