@@ -147,13 +147,7 @@ handle_pool_info_wait_tail(Req, Id, LocalAddr, ETag, UpdateID) ->
 config_version_token() ->
     {chronicle_kv:get_revision(kv), ns_config:config_version_token()}.
 
-build_pool_info(Id, Req, InfoLevel, Stability, LocalAddr, UpdateID) ->
-    Ctx = menelaus_web_node:get_context({ip, LocalAddr}, false, Stability),
-    build_pool_info(Id, Req, InfoLevel, Ctx, UpdateID).
-
-build_pool_info(Id, Req, normal, Ctx, UpdateID) ->
-    Stability = menelaus_web_node:get_stability(Ctx),
-    LocalAddr = menelaus_web_node:get_local_addr(Ctx),
+build_pool_info(Id, Req, normal, Stability, LocalAddr, UpdateID) ->
     InfoLevel =
         case menelaus_auth:has_permission({[admin, internal], all}, Req) of
             true ->
@@ -177,7 +171,8 @@ build_pool_info(Id, Req, normal, Ctx, UpdateID) ->
       fun () ->
               %% NOTE: token needs to be taken before building pool info
               Vsn = {config_version_token(), nodes(), UpdateID},
-              {do_build_pool_info(Id, InfoLevel, Ctx), 1000, Vsn}
+              {do_build_pool_info(Id, InfoLevel, Stability, LocalAddr),
+               1000, Vsn}
       end,
       fun (_Key, _Value, {ConfigVersionToken, Nodes, OldUpdateID}) ->
               ConfigVersionToken =/= config_version_token()
@@ -185,10 +180,11 @@ build_pool_info(Id, Req, normal, Ctx, UpdateID) ->
                   orelse ((UpdateID =/= OldUpdateID) andalso
                           (UpdateID =/= undefined))
       end);
-build_pool_info(Id, _Req, for_ui, Ctx, _UpdateID) ->
-    do_build_pool_info(Id, for_ui, Ctx).
+build_pool_info(Id, _Req, for_ui, Stability, LocalAddr, _UpdateID) ->
+    do_build_pool_info(Id, for_ui, Stability, LocalAddr).
 
-do_build_pool_info(Id, InfoLevel, Ctx) ->
+do_build_pool_info(Id, InfoLevel, Stability, LocalAddr) ->
+    Ctx = menelaus_web_node:get_context({ip, LocalAddr}, false, Stability),
     Config = menelaus_web_node:get_config(Ctx),
     Snapshot = menelaus_web_node:get_snapshot(Ctx),
 
