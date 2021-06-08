@@ -96,14 +96,26 @@ handle_pool_info(Id, Req) ->
     PassedETag = proplists:get_value("etag", Query),
     case WaitChangeS of
         undefined ->
-            reply_json(Req, build_pool_info(Id, Req, normal, unstable,
-                                            LocalAddr, undefined));
+            reply_json(Req, pool_info(Id, Req, normal, unstable,
+                                      LocalAddr, undefined));
         _ ->
             WaitChange = list_to_integer(WaitChangeS),
             menelaus_event:register_watcher(self()),
             erlang:send_after(WaitChange, self(), wait_expired),
             handle_pool_info_wait(Req, Id, LocalAddr, PassedETag, undefined)
     end.
+
+pool_info(Id, Req, InfoLevel, Stability, LocalAddr, UpdateID) ->
+    {struct,Info} = build_pool_info(Id, Req, InfoLevel, Stability,
+                                    LocalAddr, UpdateID),
+    Buckets = proplists:get_value(bucketNames, Info),
+    FilteredBuckets = menelaus_auth:filter_accessible_buckets(
+                        fun ({struct, [{bucketName, B}, _UUID]}) ->
+                                {[{bucket, binary_to_list(B)}, settings], read}
+                        end,
+                        Buckets, Req),
+    {struct, lists:keyreplace(bucketNames, 1, Info,
+                              {bucketNames, FilteredBuckets})}.
 
 handle_pool_info_wait(Req, Id, LocalAddr, PassedETag, UpdateID) ->
     Info = build_pool_info(Id, Req, for_ui, stable, LocalAddr, UpdateID),
@@ -286,17 +298,21 @@ build_unstable_params(Ctx) ->
     end.
 
 build_buckets_info(Id, UUID, Nodes, Snapshot) ->
+    Buckets = ns_bucket:uuids(Snapshot),
     BucketsVer =
-        erlang:phash2(ns_bucket:uuids(Snapshot))
+        erlang:phash2(Buckets)
         bxor erlang:phash2(
                [{proplists:get_value(hostname, KV),
                  proplists:get_value(status, KV)} || {struct, KV} <- Nodes]),
-    {buckets, {struct,
-               [{uri, bin_concat_path(["pools", Id, "buckets"],
-                                      [{"v", BucketsVer},
-                                       {"uuid", UUID}])},
-                {terseBucketsBase, <<"/pools/default/b/">>},
-                {terseStreamingBucketsBase, <<"/pools/default/bs/">>}]}}.
+    [{buckets, {struct,
+                [{uri, bin_concat_path(["pools", Id, "buckets"],
+                                       [{"v", BucketsVer},
+                                        {"uuid", UUID}])},
+                 {terseBucketsBase, <<"/pools/default/b/">>},
+                 {terseStreamingBucketsBase, <<"/pools/default/bs/">>}]}},
+     {bucketNames, [{struct, [{bucketName, list_to_binary(BucketName)},
+                              {uuid, BucketUUID}]}
+                    || {BucketName, BucketUUID} <- Buckets]}].
 
 build_controller(Name, UUID) ->
     build_controller(Name, atom_to_list(Name), UUID).
@@ -357,7 +373,7 @@ build_one_alert({_Key, Msg, Time, DisablePopUp}) ->
 handle_pool_info_streaming(Id, Req) ->
     LocalAddr = local_addr(Req),
     F = fun(Stability, UpdateID) ->
-                build_pool_info(Id, Req, normal, Stability, LocalAddr, UpdateID)
+                pool_info(Id, Req, normal, Stability, LocalAddr, UpdateID)
         end,
     handle_streaming(F, Req).
 
