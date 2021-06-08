@@ -32,8 +32,11 @@
           config_state = #{}
          }).
 
+%% doctor_debug is parsed by the supportal tools - avoid any log trimming
+%% on them.
+
 -define(doctor_debug(Msg), ale:debug(?NS_DOCTOR_LOGGER, Msg)).
--define(doctor_debug(Fmt, Args), ale:debug(?NS_DOCTOR_LOGGER, Fmt, Args)).
+-define(doctor_debug(Fmt, Args), ale:debug(?NS_DOCTOR_LOGGER, Fmt, Args, [{chars_limit, -1}])).
 
 -define(doctor_info(Msg), ale:info(?NS_DOCTOR_LOGGER, Msg)).
 -define(doctor_info(Fmt, Args), ale:info(?NS_DOCTOR_LOGGER, Fmt, Args)).

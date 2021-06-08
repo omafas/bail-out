@@ -9,17 +9,19 @@
 
 -include("ns_common.hrl").
 
+%% stats logs are parsed by the supportal tools - avoid any log trimming on them.
+
 -define(stats_debug(Msg), ale:debug(?STATS_LOGGER, Msg)).
--define(stats_debug(Fmt, Args), ale:debug(?STATS_LOGGER, Fmt, Args)).
+-define(stats_debug(Fmt, Args), ale:debug(?STATS_LOGGER, Fmt, Args, [{chars_limit, -1}])).
 
 -define(stats_info(Msg), ale:info(?STATS_LOGGER, Msg)).
--define(stats_info(Fmt, Args), ale:info(?STATS_LOGGER, Fmt, Args)).
+-define(stats_info(Fmt, Args), ale:info(?STATS_LOGGER, Fmt, Args, [{chars_limit, -1}])).
 
 -define(stats_warning(Msg), ale:warn(?STATS_LOGGER, Msg)).
--define(stats_warning(Fmt, Args), ale:warn(?STATS_LOGGER, Fmt, Args)).
+-define(stats_warning(Fmt, Args), ale:warn(?STATS_LOGGER, Fmt, Args, [{chars_limit, -1}])).
 
 -define(stats_error(Msg), ale:error(?STATS_LOGGER, Msg)).
--define(stats_error(Fmt, Args), ale:error(?STATS_LOGGER, Fmt, Args)).
+-define(stats_error(Fmt, Args), ale:error(?STATS_LOGGER, Fmt, Args, [{chars_limit, -1}])).
 
 -define(STAT_GAUGES,
         %% Num items in active vbuckets.
