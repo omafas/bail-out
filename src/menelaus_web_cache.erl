@@ -12,6 +12,7 @@
 %%
 -module(menelaus_web_cache).
 -include("ns_common.hrl").
+-include("cut.hrl").
 
 -export([start_link/0,
          get_static_value/1,
@@ -83,47 +84,20 @@ lookup_or_compute_with_expiration(Key, ComputeBody, InvalidPred) ->
     end.
 
 compute_with_expiration(Key, ComputeBody, InvalidPred) ->
-    CachePid = whereis(menelaus_web_cache),
-    case CachePid =:= self() of
-        true ->
-            SeenKeys = get_default(seen_keys_stack, []),
-            case lists:member(Key, SeenKeys) of
-                true ->
-                    erlang:error({loop_detected, Key, SeenKeys});
-                false ->
-                    do_compute_with_expiration(Key, ComputeBody, InvalidPred)
-            end;
-        false ->
-            work_queue:submit_sync_work(
-              CachePid,
-              fun () ->
-                      do_compute_with_expiration(Key, ComputeBody, InvalidPred)
-              end)
-    end.
+    work_queue:submit_sync_work(
+      menelaus_web_cache,
+      ?cut(do_compute_with_expiration(Key, ComputeBody, InvalidPred))).
 
 do_compute_with_expiration(Key, ComputeBody, InvalidPred) ->
     case lookup_value_with_expiration(Key, InvalidPred) of
         {not_found, Now} ->
-            SeenKeys = get_default(seen_keys_stack, []),
-            erlang:put(seen_keys_stack, [Key | SeenKeys]),
-            try
-                {Value, Age, InvalidationState} = ComputeBody(),
-                Expiration = Now + Age,
-                ns_server_stats:notify_counter(<<"web_cache_updates">>),
-                ets:insert(menelaus_web_cache, {Key, Value, Expiration, InvalidationState}),
-                Value
-            after
-                erlang:put(seen_keys_stack, SeenKeys)
-            end;
+            {Value, Age, InvalidationState} = ComputeBody(),
+            Expiration = Now + Age,
+            ns_server_stats:notify_counter(<<"web_cache_updates">>),
+            ets:insert(menelaus_web_cache, {Key, Value, Expiration,
+                                            InvalidationState}),
+            Value;
         {ok, Value} ->
             ns_server_stats:notify_counter(<<"web_cache_inner_hits">>),
             Value
-    end.
-
-get_default(Key, Default) ->
-    case erlang:get(Key) of
-        undefined ->
-            Default;
-        V ->
-            V
     end.
