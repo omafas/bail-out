@@ -81,13 +81,15 @@ split_fold_incremental_loop(Binary, CP, Len, Fun, Acc, NumMatches, Start) ->
     split_fold_incremental_loop(Binary, CP, Len, Fun,
                                 NewAcc, NumMatches - 1, MatchPos + MatchLen).
 
--spec sanitize_backtrace(atom(), binary()) -> [binary()].
+-spec sanitize_backtrace(term(), binary()) -> [binary()].
 sanitize_backtrace(Name, Backtrace) ->
     SanitizeRegisters =
         case Name of
             auth ->
                 true;
             memcached_passwords ->
+                true;
+            {lhttpc_client, request} ->
                 true;
             _ ->
                 false
@@ -144,8 +146,14 @@ grab_process_info(Pid) ->
             undefined;
         PureInfo ->
             Backtrace = proplists:get_value(backtrace, PureInfo),
-            Name = proplists:get_value(registered_name, PureInfo),
-            NewBacktrace = sanitize_backtrace(Name, Backtrace),
+
+            NewBacktrace = case {proplists:get_value(registered_name, PureInfo),
+                                 proplists:get_value(initial_call, PureInfo)} of
+                               {[], {M,F,_}} ->
+                                   sanitize_backtrace({M,F}, Backtrace);
+                               {Name, _} ->
+                                   sanitize_backtrace(Name, Backtrace)
+                            end,
 
             Messages = proplists:get_value(messages, PureInfo),
             NewMessages = massage_messages(Messages),
