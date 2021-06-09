@@ -18,7 +18,7 @@ let bucketsFormConfiguration = {
   replicaIndex: "0",
   threadsNumber: "3",
   flushEnabled: "0",
-  ramQuotaMB: "0",
+  ramQuota: "0",
   uri: '/pools/default/buckets',
   purgeInterval: "3",
   compressionMode: "passive",

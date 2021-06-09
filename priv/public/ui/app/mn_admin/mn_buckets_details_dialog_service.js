@@ -103,7 +103,7 @@ function mnBucketsDetailsDialogServiceFactory($http, $q, mnBytesToMBFilter, mnCo
       copyProperty("otherBucketsRamQuotaMB");
     }
 
-    copyProperties(["ramQuotaMB", "flushEnabled"]);
+    copyProperties(["ramQuota", "flushEnabled"]);
 
     return conf;
   }
@@ -127,14 +127,14 @@ function mnBucketsDetailsDialogServiceFactory($http, $q, mnBytesToMBFilter, mnCo
       var totals = resp[1].storageTotals;
       var bucketConf = _.clone(bucketsFormConfiguration);
       bucketConf.isNew = true;
-      bucketConf.ramQuotaMB = totals.ram ? mnBytesToMBFilter(Math.floor((totals.ram.quotaTotal - totals.ram.quotaUsed) / activeServersLength)) : 0;
+      bucketConf.ramQuota = totals.ram ? mnBytesToMBFilter(Math.floor((totals.ram.quotaTotal - totals.ram.quotaUsed) / activeServersLength)) : 0;
       return bucketConf;
     });
   }
   function reviewBucketConf(bucketDetails) {
     return mnBucketsDetailsService.doGetDetails(bucketDetails).then(function (bucketConf) {
       bucketConf["evictionPolicyEphemeral"] = bucketConf["evictionPolicy"];
-      bucketConf.ramQuotaMB = mnBytesToMBFilter(bucketConf.quota.rawRAM);
+      bucketConf.ramQuota = mnBytesToMBFilter(bucketConf.quota.rawRAM);
       bucketConf.threadsNumber = bucketConf.threadsNumber.toString();
       bucketConf.isDefault = bucketConf.name === 'default';
       bucketConf.enableMaxTTL = bucketConf.maxTTL !== 0;

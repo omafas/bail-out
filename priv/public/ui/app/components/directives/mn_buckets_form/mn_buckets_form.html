@@ -52,9 +52,9 @@ licenses/APL2.txt.
       <input
          type="number"
          mn-focus="(bucketConf.isWizard || !bucketConf.isNew)"
-         ng-class="{invalid: validation.result.errors.ramQuotaMB}"
+         ng-class="{invalid: validation.result.errors.ramQuota}"
          value="30"
-         ng-model="bucketConf.ramQuotaMB">
+         ng-model="bucketConf.ramQuota">
       <abbr>MiB</abbr>
     </div>
     <div
@@ -65,8 +65,8 @@ licenses/APL2.txt.
     </div>
     <div
        class="error"
-       ng-show="validation.result.errors.ramQuotaMB">
-      {{validation.result.errors.ramQuotaMB}}
+       ng-show="validation.result.errors.ramQuota">
+      {{validation.result.errors.ramQuota}}
     </div>
   </div>
 
