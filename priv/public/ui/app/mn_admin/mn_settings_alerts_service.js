@@ -31,7 +31,7 @@ function mnSettingsAlertsService($http, knownAlerts, mnHelper) {
   function testMail(params) {
     params = _.clone(params);
     params.alerts = params.alerts.join(',');
-    params.pop_up_alerts = settings.pop_up_alerts.join(',');
+    params.pop_up_alerts = params.pop_up_alerts.join(',');
     return $http.post('/settings/alerts/testEmail', params);
   }
   function saveAlerts(settings, params) {
