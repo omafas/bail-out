@@ -54,30 +54,30 @@ get_static_value(Key) ->
     [{Key, Value}] = ets:lookup(menelaus_web_cache, Key),
     Value.
 
-lookup_value_with_expiration(Key, Nothing, InvalidPred) ->
+lookup_value_with_expiration(Key, InvalidPred) ->
     Now = erlang:monotonic_time(millisecond),
     case ets:lookup(menelaus_web_cache, Key) of
         [] ->
-            {Nothing, Now};
+            {not_found, Now};
         [{_, Value, Expiration, InvalidationState}] ->
             case Now =< Expiration of
                 true ->
                     case InvalidPred(Key, Value, InvalidationState) of
                         true ->
-                            {Nothing, Now};
+                            {not_found, Now};
                         _ ->
-                            Value
+                            {ok, Value}
                     end;
                 _ ->
-                    {Nothing, Now}
+                    {not_found, Now}
             end
     end.
 
 lookup_or_compute_with_expiration(Key, ComputeBody, InvalidPred) ->
-    case lookup_value_with_expiration(Key, undefined, InvalidPred) of
-        {undefined, _} ->
+    case lookup_value_with_expiration(Key, InvalidPred) of
+        {not_found, _} ->
             compute_with_expiration(Key, ComputeBody, InvalidPred);
-        Value ->
+        {ok, Value} ->
             ns_server_stats:notify_counter(<<"web_cache_hits">>),
             Value
     end.
@@ -102,8 +102,8 @@ compute_with_expiration(Key, ComputeBody, InvalidPred) ->
     end.
 
 do_compute_with_expiration(Key, ComputeBody, InvalidPred) ->
-    case lookup_value_with_expiration(Key, undefined, InvalidPred) of
-        {undefined, Now} ->
+    case lookup_value_with_expiration(Key, InvalidPred) of
+        {not_found, Now} ->
             SeenKeys = get_default(seen_keys_stack, []),
             erlang:put(seen_keys_stack, [Key | SeenKeys]),
             try
@@ -115,7 +115,7 @@ do_compute_with_expiration(Key, ComputeBody, InvalidPred) ->
             after
                 erlang:put(seen_keys_stack, SeenKeys)
             end;
-        Value ->
+        {ok, Value} ->
             ns_server_stats:notify_counter(<<"web_cache_inner_hits">>),
             Value
     end.
