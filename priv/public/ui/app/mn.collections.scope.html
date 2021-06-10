@@ -40,10 +40,10 @@ licenses/APL2.txt.
       <span [hidden]="(interestingStats | async)['@kv-.kv_collection_data_size_bytes']"> - </span>
     </span>
     <span class="cbui-table-cell resp-hide-sml">
-      <span [hidden]="!(interestingStats | async)['@kv-.kv_collection_ops_sum']">
-        {{(interestingStats | async)['@kv-.kv_collection_ops_sum'] | number:'1.0-0'}}
+      <span [hidden]="!(interestingStats | async)['@kv-.kv_collection_ops']">
+        {{(interestingStats | async)['@kv-.kv_collection_ops'] | number:'1.0-0'}}
       </span>
-      <span [hidden]="(interestingStats | async)['@kv-.kv_collection_ops_sum']"> - </span>
+      <span [hidden]="(interestingStats | async)['@kv-.kv_collection_ops']"> - </span>
     </span>
     <span class="cbui-table-cell flex-grow-2 text-right wrap resp-hide-xsml">
       <a

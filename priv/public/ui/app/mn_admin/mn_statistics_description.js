@@ -315,11 +315,9 @@ function getStatAdditionalConfig(statName) {
   case "@xdcr-.@items.xdcr_docs_received_from_dcp_total":
     return {applyFunctions: ["irate", "sum"]};
 
-  case "@kv-.kv_collection_ops_sum":
-    return {applyFunctions: ["irate", "sum"], metric: {name: "kv_collection_ops"}};
-
+    //sum of get, store, delete
   case "@kv-.kv_collection_ops":
-    return {applyFunctions: ["irate"], metric: {name: "kv_collection_ops", op: "get"}};
+    return {applyFunctions: ["irate", "sum"], metric: {name: "kv_collection_ops"}};
 
   case "@cbas.cbas_gc_count_total":
   case "@cbas.cbas_gc_time_milliseconds_total":
@@ -765,8 +763,7 @@ function get70CompatDesc() {
         "kv_collection_item_count": null,
         "kv_collection_mem_used_bytes": null,
         "kv_collection_data_size_bytes": null,
-        "kv_collection_ops": null,
-        "kv_collection_ops_sum": null
+        "kv_collection_ops": null
       },
       "@index-": {
         "@items": {
