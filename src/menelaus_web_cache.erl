@@ -18,6 +18,8 @@
          get_static_value/1,
          lookup_or_compute_with_expiration/3]).
 
+-define(CLEANUP_INTERVAL, ?get_timeout(cleanup, 600000)).
+
 start_link() ->
     work_queue:start_link(?MODULE, fun cache_init/0).
 
@@ -26,7 +28,8 @@ cache_init() ->
     VersionsPList = build_versions(),
     ets:insert(?MODULE, {versions, VersionsPList}),
     PackageVariant = read_package_variant(),
-    ets:insert(?MODULE, {package_variant, PackageVariant}).
+    ets:insert(?MODULE, {package_variant, PackageVariant}),
+    schedule_cleanup().
 
 implementation_version(Versions) ->
     list_to_binary(proplists:get_value(ns_server, Versions, "unknown")).
@@ -99,3 +102,18 @@ do_compute_with_expiration(Key, ComputeBody, InvalidPred) ->
             ns_server_stats:notify_counter(<<"web_cache_inner_hits">>),
             Value
     end.
+
+schedule_cleanup() ->
+    {ok, _} = timer:apply_after(?CLEANUP_INTERVAL, work_queue, submit_work,
+                                [self(), fun cleanup/0]).
+
+cleanup() ->
+    Now = erlang:monotonic_time(millisecond),
+    ToDelete = ets:foldl(
+                 fun ({Key, _, Expiration, _}, Acc) when Now > Expiration ->
+                         [Key | Acc];
+                     (_, Acc) ->
+                         Acc
+                 end, [], ?MODULE),
+    [ets:delete(?MODULE, K) || K <- ToDelete],
+    schedule_cleanup().
