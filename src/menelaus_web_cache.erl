@@ -19,14 +19,14 @@
          lookup_or_compute_with_expiration/3]).
 
 start_link() ->
-    work_queue:start_link(menelaus_web_cache, fun cache_init/0).
+    work_queue:start_link(?MODULE, fun cache_init/0).
 
 cache_init() ->
-    ets:new(menelaus_web_cache, [set, named_table]),
+    ets:new(?MODULE, [set, named_table]),
     VersionsPList = build_versions(),
-    ets:insert(menelaus_web_cache, {versions, VersionsPList}),
+    ets:insert(?MODULE, {versions, VersionsPList}),
     PackageVariant = read_package_variant(),
-    ets:insert(menelaus_web_cache, {package_variant, PackageVariant}).
+    ets:insert(?MODULE, {package_variant, PackageVariant}).
 
 implementation_version(Versions) ->
     list_to_binary(proplists:get_value(ns_server, Versions, "unknown")).
@@ -52,12 +52,12 @@ read_package_variant() ->
     end.
 
 get_static_value(Key) ->
-    [{Key, Value}] = ets:lookup(menelaus_web_cache, Key),
+    [{Key, Value}] = ets:lookup(?MODULE, Key),
     Value.
 
 lookup_value_with_expiration(Key, InvalidPred) ->
     Now = erlang:monotonic_time(millisecond),
-    case ets:lookup(menelaus_web_cache, Key) of
+    case ets:lookup(?MODULE, Key) of
         [] ->
             {not_found, Now};
         [{_, Value, Expiration, InvalidationState}] ->
@@ -85,8 +85,7 @@ lookup_or_compute_with_expiration(Key, ComputeBody, InvalidPred) ->
 
 compute_with_expiration(Key, ComputeBody, InvalidPred) ->
     work_queue:submit_sync_work(
-      menelaus_web_cache,
-      ?cut(do_compute_with_expiration(Key, ComputeBody, InvalidPred))).
+      ?MODULE, ?cut(do_compute_with_expiration(Key, ComputeBody, InvalidPred))).
 
 do_compute_with_expiration(Key, ComputeBody, InvalidPred) ->
     case lookup_value_with_expiration(Key, InvalidPred) of
@@ -94,8 +93,7 @@ do_compute_with_expiration(Key, ComputeBody, InvalidPred) ->
             {Value, Age, InvalidationState} = ComputeBody(),
             Expiration = Now + Age,
             ns_server_stats:notify_counter(<<"web_cache_updates">>),
-            ets:insert(menelaus_web_cache, {Key, Value, Expiration,
-                                            InvalidationState}),
+            ets:insert(?MODULE, {Key, Value, Expiration, InvalidationState}),
             Value;
         {ok, Value} ->
             ns_server_stats:notify_counter(<<"web_cache_inner_hits">>),
