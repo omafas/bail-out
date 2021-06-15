@@ -53,7 +53,8 @@ let knownAlerts = [
   'indexer_ram_max_usage',
   'ep_clock_cas_drift_threshold_exceeded',
   'communication_issue',
-  'time_out_of_sync'
+  'time_out_of_sync',
+  'disk_usage_analyzer_stuck'
 ];
 
 let timeUnitToSeconds = {
