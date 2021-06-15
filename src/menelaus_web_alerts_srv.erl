@@ -76,6 +76,8 @@ short_description(communication_issue) ->
     "communication issue among some nodes";
 short_description(time_out_of_sync) ->
     "node time not in sync";
+short_description(disk_usage_analyzer_stuck) ->
+    "disks usage worker is stuck and unresponsive";
 short_description(Other) ->
     %% this case is needed for tests to work
     couch_util:to_list(Other).
@@ -103,7 +105,11 @@ errors(communication_issue) ->
     "Warning: Node \"~s\" is having issues communicating with following nodes \"~s\".";
 errors(time_out_of_sync) ->
     "The time on node ~p is not synchronized. Please ensure that NTP is set "
-    "up correctly on all nodes and that clocks are synchronized.".
+        "up correctly on all nodes and that clocks are synchronized.";
+errors(disk_usage_analyzer_stuck) ->
+    "Disk usage worker is stuck on node \"~s\". Please ensure all mounts are "
+        "accessible via \"df\" and consider killing any existing \"df\" "
+        "processes.".
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -251,7 +257,7 @@ alert_keys() ->
     [ip, disk, overhead, ep_oom_errors, ep_item_commit_failed,
      audit_dropped_events, indexer_ram_max_usage,
      ep_clock_cas_drift_threshold_exceeded,
-     communication_issue, time_out_of_sync].
+     communication_issue, time_out_of_sync, disk_usage_analyzer_stuck].
 
 config_upgrade_to_70(Config) ->
     case ns_config:search(Config, email_alerts) of
@@ -275,7 +281,7 @@ start_timer() ->
 global_checks() ->
     [oom, ip, write_fail, overhead, disk, audit_write_fail,
      indexer_ram_max_usage, cas_drift_threshold, communication_issue,
-     time_out_of_sync].
+     time_out_of_sync, disk_usage_analyzer_stuck].
 
 %% @doc fires off various checks
 check_alerts(Opaque, Hist, Stats) ->
@@ -294,6 +300,17 @@ check(ip, Opaque, _History, _Stats) ->
         true ->
             ok
     end,
+    Opaque;
+
+check(disk_usage_analyzer_stuck, Opaque, _History, _Stats) ->
+    case ns_disksup:is_stale() of
+        true ->
+            global_alert(disk_usage_analyzer_stuck,
+                         fmt_to_bin(
+                           errors(disk_usage_analyzer_stuck), [node()]));
+        false -> ok
+    end,
+
     Opaque;
 
 %% @doc check the capacity of the drives used for db and log files

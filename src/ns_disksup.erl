@@ -19,6 +19,7 @@
 %% API
 -export([start_link/0]).
 -export([get_disk_data/0]).
+-export([is_stale/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -41,10 +42,18 @@ start_link() ->
 get_disk_data() ->
     case misc:is_linux() orelse misc:is_macos() of
         true ->
-            gen_server:call(?MODULE, get_disk_data, infinity);
+            element(2, get_latest_entry());
         false ->
             ns_bootstrap:ensure_os_mon(),
             disksup:get_disk_data()
+    end.
+
+is_stale() ->
+    case get_latest_entry() of
+        {none, _} ->
+            true;
+        {Ts, _, Timeout} ->
+            check_staleness(Ts, Timeout * 2)
     end.
 
 %%----------------------------------------------------------------------
@@ -54,36 +63,38 @@ get_disk_data() ->
 init([]) ->
     process_flag(trap_exit, true),
     process_flag(priority, low),
-
-    OS = os:type(),
     Port = start_portprogram(),
     ns_bootstrap:ensure_os_mon(),
     Timeout = disksup:get_check_interval(),
+    Table = ets:new(disk_data, [named_table]),
+    true = ets:insert(Table, {disk_data_entry,
+                              erlang:monotonic_time(millisecond), [], Timeout}),
 
     %% Initiation first disk check
     self() ! timeout,
+    {ok, #state{port=Port, os=os:type(), timeout=Timeout}}.
 
-    {ok, #state{port=Port, os=OS,
-                timeout=Timeout}}.
-
-handle_call(get_disk_data, _From, State) ->
-    {reply, State#state.diskdata, State}.
+handle_call(_, _From, State) ->
+    {reply, {}, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(timeout, State) ->
-    NewDiskData = check_disk_space(State#state.os, State#state.port),
-    erlang:send_after(State#state.timeout, self(), timeout),
+handle_info(timeout, #state{os=Os, port=Port, timeout=Timeout} = State) ->
+    NewDiskData = check_disk_space(Os, Port),
+    Timestamp = erlang:monotonic_time(millisecond),
+    true = ets:insert(disk_data,
+                      {disk_data_entry, Timestamp, NewDiskData, Timeout}),
+    erlang:send_after(Timeout, self(), timeout),
     {noreply, State#state{diskdata = NewDiskData}};
 handle_info({'EXIT', _Port, Reason}, State) ->
-    {stop, {port_died, Reason}, State#state{port=not_used}};
+    {stop, {port_died, Reason}, State#state{port=none}};
 handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, State) ->
     case State#state.port of
-        not_used ->
+        none ->
             ok;
         Port ->
             port_close(Port)
@@ -94,6 +105,15 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%--Port handling functions---------------------------------------------
+
+check_staleness(Key, Timeout) ->
+    erlang:monotonic_time(millisecond) - Key > Timeout.
+
+get_latest_entry() ->
+    case ets:lookup(disk_data, disk_data_entry) of
+        [{_, Ts, Data, Timeout} | _] -> {Ts, Data, Timeout};
+        [] -> {none, []}
+    end.
 
 start_portprogram() ->
     open_port({spawn, "sh -s ns_disksup 2>&1"}, [stream]).
