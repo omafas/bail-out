@@ -168,6 +168,15 @@ with_external_bind(Settings, Fun) ->
                             end
                     end).
 
+with_simple_bind(DN, [], _Settings, _Fun) when DN =/= [] ->
+    %% Prevent "Unauthenticated Authentication Mechanism of Simple Bind".
+    %% Since we use simple_bind for authentication purposes only we should
+    %% prevent use of empty passwords.
+    %% See, https://datatracker.ietf.org/doc/html/rfc4513#section-5.1.2, for
+    %% more info.
+    ?log_debug("Simple bind prohibited for DN ~p with empty password",
+               [ns_config_log:tag_user_name(DN)]),
+    {error, unwillingToPerform};
 with_simple_bind(DN, Password, Settings, Fun) ->
     with_connection(Settings,
                     fun (Handle) ->
