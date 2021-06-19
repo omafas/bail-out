@@ -118,7 +118,7 @@ pool_info(Id, Req, InfoLevel, Stability, LocalAddr, UpdateID) ->
                               {bucketNames, FilteredBuckets})}.
 
 handle_pool_info_wait(Req, Id, LocalAddr, PassedETag, UpdateID) ->
-    Info = build_pool_info(Id, Req, for_ui, stable, LocalAddr, UpdateID),
+    Info = pool_info(Id, Req, for_ui, stable, LocalAddr, UpdateID),
     ETag = integer_to_list(erlang:phash2(Info)),
     if
         ETag =:= PassedETag ->
@@ -146,7 +146,7 @@ handle_pool_info_wait_tail(Req, Id, LocalAddr, ETag, UpdateID) ->
     %% consume all notifications
     LastID = menelaus_event:flush_watcher_notifications(UpdateID),
     %% and reply
-    {struct, PList} = build_pool_info(Id, Req, for_ui, unstable, LocalAddr,
+    {struct, PList} = pool_info(Id, Req, for_ui, unstable, LocalAddr,
                                       LastID),
     Info = {struct, [{etag, list_to_binary(ETag)} | PList]},
     reply_ok(Req, "application/json", encode_json(Info),
