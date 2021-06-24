@@ -116,6 +116,63 @@ get_tls_version(SV, Service) ->
             {error, lists:flatten(M)}
     end.
 
+verify_hsts(Str) ->
+    Props = lists:map(
+              fun (P) ->
+                      P1 = [string:trim(S) || S <- string:split(P, "=")],
+                      case P1 of
+                          [K] ->
+                              {K, undefined};
+                          [K, V] ->
+                              {K, V}
+                      end
+              end, string:split(Str, ";", all)),
+    {Valid, Invalid} = lists:partition(
+                         fun ({"includeSubDomains", undefined}) ->
+                                 true;
+                             ({"preload", undefined}) ->
+                                 true;
+                             ({"max-age", Val}) ->
+                                 Int = (catch erlang:list_to_integer(Val)),
+                                 (is_integer(Int) andalso (Int >= 0));
+                             (_) ->
+                                 false
+                         end, Props),
+    case Invalid of
+        [] ->
+            case proplists:get_value("max-age", Valid) of
+                undefined ->
+                    {error, "max-age directive is required"};
+                _ ->
+                    case length(lists:ukeysort(1, Valid)) =:= length(Valid) of
+                        false ->
+                            {error, "Cannot have duplicate directives"};
+                        true ->
+                            ok
+                    end
+            end;
+        _ ->
+            InvalidDir = [K || {K, _V} <- Invalid],
+            M = io_lib:format("Invalid directives ~s",
+                              [lists:join("; ", InvalidDir)]),
+            {error, lists:flatten(M)}
+    end.
+
+get_secure_headers(Json) ->
+    try ejson:decode(Json) of
+        {[{<<"Strict-Transport-Security">>, BinStr}]} ->
+            Str = binary_to_list(BinStr),
+            case verify_hsts(Str) of
+                ok -> {ok, [{"Strict-Transport-Security", Str}]};
+                Err -> Err
+            end;
+        _ ->
+            {error, "Only \"Strict-Transport-Security\" header allowed"}
+    catch
+        _:_ ->
+            {error, "Invalid format. Expecting a json."}
+    end.
+
 get_cipher_suites(Str) ->
     try ejson:decode(Str) of
         L when is_list(L) ->
@@ -181,10 +238,22 @@ get_cluster_encryption(Level) ->
 services_with_security_settings() ->
     [kv, fts, index, eventing, n1ql, cbas, backup, ns_server].
 
+is_allowed_on_cluster([secure_headers]) ->
+    cluster_compat_mode:is_cluster_70();
+is_allowed_on_cluster(_) ->
+    true.
+
 is_allowed_setting(K) ->
     case cluster_compat_mode:is_enterprise() orelse not ee_only_settings(K) of
-        true -> ok;
-        false -> {error, <<"not supported in community edition">>}
+        true ->
+            case is_allowed_on_cluster(K) of
+                true ->
+                    ok;
+                false ->
+                    {error, <<"Not supported in mixed version clusters.">>}
+            end;
+        false ->
+            {error, <<"not supported in community edition">>}
     end.
 
 ee_only_settings([ssl_minimum_protocol]) -> true;
@@ -197,6 +266,7 @@ conf(security) ->
     [{disable_ui_over_http, disableUIOverHttp, false, fun get_bool/1},
      {disable_ui_over_https, disableUIOverHttps, false, fun get_bool/1},
      {disable_www_authenticate, disableWWWAuthenticate, false, fun get_bool/1},
+     {secure_headers, responseHeaders, [], fun get_secure_headers/1},
      {ui_session_timeout, uiSessionTimeout, undefined,
       get_number(60, 1000000, undefined)},
      {ssl_minimum_protocol, tlsMinVersion,
@@ -263,7 +333,18 @@ build_kvs(Conf, Config, Filter) ->
                         undefined -> DV;
                         V -> V
                     end,
-              Filter([CK], Val) andalso {true, {JK, Val}};
+              case Filter([CK], Val) of
+                  true ->
+                      case Val of
+                          [{_K, _V} | _] ->
+                              CVal = [{K, list_to_binary(V)} || {K, V} <- Val],
+                              {true, {JK, {CVal}}};
+                          _ ->
+                              {true, {JK, Val}}
+                      end;
+                  false ->
+                      false
+              end;
           ({CK, JK, SubKeys}) when is_list(SubKeys) ->
               List = lists:filtermap(
                        fun ({SubCK, SubJK, DV, _}) ->
@@ -828,17 +909,23 @@ handle_settings_rebalance_post(Req) ->
 
 -ifdef(TEST).
 build_kvs_test() ->
-    Cfg = [[{key2, value}, {key3, [{sub_key2, value}]}]],
+    Cfg = [[{key2, value},
+            {key3, [{sub_key2, value}]},
+            {key4, [{key1, "value1"}, {key2, "value2"}]}]],
     Conf = [{key1, jsonKey1, default, fun (V) -> {ok, V} end},
             {key2, jsonKey2, default, fun (V) -> {ok, V} end},
             {key3, jsonKey3,
               [{sub_key1, subKey1, default, fun (V) -> {ok, V} end},
-               {sub_key2, subKey2, default, fun (V) -> {ok, V} end}]}],
+               {sub_key2, subKey2, default, fun (V) -> {ok, V} end}]},
+            {key4, jsonKey4, default, fun (V) -> {ok, V} end}],
     ?assertEqual([], build_kvs([], [], fun (_, _) -> true end)),
     ?assertEqual([{jsonKey1, default}, {jsonKey2, value},
-                  {jsonKey3, {[{subKey1, default}, {subKey2, value}]}}],
+                  {jsonKey3, {[{subKey1, default}, {subKey2, value}]}},
+                  {jsonKey4, {[{key1, <<"value1">>}, {key2, <<"value2">>}]}}],
                  build_kvs(Conf, Cfg, fun (_, _) -> true end)),
-    ?assertEqual([{jsonKey2, value}, {jsonKey3, {[{subKey2, value}]}}],
+    ?assertEqual([{jsonKey2, value},
+                  {jsonKey3, {[{subKey2, value}]}},
+                  {jsonKey4, {[{key1, <<"value1">>}, {key2, <<"value2">>}]}}],
                  build_kvs(Conf, Cfg,
                            fun (_, default) -> false; (_, _) -> true end)),
     ok.
@@ -846,6 +933,7 @@ build_kvs_test() ->
 test_conf() ->
     [{ssl_minimum_protocol,tlsMinVersion,unused, get_tls_version(_, all)},
      {cipher_suites,cipherSuites,unused, fun get_cipher_suites/1},
+     {secure_headers, responseHeaders, [], fun get_secure_headers/1},
      {honor_cipher_order,honorCipherOrder,unused, fun get_bool/1},
      {{security_settings, kv}, data,
       [{cipher_suites, cipherSuites, unused, fun get_cipher_suites/1},
@@ -857,11 +945,17 @@ test_conf() ->
 
 parse_post_data_test() ->
     Conf = test_conf(),
+    RH = ejson:encode({[{"Strict-Transport-Security",
+                         <<"max-age=10%3Bpreload%3BincludeSubDomains">>}]}),
+    ResponseHeaders = <<"responseHeaders=", RH/binary, "&">>,
     KeyValidator = fun ([not_allowed]) -> {error, <<"not allowed">>};
                        (_) -> ok
                    end,
     ?assertEqual({ok, []}, parse_post_data(Conf, [], <<>>, KeyValidator)),
-    ?assertEqual({ok, [{[ssl_minimum_protocol], 'tlsv1.2'},
+    ?assertEqual({ok, [{[secure_headers],
+                        [{"Strict-Transport-Security",
+                          "max-age=10;preload;includeSubDomains"}]},
+                       {[ssl_minimum_protocol], 'tlsv1.2'},
                        {[cipher_suites], []},
                        {[honor_cipher_order], true},
                        {[{security_settings, kv}, ssl_minimum_protocol],
@@ -869,7 +963,8 @@ parse_post_data_test() ->
                        {[{security_settings, kv}, cipher_suites], []},
                        {[{security_settings, kv}, honor_cipher_order], false}]},
                  parse_post_data(Conf, [],
-                                 <<"tlsMinVersion=tlsv1.2&"
+                                 <<ResponseHeaders/binary,
+                                   "tlsMinVersion=tlsv1.2&"
                                    "cipherSuites=[]&"
                                    "honorCipherOrder=true&"
                                    "data.tlsMinVersion=tlsv1.3&"
@@ -910,6 +1005,10 @@ parse_post_data_test() ->
                                    "cipherSuites=[]&"
                                    "cipherSuites=bad">>,
                                  KeyValidator)),
+    ?assertEqual({error, [<<"responseHeaders - Invalid format. "
+                            "Expecting a json.">>]},
+                 parse_post_data(Conf, ["responseHeaders"],
+                                 <<"bad">>, KeyValidator)),
     ?assertEqual({error, [<<"data.cipherSuites - Invalid format. "
                             "Expecting a list of ciphers.">>]},
                  parse_post_data(Conf, ["data", "cipherSuites"],
