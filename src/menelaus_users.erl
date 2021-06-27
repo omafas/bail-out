@@ -819,13 +819,19 @@ upgrade(Version, Config, Nodes) ->
         ok = ns_config_rep:ensure_config_seen_by_nodes(Nodes),
         sync_with_remotes(Nodes, Version),
 
-        do_upgrade(Version),
+        do_upgrade(Version, user),
+        case Version of
+            ?VERSION_66 ->
+                ok;
+            ?VERSION_70 ->
+                do_upgrade(Version, group)
+        end,
         sync_with_remotes(Nodes, Version),
         ok
     catch T:E:S ->
-              ale:error(?USER_LOGGER, "Unsuccessful user storage upgrade.~n~p",
-                        [{T, E, S}]),
-              error
+            ale:error(?USER_LOGGER, "Unsuccessful user storage upgrade.~n~p",
+                      [{T, E, S}]),
+            error
     end.
 
 maybe_upgrade_role_to_70({RoleName, Buckets}) ->
@@ -838,13 +844,13 @@ maybe_upgrade_role_to_70(security_admin) ->
 maybe_upgrade_role_to_70(Role) ->
     [Role].
 
-upgrade_user(?VERSION_66, Props) ->
+upgrade_props(?VERSION_66, Props) ->
     %% remove junk user_roles property that might appear due to MB-39706
     lists:keydelete(user_roles, 1, Props);
-upgrade_user(?VERSION_70, Props) ->
-    upgrade_user_roles(fun maybe_upgrade_role_to_70/1, Props).
+upgrade_props(?VERSION_70, Props) ->
+    upgrade_roles(fun maybe_upgrade_role_to_70/1, Props).
 
-upgrade_user_roles(Fun, Props) ->
+upgrade_roles(Fun, Props) ->
     OldRoles = lists:sort(proplists:get_value(roles, Props)),
     %% Convert roles and remove duplicates.
     case lists:usort(lists:flatmap(Fun, OldRoles)) of
@@ -854,23 +860,23 @@ upgrade_user_roles(Fun, Props) ->
             lists:keyreplace(roles, 1, Props, {roles, NewRoles})
     end.
 
-do_upgrade(Version) ->
+do_upgrade(Version, UserOrGroup) ->
     UpdateFun =
-        fun ({user, Key}, Props) ->
-                case upgrade_user(Version, Props) of
+        fun ({UOG, Key}, Props) when UOG =:= UserOrGroup ->
+                case upgrade_props(Version, Props) of
                     Props ->
                         skip;
                     NewProps ->
-                        ?log_debug("Upgrade user ~p from ~p to ~p",
-                                   [ns_config_log:tag_user_data(Key),
+                        ?log_debug("Upgrade ~p from ~p to ~p",
+                                   [{UOG, ns_config_log:tag_user_data(Key)},
                                     ns_config_log:tag_user_props(Props),
                                     ns_config_log:tag_user_props(NewProps)]),
                         {update, NewProps}
                 end
         end,
 
-    [] = replicated_dets:select_with_update(storage_name(), {user, '_'}, 100,
-                                            UpdateFun).
+    [] = replicated_dets:select_with_update(
+           storage_name(), {UserOrGroup, '_'}, 100, UpdateFun).
 
 -ifdef(TEST).
 
