@@ -1411,6 +1411,23 @@
               "valid_on_uid" : "",
               "sessionid" : ""
           }
+      },
+      {
+        "id" : 8264,
+        "name" : "authentication failure",
+        "description" : "REST operation failed due to authentication failure",
+        "sync" : false,
+        "enabled" : true,
+        "filtering_permitted": false,
+        "mandatory_fields" : {
+            "timestamp" : "",
+            "real_userid" : {"domain" : "", "user" : ""},
+            "remote" : {"ip" : "", "port" : 1},
+            "local" : {"ip" : "", "port" : 1},
+            "raw_url" : ""
+        },
+        "optional_fields" : {
+        }
       }
     ]
 }

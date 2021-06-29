@@ -86,7 +86,8 @@
          delete_user_profile/2,
          enable_auto_reprovision/2,
          disable_auto_reprovision/1,
-         failover_settings/2
+         failover_settings/2,
+         auth_failure/1
         ]).
 
 -export([start_link/0, stats/0]).
@@ -379,7 +380,9 @@ code(create_collection) ->
 code(drop_collection) ->
     8262;
 code(set_manifest) ->
-    8263.
+    8263;
+code(auth_failure) ->
+    8264.
 
 to_binary({list, List}) ->
     [to_binary(A) || A <- List];
@@ -959,3 +962,7 @@ set_manifest(Req, BucketName, InputManifest, ValidOnUid, Uid) ->
     put(set_manifest, Req,
         [{bucket_name, BucketName}, {input_manifest, InputManifest},
          {valid_on_uid, ValidOnUid}, {new_manifest_uid, Uid}]).
+
+auth_failure(Req) ->
+    RawPath = mochiweb_request:get(raw_path, Req),
+    put(auth_failure, Req, [{raw_url, RawPath}]).

@@ -1112,6 +1112,7 @@ perform_action(Req, {local, Fun}) ->
         allowed ->
             Fun(NewReq);
         auth_failure ->
+            ns_audit:auth_failure(NewReq),
             menelaus_util:require_auth(NewReq)
     end;
 perform_action(Req, {ui, IsSSL, Fun}) ->
@@ -1133,8 +1134,10 @@ perform_action(Req, {Permission, Fun, Args}) ->
                                       NewReq)
             end;
         auth_failure ->
+            ns_audit:auth_failure(NewReq),
             menelaus_util:require_auth(NewReq);
         forbidden ->
+            ns_audit:auth_failure(NewReq),
             menelaus_util:reply_json(
               NewReq, menelaus_web_rbac:forbidden_response([Permission]), 403)
     end.
