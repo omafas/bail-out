@@ -913,7 +913,7 @@ upgrade_test_() ->
                          [replicated_dets:toy_set(
                             storage_name(), {user, {Id, local}}, Props) ||
                              {Id, Props} <- Users],
-                         do_upgrade(Version),
+                         do_upgrade(Version, user),
                          Check()
                  end}
         end,
@@ -926,7 +926,6 @@ upgrade_test_() ->
      end,
      fun (_) ->
              meck:unload(replicated_dets),
-             meck:unload(cluster_compat_mode),
              ets:delete(storage_name())
      end,
      [Test(?VERSION_66,
