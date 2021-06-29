@@ -45,7 +45,11 @@ handle_get_metrics(Req) ->
                         end, AlmostAllTargets),
     %% Addr is supposed to be a loopback address (127.0.0.1 or [::1] depending
     %% on configured ip family) with port, hence no need to use https
-    MakeURL = fun (Addr, Path) -> "http://" ++ Addr ++ Path end,
+    MakeURL = fun (Addr, Path, kv) ->
+                      "http://" ++ Addr ++ Path ++ "NoTS";
+                  (Addr, Path, _) ->
+                      "http://" ++ Addr ++ Path
+              end,
     Config = ns_config:latest(),
     AuthHeader =
         fun (kv) ->
@@ -55,10 +59,10 @@ handle_get_metrics(Req) ->
             (_) ->
                 menelaus_rest:special_auth_header()
         end,
-    URLs = [{MakeURL(Addr, "/_prometheusMetrics"), AuthHeader(Type)}
-                || {Type, Addr} <- AlmostAllTargets] ++
-           [{MakeURL(Addr, "/_prometheusMetricsHigh"), AuthHeader(Type)}
-                || {Type, Addr} <- HighCardTargets],
+    URLs = [{MakeURL(Addr, "/_prometheusMetrics", Type), AuthHeader(Type)}
+            || {Type, Addr} <- AlmostAllTargets] ++
+        [{MakeURL(Addr, "/_prometheusMetricsHigh", Type), AuthHeader(Type)}
+         || {Type, Addr} <- HighCardTargets],
     [proxy_chunks_from_url(URL, Resp) || URL <- URLs],
     mochiweb_response:write_chunk(<<>>, Resp).
 
@@ -168,4 +172,3 @@ label_val_to_bin(F) when is_float(F) -> float_to_binary(F);
 label_val_to_bin(A) when is_atom(A) -> atom_to_binary(A, latin1);
 label_val_to_bin(Bin) when is_binary(Bin) -> Bin;
 label_val_to_bin(Str) when is_list(Str) -> list_to_binary(Str).
-
