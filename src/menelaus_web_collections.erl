@@ -38,13 +38,15 @@ handle_post_scope(Bucket, Req) ->
       fun (Values) ->
               Name = proplists:get_value(name, Values),
               RV = collections:create_scope(Bucket, Name),
-              maybe_audit(RV, ns_audit:create_scope(Req, Bucket, Name, _)),
+              maybe_audit(RV, Req, ns_audit:create_scope(_, Bucket, Name, _)),
               handle_rv(RV, Req)
       end, Req, form, scope_validators(default_not_allowed)).
 
-maybe_audit({ok, Uid}, AuditFun) ->
-    AuditFun(Uid);
-maybe_audit(_, _AuditFun) ->
+maybe_audit({ok, Uid}, Req, SuccessfulAuditFun) ->
+    SuccessfulAuditFun(Req, Uid);
+maybe_audit(forbidden, Req, _SuccessfulAuditFun) ->
+    ns_audit:auth_failure(Req);
+maybe_audit(_, _Req, _SuccessfulAuditFun) ->
     ok.
 
 scope_validators(default_not_allowed) ->
@@ -72,21 +74,22 @@ handle_post_collection(Bucket, Scope, Req) ->
               Name = proplists:get_value(name, Values),
               RV =  collections:create_collection(
                   Bucket, Scope, Name, proplists:delete(name, Values)),
-              maybe_audit(RV, ns_audit:create_collection(Req, Bucket, Scope,
-                                                         Name, _)),
+              maybe_audit(RV, Req,
+                          ns_audit:create_collection(_, Bucket, Scope, Name,
+                                                     _)),
               handle_rv(RV, Req)
       end, Req, form, collection_validators(default_not_allowed)).
 
 handle_delete_scope(Bucket, Name, Req) ->
     assert_api_available(Bucket),
     RV = collections:drop_scope(Bucket, Name),
-    maybe_audit(RV, ns_audit:drop_scope(Req, Bucket, Name, _)),
+    maybe_audit(RV, Req, ns_audit:drop_scope(_, Bucket, Name, _)),
     handle_rv(RV, Req).
 
 handle_delete_collection(Bucket, Scope, Name, Req) ->
     assert_api_available(Bucket),
     RV = collections:drop_collection(Bucket, Scope, Name),
-    maybe_audit(RV, ns_audit:drop_collection(Req, Bucket, Scope, Name, _)),
+    maybe_audit(RV, Req, ns_audit:drop_collection(_, Bucket, Scope, Name, _)),
     handle_rv(RV, Req).
 
 handle_set_manifest(Bucket, Req) ->
@@ -101,8 +104,9 @@ handle_set_manifest(Bucket, Req) ->
               RV = collections:set_manifest(Bucket, Identity, Scopes,
                                             ValidOnUid),
               InputManifest = mochiweb_request:recv_body(Req),
-              maybe_audit(RV, ns_audit:set_manifest(Req, Bucket, InputManifest,
-                                                    ValidOnUid, _)),
+              maybe_audit(RV, Req,
+                          ns_audit:set_manifest(_, Bucket, InputManifest,
+                                                ValidOnUid, _)),
               handle_rv(RV, Req)
       end, Req, json,
       [validator:required(scopes, _),
