@@ -1386,6 +1386,7 @@ handle_check_permission_for_cbauth(Req) ->
         true ->
             menelaus_util:reply_text(Req, "", 200);
         false ->
+            ns_audit:auth_failure(Req),
             menelaus_util:reply_text(Req, "", 401)
     end.
 

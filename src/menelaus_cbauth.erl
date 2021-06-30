@@ -354,10 +354,13 @@ handle_extract_user_from_cert_post(Req) ->
                                          {[{user, list_to_binary(User)},
                                            {domain, Domain}]});
             auth_failure ->
+                ns_audit:auth_failure(Req),
                 menelaus_util:reply_json(Req, <<"Auth failure">>, 401)
         end
     catch
-        _:_ -> menelaus_util:reply_json(Req, <<"Auth failure">>, 401)
+        _:_ ->
+            ns_audit:auth_failure(Req),
+            menelaus_util:reply_json(Req, <<"Auth failure">>, 401)
     end.
 
 is_cbauth_connection(Label) ->

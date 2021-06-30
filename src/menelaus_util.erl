@@ -498,6 +498,7 @@ require_permission(Req, Permission) ->
         true ->
             ok;
         false ->
+            ns_audit:auth_failure(Req),
             web_json_exception(
               403, menelaus_web_rbac:forbidden_response([Permission]))
     end.
