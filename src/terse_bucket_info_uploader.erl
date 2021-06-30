@@ -81,8 +81,8 @@ flush_refresh_msgs(BucketName) ->
 
 refresh_cluster_config(BucketName) ->
     case bucket_info_cache:terse_bucket_info(BucketName) of
-        {ok, Rev, Blob} ->
-            ok = ns_memcached:set_cluster_config(BucketName, Rev, Blob);
+        {ok, Rev, RevEpoch, Blob} ->
+            ok = ns_memcached:set_cluster_config(BucketName, Rev, RevEpoch, Blob);
         not_present ->
             ?log_debug("Bucket ~s is dead", [BucketName]),
             ok;

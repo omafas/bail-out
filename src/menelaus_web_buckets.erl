@@ -1920,7 +1920,7 @@ do_handle_local_random_key(Bucket, CollectionUId, Req) ->
 
 build_terse_bucket_info(BucketName) ->
     case bucket_info_cache:terse_bucket_info(BucketName) of
-        {ok, _, V} -> V;
+        {ok, _, _, V} -> V;
         %% NOTE: {auth_bucket for this route handles 404 for us albeit
         %% harmlessly racefully
         not_present ->

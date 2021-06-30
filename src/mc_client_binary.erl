@@ -53,7 +53,7 @@
          map_status/1,
          get_mass_dcp_docs_estimate/2,
          ext/2,
-         set_cluster_config/4,
+         set_cluster_config/5,
          get_random_key/2,
          compact_vbucket/5,
          wait_for_seqno_persistence/3,
@@ -800,12 +800,19 @@ get_mass_dcp_docs_estimate(Sock, VBuckets) ->
               {ok, V} -> V
           end || VB <- VBuckets]}.
 
-set_cluster_config(Sock, Bucket, Rev, Blob) ->
-    RV = cmd(?CMD_SET_CLUSTER_CONFIG, Sock, undefined, undefined,
-             {#mc_header{}, #mc_entry{key = list_to_binary(Bucket),
-                                      data = Blob,
-                                      ext = <<Rev:32>>}},
-             infinity),
+set_cluster_config(Sock, Bucket, Rev, RevEpoch, Blob) ->
+    RV = case RevEpoch of
+             not_present ->
+                 cmd(?CMD_SET_CLUSTER_CONFIG, Sock, undefined, undefined,
+                     {#mc_header{}, #mc_entry{key = list_to_binary(Bucket),
+                                              data = Blob,
+                                              ext = <<Rev:32>>}}, infinity);
+             _ ->
+                 cmd(?CMD_SET_CLUSTER_CONFIG, Sock, undefined, undefined,
+                     {#mc_header{}, #mc_entry{key = list_to_binary(Bucket),
+                                              data = Blob,
+                                              ext = <<RevEpoch:64,Rev:64>>}}, infinity)
+         end,
     case RV of
         {ok, #mc_header{status=?SUCCESS}, _, _} ->
             ok;

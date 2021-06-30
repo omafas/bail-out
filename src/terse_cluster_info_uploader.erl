@@ -38,9 +38,9 @@ init([]) ->
 handle_info(refresh, State) ->
     misc:flush(refresh),
     try bucket_info_cache:build_node_services() of
-        {Rev, Bin} ->
+        {Rev, RevEpoch, Bin} ->
             ?log_debug("Refreshing terse cluster info with ~p", [Bin]),
-            ok = ns_memcached:set_cluster_config(Rev, Bin)
+            ok = ns_memcached:set_cluster_config(Rev, RevEpoch, Bin)
     catch T:E:Stack ->
             ?log_error("Got exception trying to get terse cluster info: ~p",
                        [{T, E, Stack}]),

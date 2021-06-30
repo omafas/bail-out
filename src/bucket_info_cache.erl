@@ -322,11 +322,15 @@ compute_bucket_info_with_config(Id, Config, Snapshot, BucketConfig,
     %% We're computing rev using config's global rev which allows us
     %% to track changes to node services and set of active nodes.
     Rev = compute_global_rev(Config, ChronicleRev),
-
+    RevEpochJSON = build_global_rev_epoch(Config, Snapshot),
+    RevEpoch = case RevEpochJSON of
+                   [] -> not_present;
+                   [{revEpoch, E}] -> E
+               end,
     Json =
         {lists:flatten(
            [{rev, Rev},
-            build_global_rev_epoch(Config, Snapshot),
+            RevEpochJSON,
             build_short_bucket_info(Id, BucketConfig, Snapshot),
             build_ddocs(Id, BucketConfig),
             build_vbucket_map(?LOCALHOST_MARKER_STRING, BucketConfig),
@@ -336,7 +340,7 @@ compute_bucket_info_with_config(Id, Config, Snapshot, BucketConfig,
               || Node <- Servers]},
             {nodesExt, build_nodes_ext(AllServers, Config, Snapshot, [])},
             build_cluster_capabilities(Config)])},
-    {ok, Rev, ejson:encode(Json), BucketConfig}.
+    {ok, Rev, RevEpoch, ejson:encode(Json), BucketConfig}.
 
 compute_bucket_info(Bucket) ->
     try do_compute_bucket_info(Bucket, ns_config:get())
@@ -352,20 +356,20 @@ call_compute_bucket_info(BucketName) ->
               case ets:lookup(bucket_info_cache, BucketName) of
                   [] ->
                       case compute_bucket_info(BucketName) of
-                          {ok, Rev, V, BucketConfig} ->
+                          {ok, Rev, RevEpoch, V, BucketConfig} ->
                               ets:insert(bucket_info_cache,
-                                         {BucketName, Rev, V}),
+                                         {BucketName, Rev, RevEpoch, V}),
                               ets:insert(bucket_info_cache_buckets,
                                          {BucketName, BucketConfig}),
-                              {ok, Rev, V};
+                              {ok, Rev, RevEpoch, V};
                           Other ->
                               %% note: we might consider caching
                               %% exceptions but they're supposedly
                               %% rare anyways
                               Other
                       end;
-                  [{_, Rev, V}] ->
-                      {ok, Rev, V}
+                  [{_, Rev, RevEpoch, V}] ->
+                      {ok, Rev, RevEpoch, V}
               end
       end).
 
@@ -373,20 +377,20 @@ terse_bucket_info(BucketName) ->
     case ets:lookup(bucket_info_cache, BucketName) of
         [] ->
             call_compute_bucket_info(BucketName);
-        [{_, Rev, V}] ->
-            {ok, Rev, V}
+        [{_, Rev, RevEpoch, V}] ->
+            {ok, Rev, RevEpoch, V}
     end.
 
 build_node_services() ->
     case ets:lookup(bucket_info_cache, 'node_services') of
         [] ->
             case call_build_node_services() of
-                {ok, Rev, V} -> {Rev, V};
+                {ok, Rev, RevEpoch, V} -> {Rev, RevEpoch, V};
                 {T, E, Stack} ->
                     erlang:raise(T, E, Stack)
             end;
-        [{_, Rev, V}] ->
-            {Rev, V}
+        [{_, Rev, RevEpoch, V}] ->
+            {Rev, RevEpoch, V}
     end.
 
 call_build_node_services() ->
@@ -396,15 +400,15 @@ call_build_node_services() ->
               case ets:lookup(bucket_info_cache, 'node_services') of
                   [] ->
                       try do_build_node_services() of
-                          {Rev, V} ->
+                          {Rev, RevEpoch, V} ->
                               ets:insert(bucket_info_cache,
-                                         {'node_services', Rev, V}),
-                              {ok, Rev, V}
+                                         {'node_services', Rev, RevEpoch, V}),
+                              {ok, Rev, RevEpoch, V}
                       catch T:E:S ->
                               {T, E, S}
                       end;
-                  [{_, Rev, V}] ->
-                      {ok, Rev, V}
+                  [{_, Rev, RevEpoch, V}] ->
+                      {ok, Rev, RevEpoch, V}
               end
       end).
 
@@ -429,14 +433,18 @@ do_build_node_services() ->
                            Config, Snapshot, []),
     Caps = build_cluster_capabilities(Config),
     Rev = compute_global_rev(Config, ChronicleRev),
-    RevEpoch = build_global_rev_epoch(Config, Snapshot),
+    RevEpochJSON = build_global_rev_epoch(Config, Snapshot),
+    RevEpoch = case RevEpochJSON of
+                   [] -> not_present;
+                   [{revEpoch, E}] -> E
+               end,
     J = {[{rev, Rev},
-          {nodesExt, NEIs}] ++ Caps ++ RevEpoch},
-    {Rev, ejson:encode(J)}.
+          {nodesExt, NEIs}] ++ Caps ++ RevEpochJSON},
+    {Rev, RevEpoch, ejson:encode(J)}.
 
 terse_bucket_info_with_local_addr(BucketName, LocalAddr) ->
     case terse_bucket_info(BucketName) of
-        {ok, _, Bin} ->
+        {ok, _, _, Bin} ->
             {ok, binary:replace(Bin, list_to_binary(?LOCALHOST_MARKER_STRING),
                                 list_to_binary(LocalAddr), [global])};
         Other ->
