@@ -1215,12 +1215,14 @@ maybe_prune_stats(#s{decimation_levels = Levels,
 %%       keep the alignment of the intervals so we can keep only the
 %%       first scrape_interval seconds of data per interval.
 decimation_definitions_default() ->
-    [%% No decimation for the first 3 days
-     {low, 3 * ?SECS_IN_DAY, skip},
-     %% Keep 1 per minute for the next 4 days
-     {medium, 4 * ?SECS_IN_DAY, 60},
-     %% Keep 1 hour for the next 359 days
-     {large, 359 * ?SECS_IN_DAY, 6 * 60 * 60}].
+    [%% No decimation for the first 4 hours
+     {low, 4 * 60 * 60, skip},
+     %% Keep 3 per minute for the next 4 hours
+     {medium, 4 * 60 * 60, 20},
+     %% Keep 1 per minute for the next 16 hours
+     {large, 16 * 60 * 60, 60},
+     %% Keep 1 per ten minutes for 365 days
+     {large, 365 * ?SECS_IN_DAY, 10 * 60}].
 %% It is TBD on data older than one year. Perhaps we'll let the prometheus
 %% data management handle it (storage.tsdb.retention.size and
 %% storage.tsdb.retention.time).
