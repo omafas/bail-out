@@ -264,7 +264,7 @@ validate_user_dn_mapping(Name, State) ->
 
 parse_dn_mapping({[{<<"query">>, Q}]}) ->
     has_username_var(Q),
-    QueryTempl = iolist_to_binary(string:replace(Q, "%u", "{0}")),
+    QueryTempl = iolist_to_binary(string:replace(Q, "%u", "{0}", all)),
     case ldap_util:parse_url(<<"ldap:///", QueryTempl/binary>>,
                              [{"\\{\\d+\\}", [{default, "testuser"}]}]) of
         {ok, _} -> ok;
@@ -276,7 +276,7 @@ parse_dn_mapping({[{<<"query">>, Q}]}) ->
     [{<<"(.+)">>, {'query', QueryTempl}}];
 parse_dn_mapping({[{<<"template">>, T}]}) ->
     has_username_var(T),
-    Template = iolist_to_binary(string:replace(T, "%u", "{0}")),
+    Template = iolist_to_binary(string:replace(T, "%u", "{0}", all)),
     DN = re:replace(Template, "\\{\\d+\\}", "placeholder",
                     [{return, list}, global]),
     case ldap_util:parse_dn(DN) of
