@@ -206,6 +206,7 @@ handle_get_roles(Req) ->
               Json =
                   [{role_to_json(Role) ++ jsonify_props(Props)} ||
                       {Role, Props} <- Roles],
+              ns_audit:rbac_info_retrieved(Req, roles),
               menelaus_util:reply_json(Req, Json)
       end, Req, qs, get_users_or_roles_validators()).
 
@@ -408,6 +409,7 @@ substr_filter(Substr, PropsToCheck) ->
 handle_get_all_users(Req, Pattern, Params) ->
     Roles = get_roles_for_users_filtering(
               proplists:get_value(permission, Params)),
+    ns_audit:rbac_info_retrieved(Req, users),
     pipes:run(menelaus_users:select_users(Pattern),
               [filter_by_roles(Roles),
                security_filter(Req),
@@ -721,6 +723,7 @@ handle_get_users_page(Req, DomainAtom, Path, Values) ->
              {links, LinksJson},
              {skipped, Skipped},
              {users, UsersJson}]},
+    ns_audit:rbac_info_retrieved(Req, users),
     menelaus_util:reply_json(Req, Json).
 
 handle_whoami(Req) ->
@@ -1620,9 +1623,11 @@ handle_get_groups_page(Req, Path, Values) ->
              {skipped, Skipped},
              {groups, GroupsJson}]},
 
+    ns_audit:rbac_info_retrieved(Req, groups),
     menelaus_util:reply_json(Req, Json).
 
 handle_get_all_groups(Req) ->
+    ns_audit:rbac_info_retrieved(Req, groups),
     pipes:run(menelaus_users:select_groups('_'),
               [security_filter(Req),
                ldap_ref_filter(Req),

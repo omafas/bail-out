@@ -87,7 +87,8 @@
          enable_auto_reprovision/2,
          disable_auto_reprovision/1,
          failover_settings/2,
-         auth_failure/1
+         auth_failure/1,
+         rbac_info_retrieved/2
         ]).
 
 -export([start_link/0, stats/0]).
@@ -382,7 +383,9 @@ code(drop_collection) ->
 code(set_manifest) ->
     8263;
 code(auth_failure) ->
-    8264.
+    8264;
+code(rbac_info_retrieved) ->
+    8265.
 
 to_binary({list, List}) ->
     [to_binary(A) || A <- List];
@@ -966,3 +969,7 @@ set_manifest(Req, BucketName, InputManifest, ValidOnUid, Uid) ->
 auth_failure(Req) ->
     RawPath = mochiweb_request:get(raw_path, Req),
     put(auth_failure, Req, [{raw_url, RawPath}]).
+
+rbac_info_retrieved(Req, Type) ->
+    RawPath = mochiweb_request:get(raw_path, Req),
+    put(rbac_info_retrieved, Req, [{raw_url, RawPath}, {type, Type}]).

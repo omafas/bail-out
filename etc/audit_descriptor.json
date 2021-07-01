@@ -1428,6 +1428,24 @@
         },
         "optional_fields" : {
         }
+      },
+      {
+        "id" : 8265,
+        "name" : "RBAC information retrieved",
+        "description" : "RBAC information was retrieved",
+        "sync" : false,
+        "enabled" : true,
+        "filtering_permitted": true,
+        "mandatory_fields" : {
+            "timestamp" : "",
+            "real_userid" : {"domain" : "", "user" : ""},
+            "remote" : {"ip" : "", "port" : 1},
+            "local" : {"ip" : "", "port" : 1},
+            "raw_url" : "",
+            "type" : ""
+        },
+        "optional_fields" : {
+        }
       }
     ]
 }
