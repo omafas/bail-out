@@ -51,7 +51,7 @@
 
     function goToDocumentsSection(e) {
       e.stopImmediatePropagation();
-      $state.go("app.admin.buckets.documents.editing", {
+      $state.go("app.admin.documents.classicDocuments.editing", {
         documentId: vm.state.sampleDocument.meta.id,
         bucket: $state.params.bucket
       });

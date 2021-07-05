@@ -271,7 +271,7 @@
   addGroupsStates("app.admin.servers.list");
 
   addAnalyticsStates("app.admin.buckets");
-  addDocumentsStates("app.admin.buckets");
+  addDocumentsStates("app.admin.documents");
 
 
   function addGroupsStates(parent) {
@@ -294,7 +294,7 @@
 
   function addDocumentsStates(parent) {
     $stateProvider
-      .state(parent + '.documents', {
+      .state(parent + '.classicDocuments', {
         abstract: true,
         views: {
           "main@app.admin": {
@@ -304,17 +304,16 @@
         },
         url: "/documents?bucket",
         data: {
-          title: "Documents",
-          child: parent,
+          title: "Classic Documents",
           permissions: "cluster.bucket['.'].settings.read && cluster.bucket['.'].data.docs.read"
         }
       })
-      .state(parent + '.documents.control', {
+      .state(parent + '.classicDocuments.control', {
         abstract: true,
         controller: 'mnDocumentsControlController as documentsControlCtl',
         templateUrl: 'app/mn_admin/mn_documents/list/mn_documents_control.html'
       })
-      .state(parent + '.documents.control.list', {
+      .state(parent + '.classicDocuments.control.list', {
         url: "?{pageLimit:int}&{pageNumber:int}&documentsFilter",
         params: {
           pageLimit: {
@@ -328,12 +327,12 @@
         controller: 'mnDocumentsListController as documentsListCtl',
         templateUrl: 'app/mn_admin/mn_documents/list/mn_documents_list.html'
       })
-      .state(parent + '.documents.editing', {
+      .state(parent + '.classicDocuments.editing', {
         url: '/:documentId',
         controller: 'mnDocumentsEditingController as documentsEditingCtl',
         templateUrl: 'app/mn_admin/mn_documents/editing/mn_documents_editing.html',
         data: {
-          child: parent + ".documents.control.list",
+          child: parent + ".classicDocuments.control.list",
           title: "Documents Editing"
         }
       });
