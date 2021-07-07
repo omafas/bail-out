@@ -51,7 +51,7 @@
          delete/1,
          regenerate_node_uuid/0,
          get_node_uuid_map/1,
-         strip_metadata/1, extract_vclock/1,
+         strip_metadata/1, extract_vclock/1, build_vclock/2,
          latest/0,
          merge_dynamic_and_static/0,
          search_node_with_default/2,

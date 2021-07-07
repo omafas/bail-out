@@ -149,13 +149,20 @@ tag_doc_id(DocId) ->
 
 rewrite_tuples_with_vclock(Fun, Config) ->
     misc:rewrite_tuples(
-      fun ({Key, [{'_vclock', _} = VClock|Value]}) ->
-              case Fun({Key, Value}) of
-                  continue ->
-                      continue;
-                  {stop, {Key, NewValue}} ->
-                      {stop, {Key, [VClock|NewValue]}}
-              end;
+      fun ({Key, Value0} = KV) ->
+          case ns_config:extract_vclock(Value0) of
+              {0, []} ->
+                  Fun(KV);
+              {Ts, VClock} ->
+                  Value = ns_config:strip_metadata(Value0),
+                  case Fun({Key, Value}) of
+                      continue ->
+                          continue;
+                      {stop, {Key, NewValue}} ->
+                          {stop, {Key, [ns_config:build_vclock(Ts, VClock)
+                                        | NewValue]}}
+                  end
+          end;
           (Other) ->
               Fun(Other)
       end, Config).
