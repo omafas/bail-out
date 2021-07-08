@@ -234,7 +234,7 @@ handle_with_bucket(Req, Fun) ->
     end,
     capi_frontend:with_verify_bucket_auth(
       Req, Bucket, BucketUUID,
-      fun (_BucketConfig) ->
+      fun (_Req, _BucketConfig) ->
               Fun(Req, Obj, Bucket)
       end).
 
