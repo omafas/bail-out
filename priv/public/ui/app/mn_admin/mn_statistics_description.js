@@ -582,11 +582,6 @@ function get70Mapping() {
     "@index-.@items.index_num_docs_pending_and_queued": "@index-.@items.num_docs_pending+queued",
     "@index-.@items.index_cache_miss_ratio": "@index-.@items.cache_miss_ratio",
 
-    "@system.couch_docs_actual_disk_size": "@kv-.couch_docs_actual_disk_size",
-    "@system.couch_docs_data_size": "@kv-.couch_docs_data_size",
-    "@system.couch_views_actual_disk_size": "@kv-.couch_views_actual_disk_size",
-    "@system.couch_views_data_size": "@kv-.couch_views_data_size",
-
     "@kv-.kv_memcache_evictions": "@kv-.evictions",
     "@kv-.couch_total_disk_size": "@kv-.couch_total_disk_size",
     "@kv-.couch_docs_fragmentation": "@kv-.couch_docs_fragmentation",
@@ -614,6 +609,10 @@ function get70Mapping() {
     "@kv-.kv_cmd_set": "@kv-.cmd_set",
     "@kv-.kv_cmd_total_gets": "@kv-.cmd_total_gets",
     "@kv-.couch_views_ops": "@kv-.couch_views_ops",
+    "@kv-.couch_docs_actual_disk_size": "@kv-.couch_docs_actual_disk_size",
+    "@kv-.couch_docs_data_size": "@kv-.couch_docs_data_size",
+    "@kv-.couch_views_actual_disk_size": "@kv-.couch_views_actual_disk_size",
+    "@kv-.couch_views_data_size": "@kv-.couch_views_data_size",
     "@kv-.kv_ep_num_ops_del_meta": "@kv-.ep_num_ops_del_meta",
     "@kv-.kv_ep_num_ops_get_meta": "@kv-.ep_num_ops_get_meta",
     "@kv-.kv_ep_num_ops_set_meta": "@kv-.ep_num_ops_set_meta",
