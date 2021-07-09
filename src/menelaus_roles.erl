@@ -582,6 +582,53 @@ ui_folders() ->
      {backup, "Backup"},
      {mobile, "Mobile"}].
 
+maybe_add_developer_preview_roles() ->
+    DP = cluster_compat_mode:is_developer_preview(),
+    sync_gateway_roles(DP).
+
+sync_gateway_roles(true) ->
+    [{sync_gateway_configurator, ?RBAC_COLLECTION_PARAMS,
+      [{name, <<"Sync Gateway Architect">>},
+       {folder, mobile},
+       {desc, <<"Can manage Sync Gateway databases and users, "
+                "and access Sync Gateway's /metrics endpoint. "
+                "This user cannot read application data.">>}],
+      [{[{collection, ?RBAC_COLLECTION_PARAMS}, sgw], all}]},
+     {sync_gateway_app, ?RBAC_COLLECTION_PARAMS,
+      [{name, <<"Sync Gateway Application">>},
+       {folder, mobile},
+       {desc, <<"Can manage Sync Gateway users and roles, and "
+                "read and write application data through Sync "
+                "Gateway.">>}],
+      [{[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, auth], [configure]},
+       {[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, principal], [read, write]},
+       {[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, appdata], [read, write]},
+       {[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, principal_appdata], [read]}]},
+     {sync_gateway_app_ro, ?RBAC_COLLECTION_PARAMS,
+      [{name, <<"Sync Gateway Application Read Only">>},
+       {folder, mobile},
+       {desc, <<"Can read Sync Gateway users and roles, and "
+                "read application data through Sync Gateway.">>}],
+      [{[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, appdata], [read]},
+       {[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, principal], [read]},
+       {[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, principal_appdata], [read]}]},
+     {sync_gateway_replicator, ?RBAC_COLLECTION_PARAMS,
+      [{name, <<"Sync Gateway Replicator">>},
+       {folder, mobile},
+       {desc, <<"Can manage Inter-Sync Gateway Replications. "
+                "This user cannot read application data.">>}],
+      [{[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, replications], all}]},
+     {sync_gateway_dev_ops, [],
+      [{name, <<"Sync Gateway Dev Ops">>},
+       {folder, mobile},
+       {desc, <<"Can manage Sync Gateway node-level configuration, "
+                "and access Sync Gateway's /metrics endpoint "
+                "for Prometheus integration.">>}],
+      [{[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, dev_ops], all},
+       {[admin, stats_export], [read]}]}];
+sync_gateway_roles(false) ->
+    [].
+
 internal_roles() ->
     [{stats_reader, [], [],
       [{[admin, internal, stats], [read]}]}].
@@ -602,7 +649,7 @@ get_public_definitions(Version) when Version < ?VERSION_66 ->
 get_public_definitions(Version) when Version < ?VERSION_70 ->
     menelaus_old_roles:roles_pre_70();
 get_public_definitions(_) ->
-    roles().
+    roles() ++ maybe_add_developer_preview_roles().
 
 -spec object_match(
         rbac_permission_object(), rbac_permission_pattern_object()) ->
@@ -1521,7 +1568,9 @@ produce_roles_by_permission_test_() ->
              meck:expect(cluster_compat_mode, is_enterprise,
                          fun () -> true end),
              meck:expect(cluster_compat_mode, get_compat_version,
-                         fun (_) -> ?VERSION_70 end)
+                         fun (_) -> ?VERSION_70 end),
+             meck:expect(cluster_compat_mode, is_developer_preview,
+                         fun() -> false end)
      end,
      fun (_) ->
              meck:unload(cluster_compat_mode)

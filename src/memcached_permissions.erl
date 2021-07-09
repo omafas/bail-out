@@ -467,7 +467,9 @@ permissions_for_user_test_() ->
              meck:expect(cluster_compat_mode, is_enterprise,
                          fun () -> true end),
              meck:expect(cluster_compat_mode, get_compat_version,
-                         fun (_) -> ?VERSION_70 end)
+                         fun (_) -> ?VERSION_70 end),
+             meck:expect(cluster_compat_mode, is_developer_preview,
+                         fun() -> false end)
      end,
      fun (_) ->
              meck:unload(cluster_compat_mode)

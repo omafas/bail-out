@@ -922,10 +922,13 @@ upgrade_test_() ->
              meck:new(replicated_dets, [passthrough]),
              meck:expect(replicated_dets, select_with_update,
                          fun replicated_dets:toy_select_with_update/4),
+             meck:expect(cluster_compat_mode, is_developer_preview,
+                         fun() -> false end),
              replicated_dets:toy_init(storage_name())
      end,
      fun (_) ->
              meck:unload(replicated_dets),
+             meck:unload(cluster_compat_mode),
              ets:delete(storage_name())
      end,
      [Test(?VERSION_66,
