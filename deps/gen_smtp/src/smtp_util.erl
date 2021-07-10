@@ -32,19 +32,6 @@
 
 %% @doc returns a sorted list of mx servers for `Domain', lowest distance first
 mxlookup(Domain) ->
-	case whereis(inet_db) of
-		P when is_pid(P) ->
-			ok;
-		_ -> 
-			inet_db:start()
-	end,
-	case lists:keyfind(nameserver, 1, inet_db:get_rc()) of
-		false ->
-			% we got no nameservers configured, suck in resolv.conf
-			inet_config:do_load_resolv(os:type(), longnames);
-		_ ->
-			ok
-	end,
 	case inet_res:lookup(Domain, in, mx) of
 		[] ->
 			lists:map(fun(X) -> {10, inet_parse:ntoa(X)} end, inet_res:lookup(Domain, in, a));
