@@ -30,8 +30,8 @@ do_db_req(#httpd{path_parts=[DbName | _]} = Req, Fun) ->
               {BucketName, VBucket, UUID} = capi_utils:split_dbname_with_uuid(DbName),
               with_verify_bucket_auth(
                 Req, BucketName, UUID,
-                fun (BucketConfig) ->
-                        continue_do_db_req(Req, BucketConfig, BucketName, VBucket, Fun)
+                fun (Req1, BucketConfig) ->
+                        continue_do_db_req(Req1, BucketConfig, BucketName, VBucket, Fun)
                 end)
       end,
       fun (Error, Reason) ->
@@ -170,9 +170,9 @@ with_verify_bucket_auth(Req, BinBucketName, UUID, Fun) ->
     BucketName = ?b2l(BinBucketName),
     Snapshot = ns_bucket:get_snapshot(BucketName),
     case verify_bucket_auth(Req, BucketName, Snapshot) of
-        {allowed, BucketConfig} ->
+        {allowed, Req1, BucketConfig} ->
             verify_bucket_uuid(BucketName, Snapshot, UUID),
-            Fun(BucketConfig);
+            Fun(Req1, BucketConfig);
         {not_found, _} = NotFound ->
             throw(NotFound);
         auth_failure ->
@@ -189,7 +189,7 @@ verify_bucket_type_support(_OperType, BucketConfig) ->
 
 verify_bucket_auth(#httpd{method = Method,
                           path_parts = Path,
-                          mochi_req = MochiReq},
+                          mochi_req = MochiReq} = Req,
                    BucketName, Snapshot) ->
     Type = get_oper_type(Path),
     Permission = get_required_permission(BucketName, Method, Type),
@@ -198,11 +198,13 @@ verify_bucket_auth(#httpd{method = Method,
         not_present ->
             {not_found, missing};
         {ok, BucketConfig} ->
+            menelaus_auth:assert_no_meta_headers(MochiReq),
             case menelaus_auth:verify_rest_auth(MochiReq, Permission) of
-                {allowed, _} ->
+                {allowed, Headers} ->
                     case verify_bucket_type_support(Type, BucketConfig) of
                         true ->
-                            {allowed, BucketConfig};
+                            Req1 = Req#httpd{mochi_req=menelaus_auth:apply_headers(MochiReq, Headers)},
+                            {allowed, Req1, BucketConfig};
                         _ ->
                             case Type =:= views of
                                 true ->
