@@ -60,7 +60,7 @@ angular
 
 function configure($stateProvider) {
   $stateProvider
-    .state('app.admin.documents', {
+    .state('app.admin.classicDocuments', {
       abstract: true,
       views: {
         "main@app.admin": {
@@ -70,17 +70,16 @@ function configure($stateProvider) {
       },
       url: "/documents",
       data: {
-        title: "Documents",
-        parent: {name: 'Buckets', link: 'app.admin.buckets'},
+        title: "Classic Documents",
         permissions: "cluster.bucket['.'].settings.read && cluster.bucket['.'].data.docs.read"
       }
     })
-    .state('app.admin.documents.control', {
+    .state('app.admin.classicDocuments.control', {
       abstract: true,
       controller: 'mnDocumentsControlController as documentsControlCtl',
       templateUrl: 'app/mn_admin/mn_documents_control.html'
     })
-    .state('app.admin.documents.control.list', {
+    .state('app.admin.classicDocuments.control.list', {
       url: "?{pageLimit:int}&{pageNumber:int}&documentsFilter",
       params: {
         pageLimit: {
@@ -94,12 +93,12 @@ function configure($stateProvider) {
       controller: 'mnDocumentsListController as documentsListCtl',
       templateUrl: 'app/mn_admin/mn_documents_list.html'
     })
-    .state('app.admin.documents.editing', {
+    .state('app.admin.classicDocuments.editing', {
       url: '/:documentId',
       controller: 'mnDocumentsEditingController as documentsEditingCtl',
       templateUrl: 'app/mn_admin/mn_documents_editing.html',
       data: {
-        parent: {name: 'Documents', link: 'app.admin.documents.control.list'},
+        parent: {name: 'Documents', link: 'app.admin.classicDocuments.control.list'},
         title: "Documents Editing"
       }
     });

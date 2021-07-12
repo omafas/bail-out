@@ -57,7 +57,7 @@ function mnViewsEditingController($scope, $state, $uibModal, mnHelper, mnViewsEd
 
   function goToDocumentsSection(e) {
     e.stopImmediatePropagation();
-    $state.go("app.admin.documents.editing", {
+    $state.go("app.admin.classicDocuments.editing", {
       documentId: vm.state.sampleDocument.meta.id,
       commonBucket: $state.params.commonBucket
     });
