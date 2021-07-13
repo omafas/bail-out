@@ -353,11 +353,14 @@ assign_queue({sync_delete_vbucket, _}) -> #state.very_heavy_calls_queue;
 assign_queue(flush) -> #state.very_heavy_calls_queue;
 assign_queue({set_vbucket, _, _, _}) -> #state.heavy_calls_queue;
 assign_queue({set_vbuckets, _}) -> #state.very_heavy_calls_queue;
-assign_queue({add, _Key, _Uid, _VBucket, _Value}) -> #state.heavy_calls_queue;
-assign_queue({get, _Key, _Uid, _VBucket}) -> #state.heavy_calls_queue;
-assign_queue({get_from_replica, _Key, _Uid, _VBucket}) -> #state.heavy_calls_queue;
-assign_queue({delete, _Key, _Uid, _VBucket}) -> #state.heavy_calls_queue;
-assign_queue({set, _Key, _Uid, _VBucket, _Value, _Flags}) -> #state.heavy_calls_queue;
+assign_queue({add, _KeyFun, _Uid, _VBucket, _ValueFun}) ->
+    #state.heavy_calls_queue;
+assign_queue({get, _KeyFun, _Uid, _VBucket}) -> #state.heavy_calls_queue;
+assign_queue({get_from_replica, _Fun, _Uid, _VBucket}) ->
+    #state.heavy_calls_queue;
+assign_queue({delete, _KeyFun, _Uid, _VBucket}) -> #state.heavy_calls_queue;
+assign_queue({set, _KeyFun, _Uid, _VBucket, _ValueFun, _Flags}) ->
+    #state.heavy_calls_queue;
 assign_queue({get_keys, _VBuckets, _Params}) -> #state.heavy_calls_queue;
 assign_queue({get_mass_dcp_docs_estimate, _VBuckets}) -> #state.very_heavy_calls_queue;
 assign_queue({get_vbucket_details_stats, all, _}) -> #state.very_heavy_calls_queue;
@@ -441,6 +444,20 @@ try_deliver_work(State, From, RestFroms, QueueSlot) ->
             erlang:setelement(QueueSlot, State3, queue:tail(Q))
     end.
 
+handle_data_call(Command, KeyFun, CollectionsUid, VBucket, State) ->
+    handle_data_call(Command, KeyFun, CollectionsUid, VBucket, #mc_entry{},
+                     State).
+
+handle_data_call(Command, KeyFun, CollectionsUid, VBucket, McEntry,
+                 #state{worker_features = Features} = State) ->
+    CollectionsEnabled = proplists:get_bool(collections, Features),
+    EncodedKey = mc_binary:maybe_encode_uid_in_key(CollectionsEnabled,
+                                                   CollectionsUid, KeyFun()),
+    Reply = mc_client_binary:cmd(
+              Command, State#state.sock, undefined, undefined,
+              {#mc_header{vbucket = VBucket},
+               McEntry#mc_entry{key = EncodedKey}}),
+    {reply, Reply, State}.
 
 do_handle_call(verify_warmup,  _From, #state{bucket = Bucket,
                                              sock = Sock} = State) ->
@@ -493,47 +510,24 @@ do_handle_call(flush, _From, State) ->
     Reply = mc_client_binary:flush(State#state.sock),
     {reply, Reply, State};
 
-do_handle_call({delete, Key, CollectionsUid, VBucket}, _From,
-               #state{worker_features = Features} = State) ->
-    EncodedKey = maybe_encode_uid_in_key(Features, CollectionsUid, Key),
-    Reply = mc_client_binary:cmd(?DELETE, State#state.sock, undefined, undefined,
-                                 {#mc_header{vbucket = VBucket},
-                                  #mc_entry{key = EncodedKey}}),
-    {reply, Reply, State};
+do_handle_call({delete, KeyFun, CollectionsUid, VBucket}, _From, State) ->
+    handle_data_call(?DELETE, KeyFun, CollectionsUid, VBucket, State);
 
-do_handle_call({set, Key, CollectionsUid, VBucket, Val, Flags}, _From,
-               #state{worker_features = Features} = State) ->
-    EncodedKey = maybe_encode_uid_in_key(Features, CollectionsUid, Key),
-    Reply = mc_client_binary:cmd(?SET, State#state.sock, undefined, undefined,
-                                 {#mc_header{vbucket = VBucket},
-                                  #mc_entry{key = EncodedKey,
-                                            data = Val,
-                                            flag = Flags}}),
-    {reply, Reply, State};
+do_handle_call({set, KeyFun, CollectionsUid, VBucket, ValFun, Flags}, _From,
+               State) ->
+    handle_data_call(?SET, KeyFun, CollectionsUid, VBucket,
+                     #mc_entry{data = ValFun(), flag = Flags}, State);
 
-do_handle_call({add, Key, CollectionsUid, VBucket, Val}, _From,
-               #state{worker_features = Features} = State) ->
-    EncodedKey = maybe_encode_uid_in_key(Features, CollectionsUid, Key),
-    Reply = mc_client_binary:cmd(?ADD, State#state.sock, undefined, undefined,
-                                 {#mc_header{vbucket = VBucket},
-                                  #mc_entry{key = EncodedKey, data = Val}}),
-    {reply, Reply, State};
+do_handle_call({add, KeyFun, CollectionsUid, VBucket, ValFun}, _From, State) ->
+    handle_data_call(?ADD, KeyFun, CollectionsUid, VBucket,
+                     #mc_entry{data = ValFun()}, State);
 
-do_handle_call({get, Key, CollectionsUid, VBucket}, _From,
-               #state{worker_features = Features} = State) ->
-    EncodedKey = maybe_encode_uid_in_key(Features, CollectionsUid, Key),
-    Reply = mc_client_binary:cmd(?GET, State#state.sock, undefined, undefined,
-                                 {#mc_header{vbucket = VBucket},
-                                  #mc_entry{key = EncodedKey}}),
-    {reply, Reply, State};
+do_handle_call({get, KeyFun, CollectionsUid, VBucket}, _From, State) ->
+    handle_data_call(?GET, KeyFun, CollectionsUid, VBucket, State);
 
-do_handle_call({get_from_replica, Key, CollectionsUid, VBucket}, _From,
-               #state{worker_features = Features} = State) ->
-    EncodedKey = maybe_encode_uid_in_key(Features, CollectionsUid, Key),
-    Reply = mc_client_binary:cmd(?CMD_GET_REPLICA, State#state.sock, undefined, undefined,
-                                 {#mc_header{vbucket = VBucket},
-                                  #mc_entry{key = EncodedKey}}),
-    {reply, Reply, State};
+do_handle_call({get_from_replica, KeyFun, CollectionsUid, VBucket}, _From,
+               State) ->
+    handle_data_call(?CMD_GET_REPLICA, KeyFun, CollectionsUid, VBucket, State);
 
 do_handle_call({set_vbuckets, VBsToSet}, _From, #state{sock = Sock} = State) ->
     ToSet = [{VB, VBState, construct_vbucket_info_json(Topology)}
@@ -923,14 +917,15 @@ flush(Bucket) ->
                  {ok, #mc_header{}, #mc_entry{}, any()}.
 add(Bucket, Key, CollectionsUid, VBucket, Value) ->
     do_call(server(Bucket), Bucket,
-            {add, Key, CollectionsUid, VBucket, Value}, ?TIMEOUT_HEAVY).
+            {add, fun () -> Key end, CollectionsUid, VBucket,
+             fun () -> Value end}, ?TIMEOUT_HEAVY).
 
 %% @doc send get command to memcached instance
 -spec get(bucket_name(), binary(), undefined | integer(), integer()) ->
                  {ok, #mc_header{}, #mc_entry{}, any()}.
 get(Bucket, Key, CollectionsUid, VBucket) ->
     do_call(server(Bucket), Bucket,
-            {get, Key, CollectionsUid, VBucket}, ?TIMEOUT_HEAVY).
+            {get, fun () -> Key end, CollectionsUid, VBucket}, ?TIMEOUT_HEAVY).
 
 %% @doc send get_from_replica command to memcached instance. for testing only
 -spec get_from_replica(bucket_name(), binary(), integer(), integer()) ->
@@ -974,7 +969,8 @@ get_xattrs(Bucket, Key, CollectionsUid, VBucket, Permissions) ->
                     {memcached_error, any(), any()}.
 delete(Bucket, Key, CollectionsUid, VBucket) ->
     do_call(server(Bucket), Bucket,
-            {delete, Key, CollectionsUid, VBucket}, ?TIMEOUT_HEAVY).
+            {delete, fun () -> Key end, CollectionsUid, VBucket},
+            ?TIMEOUT_HEAVY).
 
 %% @doc send a set command to memcached instance
 -spec set(bucket_name(), binary(), undefined | integer(), integer(),
@@ -983,7 +979,8 @@ delete(Bucket, Key, CollectionsUid, VBucket) ->
                  {memcached_error, any(), any()}.
 set(Bucket, Key, CollectionsUid, VBucket, Value, Flags) ->
     do_call(server(Bucket), Bucket,
-            {set, Key, CollectionsUid, VBucket, Value, Flags}, ?TIMEOUT_HEAVY).
+            {set, fun () -> Key end, CollectionsUid, VBucket,
+             fun () -> Value end, Flags}, ?TIMEOUT_HEAVY).
 
 -spec update_with_rev(Bucket::bucket_name(), VBucket::vbucket_id(),
                       Id::binary(), Value::binary() | undefined, Rev :: rev(),
@@ -1181,10 +1178,6 @@ get_seqno_stats(Bucket, VBucket) ->
 %%
 %% Internal functions
 %%
-maybe_encode_uid_in_key(Features, CollectionsUid, Key) ->
-    CollectionsEnabled = proplists:get_bool(collections, Features),
-    mc_binary:maybe_encode_uid_in_key(CollectionsEnabled, CollectionsUid, Key).
-
 connect() ->
     connect([]).
 
