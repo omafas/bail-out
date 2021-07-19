@@ -177,4 +177,6 @@ report_stats({histo, Metric, Max, Unit, Value}) ->
 report_stats({counter, Metric, By}) ->
     ns_server_stats:notify_counter(Metric, By);
 report_stats({gauge, Metric, Value}) ->
-    ns_server_stats:notify_gauge(Metric, Value).
+    ns_server_stats:notify_gauge(Metric, Value);
+report_stats({max, Metric, Window, Bucket, Value}) ->
+    ns_server_stats:notify_max({Metric, Window, Bucket}, Value).
