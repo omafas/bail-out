@@ -116,19 +116,30 @@ perform_loading_task(Name, Quota) ->
     end,
 
     Host = misc:extract_node_address(node()),
-    Port = service_ports:get_port(rest_port),
+    ClusterOpts = case misc:disable_non_ssl_ports() of
+                      true ->
+                          SslPort = service_ports:get_port(ssl_rest_port),
+                          Cluster = "https://" ++ misc:join_host_port(
+                                                    Host, SslPort),
+                          ["--cluster", Cluster,
+                           "--cacert",
+                           ns_ssl_services_setup:memcached_cert_path()];
+                      false ->
+                          Port = service_ports:get_port(rest_port),
+                          ["--cluster", misc:join_host_port(Host, Port)]
+                  end,
     BinDir = path_config:component_path(bin),
 
     Cmd = BinDir ++ "/cbimport",
     Args = ["json",
-            "--cluster", misc:join_host_port(Host, Port),
             "--bucket", Name,
             "--format", "sample",
             "--bucket-quota", integer_to_list(Quota),
             "--threads", "2",
             "--verbose",
             "--dataset", "file://" ++ filename:join([BinDir, "..",
-                                        "samples", Name ++ ".zip"])],
+                                        "samples", Name ++ ".zip"])] ++
+            ClusterOpts,
 
     Env = [{"CB_USERNAME", "@ns_server"},
            {"CB_PASSWORD", ns_config_auth:get_password(special)} |
