@@ -481,6 +481,7 @@ class TaskRunner(object):
         # A dictionary with an instance of CollectedFile as the key and
         # full path name as the value
         self.files = {}
+        self._fps = {}
         self.verbosity = verbosity
         self.start_time = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
         self.salt_value = salt_value
@@ -510,6 +511,12 @@ class TaskRunner(object):
         AltExit.register(self.finalize)
 
     def finalize(self):
+        for fp in self._fps.values():
+            try:
+                fp.close()
+            except:
+                pass
+
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def collect_file(self, filename, relative_name=None):
@@ -566,6 +573,12 @@ class TaskRunner(object):
         else:
             self._run(task)
 
+    def _get_fp(self, path):
+        if path not in self._fps:
+            self._fps[path] = open(path, 'wb+')
+
+        return self._fps[path]
+
     def _run(self, task):
         """Run a task with a file descriptor corresponding to its log file"""
         if task.will_run():
@@ -579,32 +592,28 @@ class TaskRunner(object):
             filename = getattr(task, 'log_file', self.default_name)
             collected_file = CollectedFile(filename, os.path.basename(filename))
             fullname = os.path.join(self.tmpdir, collected_file.filename)
-            if collected_file not in self.files:
-                self.files[collected_file] = fullname
-                open_flags = 'wb+'  # truncate file contents
-            else:
-                open_flags = 'ab+'  # append to current contents
+            self.files.setdefault(collected_file, fullname)
 
-            with open(fullname, open_flags) as fp:
-                if not task.no_header:
-                    self.header(fp, task.description, task.command)
+            fp = self._get_fp(fullname)
+            if not task.no_header:
+                self.header(fp, task.description, task.command)
 
-                for i in range(task.num_samples):
-                    if i > 0:
-                        log("Taking sample %d after %f seconds - " %
-                            (i + 1, task.interval), new_line=False)
-                        time.sleep(task.interval)
-                    result = task.execute(fp)
-                    self.log_result(result)
+            for i in range(task.num_samples):
+                if i > 0:
+                    log("Taking sample %d after %f seconds - " %
+                        (i + 1, task.interval), new_line=False)
+                    time.sleep(task.interval)
+                result = task.execute(fp)
+                self.log_result(result)
 
-                for artifact in getattr(task, 'artifacts', []):
-                    path = artifact
-                    if not os.path.isabs(path):
-                        # We assume that "relative" artifacts are produced
-                        # in the self.tmpdir
-                        path = os.path.join(self.tmpdir, path)
+            for artifact in getattr(task, 'artifacts', []):
+                path = artifact
+                if not os.path.isabs(path):
+                    # We assume that "relative" artifacts are produced
+                    # in the self.tmpdir
+                    path = os.path.join(self.tmpdir, path)
 
-                    self.collect_file(path)
+                self.collect_file(path)
 
         elif self.verbosity >= 2:
             log('Skipping "%s" (%s): not for platform %s' %
