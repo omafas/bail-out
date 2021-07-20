@@ -1323,9 +1323,25 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
     goxdcr_tasks = []
     goxdcr_port = read_guts(guts, "xdcr_rest_port")
     if goxdcr_port:
+        goxdcr_url = f'http://{local_url_addr}:{goxdcr_port}/pools/default'
+        redact_opt = ""
+        if options.redact_level != "none":
+            redact_opt = '?redactRequested=true'
+        rc_url = f'{goxdcr_url}/remoteClusters{redact_opt}'
+        rp_url = f'{goxdcr_url}/replications{redact_opt}'
         goxdcr_tasks = [
             *make_golang_profile_tasks('GoXDCR', memcached_pass, goxdcr_port,
-                                       'goxdcr')
+                                       'goxdcr'),
+            make_curl_task(name='GoXDCR RemoteClusters: ',
+                                    user="@", password=memcached_pass,
+                                    url=rc_url, timeout=300,
+                                    log_file="goxdcr_remote_clusters.json",
+                                    no_header=True),
+            make_curl_task(name='GoXDCR Replications: ',
+                                    user="@", password=memcached_pass,
+                                    url=rp_url, timeout=300,
+                                    log_file="goxdcr_replications.json",
+                                    no_header=True)
         ]
 
     fts_tasks = []
