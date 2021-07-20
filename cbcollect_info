@@ -88,6 +88,40 @@ class AltExitC(object):
 
 AltExit = AltExitC()
 
+class FSyncedFile(object):
+    SYNC_BYTES = 16 * 1024 * 1024
+
+    def __init__(self, *args, **kwargs):
+        self._file = open(*args, **kwargs)
+        self._written = 0
+
+    def __getattr__(self, name):
+        return getattr(self._file, name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+    def close(self):
+        self._sync()
+        self._file.close()
+
+    def write(self, buf):
+        n = self._file.write(buf)
+
+        self._written += n
+        if self._written >= self.SYNC_BYTES:
+            self._sync()
+            self._written = 0
+
+        return n
+
+    def _sync(self):
+        self._file.flush()
+        os.fsync(self._file.fileno())
+
 # Currently we decode bytes in this file via LATIN1. The reason for this is that
 # UTF8 (which is the default in python) is a decoding which can fail - i.e. not
 # all sequences of bytes are valid UTF8 and we cannot currenlty guarantee that
@@ -297,7 +331,8 @@ class LogRedactor:
             except OSError as exc:
                 if exc.errno != errno.EEXIST:
                     raise
-            with open(ofile, 'w+', newline='', encoding=LATIN1) as out:
+
+            with FSyncedFile(ofile, 'w+', newline='', encoding=LATIN1) as out:
                 for line in inp:
                     out.write(processor.do(line))
 
@@ -575,7 +610,7 @@ class TaskRunner(object):
 
     def _get_fp(self, path):
         if path not in self._fps:
-            self._fps[path] = open(path, 'wb+')
+            self._fps[path] = FSyncedFile(path, 'wb+')
 
         return self._fps[path]
 
@@ -651,18 +686,19 @@ class TaskRunner(object):
     @staticmethod
     def make_zip(prefix, filename, files):
         from zipfile import ZipFile, ZIP_DEFLATED
-        zf = ZipFile(filename, mode='w', compression=ZIP_DEFLATED)
-        try:
-            for name, relative_name in files:
-                try:
-                    zf.write(name, f"{prefix}/{relative_name}")
-                except IOError as e:
-                    # Skipping file(s) we cannot zip. The file may have been
-                    # purged from under us.
-                    log("Failed to zip file %s, error (%s): %s" %
-                        (name, e.errno, e.strerror))
-        finally:
-            zf.close()
+        with FSyncedFile(filename, 'w+b') as fp:
+            zf = ZipFile(fp, mode='w', compression=ZIP_DEFLATED)
+            try:
+                for name, relative_name in files:
+                    try:
+                        zf.write(name, f"{prefix}/{relative_name}")
+                    except IOError as e:
+                        # Skipping file(s) we cannot zip. The file may have been
+                        # purged from under us.
+                        log("Failed to zip file %s, error (%s): %s" %
+                            (name, e.errno, e.strerror))
+            finally:
+                zf.close()
 
 
 class SolarisTask(Task):
