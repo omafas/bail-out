@@ -293,7 +293,7 @@ get_pretend_version() ->
             [A, B]
     end.
 
-is_developer_preview() -> is_developer_preview(ns_config:get()).
+is_developer_preview() -> is_developer_preview(ns_config:latest()).
 is_developer_preview(Config) ->
     ns_config:search(Config, developer_preview_enabled, false).
 
