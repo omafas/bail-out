@@ -349,8 +349,9 @@ build_bucket_info(Id, BucketConfig, InfoLevel, LocalAddr, MayExposeAuth,
                   membase ->
                       case SkipMap of
                           false ->
-                              [{vBucketServerMap, ns_bucket:json_map_from_config(
-                                                    LocalAddr, BucketConfig)} |
+                              [{vBucketServerMap,
+                                ns_bucket:json_map_from_config(
+                                  LocalAddr, BucketConfig, Config)} |
                                Suffix];
                           _ ->
                               Suffix
@@ -472,7 +473,8 @@ handle_sasl_buckets_streaming(_PoolId, Req) ->
                                         membase ->
                                             [{vBucketServerMap,
                                               ns_bucket:json_map_from_config(
-                                                LocalAddr, BucketInfo)}];
+                                                LocalAddr, BucketInfo, Config)}
+                                            ];
                                         memcached ->
                                             []
                                     end,

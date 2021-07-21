@@ -197,8 +197,9 @@ compute_bucket_info_with_config(Bucket, Config, BucketConfig) ->
             {_, memcached} ->
                 Caps;
             _ ->
-                {struct, VBMap} = ns_bucket:json_map_with_full_config(?LOCALHOST_MARKER_STRING,
-                                                                      BucketConfig, Config),
+                {struct, VBMap} = ns_bucket:json_map_from_config(
+                                    ?LOCALHOST_MARKER_STRING,
+                                    BucketConfig, Config),
                 VBMapInfo = [{vBucketServerMap, {VBMap}} | Caps],
                 case ns_bucket:storage_mode(BucketConfig) of
                     couchstore ->
