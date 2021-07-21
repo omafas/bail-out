@@ -800,19 +800,25 @@ get_mass_dcp_docs_estimate(Sock, VBuckets) ->
               {ok, V} -> V
           end || VB <- VBuckets]}.
 
-set_cluster_config(Sock, Bucket, Rev, RevEpoch, Blob) ->
-    RV = case RevEpoch of
-             not_present ->
-                 cmd(?CMD_SET_CLUSTER_CONFIG, Sock, undefined, undefined,
-                     {#mc_header{}, #mc_entry{key = list_to_binary(Bucket),
-                                              data = Blob,
-                                              ext = <<Rev:32>>}}, infinity);
-             _ ->
-                 cmd(?CMD_SET_CLUSTER_CONFIG, Sock, undefined, undefined,
-                     {#mc_header{}, #mc_entry{key = list_to_binary(Bucket),
-                                              data = Blob,
-                                              ext = <<RevEpoch:64,Rev:64>>}}, infinity)
-         end,
+set_cluster_config(Sock, Bucket, Rev, RevEpoch0, Blob) ->
+
+    %% The extra field towards memcached holds Rev and RevEpoch,
+    %% which are already a part of the JSON Blob.
+    %% RevEpoch = -1 in ext, implies that RevEpoch isn't present in
+    %% the JSON Blob. The SDK clients will use ONLY the JSON blob.
+    %%
+    %% The -1 in ext is packed to conform with the memcached protocol,
+    %% which has to be always 16 bytes and the first 8 bytes is
+    %% revEpoch and second 8 bytes is Rev (Network order).
+
+    RevEpoch = case RevEpoch0 of
+                   not_present -> -1;
+                   _ -> RevEpoch0
+               end,
+    RV = cmd(?CMD_SET_CLUSTER_CONFIG, Sock, undefined, undefined,
+             {#mc_header{}, #mc_entry{key = list_to_binary(Bucket),
+                                      data = Blob,
+                                      ext = <<RevEpoch:64,Rev:64>>}}, infinity),
     case RV of
         {ok, #mc_header{status=?SUCCESS}, _, _} ->
             ok;
