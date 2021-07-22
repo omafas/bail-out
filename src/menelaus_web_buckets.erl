@@ -261,6 +261,14 @@ build_durability_min_level(BucketConfig) ->
             <<"persistToMajority">>
     end.
 
+build_storage_totals(Config) ->
+    StorageTotals =
+        [{Key, {struct, StoragePList}}
+         || {Key, StoragePList} <-
+                ns_storage_conf:cluster_storage_info(Config)],
+
+    {storageTotals, {struct, StorageTotals}}.
+
 build_bucket_info(Id, undefined, InfoLevel, LocalAddr, MayExposeAuth,
                   SkipMap, Config) ->
     {ok, BucketConfig} = ns_bucket:get_bucket(Id, Config),
@@ -292,14 +300,12 @@ build_bucket_info(Id, BucketConfig, InfoLevel, LocalAddr, MayExposeAuth,
                  _ ->
                      BasicStats0 = menelaus_stats:basic_stats(Id),
 
-                     BasicStats = case InfoLevel of
-                                      for_ui ->
-                                          StorageTotals = [{Key, {struct, StoragePList}}
-                                                           || {Key, StoragePList} <- ns_storage_conf:cluster_storage_info()],
-
-                                          [{storageTotals, {struct, StorageTotals}} | BasicStats0];
-                                      _ -> BasicStats0
-                                  end,
+                     BasicStats =
+                         case InfoLevel of
+                             for_ui ->
+                                 [build_storage_totals(Config) | BasicStats0];
+                             _ -> BasicStats0
+                         end,
 
                      BucketParams =
                          [{replicaNumber, ns_bucket:num_replicas(BucketConfig)},
@@ -553,12 +559,14 @@ init_bucket_validation_context(IsNew, BucketName, Req) ->
     init_bucket_validation_context(IsNew, BucketName, ValidateOnly, IgnoreWarnings).
 
 init_bucket_validation_context(IsNew, BucketName, ValidateOnly, IgnoreWarnings) ->
-    init_bucket_validation_context(IsNew, BucketName,
-                                   ns_bucket:get_buckets(),
-                                   extended_cluster_storage_info(),
-                                   ValidateOnly, IgnoreWarnings,
-                                   cluster_compat_mode:get_compat_version(),
-                                   cluster_compat_mode:is_enterprise()).
+    Config = ns_config:get(),
+    init_bucket_validation_context(
+      IsNew, BucketName,
+      ns_bucket:get_buckets(Config),
+      extended_cluster_storage_info(Config),
+      ValidateOnly, IgnoreWarnings,
+      cluster_compat_mode:get_compat_version(Config),
+      cluster_compat_mode:is_enterprise()).
 
 init_bucket_validation_context(IsNew, BucketName, AllBuckets, ClusterStorageTotals,
                                ValidateOnly, IgnoreWarnings,
@@ -1588,9 +1596,10 @@ parse_validate_conflict_resolution_type(_Other) ->
     {error, conflictResolutionType,
      <<"Conflict resolution type must be 'seqno' or 'lww'">>}.
 
-extended_cluster_storage_info() ->
-    [{nodesCount, length(ns_cluster_membership:service_active_nodes(kv))}
-     | ns_storage_conf:cluster_storage_info()].
+extended_cluster_storage_info(Config) ->
+    [{nodesCount,
+      length(ns_cluster_membership:service_active_nodes(Config, kv))}
+     | ns_storage_conf:cluster_storage_info(Config)].
 
 
 handle_compact_bucket(_PoolId, Bucket, Req) ->

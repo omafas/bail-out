@@ -231,7 +231,7 @@ do_build_pool_info(Id, InfoLevel, Stability, LocalAddr) ->
          menelaus_web_node:build_memory_quota_info(Config),
          build_ui_params(InfoLevel),
          build_internal_params(InfoLevel),
-         build_unstable_params(Stability)],
+         build_unstable_params(Stability, Config)],
     {struct, lists:flatten(PropList)}.
 
 build_rebalance_params(Id, UUID) ->
@@ -265,12 +265,13 @@ build_ui_params(for_ui) ->
 build_ui_params(_) ->
     [].
 
-build_unstable_params(stable) ->
+build_unstable_params(stable, _) ->
     [];
-build_unstable_params(unstable) ->
+build_unstable_params(unstable, Config) ->
     [{storageTotals,
       {[{Key, {StoragePList}} ||
-           {Key, StoragePList} <- ns_storage_conf:cluster_storage_info()]}}].
+           {Key, StoragePList} <-
+               ns_storage_conf:cluster_storage_info(Config)]}}].
 
 build_buckets_info(Config, Id, UUID, Nodes) ->
      BucketsVer =

@@ -38,7 +38,7 @@
          this_node_java_home/0,
          update_java_home/1]).
 
--export([cluster_storage_info/0, nodes_storage_info/1]).
+-export([cluster_storage_info/1, nodes_storage_info/2]).
 
 -export([extract_disk_stats_for_path/2]).
 
@@ -440,7 +440,7 @@ extract_disk_totals(DiskPaths, DiskStats) ->
     {DiskTotal, DiskUsed}.
 
 %% returns cluster_storage_info for subset of nodes
-nodes_storage_info(NodeNames) ->
+nodes_storage_info(NodeNames, Config) ->
     NodesDict = ns_doctor:get_nodes(),
     NodesInfos = lists:foldl(fun (N, A) ->
                                      case dict:find(N, NodesDict) of
@@ -448,7 +448,7 @@ nodes_storage_info(NodeNames) ->
                                          _ -> A
                                      end
                              end, [], NodeNames),
-    do_cluster_storage_info(NodesInfos).
+    do_cluster_storage_info(NodesInfos, Config).
 
 %% returns cluster storage info. This is aggregation of various
 %% storage related metrics across active nodes of cluster.
@@ -466,8 +466,10 @@ nodes_storage_info(NodeNames) ->
 %% quotaUsed - amount of quota already allocated
 %%
 %% usedByData - amount of this resource used by our data
-cluster_storage_info() ->
-    nodes_storage_info(ns_cluster_membership:service_active_nodes(kv)).
+cluster_storage_info(Config) ->
+    nodes_storage_info(
+      ns_cluster_membership:service_active_nodes(Config, kv),
+      Config).
 
 extract_subprop(NodeInfos, Key, SubKey) ->
     [proplists:get_value(SubKey, proplists:get_value(Key, NodeInfo, [])) ||
@@ -483,9 +485,8 @@ interesting_stats_total_rec([ThisStats | RestStats], Key, Acc) ->
             interesting_stats_total_rec(RestStats, Key, Acc + V)
     end.
 
-do_cluster_storage_info([]) -> [];
-do_cluster_storage_info(NodeInfos) ->
-    Config = ns_config:get(),
+do_cluster_storage_info([], _) -> [];
+do_cluster_storage_info(NodeInfos, Config) ->
     NodesCount = length(NodeInfos),
     RAMQuotaUsedPerNode = memory_quota:get_total_buckets_ram_quota(Config),
     RAMQuotaUsed = RAMQuotaUsedPerNode * NodesCount,

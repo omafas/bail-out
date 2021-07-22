@@ -107,8 +107,11 @@ build_full_node_info(Config, Node, LocalAddr) ->
                                                             {sizeKBytes, SizeKBytes},
                                                             {usagePercent, UsagePercent}]}
                                                   || {Path, SizeKBytes, UsagePercent} <- DiskData]}]}},
-              {storageTotals, {struct, [{Type, {struct, PropList}}
-                                        || {Type, PropList} <- ns_storage_conf:nodes_storage_info([Node])]}},
+              {storageTotals,
+               {struct,
+                [{Type, {struct, PropList}}
+                 || {Type, PropList} <- ns_storage_conf:nodes_storage_info(
+                                          [Node], Config)]}},
               {storage, R}] ++ KV ++ build_memory_quota_info(Config),
     {struct, lists:filter(fun (X) -> X =/= undefined end,
                                    Fields)}.
