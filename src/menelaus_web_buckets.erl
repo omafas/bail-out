@@ -108,8 +108,10 @@ handle_bucket_list(Req) ->
                     _ -> for_ui
                 end,
     SkipMap = proplists:get_value("skipMap", mochiweb_request:parse_qs(Req)) =:= "true",
+    Config = ns_config:get(),
     BucketsInfo = [build_bucket_info(Name, undefined, InfoLevel, LocalAddr,
-                                     may_expose_bucket_auth(Name, Req), SkipMap)
+                                     may_expose_bucket_auth(Name, Req), SkipMap,
+                                     Config)
                    || Name <- BucketNames],
     reply_json(Req, BucketsInfo).
 
@@ -121,12 +123,15 @@ handle_bucket_info(_PoolId, Id, Req) ->
     SkipMap = proplists:get_value("skipMap", mochiweb_request:parse_qs(Req)) =:= "true",
     reply_json(Req, build_bucket_info(Id, undefined, InfoLevel,
                                       menelaus_util:local_addr(Req),
-                                      may_expose_bucket_auth(Id, Req), SkipMap)).
+                                      may_expose_bucket_auth(Id, Req), SkipMap,
+                                      ns_config:get())).
 
-build_bucket_node_infos(BucketName, BucketConfig, InfoLevel0, LocalAddr) ->
+build_bucket_node_infos(BucketName, BucketConfig, InfoLevel0, LocalAddr,
+                        Config) ->
     {InfoLevel, Stability} = convert_info_level(InfoLevel0),
     %% Only list nodes this bucket is mapped to
-    F = menelaus_web_node:build_nodes_info_fun(false, InfoLevel, Stability, LocalAddr),
+    F = menelaus_web_node:build_nodes_info_fun(
+          false, InfoLevel, Stability, LocalAddr, Config),
     Nodes = ns_bucket:get_servers(BucketConfig),
     %% NOTE: there's potential inconsistency here between BucketConfig
     %% and (potentially more up-to-date) vbuckets dict. Given that
@@ -257,13 +262,14 @@ build_durability_min_level(BucketConfig) ->
     end.
 
 build_bucket_info(Id, undefined, InfoLevel, LocalAddr, MayExposeAuth,
-                  SkipMap) ->
-    {ok, BucketConfig} = ns_bucket:get_bucket(Id),
+                  SkipMap, Config) ->
+    {ok, BucketConfig} = ns_bucket:get_bucket(Id, Config),
     build_bucket_info(Id, BucketConfig, InfoLevel, LocalAddr, MayExposeAuth,
-                      SkipMap);
+                      SkipMap, Config);
 build_bucket_info(Id, BucketConfig, InfoLevel, LocalAddr, MayExposeAuth,
-                  SkipMap) ->
-    Nodes = build_bucket_node_infos(Id, BucketConfig, InfoLevel, LocalAddr),
+                  SkipMap, Config) ->
+    Nodes = build_bucket_node_infos(Id, BucketConfig, InfoLevel, LocalAddr,
+                                    Config),
     StatsUri = bin_concat_path(["pools", "default", "buckets", Id, "stats"]),
     StatsDirectoryUri = iolist_to_binary([StatsUri, <<"Directory">>]),
     NodeStatsListURI = bin_concat_path(["pools", "default", "buckets", Id, "nodes"]),
@@ -481,11 +487,13 @@ handle_sasl_buckets_streaming(_PoolId, Req) ->
 handle_bucket_info_streaming(_PoolId, Id, Req) ->
     LocalAddr = menelaus_util:local_addr(Req),
     F = fun(_Stability, _UpdateID) ->
-                case ns_bucket:get_bucket(Id) of
+                Config = ns_config:get(),
+                case ns_bucket:get_bucket(Id, Config) of
                     {ok, BucketConfig} ->
                         Info = build_bucket_info(
                                  Id, BucketConfig, streaming, LocalAddr,
-                                 may_expose_bucket_auth(Id, Req), false),
+                                 may_expose_bucket_auth(Id, Req), false,
+                                 Config),
                         {just_write, Info};
                     not_present ->
                         exit(normal)

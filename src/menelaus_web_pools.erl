@@ -191,9 +191,9 @@ do_build_pool_info(Id, InfoLevel, Stability, LocalAddr) ->
     UUID = menelaus_web:get_uuid(),
 
     CanIncludeOtpCookie = InfoLevel =:= admin orelse InfoLevel =:= internal,
-    Nodes = menelaus_web_node:build_nodes_info(CanIncludeOtpCookie, InfoLevel,
-                                               Stability, LocalAddr),
     Config = ns_config:get(),
+    Nodes = menelaus_web_node:build_nodes_info(CanIncludeOtpCookie, InfoLevel,
+                                               Stability, LocalAddr, Config),
 
     TasksURI = bin_concat_path(["pools", Id, "tasks"],
                                [{"v", ns_doctor:get_tasks_version()}]),
@@ -537,10 +537,10 @@ cluster_info_props(Req) ->
       end},
      {buckets, fun extract_bucket_specific_data/1},
      {nodes,
-      fun () ->
+      fun (Cfg) ->
               [begin
                    {struct, Props} = menelaus_web_node:build_full_node_info(
-                                       N, local_addr(Req)),
+                                       Cfg, N, local_addr(Req)),
                    glean_node_details(Props)
                end || N <- ns_node_disco:nodes_wanted()]
       end}].

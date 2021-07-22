@@ -28,9 +28,10 @@
 
 -export([handle_node/2,
          build_full_node_info/2,
+         build_full_node_info/3,
          build_memory_quota_info/1,
-         build_nodes_info_fun/4,
-         build_nodes_info/4,
+         build_nodes_info_fun/5,
+         build_nodes_info/5,
          build_node_hostname/3,
          handle_bucket_node_list/2,
          handle_bucket_node_info/3,
@@ -92,7 +93,11 @@ location_prop_to_json({state, ok}) -> {state, ok};
 location_prop_to_json(KV) -> KV.
 
 build_full_node_info(Node, LocalAddr) ->
-    {struct, KV} = (build_nodes_info_fun(true, normal, unstable, LocalAddr))(Node, undefined),
+    build_full_node_info(ns_config:get(), Node, LocalAddr).
+
+build_full_node_info(Config, Node, LocalAddr) ->
+    Fun = build_nodes_info_fun(true, normal, unstable, LocalAddr, Config),
+    {struct, KV} = Fun(Node, undefined),
     NodeStatus = ns_doctor:get_node(Node),
     StorageConf = ns_storage_conf:storage_conf_from_node_status(Node, NodeStatus),
     R = {struct, storage_conf_to_json(StorageConf)},
@@ -104,7 +109,7 @@ build_full_node_info(Node, LocalAddr) ->
                                                   || {Path, SizeKBytes, UsagePercent} <- DiskData]}]}},
               {storageTotals, {struct, [{Type, {struct, PropList}}
                                         || {Type, PropList} <- ns_storage_conf:nodes_storage_info([Node])]}},
-              {storage, R}] ++ KV ++ build_memory_quota_info(ns_config:latest()),
+              {storage, R}] ++ KV ++ build_memory_quota_info(Config),
     {struct, lists:filter(fun (X) -> X =/= undefined end,
                                    Fields)}.
 
@@ -116,9 +121,10 @@ build_memory_quota_info(Config) ->
               {memory_quota:service_to_json_name(Service), Quota}
       end, memory_quota:aware_services(CompatVersion)).
 
-build_nodes_info(CanIncludeOtpCookie, InfoLevel, Stability, LocalAddr) ->
-    F = build_nodes_info_fun(CanIncludeOtpCookie, InfoLevel, Stability, LocalAddr),
-    [F(N, undefined) || N <- ns_node_disco:nodes_wanted()].
+build_nodes_info(CanIncludeOtpCookie, InfoLevel, Stability, LocalAddr, Config) ->
+    F = build_nodes_info_fun(CanIncludeOtpCookie, InfoLevel, Stability,
+                             LocalAddr, Config),
+    [F(N, undefined) || N <- ns_node_disco:nodes_wanted(Config)].
 
 %% builds health/warmup status of given node (w.r.t. given Bucket if
 %% not undefined)
@@ -153,10 +159,10 @@ build_node_status(Node, Bucket, InfoNode, BucketsAll) ->
             <<"unhealthy">>
     end.
 
-build_nodes_info_fun(CanIncludeOtpCookie, InfoLevel, Stability, LocalAddr) ->
+build_nodes_info_fun(CanIncludeOtpCookie, InfoLevel, Stability, LocalAddr,
+                     Config) ->
     OtpCookie = list_to_binary(atom_to_list(erlang:get_cookie())),
     NodeStatuses = ns_doctor:get_nodes(),
-    Config = ns_config:get(),
     BucketsAll = ns_bucket:get_buckets(Config),
     fun(WantENode, Bucket) ->
             InfoNode = ns_doctor:get_node(WantENode, NodeStatuses),
