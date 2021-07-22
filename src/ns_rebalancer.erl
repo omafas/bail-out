@@ -91,11 +91,7 @@ validate_autofailover_bucket(BucketConfig, Nodes) ->
     end.
 
 generate_vbucket_map_options(KeepNodes, BucketConfig) ->
-    Config = ns_config:get(),
-    generate_vbucket_map_options(KeepNodes, BucketConfig, Config).
-
-generate_vbucket_map_options(KeepNodes, BucketConfig, Config) ->
-    Tags = case ns_config:search(Config, server_groups) of
+    Tags = case ns_config:search(server_groups) of
                false ->
                    undefined;
                {value, ServerGroups} ->
@@ -782,11 +778,9 @@ do_unbalanced(Map, Servers) ->
       end, [MastersCounts, ReplicasCounts]).
 
 map_options_changed(BucketConfig) ->
-    Config = ns_config:get(),
-
     Servers = ns_bucket:get_servers(BucketConfig),
 
-    Opts = generate_vbucket_map_options(Servers, BucketConfig, Config),
+    Opts = generate_vbucket_map_options(Servers, BucketConfig),
     OptsHash = proplists:get_value(map_opts_hash, BucketConfig),
     case OptsHash of
         undefined ->
