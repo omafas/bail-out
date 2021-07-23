@@ -1944,9 +1944,9 @@ function get65CompatDesc() {
           desc: "Bytes of JVM heap used by Analytics on this server."
         },
         "cbas_system_load_average": {
-          unit: "bytes",
+          unit: "number",
           title: "Analytics System Load",
-          desc: "System load in bytes for Analytics node."
+          desc: "System load average for the last minute."
         },
         "cbas_thread_count": {
           unit: "number",
