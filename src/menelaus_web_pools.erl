@@ -229,7 +229,7 @@ do_build_pool_info(Id, InfoLevel, Stability, LocalAddr) ->
          {clusterName, list_to_binary(get_cluster_name())},
          {balanced, ns_cluster_membership:is_balanced()},
          menelaus_web_node:build_memory_quota_info(Config),
-         build_ui_params(InfoLevel),
+         build_ui_params(InfoLevel, Config),
          build_internal_params(InfoLevel),
          build_unstable_params(Stability, Config)],
     {struct, lists:flatten(PropList)}.
@@ -257,12 +257,12 @@ build_internal_params(internal) ->
 build_internal_params(_) ->
     [].
 
-build_ui_params(for_ui) ->
-    [{failoverWarnings, ns_bucket:failover_warnings()},
+build_ui_params(for_ui, Config) ->
+    [{failoverWarnings, ns_bucket:failover_warnings(Config)},
      {saslauthdEnabled, cluster_compat_mode:is_saslauthd_enabled()},
      {uiSessionTimeout,
       ns_config:read_key_fast(ui_session_timeout, undefined)}];
-build_ui_params(_) ->
+build_ui_params(_, _) ->
     [].
 
 build_unstable_params(stable, _) ->

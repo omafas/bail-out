@@ -32,7 +32,7 @@
          credentials/1,
          delete_bucket/1,
          durability_min_level/1,
-         failover_warnings/0,
+         failover_warnings/1,
          get_bucket/1,
          get_bucket/2,
          get_bucket_from_configs/2,
@@ -306,10 +306,9 @@ failover_safety_rec(BaseSafety, ExtraSafety, [BucketConfig | RestConfigs], Activ
     failover_safety_rec(NewBaseSafety, NewExtraSafety,
                         RestConfigs, ActiveNodes, LiveNodes).
 
--spec failover_warnings() -> [failoverNeeded | rebalanceNeeded | hardNodesNeeded | softNodesNeeded].
-failover_warnings() ->
-    Config = ns_config:get(),
-
+-spec failover_warnings(ns_config()) -> [failoverNeeded | rebalanceNeeded |
+                                         hardNodesNeeded | softNodesNeeded].
+failover_warnings(Config) ->
     ActiveNodes = ns_cluster_membership:service_active_nodes(Config, kv),
     LiveNodes = ns_cluster_membership:service_actual_nodes(Config, kv),
     {BaseSafety0, ExtraSafety}
