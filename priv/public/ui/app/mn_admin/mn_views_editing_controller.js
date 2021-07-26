@@ -12,7 +12,7 @@ import _ from "/ui/web_modules/lodash.js";
 
 export default mnViewsEditingController;
 
-function mnViewsEditingController($scope, $state, $uibModal, mnHelper, mnViewsEditingService, mnViewsListService, mnPromiseHelper) {
+function mnViewsEditingController($scope, $state, $uibModal, mnHelper, mnViewsEditingService, mnViewsListService, mnPromiseHelper, qwDialogService, mnAlertsService) {
   var vm = this;
   var codemirrorOptions = {
     lineNumbers: true,
@@ -42,7 +42,7 @@ function mnViewsEditingController($scope, $state, $uibModal, mnHelper, mnViewsEd
   vm.onReduceChange = onReduceChange;
   vm.setReduceValue = setReduceValue;
   vm.awaitingViews = awaitingViews;
-  vm.goToDocumentsSection = goToDocumentsSection;
+  vm.editDocument = editDocument;
   vm.isEditDocumentDisabled = isEditDocumentDisabled;
   vm.toggleSampleDocument = toggleSampleDocument;
   vm.isViewsEditorControllsDisabled = isViewsEditorControllsDisabled;
@@ -55,12 +55,23 @@ function mnViewsEditingController($scope, $state, $uibModal, mnHelper, mnViewsEd
 
   activate();
 
-  function goToDocumentsSection(e) {
+  function editDocument(e) {
     e.stopImmediatePropagation();
-    $state.go("app.admin.classicDocuments.editing", {
-      documentId: vm.state.sampleDocument.meta.id,
-      commonBucket: $state.params.commonBucket
-    });
+
+    let docId = vm.state.sampleDocument.meta.id;
+    let bucket = $state.params.commonBucket;
+    qwDialogService.getAndShowDocument(false, "Edit Document", bucket, "_default", "_default", docId)
+      .then((response) => {
+        if (response === "dialog closed, no changes") {
+          return;
+        }
+        let params = Object.assign({}, $state.params);
+        params.sampleDocumentId = docId;
+        mnPromiseHelper(vm.state, mnViewsEditingService.prepareRandomDocument(params))
+          .showSpinner("sampleDocumentLoading")
+          .applyToScope("sampleDocument")
+          .showGlobalSuccess("Document saved successfully!");
+      }, (error) => mnAlertsService.setAlert("error", error || "Document could not be saved.", 4000));
   }
   function toggleSampleDocument() {
     vm.isSampleDocumentClosed = !vm.isSampleDocumentClosed;

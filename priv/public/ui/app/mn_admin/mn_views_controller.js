@@ -36,6 +36,8 @@ import mnViewsDeleteViewDialogController from "./mn_views_delete_view_dialog_con
 import mnViewsDeleteDdocDialogController from "./mn_views_delete_ddoc_dialog_controller.js";
 import mnViewsCreateDialogController from "./mn_views_create_dialog_controller.js";
 import mnViewsCopyDialogController from "./mn_views_copy_dialog_controller.js";
+import {downgradeInjectable} from '/ui/web_modules/@angular/upgrade/static.js';
+import {QwDialogService} from "/_p/ui/query/angular-directives/qw.dialog.service.js";
 
 export default "mnViews";
 
@@ -66,7 +68,8 @@ angular
   .controller("mnViewsDeleteViewDialogController", mnViewsDeleteViewDialogController)
   .controller("mnViewsDeleteDdocDialogController", mnViewsDeleteDdocDialogController)
   .controller("mnViewsCreateDialogController", mnViewsCreateDialogController)
-  .controller("mnViewsCopyDialogController", mnViewsCopyDialogController);
+  .controller("mnViewsCopyDialogController", mnViewsCopyDialogController)
+  .factory('qwDialogService', downgradeInjectable(QwDialogService));
 
 function configure($stateProvider) {
   $stateProvider

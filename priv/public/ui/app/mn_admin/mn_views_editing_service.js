@@ -14,8 +14,7 @@ import js_beautify from "/ui/web_modules/js-beautify.js";
 import mnFilters from "/ui/app/components/mn_filters.js";
 import mnPermissions from "/ui/app/components/mn_permissions.js";
 import mnViewsListService from "./mn_views_list_service.js";
-import mnDocumentsEditingService from "./mn_documents_editing_service.js";
-import mnDocumentsListService from "./mn_documents_list_service.js";
+import mnDocumentsService from "./mn_documents_service.js";
 import mnPoolDefault from "/ui/app/components/mn_pool_default.js";
 
 export default "mnViewsEditingService";
@@ -26,12 +25,11 @@ angular
     mnFilters,
     mnPoolDefault,
     mnViewsListService,
-    mnDocumentsEditingService,
-    mnDocumentsListService,
+    mnDocumentsService,
   ])
   .factory("mnViewsEditingService", mnViewsEditingFactory);
 
-function mnViewsEditingFactory($http, $state, mnPermissions, mnViewsListService, mnDocumentsEditingService, mnDocumentsListService, $q, removeEmptyValueFilter, jQueryLikeParamSerializerFilter, mnPoolDefault, viewsPerPageLimit, docBytesLimit, getStringBytesFilter) {
+function mnViewsEditingFactory($http, $state, mnPermissions, mnViewsListService, mnDocumentsService, $q, removeEmptyValueFilter, jQueryLikeParamSerializerFilter, mnPoolDefault, viewsPerPageLimit, docBytesLimit, getStringBytesFilter) {
   var mnViewsEditingService = {
     getViewsEditingState: getViewsEditingState,
     prepareRandomDocument: prepareRandomDocument,
@@ -129,7 +127,7 @@ function mnViewsEditingFactory($http, $state, mnPermissions, mnViewsListService,
   }
 
   function getSampleDocument(params) {
-    return mnDocumentsEditingService.getDocument(params).then(function (sampleDocument) {
+    return mnDocumentsService.getDocument(params).then(function (sampleDocument) {
       if (getStringBytesFilter(angular.toJson(sampleDocument.data.json)) > docBytesLimit) {
         return {
           meta: sampleDocument.data.meta,
@@ -168,7 +166,7 @@ function mnViewsEditingFactory($http, $state, mnPermissions, mnViewsListService,
       switch(resp.status) {
       case 404:
         if (resp.data.error === "fallback_to_all_docs") {
-          return mnDocumentsListService.getDocuments({
+          return mnDocumentsService.getDocuments({
             commonBucket: params.commonBucket,
             pageNumber: 0,
             pageLimit: 1

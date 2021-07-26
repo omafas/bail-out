@@ -10,50 +10,22 @@ licenses/APL2.txt.
 
 import angular from "/ui/web_modules/angular.js";
 
-export default "mnDocumentsListService";
+export default "mnDocumentsService";
 
 angular
-  .module("mnDocumentsListService", [])
-  .factory("mnDocumentsListService", mnDocumentsListFactory);
+  .module("mnDocumentsService", [])
+  .factory("mnDocumentsService", mnDocumentsFactory);
 
-function mnDocumentsListFactory($http, $q, docsLimit) {
-  var mnDocumentsListService = {
+function mnDocumentsFactory($http, $q, docsLimit) {
+  var mnDocumentsService = {
+    getDocument: getDocument,
     getDocuments: getDocuments,
-    getDocumentsListState: getDocumentsListState,
     getDocumentsParams: getDocumentsParams,
     getDocumentsURI: getDocumentsURI
   };
 
-  return mnDocumentsListService;
+  return mnDocumentsService;
 
-  function getListState(docs, params) {
-    var rv = {};
-    rv.pageNumber = params.pageNumber;
-    rv.isNextDisabled = docs.rows.length <= params.pageLimit || params.pageLimit * (params.pageNumber + 1) === docsLimit;
-    if (docs.rows.length > params.pageLimit) {
-      docs.rows.pop();
-    }
-
-    rv.docs = docs;
-
-    rv.pageLimits = [10, 20, 50, 100];
-    rv.pageLimits.selected = params.pageLimit;
-    return rv;
-  }
-
-  function getDocumentsListState(params) {
-    return getDocuments(params).then(function (resp) {
-      return getListState(resp.data, params);
-    }, function (resp) {
-      switch (resp.status) {
-      case 0:
-      case -1: return $q.reject(resp);
-      case 404: return !params.commonBucket ? {status: "_404"} : resp;
-      case 501: return {};
-      default: return resp;
-      }
-    });
-  }
 
   function getDocumentsParams(params) {
     var param;
@@ -89,11 +61,30 @@ function mnDocumentsListFactory($http, $q, docsLimit) {
     return base + "/docs";
   }
 
+  // this is used in views editing service
   function getDocuments(params) {
     return $http({
       method: "GET",
       url: getDocumentsURI(params),
       params: getDocumentsParams(params)
     });
+  }
+
+  function getDocument(params) {
+    if (!params.documentId) {
+      return $q.reject({data: {reason: "Document ID cannot be empty"}});
+    }
+    return $http({
+      method: "GET",
+      url: buildDocumentUrl(params)
+    });
+  }
+  function buildDocumentUrl(params) {
+    let bucket = params.bucket || params.commonBucket;
+    let base =  "/pools/default/buckets/" + encodeURIComponent(bucket);
+    if (params.scope && params.collection) {
+      base += "/scopes/" + encodeURIComponent(params.scope) + "/collections/" + encodeURIComponent(params.collection);
+    }
+    return base + "/docs/" + encodeURIComponent(params.documentId);
   }
 }
