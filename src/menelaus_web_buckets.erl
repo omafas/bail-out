@@ -480,19 +480,13 @@ handle_sasl_buckets_streaming(_PoolId, Req) ->
 
 handle_bucket_info_streaming(_PoolId, Id, Req) ->
     LocalAddr = menelaus_util:local_addr(Req),
-    SendTerse = ns_config:read_key_fast(send_terse_streaming_buckets, false),
     F = fun(_Stability, _UpdateID) ->
                 case ns_bucket:get_bucket(Id) of
                     {ok, BucketConfig} ->
-                        case SendTerse of
-                            true ->
-                                {ok, Bin} = bucket_info_cache:terse_bucket_info_with_local_addr(Id, LocalAddr),
-                                {just_write, {write, Bin}};
-                            _ ->
-                                Info = build_bucket_info(Id, BucketConfig, streaming, LocalAddr,
-                                                         may_expose_bucket_auth(Id, Req), false),
-                                {just_write, Info}
-                        end;
+                        Info = build_bucket_info(
+                                 Id, BucketConfig, streaming, LocalAddr,
+                                 may_expose_bucket_auth(Id, Req), false),
+                        {just_write, Info};
                     not_present ->
                         exit(normal)
                 end

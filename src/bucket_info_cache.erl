@@ -20,8 +20,7 @@
 -include("ns_common.hrl").
 
 -export([start_link/0,
-         terse_bucket_info/1,
-         terse_bucket_info_with_local_addr/2]).
+         terse_bucket_info/1]).
 
 -export([build_node_services/0]).
 
@@ -325,12 +324,3 @@ do_build_node_services() ->
     J = {[{rev, Rev},
           {nodesExt, NEIs}] ++ Caps},
     {Rev, ejson:encode(J)}.
-
-terse_bucket_info_with_local_addr(BucketName, LocalAddr) ->
-    case terse_bucket_info(BucketName) of
-        {ok, _, Bin} ->
-            {ok, binary:replace(Bin, list_to_binary(?LOCALHOST_MARKER_STRING),
-                                list_to_binary(LocalAddr), [global])};
-        Other ->
-            Other
-    end.
