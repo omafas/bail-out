@@ -13,7 +13,7 @@
 
 -include("ale.hrl").
 
--define(CHARS_LIMIT_DEFAULT, -1).
+-define(CHARS_LIMIT_DEFAULT, 50000).
 
 logger_impl(Logger) when is_atom(Logger) ->
     logger_impl(atom_to_list(Logger));

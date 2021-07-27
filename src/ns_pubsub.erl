@@ -150,12 +150,14 @@ do_subscribe_link_continue(Name, Parent, Handler) ->
                 end;
             {'EXIT', Parent, Reason} ->
                 ?log_debug("Parent process of subscription ~p "
-                           "exited with reason ~p", [{Name, Parent}, Reason]),
+                           "exited with reason ~p", [{Name, Parent}, Reason],
+                                                    [{chars_limit, 1000}]),
                 normal;
             {'EXIT', Pid, Reason} ->
                 ?log_debug("Linked process ~p of subscription ~p "
                            "died unexpectedly with reason ~p",
-                           [Pid, {Name, Parent}, Reason]),
+                           [Pid, {Name, Parent}, Reason],
+                           [{chars_limit, 1000}]),
                 {linked_process_died, Pid, Reason};
             X ->
                 ?log_error("Subscription ~p got unexpected message: ~p",
