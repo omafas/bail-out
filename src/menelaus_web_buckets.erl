@@ -370,24 +370,15 @@ build_sasl_bucket_info({Id, BucketConfig}, LocalAddr) ->
         bucket_info_cache:build_vbucket_map(LocalAddr, BucketConfig),
         build_sasl_bucket_nodes(BucketConfig, LocalAddr)])}.
 
-build_streaming_info(true, Id, _Req, LocalAddr, _UpdateID) ->
-    case ns_bucket:bucket_exists(Id, direct) of
-        true ->
-            {ok, Bin} =
-                bucket_info_cache:terse_bucket_info_with_local_addr(
-                  Id, LocalAddr),
-            {write, Bin};
-        false ->
-            exit(normal)
-    end;
-build_streaming_info(false, Id, Req, LocalAddr, UpdateID) ->
+build_streaming_info(Id, Req, LocalAddr, UpdateID) ->
     ns_server_stats:notify_counter(<<"build_streaming_info">>),
     case ns_bucket:bucket_exists(Id, direct) of
         true ->
             menelaus_web_cache:lookup_or_compute_with_expiration(
                 {build_bucket_info, Id, LocalAddr},
                 fun () ->
-                    Ctx = menelaus_web_node:get_context({ip, LocalAddr}, false, stable),
+                    Ctx = menelaus_web_node:get_context({ip, LocalAddr}, false,
+                                                        stable),
                     [Info] = build_buckets_info(Req, [Id], Ctx, streaming),
                     {Info, 1000, UpdateID}
                 end,
@@ -400,11 +391,10 @@ build_streaming_info(false, Id, Req, LocalAddr, UpdateID) ->
 
 handle_bucket_info_streaming(_PoolId, Id, Req) ->
     LocalAddr = menelaus_util:local_addr(Req),
-    Terse = ns_config:read_key_fast(send_terse_streaming_buckets, false),
     handle_streaming(
       fun(_Stability, UpdateID) ->
               {just_write,
-               build_streaming_info(Terse, Id, Req, LocalAddr, UpdateID)}
+               build_streaming_info(Id, Req, LocalAddr, UpdateID)}
       end, Req).
 
 handle_bucket_delete(_PoolId, BucketId, Req) ->
