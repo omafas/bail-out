@@ -545,13 +545,14 @@ class TaskRunner(object):
 
         AltExit.register(self.finalize)
 
-    def finalize(self):
+    def close_files(self):
         for fp in self._fps.values():
             try:
                 fp.close()
             except:
                 pass
 
+    def finalize(self):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def collect_file(self, filename, relative_name=None):
@@ -2210,6 +2211,9 @@ def main():
 
     runner.literal("cbcollect_info log", log_stream.getvalue(),
                    log_file="cbcollect_info.log", no_header=True)
+
+    # Close any open files so all content is flushed to disk.
+    runner.close_files()
 
     if options.redact_level != "none":
         log("Redacting log files to level: %s" % options.redact_level)
