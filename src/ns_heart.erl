@@ -299,12 +299,11 @@ current_status_slow_inner() ->
 %% failover safeness fields (or down bool property). Instead of going
 %% to doctor it actually contacts all nodes and tries to grab fresh
 %% information. See failover_safeness_level:build_local_safeness_info
-grab_fresh_failover_safeness_infos(BucketsAll) ->
-    do_grab_fresh_failover_safeness_infos(BucketsAll, 2000).
+grab_fresh_failover_safeness_infos(BucketNames) ->
+    do_grab_fresh_failover_safeness_infos(BucketNames, 2000).
 
-do_grab_fresh_failover_safeness_infos(BucketsAll, Timeout) ->
+do_grab_fresh_failover_safeness_infos(BucketNames, Timeout) ->
     Nodes = ns_node_disco:nodes_actual(),
-    BucketNames = proplists:get_keys(BucketsAll),
     {NodeResp, NodeErrors, DownNodes} =
         misc:rpc_multicall_with_plist_result(
           Nodes,

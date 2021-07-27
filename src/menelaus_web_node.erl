@@ -634,7 +634,8 @@ handle_node_statuses(Req) ->
          local_addr = LocalAddr,
          snapshot = Snapshot} = get_context(Req, false, stable),
     BucketsAll = ns_bucket:get_buckets(Snapshot),
-    FreshStatuses = ns_heart:grab_fresh_failover_safeness_infos(BucketsAll),
+    FreshStatuses = ns_heart:grab_fresh_failover_safeness_infos(
+                      ns_bucket:get_bucket_names(Snapshot)),
     NodeStatuses =
         lists:map(
           fun (N) ->
