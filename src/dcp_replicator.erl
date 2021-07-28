@@ -15,11 +15,15 @@
 
 -include("ns_common.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
 
--export([start_link/3, start_link/6,
+-export([start_link/3, start_link/7,
          get_partitions/1,
          setup_replication/2, setup_replication/3,
          takeover/2, takeover/3,
@@ -29,42 +33,57 @@
 
 -record(state, {proxies,
                 consumer_conn :: pid(),
-                connection_name :: nonempty_string(),
+                %% Connection names will be the same unless abbreviated
+                %% ones are needed.
+                producer_connection_name :: nonempty_string(),
+                consumer_connection_name :: nonempty_string(),
                 producer_node :: node(),
                 bucket :: bucket_name()}).
 
 -define(VBUCKET_POLL_INTERVAL, 100).
 -define(SHUT_CONSUMER_TIMEOUT, ?get_timeout(dcp_shut_consumer, 60000)).
+-define(MAX_CONNECTION_NAME, 200).
 
-init({ConsumerNode, ProducerNode, Bucket, ConnName, RepFeatures}) ->
+init({ConsumerNode, ProducerNode, Bucket, ProducerConnName,
+      ConsumerConnName, RepFeatures}) ->
     process_flag(trap_exit, true),
 
-    {ok, ConsumerConn} = dcp_consumer_conn:start_link(ConnName, ConsumerNode,
-                                                      Bucket, RepFeatures),
-    {ok, ProducerConn} = dcp_producer_conn:start_link(ConnName, ProducerNode,
-                                                      Bucket, RepFeatures),
+    {ok, ConsumerConn} = dcp_consumer_conn:start_link(ProducerConnName,
+                                                      ConsumerNode, Bucket,
+                                                      RepFeatures),
+    {ok, ProducerConn} = dcp_producer_conn:start_link(ConsumerConnName,
+                                                      ProducerNode, Bucket,
+                                                      RepFeatures),
 
     Proxies = dcp_proxy:connect_proxies(ConsumerConn, ProducerConn),
 
-    ?log_debug("initiated new dcp replication with consumer side: ~p and producer side: ~p", [ConsumerConn, ProducerConn]),
+    ?log_debug("initiated new dcp replication with consumer side: ~p (~p) "
+               "and producer side: ~p (~p)",
+               [ConsumerConn, ConsumerConnName,
+                ProducerConn, ProducerConnName]),
 
-    master_activity_events:note_dcp_replicator_start(Bucket, ConnName,
-                                                     ProducerNode, ConsumerConn, ProducerConn),
+    master_activity_events:note_dcp_replicator_start(Bucket, ProducerConnName,
+                                                     ProducerNode, ConsumerConn,
+                                                     ProducerConn),
 
     {ok, #state{
             proxies = Proxies,
             consumer_conn = ConsumerConn,
-            connection_name = ConnName,
+            producer_connection_name = ProducerConnName,
+            consumer_connection_name = ConsumerConnName,
             producer_node = ProducerNode,
             bucket = Bucket
            }}.
 
-start_link(Name, ConsumerNode, ProducerNode, Bucket, ConnName, RepFeatures) ->
+start_link(Name, ConsumerNode, ProducerNode, Bucket, ProducerConnName,
+           ConsumerConnName, RepFeatures) ->
     %% We (and ep-engine actually) depend on this naming.
-    true = lists:prefix("replication:", ConnName),
+    true = lists:prefix("replication:", ProducerConnName),
+    true = lists:prefix("replication:", ConsumerConnName),
 
     Args0 = [?MODULE, {ConsumerNode,
-                       ProducerNode, Bucket, ConnName, RepFeatures}, []],
+                       ProducerNode, Bucket, ProducerConnName,
+                       ConsumerConnName, RepFeatures}, []],
     Args  = case Name of
                 undefined ->
                     Args0;
@@ -75,9 +94,13 @@ start_link(Name, ConsumerNode, ProducerNode, Bucket, ConnName, RepFeatures) ->
 
 start_link(ProducerNode, Bucket, RepFeatures) ->
     ConsumerNode = node(),
-    ConnName     = get_connection_name(ConsumerNode, ProducerNode, Bucket),
+    ProducerConnName = get_connection_name(ConsumerNode, ProducerNode, Bucket,
+                                           consumer_optional),
+    ConsumerConnName = get_connection_name(ConsumerNode, ProducerNode, Bucket,
+                                           producer_optional),
     start_link(server_name(ProducerNode, Bucket),
-               ConsumerNode, ProducerNode, Bucket, ConnName, RepFeatures).
+               ConsumerNode, ProducerNode, Bucket, ProducerConnName,
+               ConsumerConnName, RepFeatures).
 
 server_name(ProducerNode, Bucket) ->
     list_to_atom(?MODULE_STRING "-" ++ Bucket ++ "-" ++ atom_to_list(ProducerNode)).
@@ -158,7 +181,7 @@ wait_for_data_move(Nodes, Bucket, Partition) ->
 wait_for_data_move_loop([], _, _, _DoneLimit) ->
     ok;
 wait_for_data_move_loop([Node | Rest], Bucket, Partition, DoneLimit) ->
-    Connection = get_connection_name(Node, node(), Bucket),
+    Connection = get_connection_name(Node, node(), Bucket, producer_optional),
     case wait_for_data_move_on_one_node(0, Connection,
                                         Bucket, Partition, DoneLimit) of
         ok ->
@@ -209,11 +232,39 @@ check_move_done(_Estimate, _DoneLimit) ->
 -spec get_docs_estimate(bucket_name(), vbucket_id(), node()) ->
                                {ok, {non_neg_integer(), non_neg_integer(), binary()}}.
 get_docs_estimate(Bucket, Partition, ConsumerNode) ->
-    Connection = get_connection_name(ConsumerNode, node(), Bucket),
+    Connection = get_connection_name(ConsumerNode, node(), Bucket,
+                                     producer_optional),
     ns_memcached:get_dcp_docs_estimate(Bucket, Partition, Connection).
 
-get_connection_name(ConsumerNode, ProducerNode, Bucket) ->
-    "replication:" ++ atom_to_list(ProducerNode) ++ "->" ++ atom_to_list(ConsumerNode) ++ ":" ++ Bucket.
+get_connection_name(ConsumerNode, ProducerNode, Bucket, LocalNode) ->
+    ConsumerNodeList = atom_to_list(ConsumerNode),
+    ProducerNodeList = atom_to_list(ProducerNode),
+    CName = "replication:" ++ ProducerNodeList ++ "->" ++ ConsumerNodeList ++
+        ":" ++ Bucket,
+
+    case length(CName) =< ?MAX_CONNECTION_NAME of
+        true ->
+            CName;
+        false ->
+            %% Used an abbreviated connection name by not including the
+            %% specified node and limiting the length of the bucket name.
+            %% Include a hash of the full connection name to guarantee
+            %% uniqueness.
+            Hash = binary_to_list(base64:encode(crypto:hash(sha, CName))),
+            {CNode, PNode} =
+                case LocalNode of
+                    consumer_optional ->
+                        {"", string:slice(ProducerNodeList, 0, 90)};
+                    producer_optional ->
+                        {string:slice(ConsumerNodeList, 0, 90), ""}
+                end,
+            Bkt = string:slice(Bucket, 0, 60),
+
+            CName2 = "replication:" ++ PNode ++ "->" ++ CNode ++ ":" ++ Bkt ++
+                     ":" ++ Hash,
+            true = length(CName2) =< ?MAX_CONNECTION_NAME,
+            CName2
+    end.
 
 get_connections(Bucket) ->
     {ok, Connections} =
@@ -273,3 +324,43 @@ maybe_shut_consumer(Reason, Consumer) ->
         false ->
             ok
     end.
+
+-ifdef(TEST).
+get_connection_name_test() ->
+
+    %% Connection name fits into the maximum allowed
+
+    NodeA = 'nodeA.eng.couchbase.com',
+    NodeB = 'nodeB.eng.couchbase.com',
+    BucketAB = "bucket1",
+    ConnAB = get_connection_name(NodeA, NodeB, BucketAB, undefined),
+    ?assertEqual("replication:nodeB.eng.couchbase.com->"
+                 "nodeA.eng.couchbase.com:bucket1", ConnAB),
+    ?assertEqual(true, length(ConnAB) =< ?MAX_CONNECTION_NAME),
+
+    %% Test where the connection name, using the pre-NEO method, won't
+    %% fit into the maximum allowed.
+
+    Node1 = "ns_1@platform-couchbase-cluster-0000.platform-couchbase-cluster."
+            "couchbase-new-pxxxxxxx.svc",
+    Node2 = "ns_1@platform-couchbase-cluster-0001.platform-couchbase-cluster."
+            "couchbase-new-pxxxxxxx.svc",
+    Bucket12 = "com.yyyyyy.digital.ms.shoppingcart.shoppingcart",
+    Conn12l = get_connection_name(list_to_atom(Node1), list_to_atom(Node2),
+                                  Bucket12, consumer_optional),
+    ?assertEqual("replication:ns_1@platform-couchbase-cluster-0001.platform-"
+                 "couchbase-cluster.couchbase-new-pxxxxxxx.svc->:"
+                 "com.yyyyyy.digital.ms.shoppingcart.shoppingcart:"
+                 "/Jh4NdC6VwWeFlb9os/VBnSgpvg=",  Conn12l),
+    ?assertEqual(true, length(Conn12l) =< ?MAX_CONNECTION_NAME),
+
+    Conn12p = get_connection_name(list_to_atom(Node1), list_to_atom(Node2),
+                                  Bucket12, producer_optional),
+    ?assertEqual("replication:->ns_1@platform-couchbase-cluster-0000.platform-"
+                 "couchbase-cluster.couchbase-new-pxxxxxxx.svc:"
+                 "com.yyyyyy.digital.ms.shoppingcart.shoppingcart:"
+                 "/Jh4NdC6VwWeFlb9os/VBnSgpvg=",
+                 Conn12p),
+    ?assertEqual(true, length(Conn12p) =< ?MAX_CONNECTION_NAME).
+
+-endif.
