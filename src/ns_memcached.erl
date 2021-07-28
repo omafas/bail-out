@@ -384,11 +384,12 @@ assign_queue({sync_delete_vbucket, _}) -> #state.very_heavy_calls_queue;
 assign_queue(flush) -> #state.very_heavy_calls_queue;
 assign_queue({set_vbucket, _, _, _}) -> #state.heavy_calls_queue;
 assign_queue({set_vbuckets, _}) -> #state.very_heavy_calls_queue;
-assign_queue({add, _Key, _VBucket, _Value}) -> #state.heavy_calls_queue;
-assign_queue({get, _Key, _VBucket}) -> #state.heavy_calls_queue;
-assign_queue({get_from_replica, _Key, _VBucket}) -> #state.heavy_calls_queue;
-assign_queue({delete, _Key, _VBucket}) -> #state.heavy_calls_queue;
-assign_queue({set, _Key, _VBucket, _Value, _Flags}) -> #state.heavy_calls_queue;
+assign_queue({add, _KeyFun, _VBucket, _ValueFun}) -> #state.heavy_calls_queue;
+assign_queue({get, _KeyFun, _VBucket}) -> #state.heavy_calls_queue;
+assign_queue({get_from_replica, _KeyFun, _VBucket}) -> #state.heavy_calls_queue;
+assign_queue({delete, _KeyFun, _VBucket}) -> #state.heavy_calls_queue;
+assign_queue({set, _KeyFun, _VBucket, _ValueFun, _Flags}) ->
+    #state.heavy_calls_queue;
 assign_queue({get_keys, _VBuckets, _Params}) -> #state.heavy_calls_queue;
 assign_queue({get_mass_dcp_docs_estimate, _VBuckets}) -> #state.very_heavy_calls_queue;
 assign_queue({get_vbucket_details_stats, all, _}) -> #state.very_heavy_calls_queue;
@@ -524,34 +525,36 @@ do_handle_call(flush, _From, State) ->
     Reply = mc_client_binary:flush(State#state.sock),
     {reply, Reply, State};
 
-do_handle_call({delete, Key, VBucket}, _From, State) ->
+do_handle_call({delete, KeyFun, VBucket}, _From, State) ->
     Reply = mc_client_binary:cmd(?DELETE, State#state.sock, undefined, undefined,
                                  {#mc_header{vbucket = VBucket},
-                                  #mc_entry{key = Key}}),
+                                  #mc_entry{key = KeyFun()}}),
     {reply, Reply, State};
 
-do_handle_call({set, Key, VBucket, Val, Flags}, _From, State) ->
+do_handle_call({set, KeyFun, VBucket, ValFun, Flags}, _From, State) ->
     Reply = mc_client_binary:cmd(?SET, State#state.sock, undefined, undefined,
                                  {#mc_header{vbucket = VBucket},
-                                  #mc_entry{key = Key, data = Val, flag = Flags}}),
+                                  #mc_entry{key = KeyFun(), data = ValFun(),
+                                            flag = Flags}}),
     {reply, Reply, State};
 
-do_handle_call({add, Key, VBucket, Val}, _From, State) ->
+do_handle_call({add, KeyFun, VBucket, ValFun}, _From, State) ->
     Reply = mc_client_binary:cmd(?ADD, State#state.sock, undefined, undefined,
                                  {#mc_header{vbucket = VBucket},
-                                  #mc_entry{key = Key, data = Val}}),
+                                  #mc_entry{key = KeyFun(), data = ValFun()}}),
     {reply, Reply, State};
 
-do_handle_call({get, Key, VBucket}, _From, State) ->
+do_handle_call({get, KeyFun, VBucket}, _From, State) ->
     Reply = mc_client_binary:cmd(?GET, State#state.sock, undefined, undefined,
                                  {#mc_header{vbucket = VBucket},
-                                  #mc_entry{key = Key}}),
+                                  #mc_entry{key = KeyFun()}}),
     {reply, Reply, State};
 
-do_handle_call({get_from_replica, Key, VBucket}, _From, State) ->
-    Reply = mc_client_binary:cmd(?CMD_GET_REPLICA, State#state.sock, undefined, undefined,
+do_handle_call({get_from_replica, KeyFun, VBucket}, _From, State) ->
+    Reply = mc_client_binary:cmd(?CMD_GET_REPLICA, State#state.sock,
+                                 undefined, undefined,
                                  {#mc_header{vbucket = VBucket},
-                                  #mc_entry{key = Key}}),
+                                  #mc_entry{key = KeyFun()}}),
     {reply, Reply, State};
 
 do_handle_call({set_vbuckets, VBsToSet}, _From, #state{sock = Sock} = State) ->
@@ -902,19 +905,22 @@ flush(Bucket) ->
                  {ok, #mc_header{}, #mc_entry{}, any()}.
 add(Bucket, Key, VBucket, Value) ->
     do_call({server(Bucket), node()},
-            {add, Key, VBucket, Value}, ?TIMEOUT_HEAVY).
+            {add, fun () -> Key end, VBucket, fun () -> Value end},
+            ?TIMEOUT_HEAVY).
 
 %% @doc send get command to memcached instance
 -spec get(bucket_name(), binary(), integer()) ->
                  {ok, #mc_header{}, #mc_entry{}, any()}.
 get(Bucket, Key, VBucket) ->
-    do_call({server(Bucket), node()}, {get, Key, VBucket}, ?TIMEOUT_HEAVY).
+    do_call({server(Bucket), node()}, {get, fun () -> Key end, VBucket},
+            ?TIMEOUT_HEAVY).
 
 %% @doc send get_from_replica command to memcached instance. for testing only
 -spec get_from_replica(bucket_name(), binary(), integer()) ->
                               {ok, #mc_header{}, #mc_entry{}, any()}.
 get_from_replica(Bucket, Key, VBucket) ->
-    do_call({server(Bucket), node()}, {get_from_replica, Key, VBucket}, ?TIMEOUT_HEAVY).
+    do_call({server(Bucket), node()}, {get_from_replica, fun () -> Key end,
+                                       VBucket}, ?TIMEOUT_HEAVY).
 
 %% @doc send an get metadata command to memcached
 -spec get_meta(bucket_name(), binary(), integer()) ->
@@ -943,7 +949,8 @@ get_xattrs(Bucket, Key, VBucket, Permissions) ->
                     {ok, #mc_header{}, #mc_entry{}, any()} |
                     {memcached_error, any(), any()}.
 delete(Bucket, Key, VBucket) ->
-    do_call(server(Bucket), {delete, Key, VBucket}, ?TIMEOUT_HEAVY).
+    do_call(server(Bucket), {delete, fun () -> Key end, VBucket},
+            ?TIMEOUT_HEAVY).
 
 %% @doc send a set command to memcached instance
 -spec set(bucket_name(), binary(), integer(), binary(), integer()) ->
@@ -951,7 +958,8 @@ delete(Bucket, Key, VBucket) ->
                  {memcached_error, any(), any()}.
 set(Bucket, Key, VBucket, Value, Flags) ->
     do_call({server(Bucket), node()},
-            {set, Key, VBucket, Value, Flags}, ?TIMEOUT_HEAVY).
+            {set, fun () -> Key end, VBucket, fun () -> Value end, Flags},
+            ?TIMEOUT_HEAVY).
 
 -spec update_with_rev(Bucket::bucket_name(), VBucket::vbucket_id(),
                       Id::binary(), Value::binary() | undefined, Rev :: rev(),
