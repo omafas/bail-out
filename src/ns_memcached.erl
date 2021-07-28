@@ -932,7 +932,8 @@ get(Bucket, Key, CollectionsUid, VBucket) ->
                               {ok, #mc_header{}, #mc_entry{}, any()}.
 get_from_replica(Bucket, Key, CollectionsUid, VBucket) ->
     do_call(server(Bucket), Bucket,
-            {get_from_replica, Key, CollectionsUid, VBucket}, ?TIMEOUT_HEAVY).
+            {get_from_replica, fun () -> Key end, CollectionsUid, VBucket},
+            ?TIMEOUT_HEAVY).
 
 %% @doc send an get metadata command to memcached
 -spec get_meta(bucket_name(), binary(), undefined | integer(), integer()) ->
