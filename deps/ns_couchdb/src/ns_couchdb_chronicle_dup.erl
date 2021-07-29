@@ -25,6 +25,8 @@
          lookup/1,
          ro_txn/1]).
 
+-define(RO_TXN_TIMEOUT, 10000).
+
 -record(state, {child, ref}).
 
 start_link() ->
@@ -34,7 +36,7 @@ lookup(Key) ->
     ets:lookup(?MODULE, Key).
 
 ro_txn(Body) ->
-    gen_server:call(?MODULE, {ro_txn, Body}).
+    gen_server:call(?MODULE, {ro_txn, Body}, ?RO_TXN_TIMEOUT).
 
 init([]) ->
     ets:new(?MODULE, [public, set, named_table]),
