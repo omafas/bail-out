@@ -45,6 +45,7 @@
          get_hostnames/2,
          handle_node_init/1,
          get_context/3,
+         get_context/4,
          get_config/1,
          get_stability/1,
          get_local_addr/1,
@@ -284,11 +285,25 @@ build_node_status(Node, Bucket, InfoNode, BucketsAll) ->
             <<"unhealthy">>
     end.
 
+fetch_buckets(all, Txn) ->
+    ns_bucket:fetch_snapshot(all, Txn);
+fetch_buckets(undefined, Txn) ->
+    ns_bucket:fetch_snapshot(all, Txn, [uuid, props]);
+fetch_buckets([_Bucket], {ns_config, _} = Txn) ->
+    ns_bucket:fetch_snapshot(all, Txn);
+fetch_buckets([Bucket], Txn) ->
+    maps:merge(
+      ns_bucket:fetch_snapshot(all, Txn, [uuid, props]),
+      chronicle_compat:txn_get_many([collections:key(Bucket)], Txn)).
+
 get_context(Req, IncludeOtpCookie, Stability) ->
+    get_context(Req, undefined, IncludeOtpCookie, Stability).
+
+get_context(Req, Buckets, IncludeOtpCookie, Stability) ->
     Config = ns_config:get(),
     Snapshot =
         chronicle_compat:get_snapshot(
-          [ns_bucket:fetch_snapshot(all, _),
+          [fetch_buckets(Buckets, _),
            ns_cluster_membership:fetch_snapshot(_),
            chronicle_master:fetch_snapshot(_)], #{ns_config => Config}),
 

@@ -78,7 +78,7 @@ get_info_level(Req) ->
     end.
 
 handle_bucket_list(Req) ->
-    Ctx = menelaus_web_node:get_context(Req, false, unstable),
+    Ctx = menelaus_web_node:get_context(Req, all, false, unstable),
     Snapshot = menelaus_web_node:get_snapshot(Ctx),
 
     BucketsUnsorted =
@@ -90,7 +90,7 @@ handle_bucket_list(Req) ->
     reply_json(Req, build_buckets_info(Req, Buckets, Ctx, get_info_level(Req))).
 
 handle_bucket_info(_PoolId, Id, Req) ->
-    Ctx = menelaus_web_node:get_context(Req, false, unstable),
+    Ctx = menelaus_web_node:get_context(Req, [Id], false, unstable),
     [Json] = build_buckets_info(Req, [Id], Ctx, get_info_level(Req)),
     reply_json(Req, Json).
 
@@ -378,7 +378,7 @@ build_streaming_info(Id, Req, LocalAddr, UpdateID) ->
               {build_bucket_info, Id, LocalAddr},
               fun () ->
                       Ctx = menelaus_web_node:get_context(
-                              {ip, LocalAddr}, false, stable),
+                              {ip, LocalAddr}, [Id], false, stable),
                       [Info] = build_buckets_info(Req, [Id], Ctx, streaming),
                       {Info, 1000, UpdateID}
               end,

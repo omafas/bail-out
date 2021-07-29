@@ -38,6 +38,7 @@
          get_snapshot/1,
          get_snapshot/2,
          fetch_snapshot/2,
+         fetch_snapshot/3,
          sub_key_match/1,
          buckets_change/1,
          names_change/1,
@@ -157,19 +158,25 @@ names_change(bucket_names) ->
 names_change(_) ->
     false.
 
-all_sub_keys(Names) ->
-    [sub_key(B, SubKey) || B <- Names,
-                           SubKey <- [uuid, props, collections]].
 
-fetch_snapshot(_Bucket, {ns_config, Config}) ->
+all_sub_keys() ->
+    [uuid, props, collections].
+
+all_keys(Names, SubKeys) ->
+    [sub_key(B, SubKey) || B <- Names, SubKey <- SubKeys].
+
+fetch_snapshot(Bucket, Txn) ->
+    fetch_snapshot(Bucket, Txn, all_sub_keys()).
+
+fetch_snapshot(_Bucket, {ns_config, Config}, _SubKeys) ->
     Converted = bucket_configs_to_chronicle(get_buckets(Config)),
     maps:from_list([{K, {V, no_rev}} || {K, V} <- Converted]);
-fetch_snapshot(all, Txn) ->
+fetch_snapshot(all, Txn, SubKeys) ->
     {ok, {Names, _} = NamesRev} = chronicle_compat:txn_get(root(), Txn),
-    Snapshot = chronicle_compat:txn_get_many(all_sub_keys(Names), Txn),
+    Snapshot = chronicle_compat:txn_get_many(all_keys(Names, SubKeys), Txn),
     Snapshot#{root() => NamesRev};
-fetch_snapshot(Bucket, Txn) ->
-    chronicle_compat:txn_get_many([root() | all_sub_keys([Bucket])], Txn).
+fetch_snapshot(Bucket, Txn, SubKeys) ->
+    chronicle_compat:txn_get_many([root() | all_keys([Bucket], SubKeys)], Txn).
 
 get_snapshot() ->
     get_snapshot(all).
