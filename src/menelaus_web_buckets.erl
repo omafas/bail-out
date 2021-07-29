@@ -375,16 +375,16 @@ build_streaming_info(Id, Req, LocalAddr, UpdateID) ->
     case ns_bucket:bucket_exists(Id, direct) of
         true ->
             menelaus_web_cache:lookup_or_compute_with_expiration(
-                {build_bucket_info, Id, LocalAddr},
-                fun () ->
-                    Ctx = menelaus_web_node:get_context({ip, LocalAddr}, false,
-                                                        stable),
-                    [Info] = build_buckets_info(Req, [Id], Ctx, streaming),
-                    {Info, 1000, UpdateID}
-                end,
-                fun (_Key, _Value, OldUpdateID) ->
-                    UpdateID > OldUpdateID
-                end);
+              {build_bucket_info, Id, LocalAddr},
+              fun () ->
+                      Ctx = menelaus_web_node:get_context(
+                              {ip, LocalAddr}, false, stable),
+                      [Info] = build_buckets_info(Req, [Id], Ctx, streaming),
+                      {Info, 1000, UpdateID}
+              end,
+              fun (_Key, _Value, OldUpdateID) ->
+                      UpdateID > OldUpdateID
+              end);
         false ->
             exit(normal)
     end.
