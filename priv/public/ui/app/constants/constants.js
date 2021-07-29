@@ -78,6 +78,11 @@ let IEC = {
   Gi: 1073741824
 };
 
+class MnHttpRequestRestricted {
+  constructor(){}
+}
+let MN_HTTP_REQUEST_RESTRICTED = new MnHttpRequestRestricted();
+
 export {
   bucketsFormConfiguration,
   daysOfWeek,
@@ -86,5 +91,6 @@ export {
   docsLimit,
   docBytesLimit,
   viewsPerPageLimit,
-  IEC
+  IEC,
+  MN_HTTP_REQUEST_RESTRICTED
 };

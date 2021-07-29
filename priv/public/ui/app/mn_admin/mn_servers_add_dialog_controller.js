@@ -10,7 +10,7 @@ licenses/APL2.txt.
 
 export default mnServersAddDialogController;
 
-function mnServersAddDialogController($scope, $rootScope, $q, $uibModal, mnServersService, $uibModalInstance, mnHelper, mnPromiseHelper, groups, mnClusterConfigurationService, mnPoolDefault, mnRootCertificateService) {
+function mnServersAddDialogController($scope, $rootScope, $q, $uibModal, mnServersService, $uibModalInstance, mnHelper, mnPromiseHelper, groups, mnClusterConfigurationService, mnPoolDefault, mnCertificatesService) {
   var vm = this;
 
   vm.specifyDisk = false;
@@ -51,7 +51,7 @@ function mnServersAddDialogController($scope, $rootScope, $q, $uibModal, mnServe
   function activate() {
     reset();
     if ($scope.poolDefault.isEnterprise) {
-      mnPromiseHelper(vm, mnRootCertificateService.getDefaultCertificate())
+      mnPromiseHelper(vm, mnCertificatesService.getDefaultCertificate())
         .applyToScope("certificate");
     }
     mnClusterConfigurationService.getSelfConfig().then(function (selfConfig) {

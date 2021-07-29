@@ -8,23 +8,24 @@ be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 */
 
-import angular from "/ui/web_modules/angular.js";
-import _ from "/ui/web_modules/lodash.js";
-import mnPoolDefault from "/ui/app/components/mn_pool_default.js";
+import angular from "../../web_modules/angular.js";
+import _ from "../../web_modules/lodash.js";
+import mnPoolDefault from "../components/mn_pool_default.js";
 
-export default 'mnClientCertificateService';
+export default 'mnCertificatesService';
 
 angular
-  .module("mnClientCertificateService", [mnPoolDefault])
-  .factory("mnClientCertificateService", mnClientCertificateFactory);
+  .module("mnCertificatesService", [mnPoolDefault])
+  .factory("mnCertificatesService", mnCertificatesFactory);
 
-function mnClientCertificateFactory($http, mnPoolDefault) {
-  var mnClientCertificateService = {
+function mnCertificatesFactory($http, mnPoolDefault) {
+  var mnCertificatesService = {
     getClientCertificateSettings: getClientCertificateSettings,
-    postClientCertificateSettings: postClientCertificateSettings
+    postClientCertificateSettings: postClientCertificateSettings,
+    getDefaultCertificate: getDefaultCertificate
   };
 
-  return mnClientCertificateService;
+  return mnCertificatesService;
 
   function getClientCertificateSettings() {
     return $http({
@@ -57,6 +58,18 @@ function mnClientCertificateFactory($http, mnPoolDefault) {
         isNotForm: mnPoolDefault.export.compat.atLeast51
       },
       data: settings,
+    }).then(function (resp) {
+      return resp.data;
+    });
+  }
+
+  function getDefaultCertificate() {
+    return $http({
+      method: 'GET',
+      url: '/pools/default/certificate',
+      params: {
+        extended: true
+      }
     }).then(function (resp) {
       return resp.data;
     });

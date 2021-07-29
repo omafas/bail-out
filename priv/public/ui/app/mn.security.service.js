@@ -8,11 +8,14 @@ be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 */
 
-import {Injectable} from "/ui/web_modules/@angular/core.js";
-import {HttpClient, HttpParams, HttpHeaders} from '/ui/web_modules/@angular/common/http.js';
-import {BehaviorSubject} from '/ui/web_modules/rxjs.js';
-import {switchMap, shareReplay, map} from '/ui/web_modules/rxjs/operators.js';
+import {Injectable} from "../web_modules/@angular/core.js";
+import {HttpClient, HttpParams, HttpHeaders} from '../web_modules/@angular/common/http.js';
+import {BehaviorSubject, combineLatest, of} from '../web_modules/rxjs.js';
+import {switchMap, shareReplay, map, pluck} from '../web_modules/rxjs/operators.js';
 import {MnHttpRequest} from './mn.http.request.js';
+import {MnAdminService} from './mn.admin.service.js';
+import {MnPoolsService} from './mn.pools.service.js';
+import {MN_HTTP_REQUEST_RESTRICTED} from './constants/constants.js';
 
 export {MnSecurityService};
 
@@ -22,11 +25,16 @@ class MnSecurityService {
   ]}
 
   static get parameters() { return [
-    HttpClient
+    HttpClient,
+    MnAdminService,
+    MnPoolsService
   ]}
 
-  constructor(http) {
+  constructor(http, mnAdminService, mnPoolsService) {
     this.http = http;
+
+    let isEnterprise = mnPoolsService.stream.isEnterprise;
+    let compatVersion55 = mnAdminService.stream.compatVersion55;
 
     this.stream = {};
 
@@ -40,10 +48,13 @@ class MnSecurityService {
         switchMap(this.getCertificate.bind(this)),
         shareReplay({refCount: true, bufferSize: 1}));
 
-    this.stream.getLogRedaction =
+    let getLogRedaction =
       (new BehaviorSubject()).pipe(
-        switchMap(this.getLogRedaction.bind(this)),
-        shareReplay({refCount: true, bufferSize: 1}));
+        switchMap(this.getLogRedaction.bind(this)));
+    this.stream.shouldGetLogRedaction = combineLatest(isEnterprise, compatVersion55)
+      .pipe(switchMap(([isEnterprise, compatVersion55]) =>
+                        isEnterprise && compatVersion55 ? getLogRedaction : of(MN_HTTP_REQUEST_RESTRICTED)),
+                        shareReplay({refCount: true, bufferSize: 1}));
 
     this.stream.getClientCertAuth =
       (new BehaviorSubject()).pipe(
@@ -65,13 +76,23 @@ class MnSecurityService {
         switchMap(this.getAuditNonFilterableDescriptors.bind(this)),
         shareReplay({refCount: true, bufferSize: 1}));
 
+    this.stream.getSettingsSecurity = (new BehaviorSubject())
+      .pipe(switchMap(this.getSettingsSecurity.bind(this)),
+            shareReplay({refCount: true, bufferSize: 1}));
+
+    let getClusterEncryption = this.stream.getSettingsSecurity
+      .pipe(pluck('clusterEncryptionLevel'));
+    this.stream.shouldGetClusterEncryption = isEnterprise
+    .pipe(switchMap(isEnterprise => isEnterprise ? getClusterEncryption : of(MN_HTTP_REQUEST_RESTRICTED)),
+      shareReplay({refCount: true, bufferSize: 1}));
+
     this.stream.postLogRedaction =
       new MnHttpRequest(this.postLogRedaction.bind(this))
       .addSuccess()
       .addError();
 
-    this.stream.postSession =
-      new MnHttpRequest(this.postSession.bind(this))
+    this.stream.postSettingsSecurity =
+      new MnHttpRequest(this.postSettingsSecurity.bind(this))
       .addSuccess()
       .addError();
 
@@ -89,6 +110,12 @@ class MnSecurityService {
       new MnHttpRequest(this.postAudit(false).bind(this))
       .addSuccess()
       .addError();
+
+    this.stream.otherSettings = combineLatest(
+      mnAdminService.stream.uiSessionTimeout.pipe(map(this.unpackSession.bind(this))),
+      this.stream.shouldGetLogRedaction.pipe(map(this.unpackLogRedaction.bind(this))),
+      this.stream.shouldGetClusterEncryption.pipe(map(this.unpackClusterEncryption.bind(this)))
+    ).pipe(map(this.getOtherSettings.bind(this)));
   }
 
   postAudit(validate) {
@@ -99,8 +126,12 @@ class MnSecurityService {
     }
   }
 
-  postSession(data) {
+  postSettingsSecurity(data) {
     return this.http.post("/settings/security", data);
+  }
+
+  getSettingsSecurity() {
+    return this.http.get("/settings/security");
   }
 
   getAuditDescriptors() {
@@ -146,5 +177,30 @@ class MnSecurityService {
     return this.http.get("/pools/default/certificate", {
       params: new HttpParams().set("extended", true)
     });
+  }
+
+  unpackSession(session) {
+    return (session !== MN_HTTP_REQUEST_RESTRICTED) ? (Number(session) / 60) || 0 : null;
+  }
+
+  unpackLogRedaction(redaction) {
+    return (redaction !== MN_HTTP_REQUEST_RESTRICTED) ?
+      redaction['logRedactionLevel'] : null;
+  }
+
+  unpackClusterEncryption(encryption) {
+    return (encryption !== MN_HTTP_REQUEST_RESTRICTED) ? (encryption || null) : null;
+  }
+
+  getOtherSettings([session, logRedaction, clusterEncryption]) {
+    return {
+      logRedactionLevel: {
+        logRedactionLevel: logRedaction
+      },
+      settingsSecurity: {
+        uiSessionTimeout: session,
+        clusterEncryptionLevel: clusterEncryption
+      }
+    }
   }
 }

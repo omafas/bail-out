@@ -63,17 +63,10 @@ let XDCRState = {
   lazyLoad: mnLoadNgModule('./mn.xdcr.module.js', "MnXDCRModule")
 };
 
-let sessionState = {
-  name: 'app.admin.security.session.**',
-  url: '/session',
-  lazyLoad: mnLoadNgModule('./mn.session.module.js', 'MnSessionModule')
-};
-
-let logRedactionState = {
-  name: 'app.admin.security.redaction.**',
-  url: '/redaction',
-  lazyLoad: mnLoadNgModule('./mn.security.log.redaction.module.js',
-                           'MnSecurityLogRedactionModule')
+let otherSecuritySettingsState = {
+  name: 'app.admin.security.other.**',
+  url: '/other',
+  lazyLoad: mnLoadNgModule('./mn.security.other.module.js', 'MnSecurityOtherModule')
 };
 
 let auditState = {
@@ -205,7 +198,7 @@ let mnAppImports = [
   MnSharedModule,
   MnElementCraneModule.forRoot(),
   UIRouterUpgradeModule.forRoot({
-    states: [authState, wizardState, overviewState, serversState, bucketsState, logsState, groupsState, gsiState, viewsState, settingsState, securityState, collectionsState, XDCRState, sessionState, logRedactionState, auditState]
+    states: [authState, wizardState, overviewState, serversState, bucketsState, logsState, groupsState, gsiState, viewsState, settingsState, securityState, collectionsState, XDCRState, otherSecuritySettingsState, auditState]
   }),
 
   //downgradedModules

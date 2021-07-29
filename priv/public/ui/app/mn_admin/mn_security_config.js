@@ -10,9 +10,8 @@ licenses/APL2.txt.
 
 import angular from "/ui/web_modules/angular.js";
 import mnUserRoles from "./mn_user_roles_controller.js";
-import mnRootCertificate from "./mn_root_certificate_controller.js";
 import mnRedaction from "./mn_redaction_controller.js";
-import mnClientCertificate from "./mn_client_certificate_controller.js";
+import mnCertificates from "./mn_certificates_controller.js";
 import mnRolesGroups from "./mn_roles_groups_controller.js";
 import mnElementCrane from "/ui/app/components/directives/mn_element_crane/mn_element_crane.js";
 import mnPluggableUiRegistry from "/ui/app/components/mn_pluggable_ui_registry.js";
@@ -24,9 +23,8 @@ angular
   .module('mnSecurity', [
     mnSession,
     mnUserRoles,
-    mnRootCertificate,
     mnRedaction,
-    mnClientCertificate,
+    mnCertificates,
     mnRolesGroups,
     mnElementCrane,
     mnPluggableUiRegistry
@@ -124,18 +122,10 @@ function mnSecurityConfig($stateProvider) {
         enterprise: true
       }
     })
-    .state('app.admin.security.rootCertificate', {
-      url: '/rootCertificate',
-      controller: 'mnRootCertificateController as rootCertificateCtl',
-      templateUrl: 'app/mn_admin/mn_root_certificate.html',
-      data: {
-        enterprise: true
-      }
-    })
-    .state('app.admin.security.clientCert', {
-      url: '/clientCert',
-      controller: 'mnClientCertController as clientCertCtl',
-      templateUrl: 'app/mn_admin/mn_client_certificate.html',
+    .state('app.admin.security.certificate', {
+      url: '/certificate',
+      controller: 'mnCertController as certCtl',
+      templateUrl: 'app/mn_admin/mn_certificates.html',
       data: {
         enterprise: true
       }

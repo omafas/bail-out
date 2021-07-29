@@ -1,0 +1,142 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<mn-main-spinner
+   [mnSpinnerValue]="form.loadingPipe | async">
+</mn-main-spinner>
+
+<form
+   [formGroup]="form.group">
+  <div
+     class="error error-form"
+     [hidden]="!(postLogRedactionRequest.error | async)?.errors">
+    <div *ngFor="let error of (postLogRedactionRequest.error | async)?.errors | keyvalue">
+      {{error.key}} - {{error.value}}</div>
+  </div>
+  <div
+     class="error error-form"
+     [hidden]="!(postSettingsSecurity.error | async)?.errors">
+    <div *ngFor="let error of (postSettingsSecurity.error | async)?.errors">{{error}}</div>
+  </div>
+
+  <div
+     *ngIf="(isEnterpriseAnd55 | async)"
+     [formGroup]="form.group">
+    <div
+       formGroupName="logRedactionLevel"
+       class="formrow">
+      <label>Log Redaction</label>
+      <div class="desc">
+        Default setting for redacting logs during
+        <a uiSref="app.admin.logs.collectInfo.form">
+          collect info
+        </a>
+      </div>
+      <input
+         formControlName="logRedactionLevel"
+         type="radio"
+         value="none"
+         id="redaction_none">
+      <label for="redaction_none" class="checkbox">
+        None
+      </label>
+      <br>
+      <input
+         formControlName="logRedactionLevel"
+         type="radio"
+         value="partial"
+         id="redaction_partial">
+      <label for="redaction_partial" class="checkbox margin-right-quarter">
+        Partial Redaction
+      </label>
+      <span
+         class="fa-stack icon-info"
+         ngbTooltip="User data such as key/value pairs and usernames will be redacted. Metadata and system data will not be redacted.">
+      <span class="icon fa-circle-thin fa-stack-2x"></span>
+      <span class="icon fa-info fa-stack-1x"></span>
+    </span>
+    </div>
+  </div>
+
+  <div
+     [formGroup]="form.group"
+     class="formrow block margin-bottom-2">
+    <label>Session Timeout</label>
+    <div class="desc">
+      Minutes until an inactive browser session is closed. <br>Leave empty (or zero) for no timeout.
+    </div>
+    <div
+       class="form-inline"
+       formGroupName="settingsSecurity">
+      <input
+         id="session-field"
+         type="number"
+         class="input-short-1"
+         autocorrect="off"
+         spellcheck="false"
+         autocapitalize="off"
+         formControlName="uiSessionTimeout">
+      <small>
+        min
+      </small>
+    </div>
+  </div>
+
+  <div
+     *ngIf="(isEnterprise | async)"
+     [formGroup]="form.group"
+     class="block margin-bottom-4">
+    <ng-template #tooltipContent>
+      <p>Cluster encryption levels are:</p>
+      <p class="margin-bottom-half">
+        <strong>control</strong>:&nbsp; cluster management traffic is encrypted
+      </p>
+      <p class="margin-bottom-half">
+        <strong>all</strong>:&nbsp; all traffic between nodes is encrypted
+      </p>
+      <p class="margin-bottom-half">
+        <strong>strict</strong>:&nbsp; all traffic between nodes is encrypted and no ports accepting unencrypted traffic are open
+      </p>
+      <p>Warning: setting the encryption level to strict may cause clients with unencrypted connections to have their service interrupted.</p>
+    </ng-template>
+    <label>Cluster Encryption
+      <span
+         class="fa-stack icon-info"
+         [ngbTooltip]="tooltipContent"
+         placement="right"
+         container="body">
+      <span class="icon fa-circle-thin fa-stack-2x"></span>
+      <span class="icon fa-info fa-stack-1x"></span>
+    </span>
+    </label>
+    <mn-select
+       class="inline fix-width-2"
+       [group]="form.group"
+       formGroupName="settingsSecurity"
+       [values]="['control', 'all', 'strict']"
+       mnFormControlName="settingsSecurity.clusterEncryptionLevel"
+       mnPlaceholder="none">
+    </mn-select>
+  </div>
+
+  <footer class="footer-save">
+    <button
+       type="submit"
+       class="margin-right-2"
+       [disabled]="!(mnPermissions | async)?.cluster.admin.security.write"
+       (click)="form.submit.next()">
+      Save
+    </button>
+    <a
+       class="text-medium"
+       [hidden]="!(mnPermissions | async)?.cluster.admin.security.write"
+       (click)="form.reset.next()">Cancel/Reset</a>
+  </footer>
+</form>

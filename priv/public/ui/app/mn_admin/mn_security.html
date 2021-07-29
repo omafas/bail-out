@@ -14,7 +14,6 @@ licenses/APL2.txt.
      mn-pluggable-ui-tabs
      mn-tab-bar-name="securityTab">
     <a
-       ng-show="rbac.cluster.admin.security.read"
        ui-sref="app.admin.security.roles.user"
        ng-class="{selected: ('app.admin.security.roles.user' | includedByState) ||
                 ('app.admin.security.roles.groups' | includedByState)}">
@@ -22,27 +21,17 @@ licenses/APL2.txt.
     </a>
     <a
        ng-show="pools.isEnterprise"
-       ui-sref="app.admin.security.rootCertificate"
+       ui-sref="app.admin.security.certificate"
        ui-sref-active="selected"
-       class="resp-hide-sml">Root Certificate</a>
+       class="resp-hide-sml">Certificates</a>
     <a
-       ng-show="pools.isEnterprise && rbac.cluster.admin.security.read"
-       ui-sref="app.admin.security.clientCert"
-       ui-sref-active="selected"
-       class="resp-hide-sml">Client Certificate</a>
-    <a
-       ng-show="rbac.cluster.admin.security.read && pools.isEnterprise"
+       ng-show="pools.isEnterprise"
        ui-sref="app.admin.security.audit"
        ui-sref-active="selected">Audit</a>
     <a
-      ng-show="pools.isEnterprise && poolDefault.compat.atLeast55 && rbac.cluster.admin.security.read"
-      ui-sref="app.admin.security.redaction"
-      ui-sref-active="selected"
-      class="resp-hide-sml">Log Redaction</a>
-    <a
-       ui-sref="app.admin.security.session"
+       ui-sref="app.admin.security.other"
        ui-sref-active="selected"
-       class="resp-hide-sml">Session</a>
+       class="resp-hide-sml">Other Settings</a>
 
 <!-- for smaller screens, hide some subnav links and show them in this menu -->
     <span uib-dropdown class="mn-dropdown-menu hidden resp-show-sml">
@@ -52,20 +41,11 @@ licenses/APL2.txt.
       <div uib-dropdown-menu class="dropdown-menu-select-like">
         <a
            ng-show="pools.isEnterprise"
-           ui-sref="app.admin.security.rootCertificate"
-           ui-sref-active="selected">Root Certificate</a>
+           ui-sref="app.admin.security.certificate"
+           ui-sref-active="selected">Certificates</a>
         <a
-           ng-show="pools.isEnterprise && rbac.cluster.admin.security.read"
-           ui-sref="app.admin.security.clientCert"
-           ui-sref-active="selected">Client Certificate</a>
-        <a
-           ng-show="pools.isEnterprise && poolDefault.compat.atLeast55 && rbac.cluster.admin.security.read"
-           ui-sref="app.admin.security.redaction"
-           ui-sref-active="selected">Log Redaction</a>
-        <a
-           ui-sref="app.admin.security.session"
-           ui-sref-active="selected"
-           class="resp-hide-sml">Session</a>
+           ui-sref="app.admin.security.other"
+           ui-sref-active="selected">Other Settings</a>
       </div>
     </span>
   </nav>

@@ -24,7 +24,12 @@
         <span ng-if="node.addressFamily == 'inet6'">IPv6</span><span ng-if="node.addressFamily == 'inet'">IPv4</span><span ng-if="node.addressFamilyOnly">-only</span>
       </div>
       <div>
-        <strong>Node-to-Node Encryption:</strong> <span ng-if="node.nodeEncryption">enabled</span><span ng-if="!node.nodeEncryption">off</span>
+        <strong>Node-to-Node Encryption:</strong>
+        <span ng-if="node.nodeEncryption">
+          enabled
+          <span ng-if="rbac.cluster.admin.security.read">({{adminCtl.poolDefault.clusterEncryptionLevel}})</span>
+        </span>
+        <span ng-if="!node.nodeEncryption">off</span>
       </div>
       <div>
         <strong>OS:</strong> {{serversListItemDetailsCtl.server.details.os}}

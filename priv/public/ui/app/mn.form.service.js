@@ -13,7 +13,7 @@ import { Injectable } from '/ui/web_modules/@angular/core.js';
 import { FormBuilder, FormGroup } from '/ui/web_modules/@angular/forms.js';
 import { BehaviorSubject, Subject, NEVER, merge } from "/ui/web_modules/rxjs.js";
 import { map, tap, first, takeUntil, switchMap, mapTo,
-         shareReplay, filter, debounceTime} from "/ui/web_modules/rxjs/operators.js";
+         shareReplay, filter, debounceTime, startWith} from "/ui/web_modules/rxjs/operators.js";
 
 
 export { MnFormService };
@@ -65,6 +65,10 @@ class MnForm {
 
   setSource(source) {
     var sourcePipe = source.pipe(this.unpackPipe || tap(), first());
+
+    this.loadingPipe = sourcePipe
+      .pipe(mapTo(false),
+            startWith(true));
 
     sourcePipe.subscribe(v => this.group.patchValue(v));
 
@@ -175,6 +179,15 @@ class MnForm {
     this.submitPipe =
       this.submit.pipe(this.getPackPipe(),
                        takeUntil(this.component.mnOnDestroy))
+  }
+
+  setReset(reset) {
+    this.reset = new Subject();
+    this.reset
+      .pipe(takeUntil(this.component.mnOnDestroy))
+      .subscribe(reset);
+
+    return this;
   }
 
   hasNoHandler() {
