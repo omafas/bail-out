@@ -28,6 +28,8 @@
 
 -define(MERGING_EMERGENCY_THRESHOLD, 2000).
 -define(PULL_TIMEOUT, 30000).
+-define(PULL_RETRIES, 10).
+-define(PULL_RETRY_INTERVAL, 1000).
 
 start_link() ->
     gen_server:start_link({local, ns_config_rep}, ?MODULE, [], []).
@@ -54,6 +56,22 @@ schedule_config_pull() ->
 meld_config(KVList, FromNode) ->
     ok = gen_server:call(ns_config, {merge_ns_couchdb_config, KVList, FromNode}, infinity).
 
+do_pull(Tries) ->
+    case do_pull() of
+        ok ->
+            ok;
+        {error, E} ->
+            ?log_info("Attempt ~p to pull ns_config failed with ~p",
+                      [Tries, E]),
+            case Tries of
+                1 ->
+                    {error, no_more_retries};
+                _ ->
+                    timer:sleep(?PULL_RETRY_INTERVAL),
+                    do_pull(Tries - 1)
+            end
+    end.
+
 do_pull() ->
     Node = ns_node_disco:ns_server_node(),
     ?log_info("Pulling config from: ~p~n", [Node]),
@@ -71,7 +89,7 @@ handle_call(synchronize_everything, {Pid, _Tag} = _From, State) ->
     ?log_debug("Got full synchronization request from ~p", [RemoteNode]),
     {reply, ok, State};
 handle_call(pull, _From, State) ->
-    ok = do_pull(),
+    ok = do_pull(?PULL_RETRIES),
     {reply, ok, State};
 handle_call(Msg, _From, State) ->
     ?log_warning("Unhandled call: ~p", [Msg]),
@@ -97,7 +115,7 @@ handle_cast(Msg, State) ->
 
 handle_info(pull, State) ->
     schedule_config_pull(),
-    do_pull(),
+    do_pull(?PULL_RETRIES),
     {noreply, State};
 handle_info(Msg, State) ->
     ?log_debug("Unhandled msg: ~p", [Msg]),
