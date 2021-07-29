@@ -19,6 +19,7 @@
 -export([start_link/0,
          init/1,
          handle_call/3,
+         handle_info/2,
          prepare_join/1,
          join_cluster/1,
          leave_cluster/0,
@@ -107,6 +108,10 @@ handle_call(get_snapshot, _From, Pid) ->
     {reply, RV, Pid};
 handle_call(sync, _From, State) ->
     {reply, ok, State}.
+
+handle_info(Message, State) ->
+    ?log_debug("Ignoring unexpected message ~p", [Message]),
+    {noreply, State}.
 
 leave_cluster() ->
     gen_server2:call(?MODULE, leave_cluster, ?CALL_TIMEOUT).
