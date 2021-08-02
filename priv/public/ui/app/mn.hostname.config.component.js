@@ -49,15 +49,16 @@ class MnHostnameConfigComponent extends MnLifeCycleHooksToStream {
       return;
     }
     this.group.valueChanges
-      .pipe(pluck("hostConfig", "afamily"),
+      .pipe(pluck("hostConfig", "addressFamilyUI"),
             distinctUntilChanged(),
             takeUntil(this.mnOnDestroy))
-      .subscribe((afamily) => {
-        var hostname = this.group.get("hostname").value;
-        if (afamily && hostname == "127.0.0.1") {
+      .subscribe(option => {
+        let hostname = this.group.get("hostname").value;
+
+        if ((option == "inet6" || option == "inet6Only") && hostname == "127.0.0.1") {
           this.group.get("hostname").setValue("::1");
         }
-        if (!afamily && hostname == "::1") {
+        if ((option == "inet" || option == "inetOnly") && hostname == "::1") {
           this.group.get("hostname").setValue("127.0.0.1");
         }
       });

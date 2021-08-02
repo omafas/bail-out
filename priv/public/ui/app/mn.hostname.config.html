@@ -1,11 +1,11 @@
 <!--
-Copyright 2020-Present Couchbase, Inc.
+     Copyright 2020-Present Couchbase, Inc.
 
-Use of this software is governed by the Business Source License included in
-the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
-file, in accordance with the Business Source License, use of this software will
-be governed by the Apache License, Version 2.0, included in the file
-licenses/APL2.txt.
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
 -->
 
 <div [formGroup]="group">
@@ -31,46 +31,92 @@ licenses/APL2.txt.
     </div>
   </div>
 
-  <div class="formrow form-inline"
+  <div
      formGroupName="hostConfig"
      *ngIf="isHostCfgEnabled && (isEnterprise | async)">
-    <input
-       type="checkbox"
-       formControlName="afamily"
-       id="for-use-ipv6-addresses">
-    <label for="for-use-ipv6-addresses">
-      use IPv6 addresses
-    </label>
-    <input
-       type="checkbox"
-       id="for-node-encryption"
-       formControlName="nodeEncryption">
-    <label for="for-node-encryption">
-      enable node-to-node encryption
-    </label>
-    <div
-       class="error error-form"
-       [hidden]="!(enableExternalListenerHttp.error | async)?.errors.afamily">
-      {{(enableExternalListenerHttp.error | async)?.errors.afamily}}
+    <div class="formrow">
+      <input
+         type="checkbox"
+         id="for-node-encryption"
+         formControlName="nodeEncryption">
+      <label for="for-node-encryption">
+        enable node-to-node encryption
+      </label>
+      <div
+         class="error error-form"
+         [hidden]="!(setupNetConfigHttp.error | async)?.errors.nodeEncryption">
+        {{(setupNetConfigHttp.error | async)?.errors.nodeEncryption}}
+      </div>
+      <div
+         class="error error-form"
+         [hidden]="!(enableExternalListenerHttp.error | async)?.errors._">
+        {{(enableExternalListenerHttp.error | async)?.errors._}}
+      </div>
+      <div
+         class="error error-form"
+         [hidden]="!(setupNetConfigHttp.error | async)?.errors._">
+        {{(setupNetConfigHttp.error | async)?.errors._}}
+      </div>
     </div>
-    <div
-       class="error error-form"
-       [hidden]="!(enableExternalListenerHttp.error | async)?.errors._">
-      {{(enableExternalListenerHttp.error | async)?.errors._}}
+    <div class="form-inline">
+      <label>IP Family Preference</label>
+      <span
+         class="fa-stack icon-info"
+         ngbTooltip="Selecting IPv4 will instruct services in the cluster to listen on IPv4
+                     addresses, though as a convenience some services will also listen on IPv6.
+                     If IPv6 is selected, it's vice-versa. Selecting &quot;IPv4-only&quot; will
+                     instruct services to only listen on IPv4 addresses and again, it's vice-versa
+                     if you select &quot;IPv6-only&quot;."
+         placement="right">
+        <span class="icon fa-circle-thin fa-stack-2x"></span>
+        <span class="icon fa-info fa-stack-1x"></span>
+      </span>
     </div>
-    <div
-       class="error error-form"
-       [hidden]="!(setupNetConfigHttp.error | async)?.errors.afamily">
-      {{(setupNetConfigHttp.error | async)?.errors.afamily}}
+    <div class="formrow">
+      <div class="form-inline">
+        <input
+           type="radio"
+           formControlName="addressFamilyUI"
+           value="inet"
+           id="for-use-ipv4">
+        <label for="for-use-ipv4">
+          IPv4
+        </label>
+        <input
+           type="radio"
+           formControlName="addressFamilyUI"
+           value="inet6"
+           id="for-use-ipv6">
+        <label for="for-use-ipv6">
+          IPv6
+        </label>
+        <input
+           type="radio"
+           formControlName="addressFamilyUI"
+           value="inetOnly"
+           id="for-use-ipv4-only">
+        <label for="for-use-ipv4-only">
+          IPv4-only
+        </label>
+        <input
+           type="radio"
+           formControlName="addressFamilyUI"
+           value="inet6Only"
+           id="for-use-ipv6-only">
+        <label for="for-use-ipv6-only">
+          IPv6-only
+        </label>
+      </div>
+      <div
+         class="error error-form"
+         [hidden]="!(enableExternalListenerHttp.error | async)?.errors.afamily">
+        {{(enableExternalListenerHttp.error | async)?.errors.afamily}}
+      </div>
+      <div
+         class="error error-form"
+         [hidden]="!(setupNetConfigHttp.error | async)?.errors.afamily">
+        {{(setupNetConfigHttp.error | async)?.errors.afamily}}
+      </div>
     </div>
-    <div
-       class="error error-form"
-       [hidden]="!(setupNetConfigHttp.error | async)?.errors.nodeEncryption">
-      {{(setupNetConfigHttp.error | async)?.errors.nodeEncryption}}
-    </div>
-    <div
-       class="error error-form"
-       [hidden]="!(setupNetConfigHttp.error | async)?.errors._">
-      {{(setupNetConfigHttp.error | async)?.errors._}}
   </div>
 </div>

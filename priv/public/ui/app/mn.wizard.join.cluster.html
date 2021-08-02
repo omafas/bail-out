@@ -96,12 +96,12 @@ licenses/APL2.txt.
         class="formrow disclosure"
         (click)="toggleConfigurationSection = !toggleConfigurationSection"
         [ngClass]="{'disclosed': toggleConfigurationSection}">
-        Configure Services & Settings For This Node
+        Configure Services &amp; Settings For This Node
       </div>
 
       <div *ngIf="toggleConfigurationSection">
         <mn-hostname-config
-           [group]="joinClusterForm.get('clusterStorage')">
+          [group]="joinClusterForm.get('clusterStorage')">
         </mn-hostname-config>
         <mn-services-config
           [group]="joinClusterForm.get('services')">

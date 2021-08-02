@@ -11,9 +11,8 @@ licenses/APL2.txt.
 import {UIRouter} from '/ui/web_modules/@uirouter/angular.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {Component, ChangeDetectionStrategy} from '/ui/web_modules/@angular/core.js';
-import {takeUntil, filter, map,
-        tap, withLatestFrom, first} from '/ui/web_modules/rxjs/operators.js';
-import {BehaviorSubject, pipe} from '/ui/web_modules/rxjs.js';
+import {map, withLatestFrom, first} from '/ui/web_modules/rxjs/operators.js';
+import {pipe} from '/ui/web_modules/rxjs.js';
 import {MnWizardService} from './mn.wizard.service.js';
 import {MnPoolsService} from './mn.pools.service.js';
 import {MnFormService} from "./mn.form.service.js";
@@ -117,15 +116,37 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
       });
   }
 
+  getAddressFamily(addressFamilyUI) {
+    switch(addressFamilyUI) {
+      case "inet":
+      case "inetOnly": return "ipv4";
+      case "inet6":
+      case "inet6Only": return "ipv6";
+      default: return "ipv4";
+    }
+  }
+
+  getAddressFamilyOnly(addressFamilyUI) {
+    switch(addressFamilyUI) {
+      case "inet":
+      case "inet6": return false;
+      case "inetOnly":
+      case "inet6Only": return true;
+      default: return false;
+    }
+  }
+
   getHostConfig() {
-    var clusterStor = this.wizardForm.newClusterConfig.get("clusterStorage");
+    let clusterStore = this.wizardForm.newClusterConfig.get("clusterStorage");
+
     return {
-      afamily: clusterStor.get("hostConfig.afamily").value ? "ipv6" : "ipv4",
-      nodeEncryption: clusterStor.get("hostConfig.nodeEncryption").value ? 'on' : 'off'
+      afamily: this.getAddressFamily(clusterStore.get("hostConfig.addressFamilyUI").value),
+      afamilyOnly: this.getAddressFamilyOnly(clusterStore.get("hostConfig.addressFamilyUI").value),
+      nodeEncryption: clusterStore.get("hostConfig.nodeEncryption").value ? 'on' : 'off'
     };
   }
 
-  getFinalConfig(isEnterprise) {
+  getFinalConfig() {
     var rv = new Map();
     rv.set("authHttp", [this.wizardForm.newCluster.value.user, false]);
 
@@ -139,7 +160,8 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
 
   getNodeInitConfig([_, isEnterprise]) {
     let rv = {};
-    var nodeStorage = this.wizardForm.newClusterConfig.get("clusterStorage");
+    let nodeStorage = this.wizardForm.newClusterConfig.get("clusterStorage");
+    let addressFamilyUI = nodeStorage.get("hostConfig.addressFamilyUI").value;
     rv.hostname = nodeStorage.get("hostname").value;
     rv.dataPath = nodeStorage.get("storage.path").value;
     rv.indexPath = nodeStorage.get("storage.index_path").value;
@@ -147,7 +169,7 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
     rv.javaHome = nodeStorage.get("storage.java_home").value;
 
     if (isEnterprise) {
-      rv.afamily = nodeStorage.get("hostConfig.afamily").value ? "ipv6" : "ipv4";
+      rv.afamily = this.getAddressFamily(addressFamilyUI);
       rv.analyticsPath = nodeStorage.get("storage.cbas_path").value;
     }
     return rv;

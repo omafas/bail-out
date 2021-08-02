@@ -12,8 +12,8 @@ import {FormGroup, FormControl, Validators, FormArray} from "/ui/web_modules/@an
 import {Injectable} from "/ui/web_modules/@angular/core.js";
 import {HttpClient, HttpParams} from '/ui/web_modules/@angular/common/http.js';
 import _ from '/ui/web_modules/lodash.js';
-import {BehaviorSubject, Subject, combineLatest} from '/ui/web_modules/rxjs.js';
-import {switchMap, shareReplay, withLatestFrom, first, map, pluck} from '/ui/web_modules/rxjs/operators.js';
+import {BehaviorSubject, combineLatest} from '/ui/web_modules/rxjs.js';
+import {switchMap, shareReplay, map, pluck} from '/ui/web_modules/rxjs/operators.js';
 import {MnHelperService} from './mn.helper.service.js';
 import {MnAdminService} from './mn.admin.service.js';
 import {MnPoolsService} from './mn.pools.service.js';
@@ -24,7 +24,7 @@ export {MnWizardService};
 var clusterStorage = new FormGroup({
   hostname: new FormControl(null, [Validators.required]),
   hostConfig: new FormGroup({
-    afamily: new FormControl(),
+    addressFamilyUI: new FormControl(),
     nodeEncryption: new FormControl()
   }),
   storage: new FormGroup({
@@ -212,6 +212,10 @@ class MnWizardService {
     // }, []);
   }
 
+  getAddressFamilyUI(config) {
+    return config.addressFamily + (config.addressFamilyOnly ? "Only" : "");
+  }
+
   setSelfConfig(selfConfig) {
     var hostname = selfConfig.configuredHostname;
 
@@ -232,7 +236,7 @@ class MnWizardService {
     wizardForm.newClusterConfig.get("clusterStorage.hostname").setValue(hostname);
     wizardForm.joinCluster.get("clusterStorage.hostname").setValue(hostname);
     wizardForm.newClusterConfig.get("clusterStorage.hostConfig").patchValue({
-      afamily: selfConfig.addressFamily == "inet6",
+      addressFamilyUI: this.getAddressFamilyUI(selfConfig),
       nodeEncryption: selfConfig.nodeEncryption
     });
     this.initialValues.hostname = hostname;
