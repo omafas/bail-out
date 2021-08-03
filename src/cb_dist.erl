@@ -606,10 +606,8 @@ listen_proto({AddrType, Module}, NodeName) ->
         fun () ->
                 case Module:listen(NodeName) of
                     {ok, _} = Res ->
-                        case maybe_register_on_epmd(Module, NodeName, Port) of
-                            ok -> Res;
-                            {error, _} = Error -> Error
-                        end;
+                        maybe_register_on_epmd(Module, NodeName, Port),
+                        Res;
                     Error -> Error
                 end
         end,
@@ -646,7 +644,10 @@ maybe_register_on_epmd(Module, NodeName, PortNo)
             case erl_epmd:register_node(NodeName, PortNo, Family) of
                 {ok, _} -> ok;
                 {error, already_registered} -> ok;
-                Error -> Error
+                Error ->
+                    info_msg("Failed to register ~p with epmd. Reason ~p",
+                             [{NodeName, PortNo, Family}, Error]),
+                    Error
             end;
         _ ->
             ok
