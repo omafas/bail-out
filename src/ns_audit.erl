@@ -88,7 +88,8 @@
          disable_auto_reprovision/1,
          failover_settings/2,
          auth_failure/1,
-         rbac_info_retrieved/2
+         rbac_info_retrieved/2,
+         admin_password_reset/1
         ]).
 
 -export([start_link/0, stats/0]).
@@ -385,7 +386,9 @@ code(set_manifest) ->
 code(auth_failure) ->
     8264;
 code(rbac_info_retrieved) ->
-    8265.
+    8265;
+code(admin_password_reset) ->
+    8266.
 
 to_binary({list, List}) ->
     [to_binary(A) || A <- List];
@@ -973,3 +976,6 @@ auth_failure(Req) ->
 rbac_info_retrieved(Req, Type) ->
     RawPath = mochiweb_request:get(raw_path, Req),
     put(rbac_info_retrieved, Req, [{raw_url, RawPath}, {type, Type}]).
+
+admin_password_reset(Req) ->
+    put(admin_password_reset, Req, []).

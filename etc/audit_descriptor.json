@@ -1446,6 +1446,23 @@
         },
         "optional_fields" : {
         }
+      },
+      {
+          "id" : 8266,
+          "name" : "Admin password reset",
+          "description" : "Admin password was reset",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : "",
+              "remote" : {"ip" : "", "port" : 1},
+              "local" : {"ip" : "", "port" : 1}
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
       }
     ]
 }
