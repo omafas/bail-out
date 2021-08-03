@@ -203,6 +203,7 @@ maybe_restart(#state{webconfig = WebConfigOld,
          AFROld =:= AFRNew of
         true -> State;
         false -> {ok, _} = menelaus_web_sup:restart_web_servers(),
+                 netconfig_updater:maybe_kill_epmd(),
                  State#state{webconfig = WebConfigNew,
                              disable_non_ssl_ports = DisableNew,
                              afamily_requirement = AFRNew}

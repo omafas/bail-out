@@ -263,6 +263,7 @@ def erlang_args_for_node(i, ebin_path, extra_args, args_prefix, root_dir):
         "-proto_dist", "cb",
         "-ssl_dist_optfile", ssloptfile,
         "-epmd_module", "cb_epmd",
+        "-start_epmd", "false",
         "-hidden",
         "-kernel", "dist_config_file", quote_string_for_erl(cb_dist_config),
         "-kernel", "inetrc", f"\"{hosts_file}\"",
@@ -454,6 +455,7 @@ def start_cluster(num_nodes=1,
         params['env']['ERL_CRASH_DUMP'] = crash_dump_base + '.babysitter'
 
         params['env']['COUCHBASE_SMALLER_PKEYS'] = '1'
+        params['env']['ERL_EPMD_RELAXED_COMMAND_CHECK'] = '1'
 
         params['close_fds'] = True
         if platform.system() == "Windows":
@@ -477,6 +479,11 @@ def start_cluster(num_nodes=1,
             params['stdout'] = subprocess.DEVNULL
             params['stderr'] = subprocess.DEVNULL
 
+        if not os.path.isfile(abs_path_join(root_dir, 'data', f'n_{node_num}',
+                                            'no_epmd')):
+            subprocess.run(["erl", "-noshell", "-setcookie", "nocookie",
+                            "-sname", "init", "-run", "init", "stop"],
+                           env=params['env'])
         pr = subprocess.Popen(args, **params)
         if w is not None:
             os.close(r)

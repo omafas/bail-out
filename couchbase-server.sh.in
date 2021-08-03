@@ -79,6 +79,9 @@ export ERL_CRASH_DUMP
 ERL_FULLSWEEP_AFTER=512
 export ERL_FULLSWEEP_AFTER
 
+ERL_EPMD_RELAXED_COMMAND_CHECK=1
+export ERL_EPMD_RELAXED_COMMAND_CHECK
+
 # For some obscure reason erl requires HOME environment variable to be set.
 if [ -z "$HOME" ]
 then
@@ -143,11 +146,14 @@ _prepare_datadir () {
 }
 
 _maybe_start_epmd () {
-    # Initialize distributed erlang on the system (i.e. epmd)
-    erl -noshell -setcookie nocookie -sname init -run init stop 2>&1 > /dev/null
-    if [ $? -ne 0 ]
+    if [ ! -f $CB_DATA_DIR/no_epmd ]
     then
-        exit 1
+        # Initialize distributed erlang on the system (i.e. epmd)
+        erl -noshell -setcookie nocookie -sname init -run init stop 2>&1 > /dev/null
+        if [ $? -ne 0 ]
+        then
+            exit 1
+        fi
     fi
 }
 
@@ -211,6 +217,7 @@ _start() {
         -name 'babysitter_of_ns_1@cb.local' \
         -proto_dist cb \
         -epmd_module cb_epmd \
+        -start_epmd false \
         -ssl_dist_optfile $SSL_DIST_OPTFILE \
         -setcookie nocookie \
         $* \
@@ -236,6 +243,7 @@ _stop() {
                 inetrc "\"$HOSTS_CFG_FILE\"" \
         -proto_dist cb \
         -epmd_module cb_epmd \
+        -start_epmd false \
         -ssl_dist_optfile $SSL_DIST_OPTFILE \
         -noshell \
         -hidden \
