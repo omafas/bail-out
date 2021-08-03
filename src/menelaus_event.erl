@@ -211,6 +211,7 @@ maybe_restart(#state{webconfig = WebConfigOld,
     case WebConfigNew =:= WebConfigOld andalso DisableOld =:= DisableNew of
         true -> State;
         false -> {ok, _} = menelaus_web_sup:restart_web_servers(),
+                 netconfig_updater:maybe_kill_epmd(),
                  State#state{webconfig = WebConfigNew,
                              disable_non_ssl_ports = DisableNew}
     end.

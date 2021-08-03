@@ -252,6 +252,7 @@ def erlang_args_for_node(i, ebin_path, extra_args, args_prefix):
         "-proto_dist", "cb",
         "-ssl_dist_optfile", ssloptfile,
         "-epmd_module", "cb_epmd",
+        "-start_epmd", "false",
         "-hidden",
         "-kernel", "dist_config_file", quote_string_for_erl(cb_dist_config),
         "-kernel", "inetrc", "\"etc/hosts.cfg\"",
@@ -318,6 +319,8 @@ def erlang_args_for_node(i, ebin_path, extra_args, args_prefix):
 
     return args
 
+def abs_path_join(*args):
+    return os.path.abspath(os.path.join(*args))
 
 def start_cluster(num_nodes, start_index, extra_args, args_prefix,
                   force_community):
@@ -352,6 +355,7 @@ def start_cluster(num_nodes, start_index, extra_args, args_prefix,
         params['env']['ERL_CRASH_DUMP'] = crash_dump_base + '.babysitter'
 
         params['env']['COUCHBASE_SMALLER_PKEYS'] = '1'
+        params['env']['ERL_EPMD_RELAXED_COMMAND_CHECK'] = '1'
 
         params['close_fds'] = True
         if platform.system() == "Windows":
@@ -370,6 +374,16 @@ def start_cluster(num_nodes, start_index, extra_args, args_prefix,
                 # Ctrl-C doesn't deliver SIGINT to it, leaving us
                 # ability to it shutdown carefully or otherwise
                 params['preexec_fn'] = os.setpgrp
+
+        node_name = 'n_%d' % node_num
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+        if not os.path.isfile(abs_path_join(script_dir, 'data', node_name,
+                                            'no_epmd')):
+            pr_epmd = subprocess.Popen(["erl", "-noshell", "-setcookie",
+                                        "nocookie", "-sname", "init", "-run",
+                                        "init", "stop"],
+                                        env=params['env'])
+            pr_epmd.wait()
 
         pr = subprocess.Popen(args, **params)
         if w is not None:
