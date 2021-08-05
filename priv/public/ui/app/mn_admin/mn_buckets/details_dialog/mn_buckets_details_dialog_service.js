@@ -40,14 +40,14 @@
         copyProperties(["name", "bucketType"]);
       }
       if (bucketConf.bucketType === "membase") {
-        copyProperties(["autoCompactionDefined", "evictionPolicy", "durabilityMinLevel"]);
+        copyProperties(["autoCompactionDefined", "evictionPolicy"]);
       }
       if (bucketConf.bucketType === "ephemeral") {
         copyProperty("purgeInterval");
         conf["evictionPolicy"] = bucketConf["evictionPolicyEphemeral"];
       }
       if (bucketConf.bucketType === "membase" || bucketConf.bucketType === "ephemeral") {
-        copyProperties(["threadsNumber", "replicaNumber"]);
+        copyProperties(["threadsNumber", "replicaNumber", "durabilityMinLevel"]);
         if (pools.isEnterprise && poolDefault.compat.atLeast55) {
           copyProperty("compressionMode");
           if (!bucketConf.enableMaxTTL) {
