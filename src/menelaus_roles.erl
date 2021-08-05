@@ -624,7 +624,7 @@ sync_gateway_roles(true) ->
        {desc, <<"Can manage Sync Gateway node-level configuration, "
                 "and access Sync Gateway's /metrics endpoint "
                 "for Prometheus integration.">>}],
-      [{[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, dev_ops], all},
+      [{[{collection, [any, any, any]}, sgw, dev_ops], all},
        {[admin, stats_export], [read]}]}];
 sync_gateway_roles(false) ->
     [].
