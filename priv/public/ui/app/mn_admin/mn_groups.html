@@ -82,7 +82,11 @@ licenses/APL2.txt.
         </span>
         <span class="cbui-table-cell wrap text-right">
           <div uib-dropdown ng-show="!server.toGroupPending && groupsCtl.state.groups.length > 1" class="mn-dropdown-menu">
-            <div uib-dropdown-toggle class="menu-toggle">move to <span class="icon fa-caret-down"></span></div>
+            <div
+               ng-show="rbac.cluster.server_groups.write"
+               uib-dropdown-toggle class="menu-toggle">move to
+              <span class="icon fa-caret-down"></span>
+            </div>
             <div uib-dropdown-menu class="dropdown-menu-select-like">
               <a
                  ng-show="groupNew.name !== group.name"
