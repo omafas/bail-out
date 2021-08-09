@@ -28,6 +28,7 @@ function mnSettingsNotificationsController(mnPromiseHelper, mnSettingsNotificati
   var vm = this;
 
   mnSettingsClusterService.registerSubmitCallback(submit);
+  mnSettingsClusterService.registerInitChecker(() => (vm.updates != void 0));
   vm.implementationVersion = pools.implementationVersion;
 
   activate();

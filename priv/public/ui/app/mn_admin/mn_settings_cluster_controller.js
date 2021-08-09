@@ -43,7 +43,7 @@ angular.module('mnSettingsCluster', [
   mnClusterConfigurationService,
 ]).controller('mnSettingsClusterController', mnSettingsClusterController);
 
-function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMemoryQuotaService, mnSettingsClusterService, mnHelper, mnPromiseHelper, mnClusterConfigurationService, mnXDCRService) {
+function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMemoryQuotaService, mnSettingsClusterService, mnHelper, mnPromiseHelper, mnClusterConfigurationService, mnXDCRService, $rootScope) {
   var vm = this;
   vm.saveVisualInternalSettings = saveVisualInternalSettings;
   vm.reloadState = mnHelper.reloadState;
@@ -69,7 +69,13 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
       .catchErrorsFromSuccess("indexSettingsErrors");
   }, 500), true);
 
+  let submitted;
+
   function saveSettings() {
+    if (!isFormInitialized() || submitted) {
+      return;
+    }
+    submitted = true;
     var queries = [];
     var promise1 = mnPromiseHelper(vm, mnSettingsClusterService.postPoolsDefault(vm.memoryQuotaConfig, false, vm.clusterName))
         .catchErrors("memoryQuotaErrors")
@@ -170,7 +176,8 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
       return cb();
     }));
 
-    var promiseAll = $q.all(queries);
+    var promiseAll = $q.all(queries)
+        .finally(() => (submitted = false));
     mnPromiseHelper(vm, promiseAll)
       .showGlobalSpinner()
       .reloadState()
@@ -221,8 +228,23 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
     vm.initialCurlWhitelist = _.cloneDeep(queryCurl);
     vm.querySettings = querySettings;
   }
+  function isFormInitialized() {
+    let compat = mnPoolDefault.export.compat;
+    let cluster = $scope.rbac.cluster;
+    return (vm.clusterName != void 0) && (vm.initialMemoryQuota != void 0) &&
+      ((compat.atLeast55 && cluster.settings.read) ? (vm.querySettings != void 0) : true) &&
+      (cluster.xdcr.settings.read ? (vm.replicationSettings != void 0) : true) &&
+      (cluster.admin.memcached.read ? (vm.readerThreads != void 0) : true) &&
+      ((compat.atLeast66 && cluster.settings.read) ? (vm.settingsRebalance != void 0) : true) &&
+      ((compat.atLeast65 && mnPoolDefault.export.isEnterprise && cluster.settings.read) ?
+       (vm.retryRebalanceCfg != void 0) : true) &&
+      (cluster.settings.indexes.read ? (vm.indexSettings != void 0) : true) &&
+      mnSettingsClusterService.getInitChecker().every(v => v());
+
+  }
   function activate() {
     mnSettingsClusterService.clearSubmitCallbacks();
+    mnSettingsClusterService.clearInitChecker();
 
     mnPromiseHelper(vm, mnPoolDefault.get())
       .applyToScope(function (resp) {

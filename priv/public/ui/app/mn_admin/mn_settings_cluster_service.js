@@ -23,9 +23,15 @@ function mnSettingsClusterServiceFactory($http, $q, IEC, mnPools, mnPoolDefault)
     postPoolsDefault: postPoolsDefault,
     getIndexSettings: getIndexSettings,
     postIndexSettings: postIndexSettings,
+
+    registerInitChecker: registerInitChecker,
+    clearInitChecker: clearInitChecker,
+    getInitChecker: getInitChecker,
+
     registerSubmitCallback: registerSubmitCallback,
     clearSubmitCallbacks: clearSubmitCallbacks,
     getSubmitCallbacks: getSubmitCallbacks,
+
     getSettingsRetryRebalance: getSettingsRetryRebalance,
     postSettingsRetryRebalance: postSettingsRetryRebalance,
     getSettingsRebalance: getSettingsRebalance,
@@ -37,6 +43,7 @@ function mnSettingsClusterServiceFactory($http, $q, IEC, mnPools, mnPoolDefault)
   };
 
   var childSubmitCallbacks = [];
+  var childInitChecker = [];
 
   return mnSettingsClusterService;
 
@@ -83,11 +90,23 @@ function mnSettingsClusterServiceFactory($http, $q, IEC, mnPools, mnPoolDefault)
     });
   }
 
+  function getInitChecker() {
+    return childInitChecker;
+  }
+
+  function clearInitChecker(cb) {
+    childInitChecker = [];
+  }
+
+  function registerInitChecker(cb) {
+    childInitChecker.push(cb);
+  }
+
   function getSubmitCallbacks() {
     return childSubmitCallbacks;
   }
 
-  function clearSubmitCallbacks (cb) {
+  function clearSubmitCallbacks(cb) {
     childSubmitCallbacks = [];
   }
 

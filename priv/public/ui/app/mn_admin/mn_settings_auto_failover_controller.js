@@ -32,10 +32,15 @@ function mnSettingsAutoFailoverController($scope, $q, mnPromiseHelper, mnSetting
   var vm = this;
 
   mnSettingsClusterService.registerSubmitCallback(submit);
+  mnSettingsClusterService.registerInitChecker(() => (!!vm.autoFailoverSettings &&
+                                                      !!vm.reprovisionSettings));
 
   activate();
 
   function getAutoFailoverSettings() {
+    if (!vm.autoFailoverSettings) {
+      return;
+    }
     var settings = {
       enabled: vm.autoFailoverSettings.enabled,
       timeout: vm.autoFailoverSettings.timeout
