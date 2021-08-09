@@ -148,8 +148,8 @@ default_settings() ->
      {scrape_interval, 10}, %% in seconds
      {scrape_timeout, 10}, %% in seconds
      {snapshot_timeout_msecs, 30000}, %% in milliseconds
-     {decimation_enabled, true},
-     {truncation_enabled, true},
+     {decimation_enabled, false},
+     {truncation_enabled, false},
      {decimation_defs, decimation_definitions_default()},
      {pruning_interval, 60000}, %% frequency to try to prune stats (msecs)
      {truncate_max_age, 3*?SECS_IN_DAY}, %% age (secs) to truncate stats
