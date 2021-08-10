@@ -67,7 +67,7 @@ function mnBucketsDetailsDialogServiceFactory($http, $q, mnBytesToMBFilter, mnCo
       }
     }
     if (isMembase) {
-      copyProperties(["autoCompactionDefined", "evictionPolicy", "durabilityMinLevel"]);
+      copyProperties(["autoCompactionDefined", "evictionPolicy"]);
     }
     if (bucketConf.bucketType === "ephemeral") {
       copyProperties(["purgeInterval", "durabilityMinLevel"]);
@@ -75,7 +75,7 @@ function mnBucketsDetailsDialogServiceFactory($http, $q, mnBytesToMBFilter, mnCo
     }
 
     if (isMembase || bucketConf.bucketType === "ephemeral") {
-      copyProperties(["threadsNumber", "replicaNumber"]);
+      copyProperties(["threadsNumber", "replicaNumber", "durabilityMinLevel"]);
       if (pools.isEnterprise && poolDefault.compat.atLeast55) {
         copyProperty("compressionMode");
         if (!bucketConf.enableMaxTTL) {
