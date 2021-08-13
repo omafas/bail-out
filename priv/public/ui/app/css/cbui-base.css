@@ -311,10 +311,11 @@ small {
   font-weight: 400 !important;
   color: #333;
 }
-.text {
+.text, text {
   font-family: 'OpenSans' !important;
   font-weight: 400 !important;
-  color: #333;
+  font-size: .875rem;
+  color: #000;
 }
 strong,
 b {
