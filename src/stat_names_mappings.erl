@@ -9,7 +9,7 @@
 -module(stat_names_mappings).
 
 -export([pre_70_stats_to_prom_query/3, prom_name_to_pre_70_name/2,
-         handle_stats_mapping_get/3]).
+         handle_stats_mapping_get/3, default_stat_list/1]).
 
 -include("ns_test.hrl").
 -include("ns_stats.hrl").

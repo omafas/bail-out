@@ -54,6 +54,18 @@ start_link(Bucket) ->
         false -> ok;
         _ -> ?log_error("Will never happen")
     end,
+    %% Very similar to the above. We need to create atoms for stats  in order
+    %% to make old logic in menelaus_stats:build_stat_list_and_extractor_inner/2
+    %% work. This is needed for backward compat for old stats API only.
+    %% Involving dynamic data (Bucket) in order to make sure compiler is not
+    %% removing this code as "not used".
+    ListOfStats = stat_names_mappings:default_stat_list("@system") ++
+                  stat_names_mappings:default_stat_list("@query") ++
+                  stat_names_mappings:default_stat_list("unknwown"),
+    case lists:member(Bucket, ListOfStats) of
+        false -> ok;
+        true -> ?log_error("Will never happen")
+    end,
     gen_server:start_link({local, server(Bucket)}, ?MODULE, Bucket,
                           [{hibernate_after,
                             ?get_param(hibernate_after, 10000)}]).
