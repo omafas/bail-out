@@ -52,6 +52,8 @@
 -define(MAX_SCOPES_SUPPORTED, 1200).
 -define(MAX_COLLECTIONS_SUPPORTED, 1200).
 
+-define(MAX_DCP_CONNECTION_NAME, 200).
+
 -define(DEFAULT_LOG_FILENAME, "info.log").
 -define(ERRORS_LOG_FILENAME, "error.log").
 -define(VIEWS_LOG_FILENAME, "views.log").

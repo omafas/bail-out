@@ -419,8 +419,7 @@ start_takeover_replicator(NewMaster, OldMaster, Bucket, VBucket) ->
 
     RepFeatures = dcp_sup:get_replication_features(),
     {ok, Pid} = dcp_replicator:start_link(undefined, NewMaster, OldMaster,
-                                          Bucket, ConnName, ConnName,
-                                          RepFeatures),
+                                          Bucket, ConnName, RepFeatures),
     Pid.
 
 do_takeover(false, Pid, _Bucket, VBucket) ->
