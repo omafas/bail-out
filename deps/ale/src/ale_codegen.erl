@@ -126,12 +126,21 @@ generic_loglevel(LoggerName, LogLevel, Formatter, Preformatted, Raw) ->
          true ->
              io_lib:format(
                "Info = ale_utils:assemble_info(~s, ~p, M, F, L, Data),"
-               "UserMsg = case Args =/= [] of"
-               "              true ->"
-               "                  CharsLimit = proplists:get_value(chars_limit, Opts, ~B),"
-               "                  io_lib:format(Fmt, Args, [{chars_limit, CharsLimit}]);"
-               "              false -> Fmt"
-               "          end,",
+               "UserMsg = case Args =/= [] of~n"
+               "              true ->~n"
+               "                  CharsLimit = proplists:get_value(chars_limit, Opts, ~B),~n"
+               "                  %% io_lib:format/3 has had bugs and therefore~n"
+               "                  %% to avoid any logging errors, the following~n"
+               "                  %% try catch block has been added.~n"
+               "                  %% https://github.com/erlang/otp/issues/5053~n"
+               "                  try~n"
+               "                    io_lib:format(Fmt, Args, [{chars_limit, CharsLimit}])~n"
+               "                  catch~n"
+               "                    _:_ ->~n"
+               "                      io_lib:format(Fmt, Args)~n"
+               "                  end;~n"
+               "              false -> Fmt~n"
+               "          end,~n",
                [LoggerName, LogLevel, ?CHARS_LIMIT_DEFAULT]);
          false ->
              ""
