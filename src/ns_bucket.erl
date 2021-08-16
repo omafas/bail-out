@@ -42,6 +42,7 @@
          get_bucket_names_of_type/2,
          get_buckets/0,
          get_buckets/1,
+         uuids/1,
          is_persistent/1,
          is_ephemeral_bucket/1,
          is_valid_bucket_name/1,
@@ -824,6 +825,11 @@ bucket_uuid(BucketConfig) ->
 bucket_uuid(Name, BucketConfigs) ->
     {ok, BucketConfig} = get_bucket_from_configs(Name, BucketConfigs),
     bucket_uuid(BucketConfig).
+
+uuids(Config) ->
+    BucketConfigs = get_buckets(Config),
+    [{Name, bucket_uuid(Name, BucketConfigs)}
+     || Name <- get_bucket_names(BucketConfigs)].
 
 filter_out_unknown_buckets(BucketsWithUUIDs, BucketConfigs) ->
     lists:filter(fun ({Name, UUID}) ->
