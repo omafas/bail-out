@@ -23,7 +23,7 @@ function mnRolesController($scope, poolDefault, mnHelper, $uibModal, permissions
   function activate() {
     if (poolDefault.saslauthdEnabled) {
       mnPromiseHelper(vm, mnUserRolesService.getSaslauthdAuth())
-        .applyToScope(v => vm.isSaslauthdAuthEnabled = saslauthdAuth.enabled);
+        .applyToScope(v => vm.isSaslauthdAuthEnabled = v.enabled);
     }
 
     if (permissions.cluster.admin.security.external.read &&
