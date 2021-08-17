@@ -8,6 +8,13 @@ be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 */
 
+
+//stats format anatomy
+//example: @kv-.kv_vb_active_sync_write_committed_count
+//@kv - stat section
+//-   - dash means that this is per bucket stat, so bucket label must be specified
+//kv_vb_ac.... - stat name
+
 var labelOperators = {
   "@kv-.kv_dcp_backoff_views+indexes.connection_type": "=~",
   "@kv-.kv_dcp_connection_count_views+indexes.connection_type": "=~",
@@ -33,6 +40,13 @@ var compat70 = get70CompatDesc();
 var mapping70 = get70Mapping();
 
 var mapping65 = get65Mapping();
+
+var mapping70to71 = {
+  "@system.couch_docs_actual_disk_size": "@kv-.couch_docs_actual_disk_size",
+  "@system.couch_docs_data_size": "@kv-.couch_docs_data_size",
+  "@system.couch_views_actual_disk_size": "@kv-.couch_views_actual_disk_size",
+  "@system.couch_views_data_size": "@kv-.couch_views_data_size"
+};
 
 var compat70Combined = propertiesToArray(compat65.stats)
     .concat(propertiesToArray(compat70.stats))
@@ -153,6 +167,9 @@ let service = {
   },
   mapping65: function (name) {
     return mapping65[name] || name;
+  },
+  upgrade70to71: function (name) {
+    return mapping70to71[name] || name;
   },
   maybeGetLabelsModifier: function (service) {
     return stats70LabelsModifier[service];
