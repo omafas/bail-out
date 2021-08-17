@@ -1519,6 +1519,11 @@ is_cluster_encryption_fully_disabled() ->
     [] =:= [N || N <- ns_node_disco:nodes_wanted(),
                  misc:is_node_encryption_enabled(Cfg, N)].
 
+%% get_cluster_encryption_level is internal, it's to avoid unnecessary restarts
+%% of TLS for services when we add new nodes as there is temporary blip in
+%% is_cluster_encryption_fully_enabled(true -> false -> true) due to the config
+%% not being synced.
+%% Used in should_cluster_data_be_encrypted fun.
 -spec get_cluster_encryption_level() -> none | control | all | strict.
 get_cluster_encryption_level() ->
     Default = case is_cluster_encryption_fully_enabled() of
@@ -1529,6 +1534,13 @@ get_cluster_encryption_level() ->
               end,
     ns_config:search(ns_config:latest(), cluster_encryption_level, Default).
 
+%% get_effective_cluster_encryption_level is the experience to the user, i.e.,
+%% if node to node encryption is disabled it should be "none" else can be
+%% "control"/"all"/"strict".
+%% We don't store "none" encryption level, we infer it when node to node
+%% encryption is disabled, if enabled it defaults to control.
+%% We don't care if there is temporary blip in this field while adding nodes, as
+%% it is used mostly for the UI.
 -spec get_effective_cluster_encryption_level(term()) -> none | control |
                                                         all | strict.
 get_effective_cluster_encryption_level(Config) ->
