@@ -13,6 +13,9 @@
 -export([spawn_mover/5, mover/6]).
 
 -include("ns_common.hrl").
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
 spawn_mover(Bucket, VBucket, OldChain, NewChain, Quirks) ->
     Parent = self(),
@@ -410,17 +413,38 @@ dcp_takeover_via_orchestrator(Bucket, Parent,
       end).
 
 start_takeover_replicator(NewMaster, OldMaster, Bucket, VBucket) ->
-    ConnName = lists:concat(["replication:takeover:",
-                             binary_to_list(couch_uuids:random()), ":",
-                             atom_to_list(OldMaster), "->",
-                             atom_to_list(NewMaster), ":",
-                             Bucket, ":",
-                             integer_to_list(VBucket)]),
+    ConnName = get_takeover_connection_name(NewMaster, OldMaster, Bucket,
+                                            VBucket),
 
     RepFeatures = dcp_sup:get_replication_features(),
     {ok, Pid} = dcp_replicator:start_link(undefined, NewMaster, OldMaster,
                                           Bucket, ConnName, RepFeatures),
     Pid.
+
+get_takeover_connection_name(NewMaster, OldMaster, Bucket, VBucket) ->
+    ConnName0 = lists:concat(["replication:takeover:",
+                              binary_to_list(couch_uuids:random()), ":",
+                              atom_to_list(OldMaster), "->",
+                              atom_to_list(NewMaster), ":",
+                              Bucket, ":",
+                              integer_to_list(VBucket)]),
+
+    case length(ConnName0) =< ?MAX_DCP_CONNECTION_NAME of
+        true ->
+            ConnName0;
+        false ->
+            {OldM, NewM} = dcp_replicator:trim_common_prefix(
+                             OldMaster, NewMaster),
+            ConnName1 =
+                lists:concat(["replication:takeover:",
+                              binary_to_list(couch_uuids:random()), ":",
+                              OldM, "->",
+                              NewM, ":",
+                              string:slice(Bucket, 0, 60), ":",
+                              integer_to_list(VBucket)]),
+                true = length(ConnName1) =< ?MAX_DCP_CONNECTION_NAME,
+                ConnName1
+    end.
 
 do_takeover(false, Pid, _Bucket, VBucket) ->
     do_takeover(Pid, VBucket);
@@ -576,3 +600,87 @@ update_vbucket_map(RebalancerPid, WorkerPid, Bucket, VBucket) ->
                        [Bucket, VBucket, Error]),
             exit({failed_to_update_vbucket_map, Bucket, VBucket, Error})
     end.
+
+-ifdef(TEST).
+get_takeover_connection_name_test() ->
+    meck:new(couch_uuids, [passthrough]),
+    meck:expect(couch_uuids, random,
+                fun () -> <<"a5292f34ef9062cae8dc4a86e82ac3c8">> end),
+
+    %% Connection name fits into the maximum allowed
+
+    NodeA = 'nodeA.eng.couchbase.com',
+    NodeB = 'nodeB.eng.couchbase.com',
+    BucketAB = "bucket1",
+    ConnAB = get_takeover_connection_name(NodeA, NodeB, BucketAB, 0),
+    ?assertEqual("replication:takeover:a5292f34ef9062cae8dc4a86e82ac3c8:"
+                 "nodeB.eng.couchbase.com->nodeA.eng.couchbase.com:bucket1:0",
+                 ConnAB),
+    ?assertEqual(true, length(ConnAB) =< ?MAX_DCP_CONNECTION_NAME),
+
+    %% Test where the connection name, using the pre-NEO method, won't
+    %% fit into the maximum allowed.
+
+    Node1 = "ns_1@platform-couchbase-cluster-0000.platform-couchbase-cluster."
+            "couchbase-new-pxxxxxxx.svc",
+    Node2 = "ns_1@platform-couchbase-cluster-0001.platform-couchbase-cluster."
+            "couchbase-new-pxxxxxxx.svc",
+    Bucket12 = "com.yyyyyy.digital.ms.shoppingcart.shoppingcart.1234567890"
+               "12345678901234567890",
+    Conn12 = get_takeover_connection_name(list_to_atom(Node1),
+                                          list_to_atom(Node2),
+                                          Bucket12, 1023),
+    ?assertEqual("replication:takeover:a5292f34ef9062cae8dc4a86e82ac3c8:1."
+                 "platform-couchbase-cluster.couchb->0.platform-couchbase-"
+                 "cluster.couchb:com.yyyyyy.digital.ms.shoppingcart."
+                 "shoppingcart.123456789012:1023", Conn12),
+
+    %% Test that the node names aren't shortened too much (note the only
+    %% difference is the last character).
+
+    Node3 = "ManyManyManyManyCommonCharacters_ns_1@platform-couchbase-cluster"
+            "-0000",
+    Node4 = "ManyManyManyManyCommonCharacters_ns_1@platform-couchbase-cluster"
+            "-0001",
+    LongBucket = "travel-sample-with-a-very-very-very-very-long-bucket-name",
+    Conn34 = get_takeover_connection_name(list_to_atom(Node3),
+                                          list_to_atom(Node4),
+                                          LongBucket, 777),
+    ?assertEqual("replication:takeover:a5292f34ef9062cae8dc4a86e82ac3c8:"
+                 "s_1@platform-couchbase-cluster-0001->s_1@platform-couchbase-"
+                 "cluster-0000:travel-sample-with-a-very-very-very-very-"
+                 "long-bucket-name:777", Conn34),
+
+    %% Test with unique node names but one is much longer than the other.
+
+    Node5 = "AShortNodeName",
+    Node6 = "ManyManyManyManyCommonCharacters_ns_1@platform-couchbase-cluster"
+            "-AndEvenMoreCharactersToMakeThisNodeNameLongEnoughToRequireIt"
+            "ToBeShortened",
+    Conn56 = get_takeover_connection_name(list_to_atom(Node5),
+                                          list_to_atom(Node6),
+                                          LongBucket, 789),
+    ?assertEqual("replication:takeover:a5292f34ef9062cae8dc4a86e82ac3c8:"
+                 "ManyManyManyManyCommonCharacters_ns->AShortNodeName:"
+                 "travel-sample-with-a-very-very-very-very-long-bucket-name:"
+                 "789", Conn56),
+
+    %% Long node names with no common prefix.
+
+    Node7 = "ManyManyManyManyCommonCharacters_ns_1@platform-couchbase-cluster"
+            "-AndEvenMoreCharactersToMakeThisNodeNameLongEnoughToRequireIt"
+            "ToBeShortened",
+    Node8 = "NoCommonPrefixManyCommonCharacters_ns_1@platform-couchbase-cluster"
+            "-AndEvenMoreCharactersToMakeThisNodeNameLongEnoughToRequireIt"
+            "ToBeShortened",
+    Conn78 = get_takeover_connection_name(list_to_atom(Node7),
+                                          list_to_atom(Node8),
+                                          LongBucket, 222),
+    ?assertEqual("replication:takeover:a5292f34ef9062cae8dc4a86e82ac3c8:"
+                 "NoCommonPrefixManyCommonCharacters_->ManyManyManyMany"
+                 "CommonCharacters_ns:travel-sample-with-a-very-very-very-"
+                 "very-long-bucket-name:222", Conn78),
+
+    meck:unload(couch_uuids).
+
+-endif.
