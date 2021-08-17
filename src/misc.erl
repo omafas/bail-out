@@ -1533,6 +1533,16 @@ get_cluster_encryption_level(Config) ->
               end,
     ns_config:search(Config, cluster_encryption_level, Default).
 
+-spec get_effective_cluster_encryption_level(term()) -> none | control |
+                                                        all | strict.
+get_effective_cluster_encryption_level(Config) ->
+    case is_cluster_encryption_fully_enabled() of
+        true ->
+            ns_config:search(Config, cluster_encryption_level, control);
+        false ->
+            none
+    end.
+
 -spec should_cluster_data_be_encrypted() -> true | false.
 should_cluster_data_be_encrypted() ->
     case get_cluster_encryption_level() of
