@@ -47,6 +47,8 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
   constructor(mnFormService, mnWizardService, mnAdminService, mnPoolsService, mnAuthService, uiRouter, mnPools, $rootScope) {
     super();
 
+    this.majorMinorVersion = mnAdminService.stream.majorMinorVersion;
+
     this.wizardForm = mnWizardService.wizardForm;
     this.newClusterConfigForm = mnWizardService.wizardForm.newClusterConfig;
     this.getServicesValues = mnWizardService.getServicesValues.bind(mnWizardService);

@@ -39,9 +39,18 @@
          type="checkbox"
          id="for-node-encryption"
          formControlName="nodeEncryption">
-      <label for="for-node-encryption">
+      <label for="for-node-encryption" class="margin-right-quarter">
         enable node-to-node encryption
       </label>
+      <span
+         class="fa-stack icon-info"
+         ngbTooltip="Network traffic between the individual nodes of a
+         Couchbase Server cluster can be encrypted, in order to optimize
+         cluster internal security."
+         placement="right">
+        <span class="icon fa-circle-thin fa-stack-2x"></span>
+        <span class="icon fa-info fa-stack-1x"></span>
+      </span>
       <div
          class="error error-form"
          [hidden]="!(setupNetConfigHttp.error | async)?.errors.nodeEncryption">
@@ -58,20 +67,18 @@
         {{(setupNetConfigHttp.error | async)?.errors._}}
       </div>
     </div>
-    <div class="form-inline">
-      <label>IP Family Preference</label>
-      <span
-         class="fa-stack icon-info"
-         ngbTooltip="Selecting IPv4 will instruct services in the cluster to listen on IPv4
-                     addresses, though as a convenience some services will also listen on IPv6.
-                     If IPv6 is selected, it's vice-versa. Selecting &quot;IPv4-only&quot; will
-                     instruct services to only listen on IPv4 addresses and again, it's vice-versa
-                     if you select &quot;IPv6-only&quot;."
-         placement="right">
-        <span class="icon fa-circle-thin fa-stack-2x"></span>
-        <span class="icon fa-info fa-stack-1x"></span>
-      </span>
-    </div>
+
+    <label class="inline margin-right-quarter">IP Family Preference</label>
+    <span
+       class="fa-stack icon-info"
+       ngbTooltip="Selecting IPv4 or IPv6 will instruct services in the cluster to listen on those
+                   addresses, though as a convenience some services will also listen on the other address family.
+                   Selecting &quot;IPv4/IPv6-only&quot; will instruct services to ONLY listen on the selected addresses."
+       placement="right">
+      <span class="icon fa-circle-thin fa-stack-2x"></span>
+      <span class="icon fa-info fa-stack-1x"></span>
+    </span>
+
     <div class="formrow">
       <div class="form-inline">
         <input

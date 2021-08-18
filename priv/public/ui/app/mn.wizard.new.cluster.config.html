@@ -8,8 +8,26 @@ be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 -->
 
-<div
-  class="panel dialog-med dialog dialog-wizard height-85vh">
+<div class="panel dialog-med dialog dialog-wizard height-85vh">
+
+  <ng-template #tipContent_serviceMem>
+    <p>Memory quotas let Couchbase manage its memory usage between different
+      services without running out of memory or degrading performance.
+      The DATA SERVICE quota, for instance, is the allocation of
+      physical RAM you want to set aside for storing your data in Couchbase Server.
+      Other services like INDEXING use their memory allocations in different ways.
+    </p>
+    <p>
+      THE DEFAULTS ARE A SAFE PLACE TO START.
+    </p>
+    <a
+       href="https://docs.couchbase.com/server/{{majorMinorVersion | async}}/learn/buckets-memory-and-storage/memory.html"
+       target="_blank"
+       class="block margin-bottom-1">
+      Learn more about memory quotas for Couchbase services.
+    </a>
+  </ng-template>
+
   <!-- mn-spinner="clusterConfigurationCtl.viewLoading || !clusterConfigurationCtl.config.selfConfig" -->
   <div class="panel-header flex-left margin-bottom-quarter">
     <img
@@ -33,7 +51,18 @@ licenses/APL2.txt.
         </mn-hostname-config>
         <div class="formrow">
           <div class="row formrow">
-            <label>Service Memory Quotas</label>
+            <span class="row flex-left">
+              <label class="margin-right-quarter">Service Memory Quotas</label>
+              <span
+                 class="fa-stack icon-info"
+                 [ngbTooltip]="tipContent_serviceMem"
+                 placement="right"
+                 [closeDelay]="2000"
+                 container="body">
+                <span class="icon fa-circle-thin fa-stack-2x"></span>
+                <span class="icon fa-info fa-stack-1x"></span>
+              </span>
+            </span>
             <small class="text-smaller">Per service / per node</small>
           </div>
           <div>

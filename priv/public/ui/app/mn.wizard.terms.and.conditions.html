@@ -92,6 +92,14 @@ When the following checkbox is enabled, this product automatically collects conf
       </label>
     </div>
 
+<ng-template #tipContent>
+  <ul>
+    <li>Enable all services on this node (safest if you're exploring)
+    <li>Allocate memory automatically for Couchbase services
+    <li>Use default disk paths
+  </ul>
+</ng-template>
+
     <div class="panel-footer">
       <a class="tight"
             [uiOptions]="{location: false}"
@@ -102,7 +110,8 @@ When the following checkbox is enabled, this product automatically collects conf
           type="button"
           class="outline tight margin-right-quarter"
           (click)="defaultForm.submit.next(true)"
-          title="All services enabled / Memory optimized for Couchbase / Default disk paths">
+          [ngbTooltip]="tipContent"
+          placement="top">
           Finish With Defaults
         </button>
         <button
