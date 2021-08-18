@@ -381,6 +381,19 @@
     <a ng-click="adminCtl.closeCustomAlert('maxCount')" class="close">X</a>
   </div>
   <div
+     class="alert alert-warning"
+     ng-if="!pools.isEnterprise && (poolDefault.nodes.length > 5)"
+     ng-show="!adminCtl.clientAlerts.ceNodesLimit"
+     ng-init="adminCtl.enableCustomAlert('ceNodesLimit')">
+    <p>
+      Warning: This cluster is running {{poolDefault.nodes.length}} servers. The Couchbase Community Edition license allows for no more than 5 servers. See
+      <a href="https://blog.couchbase.com/couchbase-modifies-license-free-community-edition-package/"
+         rel="noopener noreferrer"
+         target="_blank">this link</a> for details.
+    </p>
+    <a ng-click="adminCtl.closeCustomAlert('ceNodesLimit')" class="close">X</a>
+  </div>
+  <div
      class="alert alert-warning ng-hide"
      ng-if="(adminCtl.autoFailoverSettings &&
             (adminCtl.autoFailoverSettings.count == adminCtl.autoFailoverSettings.maxCount)) ||
