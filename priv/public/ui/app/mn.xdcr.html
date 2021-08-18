@@ -28,6 +28,19 @@
   </div>
 </mn-element-cargo>
 
+<mn-element-cargo depot="alerts">
+  <div
+     *ngIf="(isNotEnterpriseAndHasClusters | async)"
+     class="alert alert-warning">
+    <p>
+      Warning: use of XDCR is not permitted by the Couchbase Community Edition license. See
+      <a href="https://blog.couchbase.com/couchbase-modifies-license-free-community-edition-package/"
+         rel="noopener noreferrer"
+         target="_blank">this link</a> for details.
+    </p>
+  </div>
+</mn-element-cargo>
+
 <div [hidden]="!(permissions | async)?.cluster.xdcr.remote_clusters.read">
   <h4>Remote Clusters</h4>
   <div class="cbui-table" [hidden]="!(references | async)?.length">
@@ -52,7 +65,15 @@
   <div
      [hidden]="(references | async)?.length"
      class="zero-content">
-    No remote clusters defined. Use ADD REMOTE to set one up.
+    <span [hidden]="!(isEnterprise | async)">
+      No remote clusters defined. Use ADD REMOTE to set one up.
+    </span>
+    <span [hidden]="(isEnterprise | async)">
+      Use of cross-data center replication is not permitted by the Couchbase Community Edition license. See
+      <a href="https://blog.couchbase.com/couchbase-modifies-license-free-community-edition-package/"
+         rel="noopener noreferrer"
+         target="_blank">this link</a> for details on what has changed in Couchbase Server 7.0.
+    </span>
   </div>
 </div>
 
@@ -83,6 +104,14 @@
        [item]="item"></mn-xdcr-item>
   </div>
   <div [hidden]="(tasksXDCR | async)?.length" class="zero-content">
-    There are currently no replications defined. Use ADD REPLICATION to set one up.
+    <span [hidden]="!(isEnterprise | async)">
+      There are currently no replications defined. Use ADD REPLICATION to set one up.
+    </span>
+    <span [hidden]="(isEnterprise | async)">
+      Use of cross-data center replication is not permitted by the Couchbase Community Edition license. See
+      <a href="https://blog.couchbase.com/couchbase-modifies-license-free-community-edition-package/"
+         rel="noopener noreferrer"
+         target="_blank">this link</a> for details on what has changed in Couchbase Server 7.0.
+    </span>
   </div>
 </div>
