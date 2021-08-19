@@ -1012,16 +1012,12 @@ do_request_janitor_run(Item, Fun, FsmState, State) ->
                       end,
     {next_state, FsmState, State, MaybeNewTimeout}.
 
+wait_for_nodes_loop([]) ->
+    ok;
 wait_for_nodes_loop(Nodes) ->
     receive
         {done, Node} ->
-            NewNodes = Nodes -- [Node],
-            case NewNodes of
-                [] ->
-                    ok;
-                _ ->
-                    wait_for_nodes_loop(NewNodes)
-            end;
+            wait_for_nodes_loop(Nodes -- [Node]);
         timeout ->
             {timeout, Nodes}
     end.
@@ -1061,7 +1057,7 @@ wait_for_nodes(Nodes, Pred, Timeout) ->
                 end),
 
               Statuses = ns_doctor:get_nodes(),
-              Nodes1 =
+              InitiallyFilteredNodes =
                   lists:filter(
                     fun (N) ->
                             Status = ns_doctor:get_node(N, Statuses),
@@ -1069,7 +1065,7 @@ wait_for_nodes(Nodes, Pred, Timeout) ->
                     end, Nodes),
 
               erlang:send_after(Timeout, Self, timeout),
-              wait_for_nodes_loop(Nodes1)
+              wait_for_nodes_loop(InitiallyFilteredNodes)
       end).
 
 perform_bucket_flushing(BucketName) ->
