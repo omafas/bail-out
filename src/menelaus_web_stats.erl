@@ -95,7 +95,9 @@ params() ->
      {"truncation.age",
       #{cfg_key => truncate_max_age, type => pos_int}},
      {"truncation.minInterval",
-      #{cfg_key => min_truncation_interval, type => non_neg_int}}] ++
+      #{cfg_key => min_truncation_interval, type => non_neg_int}},
+     {"tombstonesCleaningEnabled",
+      #{cfg_key => clean_tombstones_enabled, type => bool}}] ++
     [{"services." ++ N ++ ".highCardEnabled",
       #{cfg_key => [services, S, high_cardinality_enabled], type => bool}}
      || {S, N} <- Services] ++

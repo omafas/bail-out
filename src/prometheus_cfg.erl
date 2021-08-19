@@ -77,6 +77,7 @@
     {snapshot_timeout_msecs, pos_integer()} |
     {decimation_enabled, true | false} |
     {truncation_enabled, true | false} |
+    {clean_tombstones_enabled, true | false} |
     {decimation_defs,
      [{atom(), pos_integer(), pos_integer() | skip}]} |
     {pruning_interval, pos_integer()} |
@@ -152,6 +153,7 @@ default_settings() ->
      {snapshot_timeout_msecs, 30000}, %% in milliseconds
      {decimation_enabled, false},
      {truncation_enabled, false},
+     {clean_tombstones_enabled, false},
      {decimation_defs, decimation_definitions_default()},
      {pruning_interval, 60000}, %% frequency to try to prune stats (msecs)
      {truncate_max_age, 3*?SECS_IN_DAY}, %% age (secs) to truncate stats
@@ -1282,7 +1284,10 @@ run_prune_stats(Levels, LastPruningTime, Settings) ->
                      end,
     case StatsDecimated orelse StatsTruncated of
         true ->
-            clean_tombstones(Settings);
+            case proplists:get_bool(clean_tombstones_enabled, Settings) of
+                true -> clean_tombstones(Settings);
+                false -> ok
+            end;
         false ->
             ok
     end.
