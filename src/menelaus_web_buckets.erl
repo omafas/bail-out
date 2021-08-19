@@ -605,8 +605,12 @@ do_bucket_create(Req, Name, Params, Ctx) ->
                     case do_bucket_create(Req, Name, ParsedProps) of
                         ok -> ok;
                         {errors, Errors} ->
+                            ?log_debug("Failed to create bucket '~s' with 40X error(s): ~p",
+                                       [Name, Errors]),
                             {{struct, Errors}, 400};
                         {errors_500, Errors} ->
+                            ?log_debug("Failed to create bucket '~s' with 50X error(s): ~p",
+                                       [Name, Errors]),
                             {{struct, Errors}, 503}
                     end;
                 {true, true, {ok, _, JSONSummaries}} ->
