@@ -25,7 +25,7 @@
 -record(state, {}).
 
 start_link() ->
-    gen_server:start({local, ?MODULE}, ?MODULE, [], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
     ns_pubsub:subscribe_link(ns_config_events, fun handle_config_event/1),
