@@ -121,6 +121,7 @@ function mnOverviewController($scope, $rootScope, mnBucketsService, mnServersSer
 
   vm.getEndings = mnHelper.getEndings;
   vm.addressFamily = mnPoolDefault.export.thisNode.addressFamily;
+  vm.addressFamilyOnly = mnPoolDefault.export.thisNode.addressFamilyOnly;
   vm.nodeEncryption = mnPoolDefault.export.thisNode.nodeEncryption;
 
   activate();
