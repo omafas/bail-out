@@ -130,8 +130,8 @@ class MnWizardTermsAndConditionsComponent extends MnLifeCycleHooksToStream {
 
   getTermsAndCond(isEnterprise) {
     return isEnterprise ?
-      'https://www.couchbase.com/ESLA05242016' :
-      'https://www.couchbase.com/community';
+      'https://www.couchbase.com/LA03012021' :
+      'https://www.couchbase.com/community-license-agreement04272021';
   }
 
   getNodeInitConfig() {
