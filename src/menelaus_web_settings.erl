@@ -319,6 +319,9 @@ handle_post(Type, Req) ->
     handle_post(Type, [], Req).
 
 handle_post(Type, Keys, Req) ->
+    %% NOTE: due to a potential restart we need to protect
+    %%       ourselves from 'death signal' of parent
+    erlang:process_flag(trap_exit, true),
     case parse_post_data(conf(Type), Keys, mochiweb_request:recv_body(Req),
                          fun is_allowed_setting/1) of
         {ok, ToSet} ->
@@ -332,7 +335,8 @@ handle_post(Type, Keys, Req) ->
             end;
         {error, Errors} ->
             reply_json(Req, {struct, [{errors, Errors}]}, 400)
-    end.
+    end,
+    erlang:exit(normal).
 
 set_keys_in_txn(Cfg, SetFn, ToSet) ->
     {NewCfg, AuditProps} =
