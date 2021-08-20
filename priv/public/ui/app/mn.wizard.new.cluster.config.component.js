@@ -99,11 +99,12 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
         }
 
         this.form
-          .setPackPipe(map(this.getFinalConfig.bind(this)))
+          .setPackPipe(map(this.getIndexesConfig.bind(this)))
           .setPostRequest(new MnHttpGroupRequest({
-            indexesHttp: mnWizardService.stream.indexesHttp,
-            authHttp: mnWizardService.stream.authHttp
+            indexesHttp: mnWizardService.stream.indexesHttp
           }).addSuccess().addError())
+          .setPackPipe(map(this.getAuthConfig.bind(this)))
+          .setPostRequest(mnWizardService.stream.authHttp)
           .setPackPipe(map(mnWizardService.getUserCreds.bind(mnWizardService)))
           .setPostRequest(mnAuthService.stream.postUILogin)
           .clearErrors()
@@ -146,10 +147,12 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
     };
   }
 
-  getFinalConfig() {
-    var rv = new Map();
-    rv.set("authHttp", [this.wizardForm.newCluster.value.user, false]);
+  getAuthConfig() {
+    return [this.wizardForm.newCluster.value.user, false];
+  }
 
+  getIndexesConfig() {
+    var rv = new Map();
     if (this.wizardForm.newClusterConfig.get("services.flag").value.index) {
       rv.set("indexesHttp", {
         storageMode: this.wizardForm.newClusterConfig.get("storageMode").value
