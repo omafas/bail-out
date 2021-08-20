@@ -10,7 +10,9 @@
 
 <div
    class="delayed-spinner expanded-spinner"
-   mn-spinner="!serversListItemDetailsCtl.server || !serversListItemDetailsCtl.memoryUsages">
+   mn-spinner="!serversListItemDetailsCtl.server ||
+          ((poolDefault.compat.atLeast70 || (node.clusterMembership !== 'inactiveAdded'))
+          && !serversListItemDetailsCtl.memoryUsages)">
   <div class="row flex-left items-top resp-sml">
     <div class="cbui-table-props cursor-text" ng-click="$event.stopPropagation();">
       <div class="break-word">

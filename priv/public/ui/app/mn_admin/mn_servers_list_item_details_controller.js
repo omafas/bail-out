@@ -66,14 +66,17 @@ function mnServersListItemDetailsController($scope, mnServersListItemDetailsServ
   vm.getLatestStat =
     mnPoolDefault.export.compat.atLeast70 ? getLatestStat70 : getLatestStat;
 
-  $scope.serversCtl.mnServersStatsPoller.subscribeUIStatsPoller({
-    node: $scope.node.hostname || "all",
-    zoom: 3000,
-    step: 1,
-    bucket: mnPermissions.export.bucketNames['.stats!read'] &&
-      mnPermissions.export.bucketNames['.stats!read'][0],
-    stats: statsNames
-  }, $scope);
+  if (mnPoolDefault.export.compat.atLeast70 ||
+      $scope.node.clusterMembership !== "inactiveAdded") {
+    $scope.serversCtl.mnServersStatsPoller.subscribeUIStatsPoller({
+      node: $scope.node.hostname || "all",
+      zoom: 3000,
+      step: 1,
+      bucket: mnPermissions.export.bucketNames['.stats!read'] &&
+        mnPermissions.export.bucketNames['.stats!read'][0],
+      stats: statsNames
+    }, $scope);
+  }
 
   function filterQuotaServices(service) {
     return vm.quotaServices[service];
