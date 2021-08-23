@@ -44,6 +44,10 @@ class MnHostnameConfigComponent extends MnLifeCycleHooksToStream {
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
   }
 
+  getAddressFamilyUI() {
+    return this.group.get("hostConfig.addressFamilyUI");
+  }
+
   ngOnInit() {
     if (!this.isHostCfgEnabled) {
       return;

@@ -16,6 +16,7 @@ import {scan, map, shareReplay, distinctUntilChanged,
 import {not, sort, prop, descend, ascend, equals} from '/ui/web_modules/ramda.js';
 import {FormBuilder} from "/ui/web_modules/@angular/forms.js";
 import {UIRouter} from "/ui/web_modules/@uirouter/angular.js";
+import ipaddr from "/ui/web_modules/ipaddr.js";
 
 export {MnHelperService};
 
@@ -28,6 +29,21 @@ class MnHelperService {
     FormBuilder,
     UIRouter
   ]}
+
+  static mnLocation() {
+    let mnLocation = Object.assign({}, window.location);
+    let justHostname = mnLocation.hostname;
+    if (justHostname.startsWith("[") &&
+        justHostname.endsWith("]")) {
+      justHostname = justHostname.slice(1, -1);
+    }
+    try {
+      let ipAddr = ipaddr.parse(justHostname);
+      mnLocation.kind = ipAddr.kind();
+    } catch (e) {
+    }
+    return mnLocation;
+  }
 
   constructor(formBuilder, uiRouter) {
     this.formBuilder = formBuilder;

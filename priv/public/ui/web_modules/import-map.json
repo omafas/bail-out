@@ -40,6 +40,7 @@
     "d3-transition": "./d3-transition.js",
     "d3-zoom": "./d3-zoom.js",
     "file-saver": "./file-saver.js",
+    "ipaddr.js": "./ipaddr.js",
     "js-beautify": "./js-beautify.js",
     "lodash": "./lodash.js",
     "oclazyload": "./oclazyload.js",

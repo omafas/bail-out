@@ -21,10 +21,41 @@ import {MnHttpRequest} from './mn.http.request.js';
 
 export {MnWizardService};
 
+function ipvOnlyValidator() {
+  return (control) => {
+    let value = control.value;
+    delete control.warnings;
+    if (value && value.includes("Only")) {
+      let mnLocation = MnHelperService.mnLocation();
+      let isValueV6 = value.includes("inet6");
+      if (mnLocation.kind) {
+        let isKindV6 = mnLocation.kind.includes("ipv6");
+        return (isKindV6 && isValueV6) || (!isKindV6 && !isValueV6) ? null : getIpvOnlyError(isKindV6, isValueV6);
+      } else {
+        control.warnings = getIpvOnlyError(null, isValueV6);
+        return null;
+      }
+    } else {
+      return null;
+    }
+  };
+}
+
+function getIpvOnlyError(isKindV6, isValueV6) {
+  return {
+    ipvOnly: {
+      kind: isKindV6 ? 6 : 4,
+      value: isValueV6 ? 6 : 4
+    }
+  };
+}
+
+
+
 var clusterStorage = new FormGroup({
   hostname: new FormControl(null, [Validators.required]),
   hostConfig: new FormGroup({
-    addressFamilyUI: new FormControl(),
+    addressFamilyUI: new FormControl(null, [ipvOnlyValidator()]),
     nodeEncryption: new FormControl()
   }),
   storage: new FormGroup({

@@ -11,11 +11,12 @@ licenses/APL2.txt.
 import {UIRouter} from '/ui/web_modules/@uirouter/angular.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {Component, ChangeDetectionStrategy} from '/ui/web_modules/@angular/core.js';
-import {map, withLatestFrom, first} from '/ui/web_modules/rxjs/operators.js';
-import {pipe} from '/ui/web_modules/rxjs.js';
+import {map, withLatestFrom, first, filter, startWith} from '/ui/web_modules/rxjs/operators.js';
+import {pipe, combineLatest} from '/ui/web_modules/rxjs.js';
 import {MnWizardService} from './mn.wizard.service.js';
 import {MnPoolsService} from './mn.pools.service.js';
 import {MnFormService} from "./mn.form.service.js";
+import {MnHelperService} from "./mn.helper.service.js";
 import {MnAuthService} from "./mn.auth.service.js";
 import {MnAdminService} from "./mn.admin.service.js";
 import {MnHttpGroupRequest} from "./mn.http.request.js";
@@ -62,9 +63,20 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
 
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
 
+    let postPoolsDefaultErrors =
+        mnAdminService.stream.postPoolsDefaultValidation.error
+        .pipe(map((error) => error && !!Object.keys(error.errors).length),
+              startWith(false));
+
+    let hostConfigField =
+        this.wizardForm.newClusterConfig.get("clusterStorage.hostConfig");
+
     this.isButtonDisabled =
-      mnAdminService.stream.postPoolsDefaultValidation.error
-      .pipe(map((error) => error && !!Object.keys(error.errors).length));
+      combineLatest(
+        postPoolsDefaultErrors,
+        hostConfigField.statusChanges.pipe(map(v => v == "INVALID"))
+      ).pipe(map(([err, invalid]) => err || invalid));
+
 
     mnWizardService.stream.getSelfConfig
       .pipe(first())
@@ -77,6 +89,7 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
       .subscribe(isEnterprise => {
         this.form
           .setPackPipe(pipe(
+            filter(() => hostConfigField.valid),
             withLatestFrom(mnPoolsService.stream.isEnterprise),
             map(this.getNodeInitConfig.bind(this))
           ))

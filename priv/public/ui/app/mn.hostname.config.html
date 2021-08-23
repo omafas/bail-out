@@ -116,6 +116,16 @@
       </div>
       <div
          class="error error-form"
+         *ngIf="getAddressFamilyUI().hasError('ipvOnly')">
+        Can't set IPv{{getAddressFamilyUI().errors?.ipvOnly.value}}-only from an IPv{{getAddressFamilyUI().errors?.ipvOnly.kind}} address; please access this server via an IPv{{getAddressFamilyUI().errors?.ipvOnly.value}} address
+      </div>
+      <div
+         class="error error-form"
+         *ngIf="getAddressFamilyUI().warnings?.ipvOnly">
+        You have selected IPv{{getAddressFamilyUI().warnings?.ipvOnly.value}}-only. If the domain name with which you have accessed this server is only available under IPv{{getAddressFamilyUI().warnings?.ipvOnly.value}} you will not be able to complete initialization
+      </div>
+      <div
+         class="error error-form"
          [hidden]="!(enableExternalListenerHttp.error | async)?.errors.afamily">
         {{(enableExternalListenerHttp.error | async)?.errors.afamily}}
       </div>

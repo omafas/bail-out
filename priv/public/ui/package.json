@@ -52,7 +52,8 @@
     "rxjs": "6.5.3",
     "sortablejs": "1.10.2",
     "ui-select": "0.19.8",
-    "zone.js": "^0.9.1"
+    "zone.js": "^0.9.1",
+    "ipaddr.js": "2.0.1"
   },
   "devDependencies": {
     "snowpack": "1.7.1"
@@ -109,7 +110,8 @@
       "@uirouter/angular-hybrid",
       "ramda",
       "angular-ui-tree",
-      "sortablejs"
+      "sortablejs",
+      "ipaddr.js"
     ]
   },
   "browserslist": [
