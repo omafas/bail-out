@@ -166,6 +166,8 @@ do_flush_for_key(Key) ->
 announce_notable_keys() ->
     KVList = ns_config:get_kv_list(),
 
+    %% Always annouce cluster_encryption_level even if not present in ns_config.
+    ?MODULE ! {notable_change, cluster_encryption_level},
     lists:foreach(
       fun ({Key, _Value}) ->
               case is_notable_key(Key) of
