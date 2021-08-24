@@ -40,7 +40,7 @@
   </div>
   <div ng-if="logsCollectInfoCtl.state.nodesByStatus.uploaded">
     <p>Logs were successfully uploaded to the following URLs:</p>
-    <div ng-repeat="node in logsCollectInfoCtl.state.nodesByStatus.uploaded track by node.nodeName"><a href="{{node.url}}" target="_blank">{{node.url}}</a></div>
+    <div ng-repeat="node in logsCollectInfoCtl.state.nodesByStatus.uploaded track by node.nodeName"><a href="{{node.url}}" target="_blank" rel="noopener noreferrer">{{node.url}}</a></div>
   </div>
   <div ng-if="logsCollectInfoCtl.state.nodesByStatus.failedUpload">
     <p class="error">Warning: The following logs were successfully collected but failed to upload. Please manually upload from the following locations:</p>
