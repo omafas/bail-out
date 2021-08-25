@@ -10,7 +10,6 @@
     "@angular/upgrade": "./@angular/upgrade.js",
     "@angular/upgrade/static": "./@angular/upgrade/static.js",
     "@ng-bootstrap/ng-bootstrap": "./@ng-bootstrap/ng-bootstrap.js",
-    "@nowzoo/ngx-ace": "./@nowzoo/ngx-ace.js",
     "@uirouter/angular": "./@uirouter/angular.js",
     "@uirouter/angular-hybrid": "./@uirouter/angular-hybrid.js",
     "@uirouter/angularjs": "./@uirouter/angularjs.js",
