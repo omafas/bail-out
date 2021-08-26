@@ -196,10 +196,16 @@ find_executable(Name) ->
             V
     end.
 
-build_go_env_vars(Config, RPCService) ->
+build_go_service_env_vars(SpecId) when SpecId =:= indexer;
+                                       SpecId =:= projector ->
+    [{"GODEBUG", "madvdontneed=1"} | common_go_env_vars()];
+build_go_service_env_vars(_) ->
+    common_go_env_vars().
+
+common_go_env_vars() ->
     GoTraceBack0 = ns_config:search(ns_config:latest(), gotraceback, <<"single">>),
     GoTraceBack = binary_to_list(GoTraceBack0),
-    [{"GOTRACEBACK", GoTraceBack} | build_cbauth_env_vars(Config, RPCService)].
+    [{"GOTRACEBACK", GoTraceBack}].
 
 build_cbauth_env_vars(Config, RPCService) ->
     true = (RPCService =/= undefined),
@@ -328,7 +334,8 @@ build_goport_spec(#def{id = SpecId,
         false ->
             [];
         _ ->
-            EnvVars = build_go_env_vars(Config, RPCService),
+            EnvVars = build_go_service_env_vars(SpecId) ++
+                      build_cbauth_env_vars(Config, RPCService),
             Args = goport_args(SpecId, Config, Cmd, binary_to_list(NodeUUID)),
             [{SpecId, Cmd, Args,
               [via_goport, exit_status, stderr_to_stdout, {env, EnvVars}] ++
@@ -584,7 +591,8 @@ saslauthd_port_spec(Config) ->
         true ->
             [{saslauthd_port, Cmd, [],
               [use_stdio, exit_status, stderr_to_stdout,
-               {env, build_go_env_vars(Config, saslauthd)}]}];
+               {env, common_go_env_vars() ++
+                     build_cbauth_env_vars(Config, saslauthd)}]}];
         _ ->
             []
     end.
