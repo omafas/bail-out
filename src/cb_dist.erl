@@ -538,8 +538,7 @@ start_acceptor({_AddrType, Mod} = Listener,
                     error_msg(
                       "Accept failed for protocol ~p with reason: ~p~n"
                       "Stacktrace: ~p", [Listener, E, ST]),
-                    remove_proto(Listener, State),
-                    start_ensure_config_timer(State)
+                    start_ensure_config_timer(remove_proto(Listener, State))
             end
     end.
 
