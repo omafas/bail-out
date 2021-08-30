@@ -452,6 +452,7 @@ handle_get_user(Domain, UserId, Req) ->
                 true ->
                     verify_security_roles_access(
                       Req, ?SECURITY_READ, menelaus_users:get_roles(Identity)),
+                    ns_audit:rbac_info_retrieved(Req, users),
                     menelaus_util:reply_json(Req, get_user_json(Identity))
             end
     end.
