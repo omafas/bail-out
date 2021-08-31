@@ -1660,7 +1660,7 @@ handle_get_group(GroupId, Req) ->
         true ->
             verify_security_roles_access(
               Req, ?SECURITY_READ, menelaus_users:get_group_roles(GroupId)),
-
+            ns_audit:rbac_info_retrieved(Req, groups),
             menelaus_util:reply_json(Req, get_group_json(GroupId))
     end.
 
