@@ -65,6 +65,7 @@
         }
 
         vm.isEnterprise = $scope.poolDefault.isEnterprise;
+        vm.clusterEncryptionLevel = $scope.poolDefault.clusterEncryptionLevel;
 
         vm.memoryUsages.push(
           mnServersListItemDetailsService.getBaseConfig(

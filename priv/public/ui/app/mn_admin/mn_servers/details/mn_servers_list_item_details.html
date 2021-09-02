@@ -11,8 +11,8 @@
       <div ng-if="node.hasOwnProperty('addressFamily')">
         <strong>Address Family:</strong> <span ng-if="node.addressFamily == 'inet6'">IPv6</span><span ng-if="node.addressFamily == 'inet'">IPv4</span>
       </div>
-      <div>
-        <strong>Encryption:</strong> <span ng-if="node.nodeEncryption">On</span><span ng-if="!node.nodeEncryption">Off</span>
+      <div ng-if="node.nodeEncryption">
+        <strong>Node-to-Node Encryption:</strong> Enabled ({{serversListItemDetailsCtl.clusterEncryptionLevel}})
       </div>
       <div>
         <strong>OS:</strong> {{serversListItemDetailsCtl.server.details.os}}
