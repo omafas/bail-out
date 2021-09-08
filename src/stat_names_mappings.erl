@@ -63,14 +63,17 @@ pre_70_stats_to_prom_query(StatSection, OrGroupSize, List, Opts) ->
         || SubGroup <- misc:split(OrGroupSize, AstList)].
 
 pre_70_stat_to_prom_query("@system", <<"rest_requests">>, Opts) ->
-    {ok, promQL:rate({[{eq, <<"name">>, <<"sys_rest_requests">>}]}, Opts)};
+    {ok, promQL:rate({[{eq, <<"name">>, <<"cm_rest_request_leaves_total">>}]},
+                     Opts)};
 pre_70_stat_to_prom_query("@system", <<"hibernated_waked">>, Opts) ->
-    {ok, promQL:rate({[{eq, <<"name">>, <<"sys_hibernated_waked">>}]}, Opts)};
+    {ok, promQL:rate({[{eq, <<"name">>, <<"cm_request_unhibernates_total">>}]},
+                     Opts)};
 pre_70_stat_to_prom_query("@system", <<"hibernated_requests">>, _Opts) ->
-    {ok, promQL:named(<<"sys_hibernated_requests">>,
-                      {'-', [{ignoring, [<<"name">>]}],
-                       [{[{eq, <<"name">>, <<"sys_hibernated">>}]},
-                        {[{eq, <<"name">>, <<"sys_hibernated_waked">>}]}]})};
+    {ok, promQL:named(
+           <<"sys_hibernated_requests">>,
+           {'-', [{ignoring, [<<"name">>]}],
+            [{[{eq, <<"name">>, <<"cm_request_hibernates_total">>}]},
+             {[{eq, <<"name">>, <<"cm_request_unhibernates_total">>}]}]})};
 pre_70_stat_to_prom_query("@system", Stat, _Opts) ->
     case is_system_stat(Stat) of
         true -> {ok, {[{eq, <<"name">>, <<"sys_", Stat/binary>>}]}};
@@ -582,6 +585,10 @@ prom_name_to_pre_70_name(Bucket, {JSONProps}) ->
         case proplists:get_value(<<"name">>, JSONProps) of
             <<"n1ql_", Name/binary>> ->
                 {ok, <<"query_", Name/binary>>};
+            <<"cm_rest_request_leaves_total">> ->
+                {ok, <<"rest_requests">>};
+            <<"cm_request_unhibernates_total">> ->
+                {ok, <<"hibernated_waked">>};
             <<"sys_", Name/binary>> -> {ok, Name};
             <<"sysproc_", Name/binary>> ->
                 Proc = proplists:get_value(<<"proc">>, JSONProps, <<>>),
@@ -967,9 +974,10 @@ pre_70_to_prom_query_test_() ->
                   "sys_mem_actual_used|sys_mem_free|sys_mem_limit|"
                   "sys_mem_total|sys_mem_used_sys|sys_odp_report_failed|"
                   "sys_swap_total|sys_swap_used`} or "
-          "irate({name=~`sys_hibernated_waked|sys_rest_requests`}[1m]) or "
-          "label_replace({name=`sys_hibernated`} - ignoring(name) "
-                        "{name=`sys_hibernated_waked`},"
+          "irate({name=~`cm_request_unhibernates_total|"
+                        "cm_rest_request_leaves_total`}[1m]) or "
+          "label_replace({name=`cm_request_hibernates_total`} - ignoring(name) "
+                        "{name=`cm_request_unhibernates_total`},"
                         "`name`,`sys_hibernated_requests`,``,``)"),
      Test("@system", [], ""),
      Test("@system-processes", all,
