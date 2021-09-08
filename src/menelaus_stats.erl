@@ -2917,29 +2917,36 @@ retrieve_samples_from_archive(Archive, Stat,
             {AccSamples, AccNodes, Kind, false};
         #gathered_stats{nodes = Nodes, kind = NewKind, extractor = Extractor,
                         samples = Samples} ->
-            {true, AccNodes, Nodes} =
-                {AccNodes =:= undefined orelse Nodes =:= AccNodes,
-                 AccNodes, Nodes},
-            NewContinue =
-                case latest_start_timestamp(Samples, StartTS) - StartTS > 1000 of
-                    true ->
-                        Continue;
-                    false ->
-                        %% we got all the samples we wanted, time to
-                        %% stop retrieveing
-                        false
-                end,
+            if
+                (AccNodes =:= undefined) orelse (Nodes =:= AccNodes) ->
+                    NewContinue =
+                        LatestStart = latest_start_timestamp(Samples, StartTS),
+                        case LatestStart - StartTS > 1000 of
+                            true ->
+                                Continue;
+                            false ->
+                                %% we got all the samples we wanted, time to
+                                %% stop retrieveing
+                                false
+                        end,
 
-            MergedSamples =
-                case Aggregate of
-                    true ->
-                        aggregate_and_merge(Samples, AccSamples, StartTS,
-                                            EndTS, Extractor);
-                    false ->
-                        merge_samples(Samples, AccSamples, StartTS, EndTS,
-                                      Extractor)
-                end,
-            {MergedSamples, Nodes, NewKind, NewContinue}
+                    MergedSamples =
+                        case Aggregate of
+                            true ->
+                                aggregate_and_merge(Samples, AccSamples,
+                                                    StartTS, EndTS, Extractor);
+                            false ->
+                                merge_samples(Samples, AccSamples, StartTS,
+                                              EndTS, Extractor)
+                        end,
+                    {MergedSamples, Nodes, NewKind, NewContinue};
+
+                true -> %% Main node has changed. It means it doesn't have any
+                        %% samples for this archive, which means we can stop
+                        %% and ignore the last result
+                    {AccSamples, AccNodes, Kind, false}
+            end
+
     end.
 
 do_retrieve_samples_from_archive({Period, Seconds, Count}, StatName,
