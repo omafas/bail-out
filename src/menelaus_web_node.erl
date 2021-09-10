@@ -150,7 +150,7 @@ node_init(Req, Props) ->
                 ok ->
                     %% Wait for web servers to restart
                     ns_config:sync_announcements(),
-                    menelaus_event:sync(ns_config_events),
+                    menelaus_event:sync(chronicle_compat_events:event_manager()),
                     cluster_compat_mode:is_enterprise() andalso
                         ns_ssl_services_setup:sync();
                 {error, Msg} ->
@@ -1091,7 +1091,8 @@ handle_setup_net_config(Req) ->
                   ok ->
                       %% Wait for web servers to restart
                       ns_config:sync_announcements(),
-                      menelaus_event:sync(ns_config_events),
+                      menelaus_event:sync(
+                        chronicle_compat_events:event_manager()),
                       cluster_compat_mode:is_enterprise() andalso
                           ns_ssl_services_setup:sync(),
                       menelaus_util:reply(Req, 200);

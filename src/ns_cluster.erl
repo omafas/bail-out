@@ -194,7 +194,7 @@ apply_net_config(NodeKVList) ->
                     case netconfig_updater:apply_config(Props) of
                         ok ->
                             ns_config:sync_announcements(),
-                            menelaus_event:sync(ns_config_events),
+                            menelaus_event:sync(chronicle_compat_events:event_manager()),
                             cluster_compat_mode:is_enterprise() andalso
                                 ns_ssl_services_setup:sync(),
                             ok;
