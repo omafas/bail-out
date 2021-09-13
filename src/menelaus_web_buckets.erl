@@ -246,7 +246,6 @@ build_bucket_info(Id, Ctx, InfoLevel, MayExposeAuth, SkipMap) ->
         [bucket_info_cache:build_vbucket_map(
            menelaus_web_node:get_local_addr(Ctx), BucketConfig)
          || not SkipMap],
-        {bucketType, ns_bucket:external_bucket_type(BucketConfig)},
         {authType, misc:expect_prop_value(auth_type, BucketConfig)},
         {localRandomKeyUri,
          bucket_info_cache:build_pools_uri(["buckets", Id, "localRandomKey"])},
