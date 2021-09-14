@@ -49,11 +49,16 @@ get_disk_data() ->
     end.
 
 is_stale() ->
-    case get_latest_entry() of
-        {none, _} ->
-            true;
-        {Ts, _, Timeout} ->
-            check_staleness(Ts, Timeout * 2)
+    case misc:is_linux() orelse misc:is_macos() of
+        true ->
+            case get_latest_entry() of
+                {none, _} ->
+                    true;
+                {Ts, _, Timeout} ->
+                    check_staleness(Ts, Timeout * 2)
+            end;
+        false ->
+            false
     end.
 
 %%----------------------------------------------------------------------
