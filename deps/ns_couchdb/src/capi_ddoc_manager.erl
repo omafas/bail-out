@@ -27,7 +27,7 @@
          reset_master_vbucket/1]).
 
 -export([init/1, init_after_ack/1, handle_call/3, handle_cast/2,
-         handle_info/2, get_id/1, find_doc/2, all_docs/1,
+         handle_info/2, get_id/1, find_doc/2, all_docs/2,
          get_revision/1, set_revision/2, is_deleted/1, save_docs/2,
          on_replicate_in/1, on_replicate_out/1]).
 
@@ -155,7 +155,7 @@ get_id(#doc{id = Id}) ->
 find_doc(Id, #state{local_docs = Docs}) ->
     lists:keyfind(Id, #doc.id, Docs).
 
-all_docs(Pid) ->
+all_docs(Pid, _) ->
     ?make_producer(?yield(gen_server:call(Pid, get_all_docs, infinity))).
 
 get_revision(#doc{rev = Rev}) ->

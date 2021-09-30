@@ -24,11 +24,11 @@
 -behaviour(replicated_storage).
 
 -export([start_link/5, set/3, delete/2, get/2, get/3,
-         get_last_modified/3, select/3, select/4, empty/1,
+         get_last_modified/3, select/3, empty/1,
          select_with_update/4]).
 
 -export([init/1, init_after_ack/1, handle_call/3, handle_info/2,
-         get_id/1, get_value/1, find_doc/2, all_docs/1,
+         get_id/1, get_value/1, find_doc/2, all_docs/2,
          get_revision/1, set_revision/2, is_deleted/1, save_docs/2,
          handle_mass_update/3, on_replicate_in/1, on_replicate_out/1]).
 
@@ -111,30 +111,20 @@ get_last_modified(Name, Id, Default) ->
                   end).
 
 select(Name, KeySpec, N) ->
-    select(Name, KeySpec, N, false).
-
-select(Name, KeySpec, N, Locked) ->
     DocSpec = #docv2{id = KeySpec, _ = '_'},
     MatchSpec = [{DocSpec, [], ['$_']}],
 
-    Select =
-        case Locked of
-            true ->
-                fun select_from_dets_locked/4;
-            false ->
-                fun select_from_dets/4
-        end,
-
-    ?make_producer(Select(Name, MatchSpec, N,
-                          fun (Selection) ->
-                                  lists:foreach(
-                                    fun (#docv2{id = Id, value = Value} = D) ->
-                                            case is_deleted(D) of
-                                                false -> ?yield({Id, Value});
-                                                true -> ok
-                                            end
-                                    end, Selection)
-                          end)).
+    ?make_producer(
+       select_from_dets(Name, MatchSpec, N,
+                        fun (Selection) ->
+                                lists:foreach(
+                                  fun (#docv2{id = Id, value = Value} = D) ->
+                                          case is_deleted(D) of
+                                              false -> ?yield({Id, Value});
+                                              true -> ok
+                                          end
+                                  end, Selection)
+                        end)).
 
 select_with_update(Name, KeySpec, N, UpdateFun) ->
     gen_server:call(Name, {mass_update, {Name, KeySpec, N, UpdateFun}}, infinity).
@@ -154,7 +144,8 @@ handle_mass_update({Name, KeySpec, N, UpdateFun}, Updater, _State) ->
                              ?yield(update_doc(Id, NewValue))
                      end
              end)),
-    {RawErrors, ParentState} = pipes:run(select(Name, KeySpec, N, true), Transducer, Updater),
+    {RawErrors, ParentState} = pipes:run(select(Name, KeySpec, N), Transducer,
+                                         Updater),
     Errors = [{Id, Error} || {#docv2{id = Id}, Error} <- RawErrors],
     {Errors, ParentState}.
 
@@ -254,8 +245,8 @@ find_doc(Id, #state{name = TableName}) ->
             false
     end.
 
-all_docs(Pid) ->
-    ?make_producer(select_from_dets(Pid, [{'_', [], ['$_']}], 500,
+all_docs(_Pid, #state{name = TableName}) ->
+    ?make_producer(select_from_dets(TableName, [{'_', [], ['$_']}], 500,
                                     fun (Batch) -> ?yield({batch, Batch}) end)).
 
 get_revision(#docv2{props = Props}) ->
@@ -303,19 +294,6 @@ convert_doc_to_pre_55(#docv2{id = Id, value = Value} = Doc) ->
          rev = get_revision(Doc),
          deleted = is_deleted(Doc)}.
 
-handle_call(suspend, {Pid, _} = From, #state{name = TableName} = State) ->
-    MRef = erlang:monitor(process, Pid),
-    ?log_debug("Suspended by process ~p", [Pid]),
-    gen_server:reply(From, {ok, TableName}),
-    receive
-        {'DOWN', MRef, _, _, _} ->
-            ?log_info("Suspending process ~p died", [Pid]),
-            {noreply, State};
-        release ->
-            ?log_debug("Released by process ~p", [Pid]),
-            erlang:demonitor(MRef, [flush]),
-            {noreply, State}
-    end;
 handle_call(empty, _From, #state{name = TableName,
                                  child_module = ChildModule,
                                  child_state = ChildState} = State) ->
@@ -334,25 +312,7 @@ handle_info(Msg, #state{child_module = ChildModule,
     {noreply, NewChildState} = ChildModule:handle_info(Msg, ChildState),
     {noreply, State#state{child_state = NewChildState}}.
 
-select_from_dets(Name, MatchSpec, N, Yield) ->
-    Key = {suspended, ?MODULE, Name},
-    {Locked, TableName} =
-        case erlang:get(Key) of
-            undefined ->
-                {ok, Table} = gen_server:call(Name, suspend, infinity),
-                erlang:put(Key, Table),
-                {true, Table};
-            Table ->
-                {false, Table}
-        end,
-    try
-        select_from_dets_locked(TableName, MatchSpec, N, Yield)
-    after
-        Locked andalso erlang:erase(Key),
-        Locked andalso (Name ! release)
-    end.
-
-select_from_dets_locked(TableName, MatchSpec, N, Yield) ->
+select_from_dets(TableName, MatchSpec, N, Yield) when is_atom(TableName) ->
     ?log_debug("Starting select with ~p", [{TableName, MatchSpec, N}]),
     ets:safe_fixtable(TableName, true),
     do_select_from_dets(TableName, MatchSpec, N, Yield),

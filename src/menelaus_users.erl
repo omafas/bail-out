@@ -172,17 +172,29 @@ get_passwordless() ->
 init([]) ->
     _ = ets:new(versions_name(), [protected, named_table]),
     mru_cache:new(ldap_groups_cache, ?LDAP_GROUPS_CACHE_SIZE),
-    #state{base = init_versions()}.
+    self() ! notify_versions,
+    #state{base = init_versions(false)}.
 
-init_versions() ->
+init_versions(Notify) ->
     Base = misc:rand_uniform(0, 16#100000000),
     ets:insert_new(versions_name(), [{user_version, 0, Base},
                                      {auth_version, 0, Base},
                                      {group_version, 0, Base}]),
-    gen_event:notify(user_storage_events, {user_version, {0, Base}}),
-    gen_event:notify(user_storage_events, {group_version, {0, Base}}),
-    gen_event:notify(user_storage_events, {auth_version, {0, Base}}),
+    maybe_notify_versions(Notify),
     Base.
+
+maybe_notify_versions(true) ->
+    notify_versions();
+maybe_notify_versions(_) ->
+    ok.
+
+notify_versions() ->
+    lists:foreach(fun (Key) ->
+                          [{Key, Ver, Base}] = ets:lookup(
+                                                 versions_name(), Key),
+                          gen_event:notify(user_storage_events,
+                                           {Key, {Ver, Base}})
+                  end, [user_version, group_version, auth_version]).
 
 on_save(Docs, State) ->
     ProcessDoc =
@@ -215,6 +227,9 @@ on_save(Docs, State) ->
     [self() ! Msg || Msg <- sets:to_list(MessagesToSend), Msg =/= undefined],
     NewState.
 
+handle_info(notify_versions, State) ->
+    notify_versions(),
+    {noreply, State};
 handle_info({change_version, Key} = Msg, #state{base = Base} = State) ->
     misc:flush(Msg),
     Ver = ets:update_counter(versions_name(), Key, 1),
@@ -223,7 +238,7 @@ handle_info({change_version, Key} = Msg, #state{base = Base} = State) ->
 
 on_empty(_State) ->
     true = ets:delete_all_objects(versions_name()),
-    #state{base = init_versions()}.
+    #state{base = init_versions(true)}.
 
 maybe_update_passwordless(_Identity, _Value, _Deleted, State = #state{passwordless = undefined}) ->
     State;
@@ -247,7 +262,7 @@ maybe_update_passwordless(Identity, Auth, false, State = #state{passwordless = P
 handle_call(get_passwordless, _From, TableName, #state{passwordless = undefined} = State) ->
     Passwordless =
         pipes:run(
-          replicated_dets:select(TableName, {auth, '_'}, 100, true),
+          replicated_dets:select(TableName, {auth, '_'}, 100),
           ?make_consumer(
              pipes:fold(?producer(),
                         fun ({{auth, Identity}, Auth}, Acc) ->
