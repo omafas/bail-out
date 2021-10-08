@@ -12,7 +12,7 @@ import {MnWizardService} from './mn.wizard.service.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnPoolsService} from './mn.pools.service.js';
 import {MnAdminService} from "./mn.admin.service.js";
-import {first} from '/ui/web_modules/rxjs/operators.js';
+import {first, combineLatest} from '/ui/web_modules/rxjs/operators.js';
 import {FormGroup, FormControl} from '/ui/web_modules/@angular/forms.js';
 import {Component, ChangeDetectionStrategy} from '/ui/web_modules/@angular/core.js';
 
@@ -68,7 +68,9 @@ class MnWizardComponent extends MnLifeCycleHooksToStream {
         newClusterConfig.get("services").addControl("field", servicesToGroup(services, null));
       });
 
-    mnPoolsService.stream.isEnterprise.pipe(first())
+    let isEnterpriseStream = mnPoolsService.stream.isEnterprise.pipe(first());
+
+    isEnterpriseStream
       .subscribe(function (isEnterprise) {
         var storageMode = isEnterprise ? "plasma" : "forestdb";
         newClusterConfig.get("storageMode").setValue(storageMode);
@@ -81,12 +83,26 @@ class MnWizardComponent extends MnLifeCycleHooksToStream {
         mnWizardService.initialValues.storageMode = storageMode;
       });
 
-    mnWizardService.stream.initHddStorage.pipe(first())
-      .subscribe(function (initHdd) {
-        newClusterConfig.get("clusterStorage.storage").patchValue(initHdd);
-        joinCluster.get("clusterStorage.storage").patchValue(initHdd);
+    mnWizardService.stream.initHddStorage
+      .pipe(first(),
+            combineLatest(isEnterpriseStream))
+      .subscribe(function ([initHdd, isEnterprise]) {
+        setStorageConfigValues(newClusterConfig, initHdd, isEnterprise);
+        setStorageConfigValues(joinCluster, initHdd, isEnterprise);
 
         mnWizardService.initialValues.clusterStorage = initHdd;
       });
+
+    function setStorageConfigValues(config, initHdd, isEnterprise) {
+      if (isEnterprise) {
+        initHdd.cbas_path.forEach((dir, index) => {
+          config.get('clusterStorage.storage.cbas_path')
+            .setControl(index, new FormControl(null), {
+              emitEvent: false
+            });
+        });
+      }
+      config.get("clusterStorage.storage").patchValue(initHdd);
+    }
   }
 }
