@@ -19,45 +19,21 @@
 -author('Northscale <info@northscale.com>').
 
 -behaviour(supervisor).
--behaviour(ns_log_categorizing).
-
--define(START_OK, 1).
--define(START_FAIL, 2).
 
 %% External exports
 -export([start_link/0,
          barrier_spec/1, barrier_notify_spec/1,
-         barrier_start_link/0, barrier_notify/0, barrier_wait/0,
-         restart_web_servers/0]).
+         barrier_start_link/0, barrier_notify/0, barrier_wait/0]).
 
 %% supervisor callbacks
 -export([init/1]).
-
--export([ns_log_cat/1, ns_log_code_string/1]).
 
 -include("ns_common.hrl").
 
 %% @spec start_link() -> ServerRet
 %% @doc API for starting the supervisor.
 start_link() ->
-    Result = supervisor:start_link({local, ?MODULE}, ?MODULE, []),
-    Port = menelaus_web:webconfig(port),
-    case Result of
-        {ok, _Pid} ->
-            ?user_log(?START_OK,
-                      "Couchbase Server has started on web port ~p on node ~p. Version: ~p.",
-                      [Port, node(), ns_info:version(ns_server)]);
-        _Err ->
-            %% The exact error message is not logged here since this
-            %% is a supervisor start, but a more helpful message
-            %% should've been logged before.
-            ?user_log(?START_FAIL,
-                      "Couchbase Server has failed to start on web port ~p on node ~p. " ++
-                          "Perhaps another process has taken port ~p already? " ++
-                          "If so, please stop that process first before trying again.",
-                      [Port, node(), Port])
-    end,
-    Result.
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 barrier_spec(Id) ->
     {Id, {menelaus_sup, barrier_start_link, []},
@@ -118,17 +94,13 @@ init([]) ->
                  {gen_event, start_link, [{local, json_rpc_events}]},
                  permanent, 1000, worker, []},
 
-    Web = restartable:spec({menelaus_web,
-                            {menelaus_web, start_link, []},
-                            permanent, infinity, supervisor, dynamic}),
+    WebSup = {menelaus_web_sup,
+              {menelaus_web_sup, start_link, []},
+              permanent, infinity, supervisor, [menelaus_web_sup]},
 
     Alerts = {menelaus_web_alerts_srv,
               {menelaus_web_alerts_srv, start_link, []},
               permanent, 5000, worker, dynamic},
-
-    WebEvent = {menelaus_event,
-                {menelaus_event, start_link, []},
-                permanent, 5000, worker, dynamic},
 
     HotKeysKeeper = {hot_keys_keeper,
                      {hot_keys_keeper, start_link, []},
@@ -139,18 +111,5 @@ init([]) ->
               permanent, 1000, worker, dynamic},
 
     Processes = [UIAuth, ScramSha, LocalAuth, Cache, StatsGatherer, RpcEvents,
-                 Web, WebEvent, HotKeysKeeper, Alerts, CBAuth],
+                 WebSup, HotKeysKeeper, Alerts, CBAuth],
     {ok, {{one_for_one, 10, 10}, Processes}}.
-
-ns_log_cat(?START_OK) ->
-    info;
-ns_log_cat(?START_FAIL) ->
-    crit.
-
-ns_log_code_string(?START_OK) ->
-    "web start ok";
-ns_log_code_string(?START_FAIL) ->
-    "web start fail".
-
-restart_web_servers() ->
-    restartable:restart(?MODULE, menelaus_web).
