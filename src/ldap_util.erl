@@ -112,10 +112,31 @@ open_ldap_connection([Host|Hosts], Port, SSL, Timeout, Settings) ->
               end,
     %% Note: timeout option sets not only connect timeout but a timeout for any
     %%       request to ldap server
-    case eldap:open([Host], [{port, Port}, {timeout, Timeout} | SSLOpts]) of
+    Opts = [{port, Port}, {timeout, Timeout} | SSLOpts],
+    case do_open_ldap_connection(Host, Opts) of
         {ok, Handle} -> {ok, Handle, Host};
         {error, _} -> open_ldap_connection(Hosts, Port, SSL, Timeout, Settings)
     end.
+
+do_open_ldap_connection(Host, Opts) ->
+    ToTry = case {misc:is_raw_ip(Host), misc:is_raw_ipv6(Host)} of
+                {_, true} ->
+                    [inet6];
+                {true, _} ->
+                    [inet];
+                _ ->
+                    case misc:get_net_family() of
+                        inet ->
+                            [inet, inet6];
+                        inet6 ->
+                            [inet6, inet]
+                    end
+            end,
+    lists:foldl(fun (_Afamily, {ok, Handle}) ->
+                        {ok, Handle};
+                    (Afamily, _) ->
+                        eldap:open([Host], [{tcpopts, [Afamily]} | Opts])
+                end, undefined, ToTry).
 
 with_connection(Settings, Fun) ->
     Hosts = proplists:get_value(hosts, Settings),
