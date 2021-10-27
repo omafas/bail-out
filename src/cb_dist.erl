@@ -64,7 +64,7 @@
 
 -define(family, ?MODULE).
 -define(proto, ?MODULE).
--define(TERMINATE_TIMEOUT, 5000).
+-define(TERMINATE_TIMEOUT, 1000).
 -define(ENSURE_CONFIG_TIMEOUT, 60000).
 
 -type socket() :: any().
