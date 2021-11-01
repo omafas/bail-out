@@ -1537,16 +1537,15 @@ inaddr_any() ->
 
 -spec inaddr_any([] | [url]) -> string().
 inaddr_any(Options) ->
-    case is_ipv6() of
-        true ->
-            case Options of
-                [] ->
-                    "::";
-                [url] ->
-                    "[::]"
-            end;
-        false ->
-            "0.0.0.0"
+    inaddr_any(get_net_family(), Options).
+
+inaddr_any(inet, _Options) -> "0.0.0.0";
+inaddr_any(inet6, Options) ->
+    case Options of
+        [] ->
+            "::";
+        [url] ->
+            "[::]"
     end.
 
 -spec local_url(integer(),
