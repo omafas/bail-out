@@ -21,6 +21,10 @@
 
 -include("ns_common.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
@@ -41,6 +45,7 @@
 
 -define(VBUCKET_POLL_INTERVAL, 100).
 -define(SHUT_CONSUMER_TIMEOUT, ?get_timeout(dcp_shut_consumer, 60000)).
+-define(MIN_NODE_NAME, 35).
 
 init({ConsumerNode, ProducerNode, Bucket, ConnName, RepFeatures}) ->
     process_flag(trap_exit, true),
@@ -52,10 +57,12 @@ init({ConsumerNode, ProducerNode, Bucket, ConnName, RepFeatures}) ->
 
     Proxies = dcp_proxy:connect_proxies(ConsumerConn, ProducerConn),
 
-    ?log_debug("initiated new dcp replication with consumer side: ~p and producer side: ~p", [ConsumerConn, ProducerConn]),
+    ?log_debug("initiated new dcp replication with consumer side: ~p and "
+               "producer side: ~p", [ConsumerConn, ProducerConn]),
 
     master_activity_events:note_dcp_replicator_start(Bucket, ConnName,
-                                                     ProducerNode, ConsumerConn, ProducerConn),
+                                                     ProducerNode, ConsumerConn,
+                                                     ProducerConn),
 
     {ok, #state{
             proxies = Proxies,
@@ -81,7 +88,7 @@ start_link(Name, ConsumerNode, ProducerNode, Bucket, ConnName, RepFeatures) ->
 
 start_link(ProducerNode, Bucket, RepFeatures) ->
     ConsumerNode = node(),
-    ConnName     = get_connection_name(ConsumerNode, ProducerNode, Bucket),
+    ConnName = get_connection_name(ConsumerNode, ProducerNode, Bucket),
     start_link(server_name(ProducerNode, Bucket),
                ConsumerNode, ProducerNode, Bucket, ConnName, RepFeatures).
 
@@ -219,7 +226,43 @@ get_docs_estimate(Bucket, Partition, ConsumerNode) ->
     ns_memcached:get_dcp_docs_estimate(Bucket, Partition, Connection).
 
 get_connection_name(ConsumerNode, ProducerNode, Bucket) ->
-    "replication:" ++ atom_to_list(ProducerNode) ++ "->" ++ atom_to_list(ConsumerNode) ++ ":" ++ Bucket.
+    ConsumerNodeList = atom_to_list(ConsumerNode),
+    ProducerNodeList = atom_to_list(ProducerNode),
+    CName = "replication:" ++ ProducerNodeList ++ "->" ++ ConsumerNodeList ++
+        ":" ++ Bucket,
+
+    case length(CName) =< ?MAX_DCP_CONNECTION_NAME of
+        true ->
+            CName;
+        false ->
+            %% Find the longest common prefix for the two nodes and chop
+            %% it off (but not below a minimal length).
+            LCP = binary:longest_common_prefix(
+                    [atom_to_binary(ConsumerNode, latin1),
+                     atom_to_binary(ProducerNode, latin1)]),
+            CNode = maybe_cut_name(ConsumerNodeList, LCP),
+            PNode = maybe_cut_name(ProducerNodeList, LCP),
+
+            Hash = binary_to_list(base64:encode(crypto:hash(sha, CName))),
+            Bkt = string:slice(Bucket, 0, 60),
+
+            CName2 = "replication:" ++ PNode ++ "->" ++ CNode ++ ":" ++ Bkt ++
+                     ":" ++ Hash,
+            true = length(CName2) =< ?MAX_DCP_CONNECTION_NAME,
+            CName2
+    end.
+
+%% Cut the specified number of bytes from the front of the name but don't
+%% shorten below a minimum length.
+maybe_cut_name(Name, MaxToChop) ->
+    Len = length(Name),
+    Start = case (Len - MaxToChop) >= ?MIN_NODE_NAME of
+                       true ->
+                           MaxToChop;
+                       false ->
+                           max(0, Len - ?MIN_NODE_NAME)
+                   end,
+    string:slice(Name, Start, ?MIN_NODE_NAME).
 
 get_connections(Bucket) ->
     {ok, Connections} =
@@ -280,3 +323,62 @@ maybe_shut_consumer(Reason, Consumer) ->
         false ->
             ok
     end.
+
+-ifdef(TEST).
+get_connection_name_test() ->
+
+    %% Connection name fits into the maximum allowed
+
+    NodeA = 'nodeA.eng.couchbase.com',
+    NodeB = 'nodeB.eng.couchbase.com',
+    BucketAB = "bucket1",
+    ConnAB = get_connection_name(NodeA, NodeB, BucketAB),
+    ?assertEqual("replication:nodeB.eng.couchbase.com->"
+                 "nodeA.eng.couchbase.com:bucket1", ConnAB),
+    ?assertEqual(true, length(ConnAB) =< ?MAX_DCP_CONNECTION_NAME),
+
+    %% Test where the connection name, using the previous method, won't
+    %% fit into the maximum allowed.
+
+    Node1 = "ns_1@platform-couchbase-cluster-0000.platform-couchbase-cluster."
+            "couchbase-new-pxxxxxxx.svc",
+    Node2 = "ns_1@platform-couchbase-cluster-0001.platform-couchbase-cluster."
+            "couchbase-new-pxxxxxxx.svc",
+    Bucket12 = "com.yyyyyy.digital.ms.shoppingcart.shoppingcart.1234567890"
+               "12345678901234567890",
+    Conn12 = get_connection_name(list_to_atom(Node1), list_to_atom(Node2),
+                                 Bucket12),
+    ?assertEqual("replication:1.platform-couchbase-cluster.couchb->"
+                 "0.platform-couchbase-cluster.couchb:com.yyyyyy.digital.ms."
+                 "shoppingcart.shoppingcart.123456789012:"
+                 "TYFMH5ZD2gPLOaLgcuA2VijsZvc=", Conn12),
+
+    %% Test that the node names aren't shortened too much (note the only
+    %% difference is the last character).
+
+    Node3 = "ManyManyManyManyCommonCharacters_ns_1@platform-couchbase-cluster"
+            "-0000",
+    Node4 = "ManyManyManyManyCommonCharacters_ns_1@platform-couchbase-cluster"
+            "-0001",
+    LongBucket = "travel-sample-with-a-very-very-very-very-long-bucket-name",
+    Conn34 = get_connection_name(list_to_atom(Node3), list_to_atom(Node4),
+                                 LongBucket),
+    ?assertEqual("replication:s_1@platform-couchbase-cluster-0001->"
+                 "s_1@platform-couchbase-cluster-0000:travel-sample-with-a-"
+                 "very-very-very-very-long-bucket-name:"
+                 "D/D56MpAKsDt/0yqg6IXKBEaIcY=", Conn34),
+
+    %% Test with unique node names but one is much longer than the other.
+
+    Node5 = "AShortNodeName",
+    Node6 = "ManyManyManyManyCommonCharacters_ns_1@platform-couchbase-cluster"
+            "-AndEvenMoreCharactersToMakeThisNodeNameLongEnoughToRequireIt"
+            "ToBeShortened",
+    Conn56 = get_connection_name(list_to_atom(Node5), list_to_atom(Node6),
+                                 LongBucket),
+    ?assertEqual("replication:ManyManyManyManyCommonCharacters_ns->"
+                 "AShortNodeName:travel-sample-with-a-very-very-very-very-"
+                 "long-bucket-name:A3aPD1Sik+5ZIz43M6NNTGn9XFw=", Conn56).
+
+
+-endif.
