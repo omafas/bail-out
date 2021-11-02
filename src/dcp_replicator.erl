@@ -34,6 +34,7 @@
          setup_replication/2, setup_replication/3,
          takeover/2, takeover/3,
          wait_for_data_move/3,
+         trim_common_prefix/2,
          get_docs_estimate/3,
          get_connections/1]).
 
@@ -235,13 +236,8 @@ get_connection_name(ConsumerNode, ProducerNode, Bucket) ->
         true ->
             CName;
         false ->
-            %% Find the longest common prefix for the two nodes and chop
-            %% it off (but not below a minimal length).
-            LCP = binary:longest_common_prefix(
-                    [atom_to_binary(ConsumerNode, latin1),
-                     atom_to_binary(ProducerNode, latin1)]),
-            CNode = maybe_cut_name(ConsumerNodeList, LCP),
-            PNode = maybe_cut_name(ProducerNodeList, LCP),
+            %% Trim off the common prefix to shorten the names.
+            {CNode, PNode} = trim_common_prefix(ConsumerNode, ProducerNode),
 
             Hash = binary_to_list(base64:encode(crypto:hash(sha, CName))),
             Bkt = string:slice(Bucket, 0, 60),
@@ -251,6 +247,16 @@ get_connection_name(ConsumerNode, ProducerNode, Bucket) ->
             true = length(CName2) =< ?MAX_DCP_CONNECTION_NAME,
             CName2
     end.
+
+trim_common_prefix(Consumer, Producer) ->
+    %% Find the longest common prefix for the two nodes and chop
+    %% it off (but not below a minimal length).
+    LCP = binary:longest_common_prefix(
+            [atom_to_binary(Consumer, latin1),
+             atom_to_binary(Producer, latin1)]),
+    Consumer1 = maybe_cut_name(atom_to_list(Consumer), LCP),
+    Producer1 = maybe_cut_name(atom_to_list(Producer), LCP),
+    {Consumer1, Producer1}.
 
 %% Cut the specified number of bytes from the front of the name but don't
 %% shorten below a minimum length.
@@ -379,6 +385,5 @@ get_connection_name_test() ->
     ?assertEqual("replication:ManyManyManyManyCommonCharacters_ns->"
                  "AShortNodeName:travel-sample-with-a-very-very-very-very-"
                  "long-bucket-name:A3aPD1Sik+5ZIz43M6NNTGn9XFw=", Conn56).
-
 
 -endif.
