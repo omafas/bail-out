@@ -442,8 +442,8 @@ get_takeover_connection_name(NewMaster, OldMaster, Bucket, VBucket) ->
                               NewM, ":",
                               string:slice(Bucket, 0, 60), ":",
                               integer_to_list(VBucket)]),
-                true = length(ConnName1) =< ?MAX_DCP_CONNECTION_NAME,
-                ConnName1
+            true = length(ConnName1) =< ?MAX_DCP_CONNECTION_NAME,
+            ConnName1
     end.
 
 do_takeover(false, Pid, _Bucket, VBucket) ->
