@@ -1317,6 +1317,7 @@ perform_actual_join(RemoteNode, NewCookie) ->
 
         ok = ns_config_rep:pull_from_one_node_directly(RemoteNode),
         ?cluster_debug("pre-join merged config is:~n~p", [ns_config_log:sanitize(ns_config:get())]),
+        netconfig_updater:maybe_kill_epmd(),
 
         {ok, ok}
     catch
