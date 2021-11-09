@@ -1489,6 +1489,13 @@ try_with_maybe_ignorant_after(TryBody, AfterBody) ->
 letrec(Args, F) ->
     erlang:apply(F, [F | Args]).
 
+%% Artifact of backporting enforce TLS project, MB-48047, to 6.6.4.
+%% This is to workaround the cluster_compat_mode check of 7_0.
+%% Should git rid off when 6.6.x is unsupported.
+-spec is_strict_possible() -> true | false.
+is_strict_possible() ->
+    ns_config:read_key_fast(can_enable_strict_encryption, false).
+
 -spec is_ipv6() -> true | false.
 is_ipv6() ->
     get_net_family() == inet6.

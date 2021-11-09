@@ -62,7 +62,7 @@
 
 -define(family, ?MODULE).
 -define(proto, ?MODULE).
--define(TERMINATE_TIMEOUT, 5000).
+-define(TERMINATE_TIMEOUT, 1000).
 -define(ENSURE_CONFIG_TIMEOUT, 60000).
 
 -type socket() :: any().
@@ -669,7 +669,7 @@ conf(Prop, Conf) ->
     %% See comments for how we determine defaults.
     proplists:get_value(Prop, Conf, proplists:get_value(Prop, defaults(Conf))).
 
-%% From 7.0,
+%% From 6.6.4,
 %% 1. we do not start both [inet_tcp_dist, inet6_tcp_dist] protos for
 %% local_listeners and external_listeners by default as we introduced the
 %% address family only feature.

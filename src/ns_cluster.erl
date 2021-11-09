@@ -1430,6 +1430,7 @@ perform_actual_join(RemoteNode, NewCookie, ChronicleInfo) ->
                    [ns_config_log:sanitize(ns_config:get())]),
 
     misc:remove_marker(join_marker_path()),
+    netconfig_updater:maybe_kill_epmd(),
 
     ?cluster_debug("Join succeded, starting ns_server_cluster back", []),
     case ns_server_cluster_sup:start_ns_server() of

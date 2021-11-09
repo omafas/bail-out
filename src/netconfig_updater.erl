@@ -415,7 +415,9 @@ wait_for_exit(Port, Output) ->
 
 maybe_kill_epmd() ->
     NoEpmdFile = path_config:component_path(data, "no_epmd"),
-    case ?CAN_KILL_EPMD andalso cluster_compat_mode:is_cluster_70() andalso
+    case ?CAN_KILL_EPMD andalso
+         (misc:is_strict_possible() orelse
+          cluster_compat_mode:is_cluster_70()) andalso
          (misc:get_afamily_only() orelse misc:disable_non_ssl_ports()) of
         true ->
             try
