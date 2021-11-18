@@ -179,6 +179,7 @@ is_interesting_to_watchers({{service_map, _}, _}) -> true;
 is_interesting_to_watchers({user_roles, _}) -> true;
 is_interesting_to_watchers({client_cert_auth, _}) -> true;
 is_interesting_to_watchers({audit_uid_change, _}) -> true;
+is_interesting_to_watchers({cluster_encryption_level, _}) -> true;
 is_interesting_to_watchers(_) -> false.
 
 maybe_notify_watchers(Event, State) ->
