@@ -162,6 +162,7 @@ is_interesting_to_watchers({audit_uid_change, _}) -> true;
 is_interesting_to_watchers({user_version, _}) -> true;
 is_interesting_to_watchers({group_version, _}) -> true;
 is_interesting_to_watchers(bucket_info_cache_invalidation) -> true;
+is_interesting_to_watchers({cluster_encryption_level, _}) -> true;
 is_interesting_to_watchers({Key, _}) ->
     collections:key_match(Key) =/= false orelse ns_bucket:buckets_change(Key);
 is_interesting_to_watchers(_) -> false.
