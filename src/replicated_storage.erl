@@ -24,7 +24,7 @@
 -callback init_after_ack(term()) -> term().
 -callback get_id(term()) -> term().
 -callback find_doc(term(), term()) -> term() | false.
--callback all_docs(pid()) -> term().
+-callback all_docs(pid(), term()) -> term().
 -callback get_revision(term()) -> term().
 -callback set_revision(term(), term()) -> term().
 -callback is_deleted(term()) -> boolean().
@@ -168,11 +168,12 @@ handle_cast(Msg, #state{child_module = Module, child_state = ChildState} = State
     {noreply, NewChildState} = Module:handle_cast(Msg, ChildState),
     {noreply, State#state{child_state = NewChildState}}.
 
-handle_info(replicate_newnodes_docs, #state{child_module = Module,
+handle_info(replicate_newnodes_docs, #state{child_state = ChildState,
+                                            child_module = Module,
                                             replicator = Replicator} = State) ->
     Producer =
         pipes:compose(
-          Module:all_docs(self()),
+          Module:all_docs(self(), ChildState),
           pipes:map(
             fun ({batch, Docs}) ->
                     ToReplicate = [Module:on_replicate_out(Doc) || Doc <- Docs],
