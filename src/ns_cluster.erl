@@ -1321,7 +1321,7 @@ perform_actual_join(RemoteNode, NewCookie) ->
             ?cluster_error("Failed to join cluster because of: ~p", [Error]),
             {error, start_cluster_failed,
              <<"Failed to start ns_server cluster processes back. "
-               "Logs might have more details.">>};
+               "Logs might have more details.">>, Error};
         {ok, _} ->
             misc:remove_marker(start_marker_path()),
             ?cluster_log(?NODE_JOINED, "Node ~s joined cluster", [node()]),
