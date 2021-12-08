@@ -1455,6 +1455,11 @@ setup_with_saver() ->
     {ok, _} = gen_event:start_link({local, ns_config_events}),
     {ok, _} = gen_event:start_link({local, ns_config_events_local}),
     Parent = self(),
+
+    DefaultConfig = ns_config_default:default(),
+    WholeKey = {node, node(), memcached_config},
+    DefValue = proplists:get_value(WholeKey, DefaultConfig),
+
     %% we don't want to kill this process when ns_config server dies,
     %% but we wan't to kill ns_config process when this process dies
     proc_lib:start(
@@ -1462,6 +1467,7 @@ setup_with_saver() ->
       [fun () ->
                Cfg = #config{dynamic = [[{config_version, ns_config_default:get_current_version()},
                                          {a, [{b, 1}, {c, 2}]},
+                                         {WholeKey, DefValue},
                                          {d, 3},
                                          {{local_changes_count, testuuid}, []}]],
                              policy_mod = ns_config_default,

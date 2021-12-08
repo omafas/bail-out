@@ -346,7 +346,21 @@ upgrade_config(Config) ->
     assert_not_developer_preview(CurrentVersion, ConfigVersion, Config),
     case ConfigVersion of
         CurrentVersion ->
-            [];
+            %% Do this hack in the upgrade procedure give us the ability to
+            %% offline upgrade from 6.5+ to 6.6.4, however, the downsides are
+            %% 1. On offline downgrade after this function has executed would
+            %% result in a crash of memcached without a proper error message.
+            %% It seems that we are fine with the crash on downgrade as
+            %% downgrades aren't supported anyway.
+            %% 2. On every restart of server we will wipe out any customization
+            %% done by the customer. Since this is not expected to happen and we
+            %% wipe out cutomization on upgrade anyway. This is also deemed
+            %% acceptable.
+            %% Should not be forward-ported.
+            RV = upgrade_6_5_1_config(Config),
+            [?log_info("Setting Key ~p to Value ~p without upgrading config "
+                       "version", [K, V]) || {set, K, V} <- RV],
+            RV;
         {5,0} ->
             [{set, {node, node(), config_version}, {5,1,1}} |
              upgrade_config_from_5_0_to_5_1_1()];
@@ -380,6 +394,21 @@ assert_not_developer_preview(CurrentVsn, ConfigVsn, Config) ->
             ?log_error("Can't offline upgrade from a developer preview cluster"),
             catch ale:sync_all_sinks(),
             misc:halt(1)
+    end.
+
+upgrade_6_5_1_config(Config) ->
+    DefaultConfig = default(),
+    conditionally_upgrade_key(memcached_config, Config, DefaultConfig).
+
+conditionally_upgrade_key(Key, Config, DefaultConfig) ->
+    WholeKey = {node, node(), Key},
+    {value, DefValue} = ns_config:search([DefaultConfig], WholeKey),
+    {value, Value} = ns_config:search(Config, WholeKey),
+    case DefValue =:= Value of
+        true ->
+            [];
+        false ->
+            [{set, WholeKey, DefValue}]
     end.
 
 upgrade_key(Key, DefaultConfig) ->
@@ -582,7 +611,22 @@ upgrade_6_5_to_6_5_1_test() ->
                  do_upgrade_config_from_6_5_to_6_5_1(Cfg, Default)).
 
 no_upgrade_on_current_version_test() ->
-    ?assertEqual([], upgrade_config([[{{node, node(), config_version}, get_current_version()}]])).
+    DefaultConfig = default(),
+    WholeKey = {node, node(), memcached_config},
+    {value, DefValue} = ns_config:search([DefaultConfig], WholeKey),
+    ?assertEqual(
+       [],
+       upgrade_config([[{{node, node(), config_version}, get_current_version()},
+                        {WholeKey, DefValue}]])).
+
+upgrade_on_current_version_test() ->
+    DefaultConfig = default(),
+    WholeKey = {node, node(), memcached_config},
+    {value, DefValue} = ns_config:search([DefaultConfig], WholeKey),
+    ?assertEqual(
+       [{set, WholeKey, DefValue}],
+       upgrade_config([[{{node, node(), config_version}, get_current_version()},
+                        {WholeKey, some_value}]])).
 
 all_upgrades_test() ->
     Default = default(),
