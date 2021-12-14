@@ -256,12 +256,16 @@ build_extra_node_info(Config, Node, InfoNode, _BucketsAll, Append) ->
      | Append].
 
 build_node_hostname(Config, Node, LocalAddr) ->
+    build_node_hostname(Config, Node, LocalAddr, []).
+
+build_node_hostname(Config, Node, LocalAddr, Options) ->
     H = misc:extract_node_address(Node),
     Host = case misc:is_localhost(H) of
                true  -> LocalAddr;
                false -> H
            end,
-    misc:join_host_port(Host, service_ports:get_port(rest_port, Config, Node)).
+    Port = proplists:get_value(port, Options, rest_port),
+    misc:join_host_port(Host, service_ports:get_port(Port, Config, Node)).
 
 alternate_addresses_json(Node, Config, WantedPorts) ->
     {ExtHostname, ExtPorts} =
@@ -349,9 +353,12 @@ build_node_info(Config, WantENode, InfoNode, LocalAddr) ->
     end.
 
 nodes_to_hostnames(Config, Req) ->
+    nodes_to_hostnames(Config, Req, []).
+
+nodes_to_hostnames(Config, Req, Options) ->
     Nodes = ns_cluster_membership:active_nodes(Config),
     LocalAddr = local_addr(Req),
-    [{N, list_to_binary(build_node_hostname(Config, N, LocalAddr))}
+    [{N, list_to_binary(build_node_hostname(Config, N, LocalAddr, Options))}
      || N <- Nodes].
 
 %% Node list
@@ -386,7 +393,15 @@ find_node_hostname(HostPortStr, Req) ->
     try normalize_hostport(HostPortStr, Req) of
         Normalized ->
             HostPortBin = list_to_binary(Normalized),
-            NHs = nodes_to_hostnames(ns_config:get(), Req),
+            Config = ns_config:get(),
+            NHs = nodes_to_hostnames(Config, Req) ++
+                      case cluster_compat_mode:is_enterprise() of
+                          true ->
+                              nodes_to_hostnames(Config, Req,
+                                                 [{port, ssl_rest_port}]);
+                          false ->
+                              []
+                      end,
             case [N || {N, CandidateHostPort} <- NHs,
                        CandidateHostPort =:= HostPortBin] of
                 [] ->
