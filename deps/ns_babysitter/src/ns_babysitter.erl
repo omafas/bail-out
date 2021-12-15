@@ -39,6 +39,10 @@ start(_, _) ->
     log_pending(),
 
     maybe_set_cpu_count_env(),
+    %% We can't reduce the number of threads dynamically for this VM,
+    %% so we are reducing the number of online schedulers instead which should
+    %% reduce the number of "active" threads
+    maybe_adjust_online_schedulers(),
 
     {have_host, true} = {have_host, ('nonode@nohost' =/= node())},
 
@@ -282,4 +286,20 @@ determine_cpu_num() ->
         #{} ->
             ?log_info("CGroups cpu limit not set"),
             0
+    end.
+
+maybe_adjust_online_schedulers() ->
+    case misc:read_cpu_count_env() of
+        {ok, CPUCount} when CPUCount > 0 ->
+            Schedulers = erlang:system_info(schedulers),
+            OldOnlineSchedulers = erlang:system_info(schedulers_online),
+            OnlineSchedulers = min(CPUCount, Schedulers),
+            ?log_info("Adjusting the number of schdulers online: ~b -> ~b "
+                      "(total number of schedulers: ~b)",
+                      [OldOnlineSchedulers, OnlineSchedulers, Schedulers]),
+            erlang:system_flag(schedulers_online, OnlineSchedulers),
+            ok;
+        undefined ->
+            ?log_info("Skipping adjustment of online schedulers"),
+            ok
     end.

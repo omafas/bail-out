@@ -115,7 +115,14 @@ create_ns_couchdb_spec() ->
 
     {ok, CookieFile} = application:get_env(ns_babysitter, cookiefile),
 
-    ErlangArgs = CouchIni ++ KernelInetrc ++ SSLDistOpts ++
+    SchedulersArgs = case misc:read_cpu_count_env() of
+                         {ok, N} ->
+                             NStr = integer_to_list(N),
+                             ["+S", NStr ++ ":" ++ NStr];
+                         undefined -> []
+                     end,
+
+    ErlangArgs = CouchIni ++ KernelInetrc ++ SSLDistOpts ++ SchedulersArgs ++
         ["-name", atom_to_list(ns_node_disco:couchdb_node()),
          "-smp", "enable",
          "+P", "327680",

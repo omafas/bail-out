@@ -195,7 +195,18 @@ build_go_service_env_vars(_) ->
 common_go_env_vars() ->
     GoTraceBack0 = ns_config:search(ns_config:latest(), gotraceback, <<"single">>),
     GoTraceBack = binary_to_list(GoTraceBack0),
-    [{"GOTRACEBACK", GoTraceBack}].
+    TraceBack = [{"GOTRACEBACK", GoTraceBack}],
+    MaxProcs = case misc:read_cpu_count_env() of
+                   {ok, N} ->
+                       case os:getenv("GOMAXPROCS") of
+                           Env when Env == false; Env == "" ->
+                               [{"GOMAXPROCS", integer_to_list(N)}];
+                           _ ->
+                               []
+                       end;
+                   undefined -> []
+               end,
+    TraceBack ++ MaxProcs.
 
 build_cbauth_env_vars(Config, RPCService) ->
     true = (RPCService =/= undefined),

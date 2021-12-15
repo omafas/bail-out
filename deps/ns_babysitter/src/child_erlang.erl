@@ -43,6 +43,12 @@ get_ns_server_vm_extra_args() ->
 
 open_port_args() ->
     {AppArgs, AppEnvArgs} = handle_arguments(init:get_arguments()),
+    SchedulersArgs = case misc:read_cpu_count_env() of
+                         {ok, N} ->
+                             NStr = integer_to_list(N),
+                             ["+S", NStr ++ ":" ++ NStr];
+                         undefined -> []
+                     end,
     ErlangArgs = ["+A" , "16",
                   "-smp", "enable",
                   "+sbt",  "u",
@@ -63,7 +69,7 @@ open_port_args() ->
                   "-user", "user_io",
                   "-run", "child_erlang", "child_start", "ns_bootstrap"]
         ++ get_ns_server_vm_extra_args() ++ ["--"],
-    AllArgs = ErlangArgs ++ AppArgs,
+    AllArgs = ErlangArgs ++ AppArgs ++ SchedulersArgs,
     ErlPath = filename:join([hd(proplists:get_value(root, init:get_arguments())),
                              "bin", "erl"]),
 
