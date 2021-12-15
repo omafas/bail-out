@@ -316,7 +316,8 @@ init([]) ->
     increment_counter(odp_report_failed, 0),
     _ = spawn_link(fun stale_histo_epoch_cleaner/0),
 
-    Port = spawn_sigar(),
+    Name = lists:flatten(io_lib:format("portsigar for ~s", [node()])),
+    Port = sigar:spawn(Name),
     spawn_ale_stats_collector(),
 
     State = #state{port = Port,
@@ -328,15 +329,6 @@ init_stats() ->
     ets:new(?MODULE, [public, named_table, set]),
     %% Deprecated table, will be removed:
     ets:new(ns_server_system_stats, [public, named_table, set]).
-
-spawn_sigar() ->
-    Path = path_config:component_path(bin, "sigar_port"),
-    BabysitterPid = ns_server:get_babysitter_pid(),
-    Name = lists:flatten(io_lib:format("portsigar for ~s", [node()])),
-    open_port({spawn_executable, Path},
-              [stream, use_stdio, exit_status, binary, eof,
-               {arg0, Name},
-               {args, [integer_to_list(BabysitterPid)]}]).
 
 handle_call(get_stats, _From, State = #state{port = Port, prev = Prev}) ->
     Data = grab_stats(Port),
@@ -375,48 +367,6 @@ handle_info({Port, eof}, #state{port = Port} = State) ->
 handle_info(Info, State) ->
     ?log_warning("Unhandled info: ~p", [Info]),
     {noreply, State}.
-
-recv_data(Port) ->
-    recv_data_loop(Port, <<"">>).
-
-recv_data_loop(Port, <<Version:32/native,
-                       StructSize:32/native, _/binary>> = Acc)
-  when Version =:= 6 ->
-    recv_data_with_length(Port, Acc, StructSize - erlang:size(Acc));
-recv_data_loop(_, <<Version:32/native, _/binary>>) ->
-    error({unsupported_portsigar_version, Version});
-recv_data_loop(Port, Acc) ->
-    receive
-        {Port, {data, Data}} ->
-            recv_data_loop(Port, <<Data/binary, Acc/binary>>);
-        {Port, {exit_status, Status}} ->
-            ?log_error("Received exit_status ~p from sigar", [Status]),
-            exit({sigar, Status});
-        {Port, eof} ->
-            ?log_error("Received eof from sigar"),
-            exit({sigar, eof})
-    end.
-
-recv_data_with_length(_Port, Acc, _WantedLength = 0) ->
-    erlang:iolist_to_binary(Acc);
-recv_data_with_length(Port, Acc, WantedLength) ->
-    receive
-        {Port, {data, Data}} ->
-            Size = size(Data),
-            if
-                Size =< WantedLength ->
-                    recv_data_with_length(Port, [Acc | Data],
-                                          WantedLength - Size);
-                Size > WantedLength ->
-                    erlang:error({too_big_recv, Size, WantedLength, Data, Acc})
-            end;
-        {Port, {exit_status, Status}} ->
-            ?log_error("Received exit_status ~p from sigar", [Status]),
-            exit({sigar, Status});
-        {Port, eof} ->
-            ?log_error("Received eof from sigar"),
-            exit({sigar, eof})
-    end.
 
 unpack_data({Bin, LocalStats}, PrevCounters, State) ->
     <<_Version:32/native,
@@ -553,8 +503,7 @@ log_system_stats(TS) ->
     log_stats(TS, "@system", lists:keymerge(1, NSServerStats, NSCouchDbStats)).
 
 grab_stats(Port) ->
-    port_command(Port, <<0:32/native>>),
-    {recv_data(Port), grab_local_stats()}.
+    {sigar:grab_stats(Port), grab_local_stats()}.
 
 grab_local_stats() ->
     #{cgroup_mem => memory_quota:cgroup_memory_data(),
