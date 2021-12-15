@@ -280,4 +280,6 @@
 %% PEER, CA, ROOT-CA; if 2 the path can be PEER, CA, CA, ROOT-CA, and so on.
 -define(ALLOWED_CERT_CHAIN_LENGTH, 10).
 
+-define(CPU_COUNT_VAR, "COUCHBASE_CPU_COUNT").
+-define(CGROUPS_INFO_SIZE, 84).
 -endif.

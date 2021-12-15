@@ -3310,3 +3310,19 @@ tail_of_length(List, N) ->
       _ ->
           List
   end.
+
+read_cpu_count_env() ->
+    case os:getenv(?CPU_COUNT_VAR) of
+        Env when Env == false; Env == "" ->
+            undefined;
+        CoresStr ->
+            try list_to_integer(string:trim(CoresStr)) of
+                0 -> undefined;
+                N when N > 0 -> {ok, N}
+            catch
+                _:_ ->
+                    ?log_error("Invalid ~s env var value: ~s",
+                               [?CPU_COUNT_VAR, CoresStr]),
+                    exit({invalid_cpu_count, CoresStr})
+            end
+    end.

@@ -8,13 +8,20 @@
 %% the file licenses/APL2.txt.
 -module(sigar).
 
--export([spawn/1, grab_stats/1]).
+-export([stats/2, spawn/2, grab_stats/1, unpack_cgroups_info/1]).
 
 -include("ns_common.hrl").
 
-spawn(Name) ->
+stats(Name, BabysitterPid) ->
+    Port = ?MODULE:spawn(Name, BabysitterPid),
+    try
+        grab_stats(Port)
+    after
+        port_close(Port)
+    end.
+
+spawn(Name, BabysitterPid) ->
     Path = path_config:component_path(bin, "sigar_port"),
-    BabysitterPid = ns_server:get_babysitter_pid(),
     open_port({spawn_executable, Path},
               [stream, use_stdio, exit_status, binary, eof,
                {arg0, Name},
@@ -65,3 +72,36 @@ recv_data_with_length(Port, Acc, WantedLength) ->
             ?log_error("Received eof from sigar"),
             exit({sigar, eof})
     end.
+
+unpack_cgroups_info(Bin) ->
+    CGroupsBin = binary:part(Bin, byte_size(Bin), -?CGROUPS_INFO_SIZE),
+    unpack_cgroups(CGroupsBin).
+
+unpack_cgroups(<<0:8/native, _/binary>>) ->
+    #{supported => false};
+unpack_cgroups(<<_:8/native,
+                 CgroupsVsn:8/native,
+                 NumCpuPrc:16/native,
+                 MemMax:64/native,
+                 MemCurr:64/native,
+                 UsageUsec:64/native,
+                 UserUsec:64/native,
+                 SysUsec:64/native,
+                 NrPeriods:64/native,
+                 NrThrottled:64/native,
+                 ThrottledUsec:64/native,
+                 NrBursts:64/native,
+                 BurstUsec:64/native>>) ->
+    #{supported => true,
+      cgroups_vsn => CgroupsVsn,
+      num_cpu_prc => NumCpuPrc,
+      memory_max => MemMax,
+      memory_current => MemCurr,
+      usage_usec => UsageUsec,
+      user_usec => UserUsec,
+      system_usec => SysUsec,
+      nr_periods => NrPeriods,
+      nr_throttled => NrThrottled,
+      throttled_usec => ThrottledUsec,
+      nr_bursts => NrBursts,
+      burst_usec => BurstUsec}.

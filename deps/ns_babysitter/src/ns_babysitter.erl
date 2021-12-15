@@ -38,6 +38,8 @@ start(_, _) ->
     self() ! done,
     log_pending(),
 
+    maybe_set_cpu_count_env(),
+
     {have_host, true} = {have_host, ('nonode@nohost' =/= node())},
 
     ok = dist_manager:configure_net_kernel(),
@@ -255,3 +257,29 @@ delete_pidfile() ->
 
 delete_pidfile(PidFile) ->
     ok = file:delete(PidFile).
+
+maybe_set_cpu_count_env() ->
+    case misc:read_cpu_count_env() of
+        {ok, _} -> ok;
+        undefined -> set_cpu_count_var(determine_cpu_num())
+    end.
+
+set_cpu_count_var(CPUCount) when is_integer(CPUCount), CPUCount =< 0 -> ok;
+set_cpu_count_var(CPUCount) when is_integer(CPUCount) ->
+    os:putenv(?CPU_COUNT_VAR, integer_to_list(CPUCount)).
+
+determine_cpu_num() ->
+    StatsBin = sigar:stats("cores_count", list_to_integer(os:getpid())),
+    CGroupsStats = sigar:unpack_cgroups_info(StatsBin),
+    case CGroupsStats of
+        #{supported := true, num_cpu_prc := CPUPercent} when CPUPercent > 0 ->
+            CPUCount = ceil(CPUPercent/100),
+            ?log_info("CGroup CPU count is ~p (~b%)", [CPUCount, CPUPercent]),
+            CPUCount;
+        #{supported := false} ->
+            ?log_info("CGroups not supported by host"),
+            0;
+        #{} ->
+            ?log_info("CGroups cpu limit not set"),
+            0
+    end.

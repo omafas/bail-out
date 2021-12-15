@@ -27,8 +27,6 @@
 -define(DEFAULT_HIST_UNIT, millisecond).
 -define(METRIC_PREFIX, <<"cm_">>).
 
--define(CGROUPS_INFO_SIZE, 84).
-
 %% API
 -export([start_link/0]).
 
@@ -317,7 +315,7 @@ init([]) ->
     _ = spawn_link(fun stale_histo_epoch_cleaner/0),
 
     Name = lists:flatten(io_lib:format("portsigar for ~s", [node()])),
-    Port = sigar:spawn(Name),
+    Port = sigar:spawn(Name, ns_server:get_babysitter_pid()),
     spawn_ale_stats_collector(),
 
     State = #state{port = Port,
