@@ -447,14 +447,18 @@ build_extra_node_info(Config, Node, InfoNode) ->
      {mcdMemoryAllocated, erlang:trunc(NodesBucketMemoryAllocated)}].
 
 build_node_hostname(Config, Node, LocalAddr) ->
+    build_node_hostname(Config, Node, LocalAddr, []).
+
+build_node_hostname(Config, Node, LocalAddr, Options) ->
     H = misc:extract_node_address(Node),
     Host = case misc:is_localhost(H) of
                true  -> LocalAddr;
                false -> H
            end,
+    Port = proplists:get_value(port, Options, rest_port),
     list_to_binary(
       misc:join_host_port(Host,
-                          service_ports:get_port(rest_port, Config, Node))).
+                          service_ports:get_port(Port, Config, Node))).
 
 alternate_addresses_json(Node, Config, Snapshot, WantedPorts) ->
     {ExtHostname, ExtPorts} =
@@ -544,14 +548,17 @@ build_node_info(Config, Snapshot, WantENode, InfoNode, LocalAddr) ->
         _ -> RV
     end.
 
-get_hostnames(Req, NodeStatus) when is_atom(NodeStatus) ->
+get_hostnames(Req, Arg) ->
+    get_hostnames(Req, Arg, []).
+
+get_hostnames(Req, NodeStatus, Options) when is_atom(NodeStatus) ->
     Snapshot = ns_cluster_membership:get_snapshot(),
     Nodes = ns_cluster_membership:get_nodes_with_status(Snapshot, NodeStatus),
-    get_hostnames(Req, Nodes);
-get_hostnames(Req, Nodes) when is_list(Nodes) ->
+    get_hostnames(Req, Nodes, Options);
+get_hostnames(Req, Nodes, Options) when is_list(Nodes) ->
     Config = ns_config:get(),
     LocalAddr = local_addr(Req),
-    [{N, build_node_hostname(Config, N, LocalAddr)} || N <- Nodes].
+    [{N, build_node_hostname(Config, N, LocalAddr, Options)} || N <- Nodes].
 
 %% Node list
 %% GET /pools/default/buckets/{Id}/nodes
@@ -590,7 +597,14 @@ find_node_hostname(HostPortStr, Req, NodeStatus) ->
     try normalize_hostport(HostPortStr, Req) of
         Normalized ->
             HostPortBin = list_to_binary(Normalized),
-            NHs = get_hostnames(Req, NodeStatus),
+            NHs = get_hostnames(Req, NodeStatus) ++
+                      case cluster_compat_mode:is_enterprise() of
+                          true ->
+                              get_hostnames(Req, NodeStatus,
+                                            [{port, ssl_rest_port}]);
+                          false ->
+                              []
+                      end,
             case [N || {N, CandidateHostPort} <- NHs,
                        CandidateHostPort =:= HostPortBin] of
                 [] ->
