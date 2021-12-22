@@ -425,8 +425,15 @@ format_server_time({{YYYY, MM, DD}, {Hour, Min, Sec}}, MicroSecs) ->
                     [YYYY, MM, DD, Hour, Min, Sec, MicroSecs div 1000])).
 
 ensure_local(Req) ->
-    Host = mochiweb_request:get(peer, Req),
-    case misc:is_localhost(Host) of
+    Socket = mochiweb_request:get(socket, Req),
+    Address = case mochiweb_socket:peername(Socket) of
+                  {ok, {Addr, _Port}} ->
+                      inet_parse:ntoa(Addr);
+                  {error, enotconn} ->
+                      erlang:throw({web_exception, 500,
+                                    <<"Cannot determine peer">>, []})
+              end,
+    case misc:is_localhost(Address) of
         true ->
             ok;
         false ->
