@@ -855,9 +855,9 @@ check_otp_tls_connectivity(Host, Port, AFamily) ->
         {ok, IpAddr} ->
             case ssl:connect(IpAddr, Port, AllOpts, Timeout) of
                 {ok, TLSSocket} ->
-                    {ok, {IpAddr, _}} = ssl:sockname(TLSSocket),
+                    {ok, {LocalIpAddr, _}} = ssl:sockname(TLSSocket),
                     catch ssl:close(TLSSocket),
-                    {ok, inet:ntoa(IpAddr)};
+                    {ok, inet:ntoa(LocalIpAddr)};
                 {error, _} = Error ->
                     Error
             end;
