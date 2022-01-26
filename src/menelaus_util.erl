@@ -251,13 +251,14 @@ count_web_hit(Req, Resp) ->
            end,
     Scheme = mochiweb_request:get(scheme, Req),
     Method = mochiweb_request:get(method, Req),
+    Code = mochiweb_response:get(code, Resp),
     Path = case string:lexemes(mochiweb_request:get(path, Req), "/") of
+                _ when Code >= 400, Code < 500 -> "/*";
                 [] -> "/";
                 ["pools"] -> "/pools";
                 ["pools", "default", P | _] -> "/pools/default/" ++ P ++ "/*";
                 [P | _] -> "/" ++ P ++ "/*"
            end,
-    Code = mochiweb_response:get(code, Resp),
     ResponseTime = menelaus_web:response_time_ms(Req),
     ns_server_stats:notify_counter(
       {<<"http_requests">>, [{scheme, Scheme}, {method, Method}, {path, Path},
