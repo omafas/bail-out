@@ -645,9 +645,12 @@ attach_test_uuid(Node) ->
 attach_test_uuids(Nodes) ->
     [attach_test_uuid(N) || N <- Nodes].
 
-test_frame(Tries, Nodes, DownNodes, DownSG, State) ->
+test_frame(Tries, RawSvcConfig, DownNodes, DownSG, State) ->
+    SvcConfig = [{Service, {{disable_auto_failover, false},
+                            {nodes, ServiceNodes}}} ||
+                    {Service, ServiceNodes} <- RawSvcConfig],
+    Nodes = lists:flatten([N || {_, N} <- RawSvcConfig]),
     NodesWithIDs = attach_test_uuids(Nodes),
-    SvcConfig = [{kv, {{disable_auto_failover, false}, {nodes, Nodes}}}],
     test_frame(Tries, [], NodesWithIDs,
                attach_test_uuids(DownNodes), State, SvcConfig, DownSG,
                [{Tries, [], State}]).
@@ -678,10 +681,10 @@ flatten_state(#state{nodes_states = NS, services_state = SS,
                      down_server_group_state = DSGS}) ->
     NS ++ SS ++ [DSGS].
 
-test_body(Threshold, Nodes, DownSG, Steps) ->
+test_body(Threshold, DownSG, Steps, RawSvcConfig) ->
     lists:foldl(
       fun ({Expected, NFrames, DownNodes}, State) ->
-              {Actions, NewState} = test_frame(NFrames, Nodes, DownNodes,
+              {Actions, NewState} = test_frame(NFrames, RawSvcConfig, DownNodes,
                                                DownSG, State),
               ?assertEqual(Expected, Actions),
               NewState
@@ -707,34 +710,37 @@ compare_with(?VERSION_70, {mail_down_warnings, Nodes}) ->
     [{mail_down_warning, N} || N <- attach_test_uuids(Nodes)].
 
 generate(Versions, Tests) ->
-    T = fun (Ver, Threshold, Nodes, Steps) ->
-                ?cut(test_body(Threshold, Nodes, get_sg(Ver), Steps))
+    generate(Versions, [{kv, [a, b, c, d]}], Tests).
+
+generate(Versions, RawSvcConfig, Tests) ->
+    T = fun (Ver, Threshold, Steps) ->
+                ?cut(test_body(Threshold, get_sg(Ver),
+                               Steps, RawSvcConfig))
         end,
     [{Title ++ ver_suffix(Ver),
-      T(Ver, Threshold, Nodes,
+      T(Ver, Threshold,
         [{compare_with(Ver, CompareWith), Frames, DownNodes} ||
             {CompareWith, Frames, DownNodes} <- Steps])} ||
-        {Title, Threshold, Nodes, Steps} <- Tests,
+        {Title, Threshold, Steps} <- Tests,
         Ver <- Versions].
 
 pre_Neo_process_frame_test_() ->
     generate(
       [?VERSION_70],
-      [{"Two nodes down at the same time", 3, [a, b, c, d],
+      [{"Two nodes down at the same time", 3,
         [{no_actions, 3, [b, c]},
          {{mail_down_warnings, [b, c]}, 1, [b, c]}]},
-       {"Two nodes down at the same time with shift", 3, [a, b, c, d],
+       {"Two nodes down at the same time with shift", 3,
         [{no_actions, 1, [b]},
          {{mail_down_warnings, [b]}, 3, [b, c]},
          {{mail_down_warnings, [c]}, 1, [b, c]}]},
-       {"Multiple mail down warnings", 3, [a, b, c],
+       {"Multiple mail down warnings", 3,
         [{no_actions, 4, [b]},
          {{mail_down_warnings, [b]}, 1, [b, c]},
          %% Make sure not every tick sends out a message
          {no_actions, 2, [b, c]},
          {{mail_down_warnings, [c]}, 1, [b, c]}]},
-       {"Test if mail_down_warning is sent again if node was up in between",
-        3, [a, b, c],
+       {"Test if mail_down_warning is sent again if node was up in between", 3,
         [{no_actions, 4, [b]},
          {{mail_down_warnings, [b]}, 1, [b, c]},
          {no_actions, 1, []},
@@ -744,12 +750,12 @@ pre_Neo_process_frame_test_() ->
 common_process_frame_test_() ->
     generate(
       [?VERSION_70, ?VERSION_NEO],
-      [{"Basic one node failover", 3, [a, b, c],
+      [{"Basic one node failover", 3,
         [{no_actions, 1, []},
          {{failover, [b]}, 6, [b]}]},
-       {"Basic one node failover 2", 4, [a, b, c],
+       {"Basic one node failover 2", 4,
         [{{failover, [b]}, 7, [b]}]},
-       {"Other node down.", 3, [a, b, c],
+       {"Other node down.", 3,
         [{no_actions, 5, [b]},
          {{mail_down_warnings, [b]}, 1, [b, c]},
          {{failover, [b]}, 2, [b]},
@@ -759,23 +765,22 @@ common_process_frame_test_() ->
 process_frame_test_() ->
     generate(
       [?VERSION_NEO],
-      [{"Basic 2 nodes down.", 3, [a, b, c, d],
+      [{"Basic 2 nodes down.", 3,
         [{no_actions, 5, [b, c]},
          {{failover, [b, c]}, 1, [b, c]}]},
-       {"2 nodes down, 3rd node down and then up", 3, [a, b, c, d],
+       {"2 nodes down, 3rd node down and then up", 3,
         [{no_actions, 5, [b, c]},
          {{mail_down_warnings, [b, c]}, 1, [b, c, d]},
          {no_actions, 1, [a, b, c]},
          {{failover, [b, c]}, 2, [b, c]}]},
-       {"Two nodes down at the same time", 3, [a, b, c, d],
+       {"Two nodes down at the same time", 3,
         [{no_actions, 5, [b, c]},
          {{failover, [b, c]}, 1, [b, c]}]},
-       {"Two nodes down at the same time with shift", 3, [a, b, c, d],
+       {"Two nodes down at the same time with shift", 3,
         [{no_actions, 1, [b]},
          {{mail_down_warnings, [b]}, 4, [b, c]},
          {{failover, [b, c]}, 2, [b, c]}]},
-       {"Test if mail_down_warning is sent again if node was up in between",
-        3, [a, b, c],
+       {"Test if mail_down_warning is sent again if node was up in between", 3,
         [{no_actions, 5, [b]},
          {{mail_down_warnings, [b]}, 1, [b, c]},
          {no_actions, 1, []},
@@ -785,19 +790,22 @@ process_frame_test_() ->
 min_size_test_() ->
     MinSizeTest =
         fun (Threshold, Ver) ->
-                {Actions, State} = test_frame(
-                                     Threshold + 3, [a, b], [b],
-                                     get_sg(Ver), test_init(Threshold)),
+                SvcConfig = [{kv, [a, b]}],
+                {Actions, State} =
+                    test_frame(Threshold + 3, SvcConfig, [b],
+                               get_sg(Ver), test_init(Threshold)),
                 ?assertMatch([{mail_too_small, _, _, _}], Actions),
-                test_frame(30, [a, b], [b], get_sg(Ver), State)
+                test_frame(30, SvcConfig, [b], get_sg(Ver), State)
         end,
     MinSizeAndIncreasing =
         fun (Ver) ->
+                SvcConfig = [{kv, [a, b, c]}],
                 {Actions, State} = MinSizeTest(2, Ver),
                 ?assertEqual(compare_with(Ver, no_actions), Actions),
-                {Actions1, _} = test_frame(5, [a, b, c], [b], get_sg(Ver),
+                {Actions1, _} = test_frame(5, SvcConfig, [b], get_sg(Ver),
                                            State),
-                ?assertEqual(compare_with(Ver, {failover, [b]}), Actions1)
+                ?assertEqual(compare_with(Ver, {failover, [b]}), Actions1,
+                             SvcConfig)
         end,
     [{lists:flatten(
         io_lib:format("Min size test. Threshold = ~p, Ver = ~p", [T, V])),
