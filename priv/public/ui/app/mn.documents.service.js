@@ -11,9 +11,11 @@ licenses/APL2.txt.
 import { Injectable } from "@angular/core";
 import { HttpClient } from '@angular/common/http';
 import { UIRouter } from '@uirouter/angular';
-import { switchMap, shareReplay, pluck, withLatestFrom,
-         combineLatest, distinctUntilChanged } from 'rxjs/operators';
-import { Subject, BehaviorSubject } from 'rxjs';
+import {
+  switchMap, shareReplay, pluck, withLatestFrom,
+  combineLatest, distinctUntilChanged, startWith, catchError
+} from 'rxjs/operators';
+import { Subject, BehaviorSubject, of } from 'rxjs';
 
 export { MnDocumentsService }
 
@@ -36,6 +38,7 @@ class MnDocumentsService {
 
     this.commonBucket = uiRouter.globals.params$
       .pipe(pluck('commonBucket'),
+            startWith(uiRouter.globals.params.commonBucket),
             distinctUntilChanged());
 
     this.stream.getDocuments = new BehaviorSubject()
@@ -47,13 +50,19 @@ class MnDocumentsService {
             shareReplay({refCount: true, bufferSize: 1}));
 
     this.stream.getRandomDocument =
-      this.stream.recalculateRandomDocument
-      .pipe(combineLatest(this.commonBucket),
-            pluck(1),
+      this.commonBucket
+      .pipe(combineLatest(this.stream.recalculateRandomDocument),
+            pluck(0),
             switchMap(this.getRandomKey.bind(this)),
             pluck('key'),
             withLatestFrom(this.commonBucket),
             switchMap(this.getDocument.bind(this)),
+            catchError(err => {
+              if (err.status === 404) {
+                return of({});
+              } else {
+                throw err;
+              }}),
             shareReplay({ bufferSize: 1, refCount: true }));
   }
 

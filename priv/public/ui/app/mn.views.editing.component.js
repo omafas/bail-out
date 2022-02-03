@@ -106,9 +106,11 @@ class MnViewsEditingComponent extends MnLifeCycleHooksToStream {
       merge(this.mnDocumentsService.stream.getRandomDocument,
             this.mnDocumentsService.stream.getDocument);
 
-    this.randomDocument.subscribe(doc => {
-      this.saveForm.group.get('docJson').setValue(js_beautify(doc.json));
-      this.saveForm.group.get('metaJson').setValue(js_beautify(JSON.stringify(doc.meta)));
+    this.randomDocument.pipe(takeUntil(this.mnOnDestroy)).subscribe(doc => {
+      if (doc.json) {
+        this.saveForm.group.get('docJson').setValue(js_beautify(doc.json));
+        this.saveForm.group.get('metaJson').setValue(js_beautify(JSON.stringify(doc.meta)));
+      }
     });
 
     this.documentDoesNotExist =
@@ -119,9 +121,8 @@ class MnViewsEditingComponent extends MnLifeCycleHooksToStream {
             return of(true);
           }}));
 
-    this.thereAreNoDocs = this.commonBucket
-      .pipe(switchMap(bucket => this.mnDocumentsService.getDocuments({ bucket })),
-            map(result => !result.rows.length));
+    this.thereAreNoDocs = this.randomDocument
+      .pipe(map(doc => !doc.json));
 
     this.largeDocument = this.randomDocument
       .pipe(map(doc => this.mnHelperService.byteCount(doc.json) > 256 * 1024));
@@ -140,21 +141,16 @@ class MnViewsEditingComponent extends MnLifeCycleHooksToStream {
         this.saveForm.group.get('reduceJson').setValue(js_beautify(ddoc.views[viewId].reduce, { indent_size: 2 }));
       });
 
-    this.editContext =
-      combineLatest(this.commonBucket,
-                    this.randomDocument)
-      .pipe(map(([bucket, doc]) => ({ bucket, doc })));
-
     this.clickEdit = new Subject();
     this.clickEdit
       .pipe(takeUntil(this.mnOnDestroy),
-            withLatestFrom(this.editContext))
+            withLatestFrom(this.commonBucket, this.randomDocument))
       .subscribe(this.openEditDialog.bind(this));
 
     this.clickRandom = new Subject();
     this.clickRandom
       .pipe(takeUntil(this.mnOnDestroy))
-      .subscribe(this.mnDocumentsService.stream.recalculateRandomDocument);
+      .subscribe(() => this.mnDocumentsService.stream.recalculateRandomDocument.next());
 
     this.copyViewDialog = new Subject();
     this.copyViewDialog
@@ -217,13 +213,13 @@ class MnViewsEditingComponent extends MnLifeCycleHooksToStream {
     return this.saveForm.group.get('reduceJson').setValue(value);
   }
 
-  openEditDialog([, context]) {
-    this.qwDialogService.getAndShowDocument(false, "Edit Document", context.bucket, "_default", "_default", context.doc.meta.id).then(payload => {
+  openEditDialog([, commonBucket, randomDocument]) {
+    this.qwDialogService.getAndShowDocument(false, "Edit Document", commonBucket, "_default", "_default", randomDocument.meta.id).then(payload => {
       if (is(String, payload)) {
         return;
       }
 
-      this.mnDocumentsService.stream.getManualDocument.next([context.doc.meta.id, context.bucket]);
+      this.mnDocumentsService.stream.getManualDocument.next([randomDocument.meta.id, commonBucket]);
     })
   }
 

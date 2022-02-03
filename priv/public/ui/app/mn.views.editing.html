@@ -25,7 +25,7 @@
             <button
               type="button"
               class="outline"
-              [disabled]="!(randomDocument | async)"
+              [disabled]="(thereAreNoDocs | async)"
               [hidden]="!(toggle.state | async)"
               (click)="clickRandom.next($event)">
               Load Another Document
@@ -33,7 +33,7 @@
             <button
               type="button"
               class="outline"
-              [disabled]="!(randomDocument | async)"
+              [disabled]="(thereAreNoDocs | async)"
               [hidden]="!(toggle.state | async)"
               (click)="clickEdit.next()">
               Edit Document
