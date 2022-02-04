@@ -13,6 +13,7 @@ import {filter, withLatestFrom, pairwise, catchError,
         startWith, switchMap, pluck, takeUntil,
         mapTo, distinctUntilChanged, shareReplay, map} from 'rxjs/operators';
 import {BehaviorSubject, Subject, NEVER, of, merge, fromEvent} from 'rxjs';
+import { sortBy, prop } from 'ramda';
 
 import {MnHelperService} from './mn.helper.service.js';
 import {MnCollectionsService} from './mn.collections.service.js';
@@ -94,12 +95,15 @@ class MnKeyspaceSelectorService {
               step)
         .pipe(map(v => v !== "ok"));
 
+    let sortByName = sortBy(prop("name"));
+    let sortByValue = sortBy(prop("value"));
+
     var list = step
         .pipe(distinctUntilChanged(),
               withLatestFrom(result),
               switchMap(options.isRolesMode ?
-                        rolesPayload.bind(this) :
-                        httpPayload.bind(this)),
+                (r) => rolesPayload.call(this, r).pipe(map(sortByValue)) :
+                (r) => httpPayload.call(this, r).pipe(map(sortByName))),
               shareReplay({refCount: true, bufferSize: 1}));
 
 
