@@ -127,8 +127,9 @@ do_handle_list(Req, _Bucket, _Params, 0) ->
                 {reason, <<"could not get consistent vbucket map">>}]}, 503);
 do_handle_list(Req, Bucket, {Skip, Limit, Params}, N) ->
     NodeVBuckets = dict:to_list(vbucket_map_mirror:must_node_vbuckets_dict(Bucket)),
+    Identity = get_identity(Req),
 
-    case build_keys_heap(Bucket, NodeVBuckets, Params) of
+    case build_keys_heap(Bucket, NodeVBuckets, Params, Identity) of
         {ok, Heap} ->
             Heap1 = handle_skip(Heap, Skip),
             menelaus_util:reply_json(Req,
@@ -150,8 +151,8 @@ do_handle_list(Req, Bucket, {Skip, Limit, Params}, N) ->
                                                {reason, <<"unknown error">>}]}, 500)
     end.
 
-build_keys_heap(Bucket, NodeVBuckets, Params) ->
-    case ns_memcached:get_keys(Bucket, NodeVBuckets, Params) of
+build_keys_heap(Bucket, NodeVBuckets, Params, Identity) ->
+    case ns_memcached:get_keys(Bucket, NodeVBuckets, Params, Identity) of
         {ok, Results} ->
             try lists:foldl(
                   fun ({_Node, R}, Acc) ->
@@ -274,12 +275,20 @@ do_handle_get(BucketId, DocId, CollectionUid, XAttrPermissions, Req) ->
             menelaus_util:reply_json(Req, Res)
     end.
 
-maybe_add_identity(Req) ->
+get_identity(Req) ->
     %% In a mixed cluster with 7.0.x and 7.1.0 nodes, a 7.1.0 node can send via
     %% menelaus_web_crud:attempt/5 a 'capi_crud:Oper' RPC request to a 7.0.x
     %% node. Return Identity only when cluster_compact_mode is at 7.1.0.
-    Identity = menelaus_auth:get_identity(Req),
-    [I || I <- [Identity], cluster_compat_mode:is_cluster_NEO()].
+    case cluster_compat_mode:is_cluster_NEO() of
+        false -> undefined;
+        true -> menelaus_auth:get_identity(Req)
+    end.
+
+maybe_add_identity(Req) ->
+    case get_identity(Req) of
+        undefined -> [];
+        I -> [I]
+    end.
 
 mutate(Req, Oper, BucketId, DocId, CollectionUid, Body, Flags) ->
     BinaryBucketId = list_to_binary(BucketId),

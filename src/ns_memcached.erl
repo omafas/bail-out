@@ -113,7 +113,7 @@
          compact_vbucket/3,
          get_vbucket_high_seqno/2,
          wait_for_seqno_persistence/3,
-         get_keys/3,
+         get_keys/4,
          config_validate/2,
          config_reload/1,
          set_tls_config/1,
@@ -378,6 +378,7 @@ assign_queue({delete, _KeyFun, _Uid, _VBucket, _Identity}) ->
 assign_queue({set, _KeyFun, _Uid, _VBucket, _ValueFun, _Flags, _Identity}) ->
     #state.heavy_calls_queue;
 assign_queue({get_keys, _VBuckets, _Params}) -> #state.heavy_calls_queue;
+assign_queue({get_keys, _VBuckets, _Params, _Identity}) -> #state.heavy_calls_queue;
 assign_queue({get_mass_dcp_docs_estimate, _VBuckets}) -> #state.very_heavy_calls_queue;
 assign_queue({get_vbucket_details_stats, all, _}) -> #state.very_heavy_calls_queue;
 assign_queue(_) -> #state.fast_calls_queue.
@@ -643,10 +644,16 @@ do_handle_call({get_vbucket_high_seqno, VBucketId}, _From, State) ->
             end,
             undefined),
     {reply, Res, State};
-do_handle_call({get_keys, VBuckets, Params}, _From,
-               #state{worker_features = Features} = State) ->
+
+%% This is left in place to support backwards compat from nodes with version
+%% lower than Neo. Lower than Neo version Nodes won't provide identity.
+do_handle_call({get_keys, VBuckets, Params}, From, State) ->
+    do_handle_call({get_keys, VBuckets, Params, undefined}, From, State);
+do_handle_call({get_keys, VBuckets, Params, Identity}, _From,
+    #state{worker_features = Features} = State) ->
     RV = mc_binary:get_keys(
-           State#state.sock, Features, VBuckets, Params, ?GET_KEYS_TIMEOUT),
+        State#state.sock, Features, VBuckets, Params, ?GET_KEYS_TIMEOUT,
+        Identity),
 
     case RV of
         {ok, _}  ->
@@ -1537,19 +1544,27 @@ do_perform_checkpoint_commit_for_xdcr_loop(Sock, VBucketId, WaitedSeqno) ->
             {reply, {memcached_error, OtherError}}
     end.
 
-get_keys(Bucket, NodeVBuckets, Params) ->
+get_keys(Bucket, NodeVBuckets, Params, Identity) ->
     try
-        {ok, do_get_keys(Bucket, NodeVBuckets, Params)}
+        {ok, do_get_keys(Bucket, NodeVBuckets, Params, Identity)}
     catch
         exit:timeout ->
             {error, timeout}
     end.
 
-do_get_keys(Bucket, NodeVBuckets, Params) ->
+do_get_keys_call(Bucket, Node, VBuckets, Params, Identity) ->
+    %% This is to handle cluster compat scenario to support pre Neo get_keys
+    %% request to continue to work as before without the Identity info
+    GetKeys = case Identity of
+                  undefined -> {get_keys, VBuckets, Params};
+                  _ -> {get_keys, VBuckets, Params, Identity}
+              end,
+    do_call({server(Bucket), Node}, Bucket, GetKeys, infinity).
+
+do_get_keys(Bucket, NodeVBuckets, Params, Identity) ->
     misc:parallel_map(
       fun ({Node, VBuckets}) ->
-              try do_call({server(Bucket), Node}, Bucket,
-                          {get_keys, VBuckets, Params}, infinity) of
+              try do_get_keys_call(Bucket, Node, VBuckets, Params, Identity) of
                   unhandled ->
                       {Node, {ok, []}};
                   R ->
