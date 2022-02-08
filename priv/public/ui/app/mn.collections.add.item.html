@@ -1,0 +1,78 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="dialog-med">
+  <div class="panel-header">
+    <h2 [attr.title]="scopeName">Add Collection To {{scopeName | mnTruncate:15}} Scope</h2>
+    <a class="ui-dialog-titlebar-close modal-close" (click)="activeModal.dismiss()">X</a>
+  </div>
+  <form (ngSubmit)="form.submit.next()" [formGroup]="form.group" class="forms">
+    <div class="panel-content">
+      <div
+         class="error"
+         [hidden]="!(addCollectionHttp.error | async)?.errors?._">
+        {{(addCollectionHttp.error | async)?.errors?._}}
+      </div>
+      <div class="formrow">
+        <label for="add-collection">Name</label>
+        <input
+           type="text"
+           id="add-collection"
+           name="name"
+           formControlName="name"
+           required
+           autocorrect="off"
+           spellcheck="false"
+           autocapitalize="off">
+        <div
+           class="error"
+           [hidden]="!(addCollectionHttp.error | async)?.errors?.name">
+          {{(addCollectionHttp.error | async)?.errors?.name}}
+        </div>
+      </div>
+      <div class="formrow" *ngIf="isEnterprise | async">
+        <label for="add-collection" class="inline margin-right-quarter">Collection Max Time-To-Live</label>
+        <ng-template #maxTimeToLiveTooltip>
+          The maximum time-to-live (TTL) for all documents in this collection in seconds.
+          If enabled and a document is mutated with no TTL or a TTL greater than the maximum,
+          its TTL will be set to the collection TTL.
+          <br/><br/>
+          The largest TTL allowed is 2147483647 seconds. A 0 value means TTL is disabled.
+          <br/><br/>
+          NOTE: if collection-level TTL is set, bucket-level TTL is ignored.
+        </ng-template>
+        <span
+           class="fa-stack icon-info"
+           [ngbTooltip]="maxTimeToLiveTooltip"
+           placement="right">
+          <span class="icon fa-circle-thin fa-stack-2x"></span>
+          <span class="icon fa-info fa-stack-1x"></span>
+        </span>
+        <input
+           type="text"
+           id="add-collection-ttl"
+           name="maxTTL"
+           formControlName="maxTTL"
+           autocorrect="off"
+           spellcheck="false"
+           autocapitalize="off">
+        <div
+           class="error"
+           [hidden]="!(addCollectionHttp.error | async)?.errors?.maxTTL">
+          {{(addCollectionHttp.error | async)?.errors?.maxTTL}}
+        </div>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <a (click)="activeModal.dismiss()">Cancel</a>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</div>

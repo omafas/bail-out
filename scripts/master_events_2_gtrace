@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+
+#   Copyright 2021-Present Couchbase, Inc.
+#
+#   Use of this software is governed by the Business Source License included
+#   in the file licenses/BSL-Couchbase.txt.  As of the Change Date specified
+#   in that file, in accordance with the Business Source License, use of this
+#   software will be governed by the Apache License, Version 2.0, included in
+#   the file licenses/APL2.txt.
+#
+
+"""Converts an ns_server master_events.log file into a Google Trace Event Format file
+(https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview#heading=h.yr4qxyxotyw).
+
+Usage:
+    cat master-events.log | master_events_2_gtrace > trace.json
+
+Then open with a trace viewer such as https://ui.perfetto.dev/
+
+
+Status:
+
+The script attempts to identify pairs of start/end entries from the input
+master events and create Google Trace Duration events from them (explicit
+begin/end trace events) by looking for common suffixes. Anything which isn't
+detected will be output as an "instant" event.
+
+Google trace expects a typical C/C++ environment with processes and threads.
+This isn't a perfect match to Erlang's node and process model, but it attempts
+to map an Erlang node to a Process (pid), and an Erlang process number to a
+Thread (tid).
+
+Todo:
+
+* Google Trace supports a number of other event types such as Async, Flow, etc
+  which might be a nicer fit for things like the request/response messages,
+  or the different vBucket state changes.
+* The current Process/Thread mapping isn't ideal; probably we want to assign
+  things like each DCP connection to it's own thread /pid.
+"""
+
+import fileinput
+import json
+
+print('[')
+first = True
+for line in fileinput.input():
+    me = json.loads(line)
+    # Require at least a timestamp to be able to create a trace event.
+    if 'ts' not in me:
+        continue
+
+    event = dict()
+    name = me.pop('type')
+
+    # Fixup the 'vbucketMove' name - the end event names it 'vbucketMover'
+    # (note the extra 'r').
+    if name == "vbucketMoverTerminate":
+        name = "vbucketMoveTerminate"
+
+    # Some master events are logically "starts", but do not have an
+    # explicit suffix. For those add the missing suffix so they are
+    # correctly classed as duration events.
+    # if name in ('dcpAddStream'):
+    #     name += 'Start'
+
+    # Determine identity (name) of the event. Google trace needs matching
+    # names for the start/end of a duration event, but master_events uses
+    # different names like 'rebalanceStageStarted' /
+    # 'rebalanceStageCompleted'.
+    # Look for such suffixes and
+    #   a) Use them to determine if this the beginning or end of an event.
+    #   b) Remove the suffix so we have the same name for each.
+    for suffix in ('Start', 'Started'):
+        if name.endswith(suffix):
+                event['ph'] = 'B'
+                name = name.removesuffix(suffix)
+                break
+    else:
+        for suffix in ('Completed', 'Done', 'End', 'Ended', 'Terminate'):
+            if name.endswith(suffix):
+                event['ph'] = 'E'
+                name = name.removesuffix(suffix)
+                break
+        else:
+            # No known start / end suffix found, treat as instant.
+            event['ph'] = 'i'
+
+    # Some master events use an additional field (e.g. 'stage', 'vbucket')
+    # to distinguish between different stages of the same type of event, e.g.
+    #   {'type': 'rebalanceStageStarted', 'stage': ['kv'], ...
+    #   {'type': 'rebalanceStageStarted', 'stage': ['kv', 'kv_delta_recovery'],
+    # Google Trace requires that names are unique for Begin / End events
+    # (that's now it associates then together), so use the extra field as a
+    # unique suffix on the event name.
+    if 'stage' in me:
+        name += "/" +"/".join(me.pop('stage'))
+    if 'vbucket' in me:
+       name += "/vb:" + str(me['vbucket'])
+    if 'connectionName' in me:
+       name += "/conn:" + str(me.pop('connectionName'))
+
+    event['name'] = name
+
+    # master event records in seconds, 'ts' must be in microseconds.
+    event['ts'] = int(me.pop('ts') * 1000000)
+
+    if 'pid' in me:
+        # Mapping Erlang processes to Google Trace's process/thread model is
+        # a bit difficult. The broad expectation is that a (Google Trace) tid
+        # is a sequence of (potentially nested) spans, and a Process is a group
+        # of threads. Each thread gets its own row on the chart.
+        # We _could_ map an Erlang process to a thread, but the problem there
+        # is that Erlang creates many processes, often short-lived so we
+        # can end up with a very "tall" view which you need to constantly
+        # scroll up and down to find things.
+        # As such, we just map an Erlang "node" to a process, leaving "tid"
+        # blank. This also has downsides - sometimes events inside the single
+        # "process" overlap, but it generally gives a better view than assigning
+        # each Erlang process to a thread.
+        #
+        # Note: leaving 'pid' in original form in 'me' (not using pop()) so
+        # we include it in
+        # 'args' below.
+        pid = me['pid']
+        pid = pid[1:-1]
+        (node, process) = pid.split(".", 1)
+        event['pid'] = int(node)
+        # If you want to map each Erlang process to thread, uncomment this:
+        # event['tid'] = process
+    else:
+        # No pid in master event, but GoogleTrace requires one.
+        event['pid'] = 1
+
+    # Add any remaining fields in the master event as args.
+    event['args'] = me
+
+    # Comma-separate each recorc.
+    if not first:
+        print(',', end=' ')
+    first = False
+    print(json.dumps(event))
+print(']')

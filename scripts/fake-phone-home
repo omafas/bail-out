@@ -1,0 +1,46 @@
+#!/usr/bin/env ruby
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2012-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+
+require 'rubygems'
+require 'sinatra'
+require 'json'
+# gem install rack-contrib
+require 'rack/contrib/jsonp'
+require 'pp'
+
+use Rack::JSONP
+
+get '/home' do
+  content_type :json
+  puts "got params:"
+  pp params
+  reply = {
+    'newVersion' => '1.8.3',
+    'links' => {
+      :download => 'http://google.com/?q=couchbase+server+download',
+      :release => 'http://google.com/?q=couchbase+server+release+notes'
+    },
+    :info => 'some crap?'
+  }
+  # sleep a bit to simulate internet delay
+  sleep 3.8
+  reply.to_json
+end
+
+post '/home' do
+  statsBody = params['stats']
+  data = JSON.parse(statsBody)
+  puts "got phone home package"
+  pp data
+
+  content_type :html
+  '""'
+end

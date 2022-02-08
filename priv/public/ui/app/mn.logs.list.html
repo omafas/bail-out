@@ -1,0 +1,89 @@
+<!--
+  Copyright 2021-Present Couchbase, Inc.
+
+  Use of this software is governed by the Business Source License included in
+  the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+  file, in accordance with the Business Source License, use of this software will
+  be governed by the Apache License, Version 2.0, included in the file
+  licenses/APL2.txt.
+-->
+<mn-main-spinner
+   [mnSpinnerValue]="(logs | async) === null">
+</mn-main-spinner>
+
+<mn-input-filter
+   class="row flex-left margin-bottom-half filter-log"
+   [group]="filter.group"
+   mnPlaceholder="filter logs...">
+</mn-input-filter>
+
+<div class="cbui-table">
+  <div class="cbui-table-header padding-left resp-hide-sml">
+    <span class="cbui-table-cell flex-grow-3">
+      event
+    </span>
+    <span class="cbui-table-cell">
+      <span
+         class="sorter"
+         [ngClass]="{
+            'dynamic-active': (sorter.state | async)[0] == 'module',
+            'dynamic-inverted': (sorter.state | async)[1]
+         }"
+         (click)="sorter.click.next('module')">
+        module code
+      </span>
+    </span>
+    <span class="cbui-table-cell">
+      <span
+         class="sorter"
+         [ngClass]="{
+            'dynamic-active': (sorter.state | async)[0] == 'node',
+            'dynamic-inverted': (sorter.state | async)[1]
+         }"
+         (click)="sorter.click.next('node')">
+        server node
+      </span>
+    </span>
+    <span class="cbui-table-cell flex-grow-1-5">
+      <span
+         class="sorter"
+         [ngClass]="{
+            'dynamic-active': (sorter.state | async)[0] == 'tstamp',
+            'dynamic-inverted': (sorter.state | async)[1]
+         }"
+         (click)="sorter.click.next('tstamp')">
+        time
+      </span>
+    </span>
+  </div>
+
+  <section *ngFor="let log of (logs | async); trackBy: trackByMethod">
+    <div class="cbui-tablerow items-top resp-sml">
+      <span class="cbui-table-cell flex-grow-3 min-width-zero resp-sml">
+        <mn-text-expander
+           [text]="log.text"
+           [limit]="textLimit">
+        </mn-text-expander>
+      </span>
+      <span
+         class="cbui-table-cell resp-sml"
+         [attr.title]="log.module + ' ' + (log.code | number:'3.0-0')">
+        {{log.module}} {{log.code | number:'3.0-0'}}
+      </span>
+      <span class="cbui-table-cell cursor-pointer resp-sml">
+        <span
+           [ngbTooltip]="log.node"
+           placement="top auto"
+           triggers="click">
+          {{log.node}}
+        </span>
+      </span>
+      <span class="cbui-table-cell flex-grow-1-5 wrap resp-sml">
+        <span class="semi-bold nowrap margin-right-half">
+          {{log.serverTime | date:'mediumTime':'UTC'}}
+        </span>
+        <span class="nowrap">{{log.serverTime | date:'d MMM, y':'UTC'}}</span>
+      </span>
+    </div>
+  </section>
+</div>

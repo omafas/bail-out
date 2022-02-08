@@ -1,0 +1,97 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+  <mn-input-filter
+     [group]="filter.group"
+     mnPlaceholder="filter collections"
+     class="row flex-left">
+  </mn-input-filter>
+
+<div class="cbui-table inner-table">
+  <div class="cbui-table-header text-fine">
+    <span class="cbui-table-cell flex-grow-2">
+      <span
+         class="sorter"
+         [ngClass]="{
+                'dynamic-active': (sorter.state | async)[0] == 'name',
+                'dynamic-inverted': (sorter.state | async)[1]
+                }"
+         (click)="$event.stopPropagation();sorter.click.next('name')">
+        collection name
+      </span>
+    </span>
+    <span class="cbui-table-cell">ttl</span>
+    <span class="cbui-table-cell">items</span>
+    <span class="cbui-table-cell">memory used</span>
+    <span class="cbui-table-cell">disk utilization
+      <span
+         class="fa-stack icon-info rasied-med"
+         container="body"
+         ngbTooltip="The total data size on disk of a collection including
+                the size of the key, meta-data, and the compressed value for each document including tombstones.
+                Total disk usage summed across your buckets, scopes, and collections may be greater due to
+                the overheads associated with the underlying storage engine, the
+                underlying file system, and previous versions of
+                documents which may take up disk space until compaction."
+         placement="right">
+        <span class="icon fa-circle-thin fa-stack-2x"></span>
+        <span class="icon fa-info fa-stack-1x"></span>
+      </span>
+    </span>
+    <span class="cbui-table-cell">ops/sec</span>
+    <span class="cbui-table-cell flex-grow-2 resp-hide-xsml"></span>
+  </div>
+  <span *ngIf="!scope.collections.length" class="zero-content">
+    You have no collections yet. Use Add Collection above to start.
+  </span>
+  <!-- <div *ngIf="!(collections | async)?.length" class="text-fine padding-half">
+   No collections match.
+  </div> -->
+  <div
+     class="cbui-table-body"
+     (click)="$event.stopPropagation();"
+     *ngIf="scope.collections.length">
+    <section *ngFor="let collection of (paginator.page | async); trackBy: trackByFn.bind(this)">
+      <div [ngClass]="statusClass">
+        <mn-collections-item
+           [mnCollectionsStatsPoller]="mnCollectionsStatsPoller"
+           [scopeName]="scope.name"
+           [bucketName]="bucketName"
+           [collection]="collection"></mn-collections-item>
+      </div>
+    </section>
+  </div>
+  <div class="row row-min">
+    <div
+       (click)="$event.stopPropagation();"
+       [formGroup]="paginator.group"
+       *ngIf="(collections | async)?.length">
+      <mn-select
+         class="inline"
+         [values]="[10, 20, 40, 80]"
+         [group]="paginator.group"
+         mnPlaceholder="select bucket"
+         mnFormControlName="size">
+      </mn-select>
+    </div>
+
+    <ngb-pagination
+       (click)="$event.stopPropagation();"
+       *ngIf="(collections | async)?.length && (paginator.values | async)?.page"
+       [page]="(paginator.values | async)?.page"
+       [maxSize]="5"
+       [pageSize]="(paginator.values | async)?.size"
+       [collectionSize]="(collections | async)?.length"
+       (pageChange)="paginator.group.patchValue({page:$event})">
+      <ng-template ngbPaginationPrevious>&#60; prev</ng-template>
+      <ng-template ngbPaginationNext>next &#62;</ng-template>
+    </ngb-pagination>
+  </div>
+</div>

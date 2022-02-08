@@ -1,0 +1,54 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<mn-element-cargo depot="subnav">
+  <nav
+     class="sub-nav"
+     mn-pluggable-ui-tabs
+     mn-tab-bar-name="securityTab">
+    <a
+       ui-sref="app.admin.security.roles.user"
+       ng-class="{selected: ('app.admin.security.roles.user' | includedByState) ||
+                ('app.admin.security.roles.groups' | includedByState)}">
+      Users <span ng-show="pools.isEnterprise">&amp; Groups</span>
+    </a>
+    <a
+       ng-show="pools.isEnterprise"
+       ui-sref="app.admin.security.certificate"
+       ui-sref-active="selected"
+       class="resp-hide-sml">Certificates</a>
+    <a
+       ng-show="pools.isEnterprise"
+       ui-sref="app.admin.security.audit"
+       ui-sref-active="selected">Audit</a>
+    <a
+       ui-sref="app.admin.security.other"
+       ui-sref-active="selected"
+       class="resp-hide-sml">Other Settings</a>
+
+<!-- for smaller screens, hide some subnav links and show them in this menu -->
+    <span uib-dropdown class="mn-dropdown-menu hidden resp-show-sml">
+      <a uib-dropdown-toggle class="toggle-subnav">
+        <span class="icon fa-ellipsis-v"></span>
+      </a>
+      <div uib-dropdown-menu class="dropdown-menu-select-like">
+        <a
+           ng-show="pools.isEnterprise"
+           ui-sref="app.admin.security.certificate"
+           ui-sref-active="selected">Certificates</a>
+        <a
+           ui-sref="app.admin.security.other"
+           ui-sref-active="selected">Other Settings</a>
+      </div>
+    </span>
+  </nav>
+</mn-element-cargo>
+
+<div ui-view="" class="margin-top-half padding-left-1"></div>

@@ -1,0 +1,11 @@
+# -*- mode: conf; -*-
+
+[gerrit]
+scheme=ssh
+host=review.couchbase.org
+port=29418
+project=ns_server
+defaultremote=gerrit
+defaultbranch=master
+defaultrebase=0
+track=0

@@ -1,0 +1,43 @@
+<!--
+     Copyright 2020-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
+-->
+
+<span class="block nowrap">
+  <span
+     class="inline middle"
+     [formGroup]="group.flags">
+    <input
+       type="checkbox"
+       [attr.id]="'dynamic_collection_' + parent + item.name"
+       [formControlName]="item.name">
+    <label
+       [attr.title]="item.name"
+       [class.max-width-4]="'root' !== parent"
+       [class.max-width-5]="'root' == parent"
+       class="checkbox bold ellipsis"
+       [attr.for]="'dynamic_collection_' + parent + item.name">
+      {{item.name}}
+    </label>
+  </span>
+  &gt;&nbsp;
+  <span
+     class="inline"
+     [formGroup]="group.fields">
+    <input
+       style="display: table; background-color: inherit;"
+       [formControlName]="item.name"
+       [mnFocus]="group.flags.get(item.name).valueChanges"
+       mnName="{{item.name}}"
+       type="text"
+       autocorrect="off"
+       spellcheck="false"
+       autocapitalize="off"
+       (click)="$event.stopPropagation();">
+  </span>
+</span>

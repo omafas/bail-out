@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2011-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+
+import os
+import os.path
+import sys
+import atexit
+import getopt
+
+currentdir = os.path.dirname(os.path.realpath(__file__))
+pylib = os.path.join(currentdir, "pylib")
+sys.path.append(pylib)
+
+import cluster_run_lib
+
+
+LOGLEVELS = ["debug", "info", "warn", "error", "critical"]
+
+
+def is_ipv6_setup():
+    return os.getenv("IPV6", "false") == "true"
+
+
+def quote_string_for_erl(s):
+    return cluster_run_lib.quote_string_for_erl(s)
+
+
+USAGE_STRING = """
+usage: {program_name}
+    [--nodes=<number of nodes>] (default: 1)
+    [--dir=<directory>] (directory where node's data, logs will be kept;
+                         default: this script's directory)
+    [--dont-rename] (don't change network address)
+    [--dont-start] (don't start ns_server)
+    [--static-cookie] (don't reset cookie)
+    [--start-index=<index>] (starting node number; default: 0)
+    [--loglevel=<level>] (logging level; default: 'debug')
+    [--prepend-extras] (extra arguments)
+    [--pluggable-config=<file name>] (plug-ins)
+    [--disable-autocomplete] (disable auto-completion in UI)
+    [--pretend-version=<version>
+        When setting up a new cluster, spoof different version. Default
+        is to use current version. Can simplify basic mixed-version
+        cluster testing. E.g. (each command in its own terminal):
+
+       ./cluster_run -n2 --pretend-version 6.5
+       ./cluster_run -n2 --start-index 2
+       ./cluster_connect -n4 -Tkv
+
+       (Note the down-version cluster needs to be specified first as
+       you can't add down-version nodes to an up-version cluster.)
+       This will create a four node kv-only cluster with first two nodes
+       running at 6.5, and the other two running the "trunk" version.
+
+    [--community] (boot as Community Edition)
+    [--dev-preview-default=<true|false>]
+        Sets the default value of developer preview enabled mode.
+        This flag only has an effect if the cluster is being set up
+        for the first time and in that case, this option sets the
+        value of the dev preview mode. Otherwise, it doesn't
+        override the dev preview mode setting. Useful when combined
+        with --pretend-version as that option doesn't work with
+        clusters that are defaulted to be in developer preview mode.
+"""
+
+def usage():
+    print(USAGE_STRING.format(program_name=sys.argv[0]))
+
+
+
+def main():
+    try:
+        optlist, args = getopt.gnu_getopt(sys.argv[1:], "hn:p:",
+                                          ["help", "start-index=", "nodes=",
+                                           "dir=",
+                                           "dont-rename",
+                                           "static-cookie", "dont-start",
+                                           "loglevel=",
+                                           "prepend-extras",
+                                           "pluggable-config=",
+                                           "disable-autocomplete",
+                                           "community",
+                                           "pretend-version=", "afamily=",
+                                           "dev-preview-default="])
+    except getopt.GetoptError as err:
+        # print help information and exit:
+        print(str(err))  # will print something like "option -a not recognized"
+        usage()
+        sys.exit(2)
+
+    params = {}
+
+    params['ipv6'] = is_ipv6_setup()
+    params['args'] = args[0:]
+
+    for o, a in optlist:
+        if o in ("--nodes", "-n"):
+            params['num_nodes'] = int(a)
+        elif o == '--dont-start':
+            params['dont_start'] = True
+        elif o == '--start-index':
+            params['start_index'] = int(a)
+        elif o == '--dont-rename':
+            params['dont_rename'] = True
+        elif o in ("--help", "-h"):
+            usage()
+            exit(0)
+        elif o == "--static-cookie":
+            params['static_cookie'] = True
+        elif o == '--loglevel':
+            if loglevel not in LOGLEVELS:
+                print("Valid log levels are the following: %s" % ', '.join(LOGLEVELS))
+                sys.exit(1)
+            params['loglevel'] = a
+        elif o == '--dir':
+            params['root_dir'] = a
+        elif o == "--prepend-extras":
+            params['prepend_extras'] = True
+        elif o == "--pluggable-config":
+            params['pluggable_config'] = [a]
+        elif o == "--disable-autocomplete":
+            params['disable_autocomplete'] = "{disable_autocomplete,true}"
+        elif o == "--pretend-version":
+            params['pretend_version'] = a
+        elif o == "--dev-preview-default":
+            params['dev_preview_default'] = a == 'true'
+        elif o in ("--afamily", "-p"):
+            if a == "ipv6":
+                params['ipv6'] = True
+            elif a == "ipv4":
+                params['ipv6'] = False
+            else:
+                assert False, "invalid address family"
+        elif o == "--community":
+            params['force_community'] = True
+        else:
+            assert False, "unhandled options"
+
+    nodes = []
+    terminal_attrs = None
+
+    def kill_nodes():
+        cluster_run_lib.kill_nodes(nodes, terminal_attrs)
+
+    atexit.register(kill_nodes)
+
+    try:
+        import termios
+        terminal_attrs = termios.tcgetattr(sys.stdin)
+    except Exception:
+        pass
+
+    nodes = cluster_run_lib.start_cluster(**params)
+
+    for node in nodes:
+        node.wait()
+
+
+if __name__ == '__main__':
+    main()

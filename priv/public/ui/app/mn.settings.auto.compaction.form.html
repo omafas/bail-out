@@ -1,0 +1,269 @@
+<!--
+     Copyright 2021-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
+-->
+
+<div [formGroup]="mnGroup">
+  <div [hidden]="!(showMagmaFragmentationPercentage | async)">
+    <h4>Database Fragmentation {{isBucketSettings ? '' : '(Magma buckets)'}}</h4>
+    <div class="desc">
+      <span *ngIf="isBucketSettings">
+        Set the database fragmentation level to determine the point when compaction is triggered.
+      </span>
+      <span *ngIf="!isBucketSettings">
+        Set the default database fragmentation level to determine the point when compaction is triggered for Magma buckets.
+      </span>
+    </div>
+
+    <div class="formrow form-inline">
+      <input
+         type="number"
+         autocorrect="off"
+         spellcheck="false"
+         autocapitalize="off"
+         formControlName="magmaFragmentationPercentage">
+      <small>%</small>
+      <div
+         [hidden]="!(mnErrors | async)?.errors.magmaFragmentationPercentage"
+         class="error error-field">
+        {{(mnErrors | async)?.errors.magmaFragmentationPercentage}}
+      </div>
+    </div>
+  </div>
+
+  <div [hidden]="(mnStorage | async) === 'magma'">
+    <h4>Database Fragmentation {{isBucketSettings ? '' : '(Couchstore buckets)'}}</h4>
+    <div class="desc">
+      <span *ngIf="isBucketSettings">
+        Set the database fragmentation level to determine the point when compaction is triggered.
+      </span>
+      <span *ngIf="!isBucketSettings">
+        Set the database fragmentation level to determine the point when compaction is triggered for Couchstore buckets.
+      </span>
+    </div>
+
+    <div
+       formGroupName="databaseFragmentationThreshold"
+       class="formrow form-inline">
+      <input
+         type="checkbox"
+         id="for-data-frag-percent"
+         formControlName="percentageFlag">
+      <label for="for-data-frag-percent"></label>
+      <input
+         type="number"
+         autocorrect="off"
+         spellcheck="false"
+         autocapitalize="off"
+         formControlName="percentage">
+      <small>%</small>
+      <div
+         [hidden]="!(mnErrors | async)?.errors['databaseFragmentationThreshold[percentage]']"
+         class="error error-field">
+        {{(mnErrors | async)?.errors['databaseFragmentationThreshold[percentage]']}}
+      </div>
+    </div>
+
+    <div
+       formGroupName="databaseFragmentationThreshold"
+       class="formrow form-inline">
+      <input
+         type="checkbox"
+         id="for-data-frag-size"
+         formControlName="sizeFlag">
+      <label for="for-data-frag-size"></label>
+      <input
+         type="number"
+         autocorrect="off"
+         spellcheck="false"
+         autocapitalize="off"
+         formControlName="size">
+      <small>MiB</small>
+      <div
+         [hidden]="!(mnErrors | async)?.errors['databaseFragmentationThreshold[size]']"
+         class="error error-field">
+        {{(mnErrors | async)?.errors['databaseFragmentationThreshold[size]']}}
+      </div>
+    </div>
+
+    <h4>View Fragmentation</h4>
+    <div class="desc">
+      Set the view fragmentation level to determine the point when compaction is triggered.
+    </div>
+    <div
+       formGroupName="viewFragmentationThreshold"
+       class="formrow form-inline">
+      <input
+         type="checkbox"
+         id="for-view-frag-percent"
+         formControlName="percentageFlag">
+      <label for="for-view-frag-percent"></label>
+      <input
+         formControlName="percentage"
+         autocorrect="off"
+         spellcheck="false"
+         autocapitalize="off"
+         type="number">
+      <small>%</small>
+      <div
+         [hidden]="!(mnErrors | async)?.errors['viewFragmentationThreshold[percentage]']"
+         class="error error-field" >
+        {{(mnErrors | async)?.errors['viewFragmentationThreshold[percentage]']}}
+      </div>
+    </div>
+
+    <div
+       formGroupName="viewFragmentationThreshold"
+       class="formrow form-inline">
+      <input
+         type="checkbox"
+         id="for-view-frag-size"
+         formControlName="sizeFlag">
+      <label for="for-view-frag-size"></label>
+      <input
+         type="number"
+         autocorrect="off"
+         spellcheck="false"
+         autocapitalize="off"
+         formControlName="size">
+      <small>MiB</small>
+      <div
+         [hidden]="!(mnErrors | async)?.errors['viewFragmentationThreshold[size]']"
+         class="error error-field">
+        {{(mnErrors | async)?.errors['viewFragmentationThreshold[size]']}}
+      </div>
+    </div>
+
+    <h4>Time Interval</h4>
+    <div class="formrow">
+      <input
+         type="checkbox"
+         id="for-enable-compaction-time-period"
+         formControlName="timePeriodFlag">
+      <label for="for-enable-compaction-time-period">
+        Set the time interval for when compaction is allowed to run
+      </label>
+
+      <mn-time-period
+         [mnGroup]="mnGroup.get('allowedTimePeriod')"
+         [mnErrors]="mnErrors"
+         mnKey="allowedTimePeriod">
+      </mn-time-period>
+
+      <input
+         type="checkbox"
+         id="for-compact-parallel"
+         formControlName="parallelDBAndViewCompaction">
+      <label for="for-compact-parallel">
+        Compact buckets and views indexes in parallel
+      </label>
+    </div>
+
+    <div *ngIf="(showIndexFragmentation | async)">
+      <h4>Index Fragmentation</h4>
+      <div
+         class="formrow form-inline checkbox-list">
+        <input
+           type="radio"
+           id="index-regular-compaction-radio"
+           value="full"
+           formControlName="indexCompactionMode">
+        <label for="index-regular-compaction-radio">
+          Append-only write mode with index fragmentation level trigger:
+        </label>
+        <br>
+        <div formGroupName="indexFragmentationThreshold">
+          <input
+             type="number"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             formControlName="percentage">
+          <small>%</small>
+        </div>
+        <div class="formrow">
+          <input
+             type="radio"
+             id="for-index-circular-compaction"
+             value="circular"
+             formControlName="indexCompactionMode">
+          <label for="for-index-circular-compaction">
+            Circular write mode with day + time interval trigger:
+          </label>
+          <br>
+          <div formGroupName="indexCircularCompaction">
+            <div formGroupName="daysOfWeek" >
+              <span *ngFor="let day of daysOfWeek">
+                <input
+                    type="checkbox"
+                    [attr.id]="'for-compaction-day-' + day"
+                    [formControlName]="day">
+                <label [attr.for]="'for-compaction-day-' + day">{{day}}&nbsp;&nbsp;</label>
+              </span>
+            </div>
+          </div>
+          <div
+             class="error error-field"
+             [hidden]="!(mnErrors | async)?.errors['indexCircularCompaction[daysOfWeek]']">
+            {{(mnErrors | async)?.errors['indexCircularCompaction[daysOfWeek]']}}.
+          </div>
+          <div
+             class="error error-field"
+             [hidden]="!(mnErrors | async)?.errors.indexCompactionMode">
+            {{(mnErrors | async)?.errors.indexCompactionMode}}.
+          </div>
+        </div>
+
+        <mn-time-period
+           [mnGroup]="mnGroup.get('indexCircularCompaction.interval')"
+           [mnErrors]="mnErrors"
+           mnKey="indexCircularCompaction[interval]">
+        </mn-time-period>
+
+      </div>
+    </div>
+
+    <div
+       *ngIf="(showGsiWarning | async)"
+       class="content-box margin-top-1">
+      <strong>NOTE FOR GSI INDEXES</strong>
+      :&nbsp; Auto-compaction settings are unnecessary for memory-optimized and plasma-based indexes.
+    </div>
+
+    <h4 class="inline">Metadata Purge Interval</h4>
+    <span
+       class="fa-stack icon-info"
+       ngbTooltip="Sets the time period during which metadata on deleted items may remain on disk.
+              The acceptable range of values is 0.04 – 60, where 0.04 = 1 hour and 1 = 1 day.
+              Setting this value too high may significantly delay reclaiming of disk space; setting
+              it too low may cause data inconsistencies in XDCR."
+       placement="top">
+      <span class="icon fa-circle-thin fa-stack-2x"></span>
+      <span class="icon fa-info fa-stack-1x"></span>
+    </span><br>
+    <div class="desc">For Couchbase buckets ONLY.</div>
+    <div class="formrow form-inline">
+      <input
+         type="text"
+         formControlName="purgeInterval"
+         id="metadata-purge-frequency"
+         autocorrect="off"
+         spellcheck="false"
+         autocapitalize="off"
+         class="input-short-1">
+      <small>day{{purgeIntervalIsOne | async}}</small>
+      <br>
+      <div class="desc">Range 0.04 (1hr) - 60 days</div>
+      <div
+         [hidden]="!(mnErrors | async)?.errors.purgeInterval"
+         class="error error-field">
+        {{(mnErrors | async)?.errors.purgeInterval}}.
+      </div>
+    </div>
+  </div>
+</div>

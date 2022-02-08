@@ -1,0 +1,63 @@
+<!--
+  Copyright 2021-Present Couchbase, Inc.
+
+  Use of this software is governed by the Business Source License included in
+  the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+  file, in accordance with the Business Source License, use of this software will
+  be governed by the Apache License, Version 2.0, included in the file
+  licenses/APL2.txt.
+-->
+
+<mn-element-cargo depot="alerts">
+  <div
+     [hidden]="!(maxQuotaExceeded | async)"
+     class="alert alert-warning"><p>Insufficient RAM quota available to add the selected sample data. Please free up at least {{maxQuotaExceeded | async}}MiB of RAM quota in <a uiSref="app.admin.settings.cluster">cluster settings</a>.</p></div>
+  <div
+     [hidden]="!(isRebalancing | async)"
+     class="alert alert-warning"><p>Cannot load samples during rebalance.</p></div>
+  <div
+     [hidden]="!(maxBucketsExceeded | async)"
+     class="alert alert-warning"><p>Maximum number of buckets has been reached. For optimal performance, no more than {{maxBucketCount | async}} buckets are allowed.</p></div>
+  <div
+     [hidden]="(indexQueryNodes | async)"
+     class="alert alert-warning"><p>This cluster does not contain an index or query node. Sample data will be installed without creating indexes.</p></div>
+</mn-element-cargo>
+
+<mn-main-spinner
+   [mnSpinnerValue]="!(getSampleBuckets | async)?.length">
+</mn-main-spinner>
+
+<div>
+  <form
+     class="forms"
+     [formGroup]="form.group"
+     (ngSubmit)="form.submit.next()">
+    <h4>Sample Buckets</h4>
+    <p class="text-small">
+      Sample buckets contain example data, views, and indexes for your experimentation.
+    </p>
+    <div
+       class="error error-form"
+       [hidden]="!(postRequest?.error | async)">
+      <span *ngFor="let error of (postRequest?.error | async)">
+        {{error}}.
+      </span>
+    </div>
+    <div class="width-480">
+      <div class="formrow checkbox-list">
+        <div *ngFor="let bucket of (getSampleBuckets | async)">
+          <input
+             type="checkbox"
+             [attr.id]="'bucket' + bucket.name"
+             [formControlName]="bucket.name">
+          <label [attr.for]="'bucket' + bucket.name">&nbsp;{{bucket.name}}</label>
+        </div>
+      </div>
+    </div>
+    <button
+       type="submit"
+       [disabled]="isDisabled | async">
+       Load Sample Data
+    </button>
+  </form>
+</div>

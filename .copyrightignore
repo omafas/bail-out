@@ -1,0 +1,10 @@
+deps/gen_smtp/.*
+deps/triq/.*
+deps/meck/.*
+priv/public/ui/app/components/mn_filters.js
+priv/public/ui/app/components/mn_jquery.js
+priv/public/ui/libs/.*
+priv/public/ui/web_modules/.*
+src/gen_server2.erl
+README.markdown
+

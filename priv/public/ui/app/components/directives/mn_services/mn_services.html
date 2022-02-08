@@ -1,0 +1,97 @@
+<!--
+     Copyright 2015-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included in
+     the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+     file, in accordance with the Business Source License, use of this software will
+     be governed by the Apache License, Version 2.0, included in the file
+     licenses/APL2.txt.
+-->
+
+<div
+   class="checkbox-service"
+   ng-click="mnServicesCtl.change('kv', mnServicesCtl.config, $event)">
+  <input
+     type="checkbox"
+     id="for-kv-service"
+     ng-model="mnServicesCtl.config.services.model.kv"
+     ng-disabled="mnServicesCtl.config.services.disabled.kv || mnServicesCtl.mnIsDisabled">
+  <label for="for-kv-service">
+    Data
+  </label>
+</div>
+<div
+   class="checkbox-service"
+   ng-click="mnServicesCtl.change('index', mnServicesCtl.config, $event)">
+  <input
+     type="checkbox"
+     id="for-index-service"
+     ng-model="mnServicesCtl.config.services.model.index"
+     ng-disabled="mnServicesCtl.config.services.disabled.index || mnServicesCtl.mnIsDisabled">
+  <label for="for-index-service">
+    Index
+  </label>
+</div>
+<div
+   class="checkbox-service"
+   ng-click="mnServicesCtl.change('n1ql', mnServicesCtl.config, $event)">
+  <input
+     type="checkbox"
+     id="for-query-service"
+     ng-model="mnServicesCtl.config.services.model.n1ql"
+     ng-disabled="mnServicesCtl.config.services.disabled.n1ql || mnServicesCtl.mnIsDisabled">
+  <label for="for-query-service">
+    Query
+  </label>
+</div>
+<div
+   class="checkbox-service"
+   ng-click="mnServicesCtl.change('fts', mnServicesCtl.config, $event)">
+  <input
+     type="checkbox"
+     id="for-fts-service"
+     ng-model="mnServicesCtl.config.services.model.fts"
+     ng-disabled="mnServicesCtl.config.services.disabled.fts || mnServicesCtl.mnIsDisabled">
+  <label for="for-fts-service">
+    Search
+  </label>
+</div>
+<div
+   class="checkbox-service"
+   ng-if="mnServicesCtl.mnIsEnterprise"
+   ng-click="mnServicesCtl.change('cbas', mnServicesCtl.config, $event)">
+  <input
+     type="checkbox"
+     id="for-cbas-service"
+     ng-model="mnServicesCtl.config.services.model.cbas"
+     ng-disabled="mnServicesCtl.config.services.disabled.cbas || mnServicesCtl.mnIsDisabled">
+  <label for="for-cbas-service">
+    Analytics
+  </label>
+</div>
+<div
+   class="checkbox-service"
+   ng-if="mnServicesCtl.mnIsEnterprise"
+   ng-click="mnServicesCtl.change('eventing', mnServicesCtl.config, $event)">
+  <input
+     type="checkbox"
+     id="for-eventing-service"
+     ng-model="mnServicesCtl.config.services.model.eventing"
+     ng-disabled="mnServicesCtl.config.services.disabled.eventing || mnServicesCtl.mnIsDisabled">
+  <label for="for-eventing-service">
+    Eventing
+  </label>
+</div>
+<div
+   class="checkbox-service"
+   ng-if="mnServicesCtl.mnIsEnterprise"
+   ng-click="mnServicesCtl.change('backup', mnServicesCtl.config, $event)">
+  <input
+     type="checkbox"
+     id="for-backup-service"
+     ng-model="mnServicesCtl.config.services.model.backup"
+     ng-disabled="mnServicesCtl.config.services.disabled.backup || mnServicesCtl.mnIsDisabled">
+  <label for="for-backup-service">
+    Backup
+  </label>
+</div>

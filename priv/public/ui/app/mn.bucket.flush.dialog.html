@@ -1,0 +1,33 @@
+<!--
+  Copyright 2021-Present Couchbase, Inc.
+
+  Use of this software is governed by the Business Source License included in
+  the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+  file, in accordance with the Business Source License, use of this software will
+  be governed by the Apache License, Version 2.0, included in the file
+  licenses/APL2.txt.
+-->
+
+<div class="dialog-small">
+  <div class="panel-header">
+    <h2>Confirm Flush Bucket</h2>
+    <a class="ui-dialog-titlebar-close modal-close" (click)="activeModal.dismiss()">X</a>
+  </div>
+  <form
+     [formGroup]="form.group"
+     (submit)="form.submit.next()">
+    <div class="panel-content">
+      <div class="row flex-left">
+        <span class="icon fa-warning fa-2x red-3"></span>
+        <p>
+          Warning: Bucket data will be lost.
+          <br>Flush this bucket?
+        </p>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <a (click)="activeModal.dismiss()">Cancel</a>
+      <button type="submit">Flush Bucket</button>
+    </div>
+  </form>
+</div>

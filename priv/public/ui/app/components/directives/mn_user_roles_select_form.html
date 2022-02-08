@@ -1,0 +1,45 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<form class="margin-bottom-1">
+  <div class="row flex-left">
+    <mn-keyspace-selector-downgrade
+       class="mn-keyspace-selector"
+       [service]="mnCollectionSelectorService">
+    </mn-keyspace-selector-downgrade>
+  </div>
+</form>
+
+<div
+   class="ks-control-selectedrole"
+   ng-repeat="cfg in state.selectedRolesConfigs[item.role]">
+  <div class="row items-top">
+    <span class="row items-top">
+      <span class="icon fa-check green-1 margin-right-quarter"></span>
+      <p class="text-smaller break-word line-height-1-5">{{cfg}}</p>
+    </span>
+    <a ng-click="del(cfg)">
+      X
+    </a>
+  </div>
+</div>
+<div
+   class=""
+   ng-repeat="(params, groups) in state.selectedGroupsRolesConfigs[item.role]">
+  <div class="row">
+    {{params}}
+    <span
+       class="role-from-group"
+       ng-if="groups.length"
+       tooltip-trigger="mouseenter"
+       tooltip-append-to-body="true"
+       uib-tooltip="{{groups.join(', ')}}">&nbsp;</span>
+  </div>
+</div>

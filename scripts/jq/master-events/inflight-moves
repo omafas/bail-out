@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2016-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+#
+# Filter and group events for unfinished moves.
+#
+
+exec jq '
+def has_vbucketMoveStart: any(.type == "vbucketMoveStart");
+def has_vbucketMoveDone: any(.type == "vbucketMoveDone");
+
+map(select(has("bucket") and has("vbucket"))) |
+group_by([.bucket,.vbucket]) |
+map(select(has_vbucketMoveStart and (has_vbucketMoveDone | not)))
+' "$@"

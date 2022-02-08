@@ -1,0 +1,100 @@
+<!--
+Copyright 2021-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div
+   uib-dropdown
+   class="mn-select relative min-width-3-5"
+   ng-class="{'mn-align-left': vm.mnHorizontalAlign === 'left', 'mn-align-right': vm.mnHorizontalAlign === 'right', 'open-on-top': vm.openOnTop}"
+   is-open="vm.isOpened">
+  <div
+     uib-dropdown-toggle
+     ng-disabled="vm.mnDisabled">
+    <button
+       ng-attr-title="{{vm.values.indexOf(vm.ngModel) >= 0 ? (vm.labels ? vm.labels[vm.values.indexOf(vm.ngModel)] : vm.valuesMapping(vm.ngModel)) : (vm.mnPlaceholder || '')}}"
+       ng-disabled="vm.mnDisabled"
+       class="outline btn-small dropdown-btn ellipsis"
+       ng-class="{'active': vm.isOpened}"
+       type="button">
+      {{vm.values.indexOf(vm.ngModel) >= 0 ? (vm.labels ? vm.labels[vm.values.indexOf(vm.ngModel)] : vm.valuesMapping(vm.ngModel)) : (vm.mnPlaceholder || '')}}
+    </button>
+  </div>
+  <div
+     uib-dropdown-menu
+     class="panel absolute fit-content-width margin-0">
+    <div
+       ng-if="vm.hasSearchInput()"
+       class="sticky position-top-0"
+       mn-search="vm.mnSearchValue"
+       mn-hide-button="true"
+       ng-click="vm.clickSearch($event)">
+    </div>
+    <div class="scrollable">
+      <span
+         ng-if="!vm.hasSearchInput()"
+         class="block option"
+         ng-repeat="value in vm.values track by value">
+        <input
+           type="radio"
+           id="mn-select-{{vm.id}}-{{$index}}"
+           name="mn-select-{{vm.id}}"
+           ng-model="vm.ngModel"
+           ng-value="value"
+           ng-change="vm.optionClicked(value)">
+        <label
+           for="mn-select-{{vm.id}}-{{$index}}"
+           class="width-12"
+           tabindex="0"
+           ng-keydown="vm.optionClicked(value, $event)">
+          {{vm.labels ? vm.labels[$index] : vm.valuesMapping(value)}}
+        </label>
+      </span>
+
+      <span
+         ng-if="vm.hasSearchInput() && !vm.labels"
+         class="block option"
+         ng-repeat="value in vm.getPreparedValues() | filter: vm.mnSearchValue track by value">
+        <input
+           type="radio"
+           id="mn-select-{{vm.id}}-{{$index}}"
+           name="mn-select-{{vm.id}}"
+           ng-model="vm.ngModel"
+           ng-value="vm.values[vm.preparedValues.indexOf(value)]"
+           ng-change="vm.optionClicked(vm.values[vm.preparedValues.indexOf(value)])">
+        <label
+           for="mn-select-{{vm.id}}-{{$index}}"
+           class="width-12"
+           tabindex="0"
+           ng-keydown="vm.optionClicked(vm.values[vm.preparedValues.indexOf(value)], $event)">
+          {{value}}
+        </label>
+      </span>
+
+      <span
+         ng-if="vm.hasSearchInput() && vm.labels"
+         class="block option"
+         ng-repeat="label in vm.labels | filter: vm.mnSearchValue track by label">
+        <input
+           type="radio"
+           id="mn-select-{{vm.id}}-{{$index}}"
+           name="mn-select-{{vm.id}}"
+           ng-model="vm.ngModel"
+           ng-value="vm.values[vm.labels.indexOf(label)]"
+           ng-change="vm.optionClicked(vm.values[vm.labels.indexOf(label)])">
+        <label
+           for="mn-select-{{vm.id}}-{{$index}}"
+           class="width-12"
+           tabindex="0"
+           ng-keydown="vm.optionClicked(vm.values[vm.labels.indexOf(label)], $event)">
+          {{label}}
+        </label>
+      </span>
+    </div>
+  </div>
+</div>

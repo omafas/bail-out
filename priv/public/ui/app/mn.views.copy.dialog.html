@@ -1,0 +1,37 @@
+<!--
+  Copyright 2021-Present Couchbase, Inc.
+
+  Use of this software is governed by the Business Source License included in
+  the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+  file, in accordance with the Business Source License, use of this software will
+  be governed by the Apache License, Version 2.0, included in the file
+  licenses/APL2.txt.
+-->
+
+<div class="dialog-med">
+  <div  class="panel-header">
+    <h2>Copy Design Document</h2>
+  </div>
+  <form
+      [formGroup]="form.group"
+      (ngSubmit)="form.submit.next()">
+    <div class="panel-content forms">
+      <label for="copy_ddoc_ddoc_name">Document Name:</label>
+      <div class="formrow form-inline">
+        <label for="copy_ddoc_ddoc_name">_design/dev_</label>
+        <input
+            type="text"
+            formControlName="ddocName"
+            autocorrect="off"
+            spellcheck="false"
+            autocapitalize="off"
+            id="copy_ddoc_ddoc_name">
+      </div>
+      <p><strong>NOTE:</strong> Development mode (_design/dev_) provides the opportunity to edit and test your map/reduce views against a subset of data without overloading the cluster.</p>
+    </div>
+    <div class="panel-footer">
+      <a (click)="activeModal.dismiss()">Cancel</a>
+      <button type="submit">Copy Design Doc</button>
+    </div>
+  </form>
+</div>

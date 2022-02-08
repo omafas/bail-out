@@ -1,0 +1,26 @@
+<!--
+  Copyright 2021-Present Couchbase, Inc.
+
+  Use of this software is governed by the Business Source License included in
+  the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+  file, in accordance with the Business Source License, use of this software will
+  be governed by the Apache License, Version 2.0, included in the file
+  licenses/APL2.txt.
+-->
+
+<div class="dialog-small">
+  <div class="panel-header">
+    <h2>Confirm Log Collection Stop</h2>
+  </div>
+  <form
+     [formGroup]="form.group"
+     (submit)="form.submit.next()">
+    <div class="panel-content">
+      <p>Are you sure you want to stop log collection?</p>
+    </div>
+    <div class="panel-footer">
+      <a (click)="activeModal.dismiss()">Cancel</a>
+      <button type="submit">Stop</button>
+    </div>
+  </form>
+</div>

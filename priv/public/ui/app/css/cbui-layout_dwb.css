@@ -1,0 +1,605 @@
+/* MAIN LAYOUT COMPONENTS ----------------------------------------------- */
+/* expands height of the page regardless of content - for footer position */
+body {
+  min-height: 100vh;
+}
+
+/* blue header area w/ logo, title, action links ------------------------ */
+header {
+
+}
+/* contains all content below the header -------------------------------- */
+main {
+
+}
+/* nav element for child pages, positioned under header ----------------- */
+nav.sub-nav {
+
+}
+/* nav element for main navigation, on left side or hidden for mobile --- */
+nav.nav-sidebar {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  border-right: 1px solid #ececec;
+  padding: .25rem 0 2rem 0;
+  margin: 0 2rem 120px 0;
+  text-align: right;
+  width: 104px;
+  transform: translateX(0px);
+  transition: width .6s, transform .9s;
+  position: relative;
+}
+section {
+  border-bottom: 1px solid #d1d1d1;
+  padding: 4px 0;
+}
+footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: .688rem!important;
+  padding: .5rem 1rem;
+  width: 100%;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  box-shadow: 0px -1px 5px 1px rgba(0,0,0,0.12);
+  z-index: 1;
+}
+.vertical-page-splitter {
+  border-left: 1px solid #d1d1d1;
+  margin: 0 40px;
+  flex-basis: 1;
+}
+/* basic flex component for horizontal layout --------------------------- */
+.row {
+  display: flex;
+  min-height: 1rem;
+  align-items: center;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  position: relative;
+}
+.row.row-min {
+  min-height: 0;
+}
+
+/* column for side-by-side containers ----------------------------------- */
+.column {
+  padding: 0;
+  margin: 0 2rem 0 0;
+}
+.column:last-child {
+  margin-right: 0;
+}
+/* turns a .row into a vertical layout w/ top-aligned content ----------- */
+.flex-column {
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.flex-inline {
+  display: inline-flex;
+}
+
+/* GENERAL HELPERS ------------------------------------------------------ */
+.relative {
+  position: relative !important;
+}
+.absolute {
+  position: absolute;
+}
+.sticky {
+  position: sticky;
+}
+.inline {
+  display: inline-block !important;
+}
+.middle {
+  vertical-align: middle; /* almost always useless...use flex instead  ***** */
+}
+.align-top {
+  vertical-align: top;
+}
+.align-bottom {
+  vertical-align: bottom;
+}
+.text-right {
+  text-align: right;
+}
+.text-center {
+  text-align: center;
+}
+.text-left {
+  text-align: left;
+}
+.nowrap {
+  white-space: nowrap;
+}
+.wrap {
+  white-space: normal;
+  overflow: visible;
+}
+.line-height-1 {
+  line-height:1!important;
+}
+.line-height-1-5 {
+  line-height:1.5!important;
+}
+.fix-position-br {
+  position: fixed;
+  bottom: .5rem;
+  right: .5rem;
+}
+.fix-position-bl {
+  position: fixed;
+  bottom: 1rem;
+  left: 1rem;
+}
+
+/* FLEX HELPERS --------------------------------------------------------- */
+.flex-left {
+  justify-content: flex-start !important;
+}
+.flex-right {
+  justify-content: flex-end !important;
+}
+.flex-center {
+  justify-content: center !important;
+}
+.flex-wrap {
+  flex-wrap: wrap !important;
+}
+.items-top {
+  align-items: flex-start !important;
+}
+.items-bottom {
+  align-items: flex-end !important;
+}
+.items-center {
+  align-items: center !important;
+}
+.items-space-around {
+  justify-content: space-around !important;
+}
+.items-stretch {
+  align-items: stretch !important;
+}
+
+/* flex-grow factors --------------------------------------------------- */
+.flex-grow-0 {
+  flex-grow: 0;
+}
+.flex-grow-half {
+  flex-grow: .5;
+}
+.flex-grow-1 {
+  flex-grow: 1;
+}
+.flex-grow-1-25 {
+  flex-grow: 1.25;
+}
+.flex-grow-1-5 {
+  flex-grow: 1.5;
+}
+.flex-grow-2 {
+  flex-grow: 2;
+}
+.flex-grow-2-5 {
+  flex-grow: 2.5;
+}
+.flex-grow-3 {
+  flex-grow: 3;
+}
+
+/* min/max width ------------------------------------------------------- */
+.min-width-zero {
+  min-width: 0;
+}
+.min-width-10 {
+  min-width: 10rem;
+}
+.min-width-3-5 {
+  min-width: 3.5rem;
+}
+.min-width-4 {
+  min-width: 4rem;
+}
+.min-width-12 {
+  min-width: 12rem;
+}
+.min-width-full {
+  min-width: 100%;
+}
+
+.max-width-1 {
+  max-width: 4rem; /* 1rem = 16px, 4rem = 64px */
+}
+.max-width-2 {
+  max-width: 8rem; /* 128px */
+}
+.max-width-3 {
+  max-width: 12rem; /* 192px */
+}
+.max-width-4 {
+  max-width: 16rem; /* 256px */
+}
+.max-width-5 {
+  max-width: 24rem; /* 384px */
+}
+.max-width-6 {
+  max-width: 32rem; /* 512px */
+}
+.max-width-7 {
+  max-width: 40rem; /* 640px */
+}
+.max-width-8 {
+  max-width: 48rem; /* 768px */
+}
+.max-width-9 {
+  max-width: 56rem; /* 896px */
+}
+.max-width-10 {
+  max-width: 64rem; /* 1024px */
+}
+.max-width-11 {
+  max-width: 72rem; /* 1152px */
+}
+.max-width-12 {
+  max-width: 80rem; /* 1280px */
+}
+.max-width-50 {
+  max-width: 50%;
+}
+
+/* percentage width ---------------------------------------------------- */
+.width-1 {
+  width: 8.33333333%;
+}
+.width-2 {
+  width: 16.66666667%;
+}
+.width-3 {
+  width: 25%;
+}
+.width-4 {
+  width: 33.33333333%;
+}
+.width-5 {
+  width: 41.66666667%;
+}
+.width-6 {
+  width: 50%;
+}
+.width-7 {
+  width: 58.33333333%;
+}
+.width-8 {
+  width: 66.66666667%;
+}
+.width-9 {
+  width: 75%;
+}
+.width-10 {
+  width: 83.33333333%;
+}
+.width-11 {
+  width: 91.66666667%;
+}
+.width-12 {
+  width: 100%!important;
+}
+
+/* fixed rem width ----------------------------------------------------- */
+.fix-width-0 {
+  width: 0px;
+}
+.fix-width-half {
+  width: 2rem !important; /* 1rem = 16px, 2rem = 32px */
+}
+.fix-width-3-quarters {
+  width: 3.5rem !important; /* 1rem = 16px, 2rem = 32px */
+}
+.fix-width-1 {
+  width: 4rem !important; /* 1rem = 16px, 4rem = 64px */
+}
+.fix-width-1-5 {
+  width: 6rem !important; /* 1rem = 16px, 6rem = 96px */
+}
+.fix-width-2 {
+  width: 8rem !important; /* 128px */
+}
+.fix-width-3 {
+  width: 12rem !important; /* 192px */
+}
+.fix-width-3-5 {
+  width: 14rem !important; /* 192px */
+}
+.fix-width-4 {
+  width: 16rem !important; /* 256px */
+}
+.fix-width-4-5 {
+  width: 20rem !important; /* 320px */
+}
+.fix-width-5 {
+  width: 24rem !important; /* 384px */
+}
+.fix-width-6 {
+  width: 32rem !important; /* 512px */
+}
+.fix-width-7 {
+  width: 40rem !important; /* 640px */
+}
+.fix-width-8 {
+  width: 48rem !important; /* 768px */
+}
+.fix-width-9 {
+  width: 56rem !important; /* 896px */
+}
+.fix-width-10 {
+  width: 64rem !important; /* 1024px */
+}
+.fix-width-11 {
+  width: 72rem !important; /* 1152px */
+}
+.fix-width-12 {
+  width: 80rem !important; /* 1280px */
+}
+
+/* fixed pixel width -------------------------------------------------- */
+.width-300 {
+  width: 300px !important;
+}
+
+/* fixed height ------------------------------------------------------- */
+.max-height-500 {
+  max-height: 500px;
+  overflow: auto;
+}
+
+.min-height-0 {
+  min-height: 0 !important;
+}
+.min-height-2 {
+  height: 2rem !important;
+}
+.min-height-4 {
+  height: 4rem !important;
+}
+.min-height-1 {
+  min-height: 1rem !important;
+}
+.height-1-5 {
+  height: 1.5rem !important;
+}
+
+/* responsive height -------------------------------------------------- */
+.height-85vh {
+  height: 85vh;
+}
+
+/* positions ---------------------------------------------------------- */
+.position-top-0 {
+  top: 0;
+}
+
+/* margins ------------------------------------------------------------ */
+.margin-0 {
+  margin: 0 !important;
+}
+.margin-quarter {
+  margin: .25rem !important;
+}
+.margin-1 {
+  margin: 1rem !important;
+}
+.margin-quarter:last-child {
+  margin: .25rem 0 !important;
+}
+.margin-top-neg-half {
+  margin-top: -.5rem !important;
+}
+.margin-top-neg-1 {
+  margin-top: -1rem !important;
+}
+.margin-top-neg-2 {
+  margin-top: -2rem !important;
+}
+.margin-top-0 {
+  margin-top: 0 !important;
+}
+.margin-top-quarter {
+  margin-top: .25rem !important;
+}
+.margin-top-half {
+  margin-top: .5rem !important;
+}
+.margin-top-1 {
+  margin-top: 1rem !important;
+}
+.margin-top-1-5 {
+  margin-top: 1.5rem !important;
+}
+.margin-top-2 {
+  margin-top: 2rem !important;
+}
+.margin-top-4 {
+  margin-top: 4rem !important;
+}
+
+.margin-right-zero {
+  margin-right: 0 !important;
+}
+.margin-right-0 {
+  margin-right: 0 !important;
+}
+.margin-right-quarter {
+  margin-right: .25rem !important;
+}
+.margin-right-half {
+  margin-right: .5rem !important;
+}
+.margin-right-1 {
+  margin-right: 1rem !important;
+}
+.margin-right-15 {
+  margin-right: 1.5rem !important;
+}
+.margin-right-2 {
+  margin-right: 2rem !important;
+}
+.margin-right-25 {
+  margin-right: 2.5rem !important;
+}
+.margin-right-3 {
+  margin-right: 3rem !important;
+}
+.margin-right-35 {
+  margin-right: 3.5rem !important;
+}
+.margin-right-4 {
+  margin-right: 4rem !important;
+}
+
+.margin-bottom-0 {
+  margin-bottom: 0 !important;
+}
+.margin-bottom-quarter {
+  margin-bottom: .25rem !important;
+}
+.margin-bottom-half {
+  margin-bottom: .5rem !important;
+}
+.margin-bottom-1 {
+  margin-bottom: 1rem !important;
+}
+.margin-bottom-1-5 {
+  margin-bottom: 1.5rem !important;
+}
+.margin-bottom-2 {
+  margin-bottom: 2rem !important;
+}
+.margin-bottom-3 {
+  margin-bottom: 3rem !important;
+}
+.margin-bottom-4 {
+  margin-bottom: 4rem !important;
+}
+.margin-bottom-neg-1 {
+  margin-bottom: -1rem !important;
+}
+
+.margin-left-0 {
+  margin-left: 0 !important;
+}
+.margin-left-quarter {
+  margin-left: .25rem !important;
+}
+.margin-left-half {
+  margin-left: .5rem !important;
+}
+.margin-left-1, .indent-1 {
+  margin-left: 1rem !important;
+}
+.margin-left-1-5, .indent-1-5 {
+  margin-left: 1.5rem !important;
+}
+.margin-left-2, .indent-2 {
+  margin-left: 2rem !important;
+}
+.margin-left-2-5, .indent-2-5 {
+  margin-left: 2.5rem !important;
+}
+.margin-left-3, .indent-3 {
+  margin-left: 3rem !important;
+}
+.margin-left-neg-1 {
+  margin-left: -1rem !important;
+}
+
+.margin-auto {
+  margin: auto;
+}
+
+/* padding ------------------------------------------------------------- */
+.padding-0 {
+  padding: 0 !important;
+}
+.padding-quarter {
+  padding: .25rem !important;
+}
+.padding-half {
+  padding: .5rem !important;
+}
+.padding-1 {
+  padding: 1rem !important;
+}
+.padding-left-0 {
+  padding-left: 0 !important;
+}
+.padding-left-half {
+  padding-left: .5rem !important;
+}
+.padding-left-1 {
+  padding-left: 1rem !important;
+}
+.padding-left-1-5 {
+  padding-left: 1.5rem !important;
+}
+.padding-left-2 {
+  padding-left: 2rem !important;
+}
+.padding-left-2-5 {
+  padding-left: 2.5rem !important;
+}
+
+.padding-right-0 {
+  padding-right: 0 !important;
+}
+.padding-right-min {
+  padding-right: .25rem !important;
+}
+.padding-right-half {
+  padding-right: .5rem !important;
+}
+.padding-right-1 {
+  padding-right: 1rem !important;
+}
+
+.padding-bottom-6 {
+  padding-bottom: 6rem !important;
+}
+.padding-top-1 {
+  padding-top: 1rem !important;
+}
+
+/* extras -------------------------------------------------------------- */
+.pre-line {
+  white-space: pre-line;
+}
+.break-word {
+  word-break: break-all;
+}
+.overflow-wrap {
+  overflow-wrap: anywhere
+}
+.debug-outline {
+  border: 1px dashed red !important;
+}
+.border-0 {
+  border-width: 0!important;
+}
+.border-1 {
+  border-left: 1px solid #d1d1d1;
+}
+.overflow-auto {
+  overflow: auto;
+}
+.overflow-hidden {
+  overflow: hidden;
+}
+/* adds a comma before an element w/ class .comma-list AND non-zero content ...
+  if it follows another .comma-list element // "empty" for CSS is this:
+  <div class="comma-list"></div> */
+.comma-list:not(:empty) ~ .comma-list:not(:empty):before {
+  content: ", ";
+}

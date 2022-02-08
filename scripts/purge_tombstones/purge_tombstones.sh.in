@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2021-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+#
+# A script that drops all replicas for a particular vbucket and then recreates
+# them from active copy.
+#
+__GENERATED__
+
+set -e
+
+HOST="$1"
+USER="$2"
+
+PASSWORD=
+MODULE=
+
+NEED_CLEANUP=yes
+
+read -r -d '' MODULE <<'EOF' || true # read exits with status 1 on EOF
+__MODULE__
+EOF
+
+CURL=
+COUCHBASE_CURL=/opt/couchbase/bin/curl
+
+# Use curl from /opt/coucbhase/bin if available. It's often newer than the one
+# installed globally.
+if [ -f "$COUCHBASE_CURL" ] && [ -x "$COUCHBASE_CURL" ]; then
+    CURL="$COUCHBASE_CURL"
+else
+    if command -v curl > /dev/null 2>&1; then
+        CURL=curl
+    else
+        echo "'curl' not found in PATH" >&2
+        exit 1
+    fi
+fi
+
+function diag_eval() {
+    # the body is sent to stderr; we expect any output only when errors occur
+    status=$("$CURL" --max-time 60 --silent --show-error \
+                     --config <(echo "--user $USER:$PASSWORD") \
+                     --write-out "%{http_code}" \
+                     --output /dev/fd/2 \
+                     -X POST "$HOST/diag/eval" --data-binary @-)
+    if [[ "$status" != "200" ]]; then
+        echo "HTTP request failed. Status code: $status" >&2
+        return 1
+    fi
+}
+
+function load_module() {
+    diag_eval <<EOF
+Nodes = ns_node_disco:nodes_wanted(),
+Module = $MODULE,
+{Results, BadNodes} =
+    rpc:multicall(Nodes, dynamic_compile, load_from_string, [Module]),
+GoodNodes =
+    lists:filtermap(
+      fun ({Node, Result}) ->
+              case Result of
+                  {module, _} ->
+                      {true, Node};
+                  _ ->
+                      false
+              end
+      end, lists:zip(Nodes -- BadNodes, Results)),
+
+case GoodNodes =:= Nodes of
+    true ->
+        menelaus_util:reply_text(Req, "", 200);
+    false ->
+        Msg = io_lib:format("Failed nodes: ~w~n", [Nodes -- GoodNodes]),
+        menelaus_util:reply_text(Req, Msg, 500)
+end,
+done.
+EOF
+}
+
+function start_purger() {
+    diag_eval <<EOF
+purge_tombstones:start(Req).
+EOF
+}
+
+function purge_tombstones() {
+    diag_eval <<EOF
+purge_tombstones:purge(Req).
+EOF
+}
+
+function purge_complete() {
+    diag_eval <<EOF
+purge_tombstones:complete(Req).
+EOF
+}
+
+function cleanup() {
+    if [ -n "${NEED_CLEANUP}" ]; then
+        echo "Attempting to cleanup after an error"
+        diag_eval <<EOF
+rpc:eval_everywhere(ns_node_disco:nodes_wanted(),
+                    purge_tombstones, do_kill, []),
+menelaus_util:reply_text(Req, "", 200),
+done.
+EOF
+    fi
+}
+
+function get_password() {
+    read -sr -p "Password: " "$1" && echo
+}
+
+if [ -z "$HOST" ] || [ -z "$USER" ]; then
+    printf "Usage:\n\t%s <hostname> <username>\n" "$0" >&2
+    exit 1
+fi
+
+get_password PASSWORD
+
+echo "Preparing nodes"
+load_module
+
+trap cleanup EXIT
+
+echo "Pausing config replication"
+start_purger
+
+echo "Waiting for in-flight config changes to replicate"
+sleep 10s
+
+echo "Purging tombstones"
+purge_tombstones
+
+echo "Resuming config replication"
+purge_complete
+
+unset NEED_CLEANUP
+echo "Done"

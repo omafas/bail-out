@@ -1,0 +1,107 @@
+<!--
+Copyright 2021-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div
+   ngbDropdown
+   #ngbSelect="ngbDropdown"
+   display="dynamic"
+   class="mn-select relative">
+  <div ngbDropdownToggle>
+    <button
+       [attr.title]="labels ? labels[values.indexOf(value | async)] : valuesMapping(value | async) || mnPlaceholder"
+       type="button"
+       class="outline btn-small dropdown-btn ng-binding margin-top-0 ellipsis"
+       [class.active]="ngbSelect.isOpen()"
+       [disabled]="disabled | async">
+      {{labels ? labels[values.indexOf(value | async)] : valuesMapping(value | async) || mnPlaceholder}}
+    </button>
+  </div>
+  <div
+     ngbDropdownMenu
+     class="panel margin-0 fit-content-width">
+    <mn-input-filter
+       *ngIf="hasSearchInput | async"
+       [group]="searchFilter.group"
+       mnPlaceholder="filter options"
+       class="row flex-left sticky position-top-0">
+    </mn-input-filter>
+    <div class="scrollable">
+      <span
+         *ngIf="!(hasSearchInput | async)"
+         [formGroup]="hiddenRadioGroup">
+        <span
+           class="block option"
+           *ngFor="let value of values; index as i;">
+          <input
+             formControlName="hiddenRadio"
+             name="hiddenRadio"
+             type="radio"
+             [attr.id]="'mn-select-' + id + '-' + i"
+             [attr.name]="'mn-select-' + id"
+             [value]="value"
+             (click)="selectOptionClickStream.next(value);">
+          <label
+             [attr.for]="'mn-select-' + id + '-' + i"
+             class="width-12"
+             tabindex="0"
+             (keydown.enter)="selectOptionClickStream.next(value);">
+            {{labels ? labels[i] : valuesMapping(value)}}
+          </label>
+        </span>
+      </span>
+      <span
+         *ngIf="(hasSearchInput | async) && !labels"
+         [formGroup]="hiddenRadioGroup">
+        <span
+           class="block option"
+           *ngFor="let value of preparedValues | async; index as i;">
+          <input
+             formControlName="hiddenRadio"
+             name="hiddenRadio"
+             type="radio"
+             [attr.id]="'mn-select-' + id + '-' + i"
+             [attr.name]="'mn-select-' + id"
+             [value]="value"
+             (click)="selectOptionClickStream.next(value);">
+          <label
+             [attr.for]="'mn-select-' + id + '-' + i"
+             class="width-12"
+             tabindex="0"
+             (keydown.enter)="selectOptionClickStream.next(value);">
+            {{valuesMapping(value)}}
+          </label>
+        </span>
+      </span>
+      <span
+         *ngIf="(hasSearchInput | async) && labels"
+         [formGroup]="hiddenRadioGroup">
+        <span
+           class="block option"
+           *ngFor="let label of preparedLabels | async; index as i;">
+          <input
+             formControlName="hiddenRadio"
+             name="hiddenRadio"
+             type="radio"
+             [attr.id]="'mn-select-' + id + '-' + i"
+             [attr.name]="'mn-select-' + id"
+             [value]="label"
+             (click)="selectLabelClickStream.next(label);">
+          <label
+             [attr.for]="'mn-select-' + id + '-' + i"
+             class="width-12"
+             tabindex="0"
+             (keydown.enter)="selectLabelClickStream.next(label);">
+            {{label}}
+          </label>
+        </span>
+      </span>
+    </div>
+  </div>
+</div>

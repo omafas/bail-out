@@ -1,0 +1,38 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="panel dialog width-520 text-center">
+  <div class="panel-content">
+    <img
+     src="/cb_logo_red_withtext.svg"
+     height="157"
+     width="373">
+  <div class="text-normal margin-top-1">
+    {{prettyVersion | async}}
+  </div>
+  <button
+     [mnFocus]="focusFieldSubject"
+     class="btn-lg margin-top-2"
+     uiSref="app.wizard.setupNewCluster"
+     [uiOptions]="{location: false}">Setup New Cluster</button><br>
+  <button
+     class="btn-lg margin-bottom-half"
+     style="margin-top: 12px;"
+     uiSref="app.wizard.joinCluster"
+     [uiOptions]="{location: false}">Join Existing Cluster</button>
+  </div>
+</div>
+<a
+   href="https://docs.couchbase.com/server/{{majorMinorVersion | async}}/install/install-platforms.html#supported-browsers"
+   target="_blank"
+   rel="noopener noreferrer"
+   class="supported-browsers-520">
+ Chrome, Firefox, Edge, Safari
+</a>

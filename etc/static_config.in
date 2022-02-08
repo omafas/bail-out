@@ -1,0 +1,39 @@
+{error_logger_mf_dir, "@DATA_PREFIX@/var/lib/couchbase/logs"}.
+{path_config_bindir, "@BIN_PREFIX@/bin"}.
+{path_config_etcdir, "@BIN_PREFIX@/etc/couchbase"}.
+{path_config_libdir, "@BIN_PREFIX@/lib"}.
+{path_config_datadir, "@DATA_PREFIX@/var/lib/couchbase"}.
+{path_config_tmpdir, "@DATA_PREFIX@/var/lib/couchbase/tmp"}.
+{path_config_secdir, "@BIN_PREFIX@/etc/security"}.
+
+{nodefile, "@DATA_PREFIX@/var/lib/couchbase/couchbase-server.node"}.
+
+{loglevel_default, debug}.
+{loglevel_couchdb, info}.
+{loglevel_ns_server, debug}.
+{loglevel_error_logger, debug}.
+{loglevel_user, debug}.
+{loglevel_menelaus, debug}.
+{loglevel_ns_doctor, debug}.
+{loglevel_stats, debug}.
+{loglevel_rebalance, debug}.
+{loglevel_cluster, debug}.
+{loglevel_views, debug}.
+{loglevel_mapreduce_errors, debug}.
+{loglevel_xdcr, debug}.
+{loglevel_access, info}.
+{loglevel_cbas, debug}.
+
+{disk_sink_opts,
+ [{rotation, [{compress, true},
+              {size, 41943040},
+              {num_files, 10},
+              {buffer_size_max, 52428800}]}]}.
+
+{disk_sink_opts_json_rpc,
+ [{rotation, [{compress, true},
+              {size, 41943040},
+              {num_files, 2},
+              {buffer_size_max, 52428800}]}]}.
+
+{net_kernel_verbosity, 10}.

@@ -1,0 +1,80 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div mn-spinner="viewLoading" min-height="410px">
+  <div
+     ng-repeat="group in state.folders"
+     style="position: relative;"
+     ng-style="{'z-index': 10 + group.folders.length - $index}">
+    <label
+       class="disclosure ellipsis"
+       ng-click="toggleWrapper(group.name)"
+       ng-class="{
+              'disclosed': state.openedWrappers[group.name],
+              'has-selection': !state.openedWrappers[group.name] && hasSelectedItems(group.name)
+              }">
+      {{::group.name}}
+    </label>
+    <div
+       class="margin-left-half"
+       ng-show="state.openedWrappers[group.name]">
+      <div
+         ng-repeat="item in group.roles"
+         class="user-role-row"
+         ng-style="{'z-index': 10 + group.roles.length - $index}"
+         ng-class="{'has-selection': !item.params.length &&
+                    (state.selectedRoles[item.role] || state.selectedGroupsRoles[item.role].length)}">
+        <input
+           ng-disabled="isRoleDisabled(item)"
+           ng-if="!item.params.length"
+           id="for-{{item.role}}"
+           type="checkbox"
+           ng-model="state.selectedRoles[item.role]">
+        <label ng-class="{
+                         'disclosure': item.params.length,
+                         'ellipsis': item.params.length,
+                         'disclosed': item.params.length && state.openedWrappers[item.role],
+                         'has-selection': item.params.length && (!state.openedWrappers[item.role] && hasSelectedConfigs(item.role))}"
+           ng-click="toggleWrapper(item.role)"
+           for="for-{{item.role}}">
+          {{::item.name}}
+          <span
+             ng-if="item.role == 'query_external_access'"
+             tooltip-trigger="mouseenter"
+             tooltip-append-to-body="true"
+             tooltip-placement="top"
+             class="fa-exclamation-circle icon orange-3"
+             uib-tooltip="Warning: Granting the query_external_access role permits execution of the N1QL function CURL() and may allow access to other network endpoints in the local network and the Internet.">
+          </span>
+          <span class="fa-stack icon-info"
+             tooltip-trigger="mouseenter"
+             tooltip-placement="top"
+             tooltip-append-to-body="true"
+             uib-tooltip="{{item.desc}}">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+        </label>
+        <span
+           class="role-from-group"
+           ng-if="!item.params.length && state.selectedGroupsRoles[item.role].length"
+           tooltip-trigger="mouseenter"
+           tooltip-append-to-body="true"
+           uib-tooltip="{{state.selectedGroupsRoles[item.role].join(', ')}}">&nbsp;</span>
+        <div
+           mn-user-roles-select-form
+           item="item"
+           state="state"
+           ng-if="item.params.length && state.openedWrappers[item.role]">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

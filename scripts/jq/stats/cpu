@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2016-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+#
+# Extract cpu utilization stats from stats archive.
+#
+# Example usage:
+#
+#   ./cpu --period minute stats_archives.json | jq 'sort_by(.total_cpu)'
+#
+
+PERIOD=hour
+ARGS=$(getopt -o p: -l period: -n "$0" -- "$@")
+
+if [ $? != 0 ]; then
+    exit 1
+fi
+
+eval set -- "$ARGS"
+
+while true; do
+    case "$1" in
+        -p|--period) PERIOD=$2; shift 2;;
+        --) shift; break;;
+    esac
+done
+
+exec jq --arg period "$PERIOD" '
+.["@system-processes"][$period].samples
+| map((.sample | with_entries(select(.key | test("cpu_utilization")))) as $cpu
+      | ($cpu | values | add) as $total
+      | {ts: .ts, total_cpu: $total, cpu: $cpu})
+' "$@"

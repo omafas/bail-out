@@ -1,0 +1,39 @@
+ns_server depends on tap checkpoints in a number of places. Here's
+full list:
+
+* ebucketmigrator asks downstream bucket about it's closed checkpoints
+  and passes them with tap connect command to upstream bucket. tap connect needs them.
+
+* ebucketmigrator queries checkpoints of source node as well to avoid
+  replicating from vbuckets with open checkpoint zero. Which may
+  happen in chain where first replica is not yet ready to replicate
+  stuff into second replica due to not yet completed backfill into
+  first replica.
+
+* same thing is done with change_vbucket_filter command. change_vbucket_filter needs them.
+
+* ebucketmigrator is tracking tap backfill completion message that
+  flows through it. This is done to detect end bulk data
+  transfer. When we see backfill completion (or other messages that
+  signal that backfill is not happening) we allow other vbuckets
+  movements to/from source and destination nodes
+
+* as part of replica building phase we're querying open checkpoints at
+  all replica building destinations to make sure they all have same
+  open checkpoint. This is done in order to prevent attempts to
+  chain-replicate from replica that's slightly behind into second
+  replica that's slightly ahead which would cause backfill.
+
+* checkpoints, particularly forced checkpoint creation command and
+  wait for checkpoint persistence command are used to ensure that
+  future master's indexable db state is not behind current
+  masters. We're also using this facility to ensure that future master
+  is "resonably close" w.r.t. persisted data compared to current
+  master. I.e. so that not too much data can be lost if we lose power
+  shortly after vbucket move.
+
+* forced checkpoint creation and wait for checkpoint persistence are
+  used to "checkpoint" xdcr progress
+
+* checkpoint and tap stats are logged periodically during rebalance as
+  a diagnostics

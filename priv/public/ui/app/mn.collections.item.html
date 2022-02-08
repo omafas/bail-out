@@ -1,0 +1,59 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="cbui-tablerow">
+  <span class="cbui-table-cell flex-grow-2 bold">
+    {{collection.name}}
+  </span>
+  <span class="cbui-table-cell resp-hide-sml">
+    {{collection.maxTTL}}
+  </span>
+  <span class="cbui-table-cell resp-hide-sml">
+    <span [hidden]="!(interestingStats | async)['@kv-.kv_collection_item_count']">
+      {{(interestingStats | async)['@kv-.kv_collection_item_count'] | mnFormatQuantity:1000}}
+    </span>
+    <span [hidden]="(interestingStats | async)['@kv-.kv_collection_item_count']"> - </span>
+  </span>
+  <span class="cbui-table-cell resp-hide-sml">
+    <span [hidden]="!(interestingStats | async)['@kv-.kv_collection_mem_used_bytes']">
+      {{(interestingStats | async)['@kv-.kv_collection_mem_used_bytes'] | mnFormatQuantity}}
+    </span>
+    <span [hidden]="(interestingStats | async)['@kv-.kv_collection_mem_used_bytes']"> - </span>
+  </span>
+  <span class="cbui-table-cell resp-hide-sml">
+    <span [hidden]="!(interestingStats | async)['@kv-.kv_collection_data_size_bytes']">
+      {{(interestingStats | async)['@kv-.kv_collection_data_size_bytes'] | mnFormatQuantity}}
+    </span>
+    <span [hidden]="(interestingStats | async)['@kv-.kv_collection_data_size_bytes']"> - </span>
+  </span>
+  <span class="cbui-table-cell resp-hide-sml">
+    <span [hidden]="!(interestingStats | async)['@kv-.kv_collection_ops']">
+      {{(interestingStats | async)['@kv-.kv_collection_ops'] | number:'1.0-0'}}
+    </span>
+    <span [hidden]="(interestingStats | async)['@kv-.kv_collection_ops']"> - </span>
+  </span>
+  <span class="cbui-table-cell flex-grow-2 wrap text-right resp-hide-xsml">
+    <a
+       class="nowrap"
+       style="margin-right: -3px;"
+       [hidden]="!(permissions | async)?.cluster.collection[bucketName + ':' + scopeName + ':' + '*']?.collections?.write ||
+              collection.name.startsWith('_')"
+       (click)="$event.stopPropagation();clickDeleteCollection.next();">
+      Drop</a>
+    <a
+       class="margin-left-half"
+       style="margin-right: -4px;"
+       (click)="$event.stopPropagation()"
+       [hidden]="!(permissions | async)?.cluster.collection[bucketName + ':' + scopeName + ':' + collection.name]?.data?.docs?.read"
+       uiSref="app.admin.docs.editor"
+       [uiParams]="{bucket: bucketName, scope: scopeName, collection: collection.name}">
+      Documents</a>
+  </span>
+</div>
