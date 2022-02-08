@@ -397,7 +397,7 @@ decide_on_actions(PrevDownStates, DownStates, State, SvcConfig) ->
             issue_mail_down_warnings(PrevDownStates, DownStates);
         {Actions, NewDownStates} ->
             {Failovers, Other} =
-                lists:splitwith(fun ({failover, _}) ->
+                lists:partition(fun ({failover, _}) ->
                                         true;
                                     (_) ->
                                         false
@@ -411,7 +411,7 @@ combine_failovers([], Other, _SvcConfig) ->
 combine_failovers(Failovers, Other, SvcConfig) ->
     FailoverNodes = [N || {failover, N} <- Failovers],
     {KV, OtherServiceNodes} =
-        lists:splitwith(
+        lists:partition(
           fun ({NodeName, _}) ->
                   NodeSvc = get_node_services(NodeName, SvcConfig),
                   lists:member(kv, NodeSvc)
@@ -706,10 +706,14 @@ ver_suffix(Ver) ->
 
 compare_with(_Ver, no_actions) ->
     [];
+compare_with(?VERSION_NEO, List) when is_list(List) ->
+    lists:flatten([compare_with(?VERSION_NEO, X) || X <- List]);
 compare_with(?VERSION_NEO, {failover, Nodes}) ->
     [{failover, [N || N <- attach_test_uuids(Nodes)]}];
 compare_with(?VERSION_70, {failover, Nodes}) ->
     [{failover, N} || N <- attach_test_uuids(Nodes)];
+compare_with(?VERSION_NEO, {mail_too_small, Svc, SvcNodes, Node}) ->
+    [{mail_too_small, Svc, SvcNodes, attach_test_uuid(Node)}];
 compare_with(?VERSION_NEO, {mail_down_warnings, Nodes}) ->
     [{mail_down_warning_multi_node, N} || N <- attach_test_uuids(Nodes)];
 compare_with(?VERSION_70, {mail_down_warnings, Nodes}) ->
@@ -792,6 +796,20 @@ process_frame_test_() ->
          {no_actions, 1, []},
          {no_actions, 4, [b]},
          {{mail_down_warnings, [b]}, 1, [b, c]}]}]).
+
+multiple_services_test_() ->
+    generate(
+      [?VERSION_NEO],
+      [{fts, [a1, a2]}, {n1ql, [b1, b2]}, {kv, [c1, c2, c3]},
+       {index, [d1, d2]}],
+      [{"3 nodes of different services are down.", 3,
+        [{no_actions, 5, [a1, b1, c1]},
+         {{failover, [a1, b1, c1]}, 1, [a1, b1, c1]}]},
+       {"4 nodes are down, but one service is not safe to fail over", 3,
+        [{no_actions, 5, [a1, b1, b2, d1]},
+         {[{failover, [a1, d1]},
+           {mail_too_small, n1ql, [], b1},
+           {mail_too_small, n1ql, [], b2}], 1, [a1, b1, b2, d1]}]}]).
 
 min_size_test_() ->
     MinSizeTest =
