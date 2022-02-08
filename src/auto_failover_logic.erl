@@ -686,7 +686,7 @@ test_body(Threshold, DownSG, Steps, RawSvcConfig) ->
       fun ({Expected, NFrames, DownNodes}, State) ->
               {Actions, NewState} = test_frame(NFrames, RawSvcConfig, DownNodes,
                                                DownSG, State),
-              ?assertEqual(Expected, Actions),
+              ?assertEqual(lists:sort(Expected), lists:sort(Actions)),
               NewState
       end, test_init(Threshold), Steps).
 
