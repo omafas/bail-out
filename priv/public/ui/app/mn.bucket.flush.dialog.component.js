@@ -15,6 +15,7 @@ import {map} from 'rxjs/operators';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnFormService} from './mn.form.service.js';
 import {MnBucketsService} from './mn.buckets.service.js';
+import template from "./mn.bucket.flush.dialog.html";
 
 export {MnBucketFlushDialogComponent};
 
@@ -22,7 +23,7 @@ class MnBucketFlushDialogComponent extends MnLifeCycleHooksToStream {
 
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.bucket.flush.dialog.html",
+      template,
       inputs: [
         'bucket'
       ],

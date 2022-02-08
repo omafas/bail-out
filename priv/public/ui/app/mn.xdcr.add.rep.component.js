@@ -22,13 +22,14 @@ import {MnXDCRService} from "./mn.xdcr.service.js";
 import {MnPoolsService} from "./mn.pools.service.js";
 import {MnAdminService} from "./mn.admin.service.js";
 import {MnBucketsService} from "./mn.buckets.service.js";
+import template from "./mn.xdcr.add.rep.html";
 
 export {MnXDCRAddRepComponent};
 
 class MnXDCRAddRepComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.xdcr.add.rep.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
     })
   ]}

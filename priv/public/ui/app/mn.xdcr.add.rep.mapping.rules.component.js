@@ -13,6 +13,7 @@ import {map} from 'rxjs/operators';
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {collectionDelimiter} from './mn.xdcr.service.js';
+import template from "./mn.xdcr.add.rep.mapping.rules.html";
 
 export {MnXDCRAddRepMappingRulesComponent};
 
@@ -20,7 +21,7 @@ class MnXDCRAddRepMappingRulesComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-xdcr-mapping-rules",
-      templateUrl: "app/mn.xdcr.add.rep.mapping.rules.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "isEditMode",

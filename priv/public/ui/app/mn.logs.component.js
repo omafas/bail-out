@@ -11,6 +11,7 @@ import {Component, ChangeDetectionStrategy} from '@angular/core';
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnPermissions} from './ajs.upgraded.providers.js';
+import template from "./mn.logs.html";
 
 export {MnLogsComponent};
 
@@ -19,7 +20,7 @@ class MnLogsComponent extends MnLifeCycleHooksToStream {
   static get annotations() {
     return [
       new Component({
-        templateUrl: "app/mn.logs.html",
+        template,
         changeDetection: ChangeDetectionStrategy.OnPush
       })
   ]}

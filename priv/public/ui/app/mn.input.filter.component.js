@@ -9,6 +9,7 @@ licenses/APL2.txt.
 */
 import {startWith} from 'rxjs/operators';
 import {ChangeDetectionStrategy, Component} from '@angular/core';
+import template from "./mn.input.filter.html";
 
 export {MnInputFilterComponent};
 
@@ -16,7 +17,7 @@ class MnInputFilterComponent {
   static get annotations() { return [
     new Component({
       selector: "mn-input-filter",
-      templateUrl: 'app/mn.input.filter.html',
+      template,
       inputs: [
         "group",
         "mnFocusStatus",

@@ -22,13 +22,15 @@ import {MnPermissions} from './ajs.upgraded.providers.js';
 import {MnBucketDialogComponent} from './mn.bucket.dialog.component.js';
 import {MnBucketFullDialogComponent} from './mn.bucket.full.dialog.component.js';
 
+import template from './mn.buckets.html';
+
 export {MnBucketsComponent};
 
 class MnBucketsComponent extends MnLifeCycleHooksToStream {
   static get annotations() {
     return [
       new Component({
-        templateUrl: "app/mn.buckets.html",
+        template: template,
         changeDetection: ChangeDetectionStrategy.OnPush
       })
     ]

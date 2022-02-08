@@ -21,6 +21,7 @@ import {MnPoolsService} from "./mn.pools.service.js"
 import {MnHelperService} from "./mn.helper.service.js";
 import {MnSecurityService} from "./mn.security.service.js";
 import {MnPools, $rootScope} from "./ajs.upgraded.providers.js";
+import template from "./mn.wizard.join.cluster.html";
 
 export {MnWizardJoinClusterComponent};
 
@@ -28,7 +29,7 @@ class MnWizardJoinClusterComponent extends MnLifeCycleHooksToStream {
 
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.wizard.join.cluster.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

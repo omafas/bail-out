@@ -14,6 +14,7 @@ import {MnLifeCycleHooksToStream} from "./mn.core.js";
 import {MnPoolsService} from "./mn.pools.service.js";
 import {MnAdminService} from "./mn.admin.service.js";
 import {MnHelperService} from "./mn.helper.service.js";
+import template from "./mn.xdcr.settings.html";
 
 export {MnXDCRSettingsComponent};
 
@@ -21,7 +22,7 @@ class MnXDCRSettingsComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-xdcr-settings",
-      templateUrl: "app/mn.xdcr.settings.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "form",

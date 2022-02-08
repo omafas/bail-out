@@ -10,6 +10,7 @@ licenses/APL2.txt.
 
 import angular from "angular";
 import uiBootstrap from "angular-ui-bootstrap";
+import template from "./mn_reset_password_dialog.html";
 
 export default "mnResetPasswordDialogService";
 
@@ -27,7 +28,7 @@ function mnResetPasswordDialogFactory($http, $uibModal, $q) {
 
   function showDialog(user) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_reset_password_dialog.html',
+      template,
       controller: "mnResetPasswordDialogController as resetPasswordDialogCtl",
       resolve: {
         user: function () {

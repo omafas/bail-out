@@ -17,13 +17,14 @@ import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnHelperService} from './mn.helper.service.js';
 import {MnWizardService} from './mn.wizard.service.js';
 import {MnFormService} from "./mn.form.service.js";
+import template from "./mn.wizard.setup.new.cluster.html";
 
 export {MnWizardSetupNewClusterComponent};
 
 class MnWizardSetupNewClusterComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.wizard.setup.new.cluster.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

@@ -15,6 +15,7 @@ import {BehaviorSubject} from 'rxjs';
 import {MnPoolsService} from './mn.pools.service.js';
 import {MnWizardService} from './mn.wizard.service.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
+import template from "./mn.hostname.config.html";
 
 export {MnHostnameConfigComponent};
 
@@ -22,7 +23,7 @@ class MnHostnameConfigComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-hostname-config",
-      templateUrl: "app/mn.hostname.config.html",
+      template,
       inputs: [
         "group",
         "isHostCfgEnabled"

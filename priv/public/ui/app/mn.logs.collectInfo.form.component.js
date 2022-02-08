@@ -23,6 +23,7 @@ import {MnLifeCycleHooksToStream} from "./mn.core.js";
 import {MnTasksService} from './mn.tasks.service.js';
 import {MnClusterSummaryDialogComponent} from './mn.cluster.summary.dialog.component.js';
 import {MnLogsCollectInfoStopCollectionComponent} from './mn.logs.collectInfo.stop.collection.component.js';
+import template from "./mn.logs.collectInfo.form.html";
 
 export {MnLogsCollectInfoFormComponent};
 
@@ -30,7 +31,7 @@ class MnLogsCollectInfoFormComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-logs-collect-info-form",
-      templateUrl: "app/mn.logs.collectInfo.form.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

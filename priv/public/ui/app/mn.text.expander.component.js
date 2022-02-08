@@ -10,6 +10,7 @@
 
 import {ChangeDetectionStrategy, Component} from '@angular/core';
 import {MnHelperService} from './mn.helper.service.js';
+import template from "./mn.text.expander.html";
 
 export {MnTextExpanderComponent};
 
@@ -17,7 +18,7 @@ class MnTextExpanderComponent {
   static get annotations() { return [
     new Component({
       selector: "mn-text-expander",
-      templateUrl: "app/mn.text.expander.html",
+      template,
       inputs: [
         "text",
         "limit"

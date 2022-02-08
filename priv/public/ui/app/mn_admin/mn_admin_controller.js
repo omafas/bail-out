@@ -13,6 +13,8 @@ import {fromEvent, Subject, timer} from 'rxjs';
 import {tap, switchMap, takeUntil} from 'rxjs/operators';
 import _ from 'lodash';
 import saveAs from 'file-saver';
+import mnDeveloperSettingsTemplate from "./mn_developer_settings.html";
+import mnInternalSettingsTemplate from "./mn_internal_settings.html";
 
 export default mnAdminController;
 
@@ -122,7 +124,7 @@ function mnAdminController($scope, $rootScope, $state, $window, $uibModal, mnAle
       .then(function () {
         $ocLazyLoad.load({name: 'mnDeveloperSettings'});
         $uibModal.open({
-          templateUrl: "app/mn_admin/mn_developer_settings.html",
+          template: mnDeveloperSettingsTemplate,
           controller: "mnDeveloperSettingsController as devSettingsCtl"
         });
       });
@@ -133,7 +135,7 @@ function mnAdminController($scope, $rootScope, $state, $window, $uibModal, mnAle
       .then(function () {
         $ocLazyLoad.load({name: 'mnInternalSettings'});
         $uibModal.open({
-          templateUrl: "app/mn_admin/mn_internal_settings.html",
+          template: mnInternalSettingsTemplate,
           controller: "mnInternalSettingsController as internalSettingsCtl"
         });
       });

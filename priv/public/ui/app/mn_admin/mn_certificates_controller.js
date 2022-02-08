@@ -15,6 +15,7 @@ import mnHelper from "../components/mn_helper.js";
 import uiBootstrap from "../../web_modules/angular-ui-bootstrap.js";
 import mnCertificatesDeleteDialogController from "./mn_certificates_delete_dialog_controller.js";
 import mnPoll from "../components/mn_poll.js";
+import template from "./mn_certificates_delete_dialog.html";
 
 export default "mnCertificates";
 
@@ -67,7 +68,7 @@ function mnCertController($scope, mnCertificatesService, mnPromiseHelper, mnHelp
 
   function showDeleteConfirmation(id) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_certificates_delete_dialog.html',
+      template,
       controller: 'mnCertificatesDeleteDialogController as certDeleteDialogCtrl',
       resolve: {
         id: mnHelper.wrapInFunction(id)

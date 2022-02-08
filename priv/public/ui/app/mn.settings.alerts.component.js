@@ -19,13 +19,14 @@ import { MnFormService } from './mn.form.service.js';
 import { MnSettingsAlertsService } from './mn.settings.alerts.service.js';
 import { MnPermissions } from './ajs.upgraded.providers.js';
 import { knownAlerts } from './constants/constants.js';
+import template from "./mn.settings.alerts.html";
 
 export { MnSettingsAlertsComponent };
 
 class MnSettingsAlertsComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.settings.alerts.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

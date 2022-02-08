@@ -33,6 +33,9 @@ import mnUserRolesDeleteDialogController from "./mn_user_roles_delete_dialog_con
 import mnUserRolesResetPasswordDialogController from "./mn_user_roles_reset_password_dialog_controller.js";
 
 import mnRolesController from "./mn_roles_controller.js";
+import mnUserRolesAddDialogTemplate from "./mn_user_roles_add_dialog.html";
+import mnUserRolesResetPasswordDialogTemplate from "./mn_user_roles_reset_password_dialog.html";
+import mnUserRolesDeleteDialogTemplate from "./mn_user_roles_delete_dialog.html";
 
 export default "mnUserRoles";
 
@@ -142,7 +145,7 @@ function mnUserRolesController($scope, $uibModal, mnPromiseHelper, mnUserRolesSe
 
   function editUser(user) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_user_roles_add_dialog.html',
+      template: mnUserRolesAddDialogTemplate,
       controller: 'mnUserRolesAddDialogController as userRolesAddDialogCtl',
       resolve: {
         user: mnHelper.wrapInFunction(user),
@@ -154,7 +157,7 @@ function mnUserRolesController($scope, $uibModal, mnPromiseHelper, mnUserRolesSe
   }
   function resetUserPassword(user) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_user_roles_reset_password_dialog.html',
+      template: mnUserRolesResetPasswordDialogTemplate,
       controller: 'mnUserRolesResetPasswordDialogController as userRolesResetPasswordDialogCtl',
       resolve: {
         user: mnHelper.wrapInFunction(user)
@@ -163,7 +166,7 @@ function mnUserRolesController($scope, $uibModal, mnPromiseHelper, mnUserRolesSe
   }
   function deleteUser(user) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_user_roles_delete_dialog.html',
+      template: mnUserRolesDeleteDialogTemplate,
       controller: 'mnUserRolesDeleteDialogController as userRolesDeleteDialogCtl',
       resolve: {
         user: mnHelper.wrapInFunction(user)

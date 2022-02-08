@@ -17,6 +17,7 @@ import {MnPermissions, $rootScope} from './ajs.upgraded.providers.js'
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnCollectionsService} from './mn.collections.service.js';
 import {MnCollectionsDeleteItemComponent} from './mn.collections.delete.item.component.js';
+import template from "./mn.collections.item.html";
 
 export {MnCollectionsItemComponent};
 
@@ -24,7 +25,7 @@ class MnCollectionsItemComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-collections-item",
-      templateUrl: 'app/mn.collections.item.html',
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "collection",

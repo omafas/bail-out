@@ -22,13 +22,14 @@ import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnCollectionsService} from './mn.collections.service.js';
 import {MnCollectionsAddScopeComponent} from './mn.collections.add.scope.component.js';
 import {MnHelperService} from './mn.helper.service.js';
+import template from "./mn.collections.html";
 
 export {MnCollectionsComponent};
 
 class MnCollectionsComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: 'app/mn.collections.html',
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

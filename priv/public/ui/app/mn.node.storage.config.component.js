@@ -14,6 +14,7 @@ import {FormControl} from '@angular/forms';
 import {MnPoolsService} from './mn.pools.service.js';
 import {MnWizardService} from './mn.wizard.service.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
+import template from "./mn.node.storage.config.html";
 
 export {MnNodeStorageConfigComponent};
 
@@ -21,7 +22,7 @@ class MnNodeStorageConfigComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-node-storage-config",
-      templateUrl: "app/mn.node.storage.config.html",
+      template,
       inputs: [
         "group"
       ],

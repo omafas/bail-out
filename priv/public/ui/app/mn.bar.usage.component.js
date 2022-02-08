@@ -11,6 +11,7 @@ licenses/APL2.txt.
 import {ChangeDetectionStrategy, Component} from '@angular/core';
 
 import {MnLifeCycleHooksToStream} from "./mn.core.js";
+import template from "./mn.bar.usage.html";
 
 export {MnBarUsageComponent};
 
@@ -18,7 +19,7 @@ class MnBarUsageComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-bar-usage",
-      templateUrl: 'app/mn.bar.usage.html',
+      template,
       inputs: [
         "baseInfo",
         "total"

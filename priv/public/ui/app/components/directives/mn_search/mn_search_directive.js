@@ -9,6 +9,7 @@ licenses/APL2.txt.
 */
 
 import angular from 'angular';
+import template from "./mn_search.html";
 
 export default 'mnSearch';
 
@@ -26,7 +27,7 @@ function mnSearchDirective() {
       mnHideButton: "=",
       mnDisabled: "="
     },
-    templateUrl: 'app/components/directives/mn_search/mn_search.html',
+    template,
     controller: controller,
     controllerAs: "mnSearchCtl",
     bindToController: true

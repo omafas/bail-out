@@ -19,6 +19,7 @@ import {MnPermissions} from './ajs.upgraded.providers.js';
 import {MnLifeCycleHooksToStream, DetailsHashObserver} from './mn.core.js';
 import {MnXDCRService} from './mn.xdcr.service.js';
 import {MnXDCRErrorsComponent} from "./mn.xdcr.errors.component.js";
+import template from "./mn.xdcr.item.html";
 
 export {MnXDCRItemComponent};
 
@@ -26,7 +27,7 @@ class MnXDCRItemComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-xdcr-item",
-      templateUrl: "app/mn.xdcr.item.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "item"

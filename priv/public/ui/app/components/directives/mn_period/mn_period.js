@@ -9,6 +9,7 @@ licenses/APL2.txt.
 */
 
 import angular from 'angular';
+import template from "./mn_period.html";
 
 export default 'mnPeriod';
 
@@ -25,7 +26,7 @@ function mnPeriodDirective() {
       errors: "=",
       rbac: "="
     },
-    templateUrl: 'app/components/directives/mn_period/mn_period.html'
+    template
   };
 
   return mnPeriod;

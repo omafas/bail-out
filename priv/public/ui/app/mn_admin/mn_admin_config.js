@@ -43,6 +43,9 @@ import {MnStatsService} from "../mn.stats.service.js";
 import mnDetailStatsModule from "../components/directives/mn_detail_stats_controller.js";
 
 import mnSelect from "../components/directives/mn_select/mn_select.js";
+import memoryQuotaDialogTemplate from "./memory_quota_dialog.html";
+import mnAdminTemplate from "./mn_admin.html";
+import mnLostConnectionTemplate from "./mn_lost_connection.html";
 
 export default 'mnAdmin';
 
@@ -121,7 +124,7 @@ angular.module('mnAdmin').run(function($rootScope, $uibModal, $ocLazyLoad, $inje
       $uibModal.open({
         windowTopClass: "without-titlebar-close",
         backdrop: 'static',
-        templateUrl: 'app/mn_admin/memory_quota_dialog.html',
+        template: memoryQuotaDialogTemplate,
         controller: 'mnMemoryQuotaDialogController as memoryQuotaDialogCtl',
         resolve: {
           memoryQuotaConfig: function (mnMemoryQuotaService) {
@@ -231,10 +234,10 @@ function mnAdminConfig($stateProvider, $urlMatcherFactoryProvider, mnPluggableUi
       views: {
         "": {
           controller: 'mnAdminController as adminCtl',
-          templateUrl: 'app/mn_admin/mn_admin.html'
+          template: mnAdminTemplate
         },
         "lostConnection@app.admin": {
-          templateUrl: 'app/mn_admin/mn_lost_connection.html',
+          template: mnLostConnectionTemplate,
           controller: 'mnLostConnectionController as lostConnCtl'
         }
       }

@@ -12,7 +12,7 @@ import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { MnLifeCycleHooksToStream } from './mn.core.js';
 
 import { MnHelperService } from './mn.helper.service.js';
-
+import template from "./mn.views.filter.html";
 
 export { MnViewsFilterComponent };
 
@@ -20,7 +20,7 @@ class MnViewsFilterComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-views-filter",
-      templateUrl: "app/mn.views.filter.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: ['mnForm', 'defaultFormGroup']
     })

@@ -12,6 +12,8 @@ import angular from 'angular';
 import {Subject} from 'rxjs';
 import {takeUntil, filter} from 'rxjs/operators';
 import mnKeyspaceSelectorDowngradeModule from '../../mn.keyspace.selector.downgrade.module.js'
+import mnUserRolesSelectTemplate from "./mn_user_roles_select.html";
+import mnUserRolesSelectFormTemplate from "./mn_user_roles_select_form.html";
 
 export default 'mnUserRolesSelect';
 
@@ -23,7 +25,7 @@ angular
 function mnUserRolesSelectDirective() {
   var mnUserRolesSelect = {
     restrict: 'E',
-    templateUrl: 'app/components/directives/mn_user_roles_select.html',
+    template: mnUserRolesSelectTemplate,
     controller: ["$scope", mnUserRolesSelectController],
     scope: {
       state: "="
@@ -70,7 +72,7 @@ function mnUserRolesSelectDirective() {
 function mnUserRolesSelectFormDirective(mnKeyspaceSelectorServiceDowngrade) {
   var mnUserRolesSelectForm = {
     restrict: 'AE',
-    templateUrl: 'app/components/directives/mn_user_roles_select_form.html',
+    template: mnUserRolesSelectFormTemplate,
     controller: mnUserRolesSelectFormController,
     scope: {
       item: "=",

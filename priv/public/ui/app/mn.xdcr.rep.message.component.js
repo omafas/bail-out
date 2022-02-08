@@ -9,6 +9,7 @@ licenses/APL2.txt.
 */
 
 import {Component, ChangeDetectionStrategy} from '@angular/core';
+import template from "./mn.xdcr.rep.message.html";
 
 export {MnXDCRRepMessageComponent};
 
@@ -16,7 +17,7 @@ class MnXDCRRepMessageComponent {
   static get annotations() { return [
     new Component({
       selector: "mn-xdcr-rep-message",
-      templateUrl: "app/mn.xdcr.rep.message.html",
+      template,
       inputs: [
         "fromBucket",
         "toBucket",

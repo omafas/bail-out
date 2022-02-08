@@ -26,6 +26,7 @@ import {MnBucketsService} from './mn.buckets.service.js';
 import {MnUserRolesService} from './mn.user.roles.service.js';
 import {MnPermissionsService} from './mn.permissions.service.js';
 import {MnSettingsAutoCompactionService} from './mn.settings.auto.compaction.service.js';
+import template from "./mn.bucket.dialog.html";
 
 export {MnBucketDialogComponent};
 
@@ -34,7 +35,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: 'mn-buckets-dialog',
-      templateUrl: 'app/mn.bucket.dialog.html',
+      template,
       inputs: [
         'bucket'
       ],

@@ -19,6 +19,11 @@ import mnSettingsCluster from "./mn_settings_cluster_controller.js";
 import mnSettingsAutoFailover from "./mn_settings_auto_failover_controller.js";
 import mnSettingsNotificationsService from "./mn_settings_notifications_service.js";
 
+import mnSettingsTemplate from "./mn_settings.html";
+import mnSettingsClusterTemplate from "./mn_settings_cluster.html";
+import mnSettingsAutoFailoverTemplate from "./mn_settings_auto_failover.html";
+import mnSettingsNotificationsTemplate from "./mn_settings_notifications.html";
+
 export default "mnSettings";
 
 angular
@@ -45,7 +50,7 @@ function mnSettingsConfig($stateProvider) {
       abstract: true,
       views: {
         "main@app.admin": {
-          templateUrl: 'app/mn_admin/mn_settings.html',
+          template: mnSettingsTemplate,
           controller: 'mnSettingsController as settingsCtl'
         }
       },
@@ -58,15 +63,15 @@ function mnSettingsConfig($stateProvider) {
       views: {
         "": {
           controller: 'mnSettingsClusterController as settingsClusterCtl',
-          templateUrl: 'app/mn_admin/mn_settings_cluster.html'
+          template: mnSettingsClusterTemplate
         },
         "autofailover@app.admin.settings.cluster": {
           controller: 'mnSettingsAutoFailoverController as settingsAutoFailoverCtl',
-          templateUrl: 'app/mn_admin/mn_settings_auto_failover.html'
+          template: mnSettingsAutoFailoverTemplate
         },
         "notifications@app.admin.settings.cluster": {
           controller: 'mnSettingsNotificationsController as settingsNotificationsCtl',
-          templateUrl: 'app/mn_admin/mn_settings_notifications.html'
+          template: mnSettingsNotificationsTemplate
         }
       }
     })

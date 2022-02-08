@@ -21,13 +21,14 @@ import {MnSecurityService} from './mn.security.service.js';
 import {MnPermissions} from './ajs.upgraded.providers.js';
 import {MnAdminService} from './mn.admin.service.js';
 import {MnPoolsService} from './mn.pools.service.js';
+import template from "./mn.security.audit.html";
 
 export {MnSecurityAuditComponent};
 
 class MnSecurityAuditComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.security.audit.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

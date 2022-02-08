@@ -16,6 +16,7 @@ import {not, pipe, contains, all, equals} from 'ramda';
 import {FormControl, FormGroup} from '@angular/forms';
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
+import template from "./mn.security.audit.item.html";
 
 export {MnSecurityAuditItemComponent};
 
@@ -23,7 +24,7 @@ class MnSecurityAuditItemComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-security-audit-item",
-      templateUrl: "app/mn.security.audit.item.html",
+      template,
       inputs: [
         "form",
         "descriptors",

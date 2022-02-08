@@ -9,6 +9,7 @@ licenses/APL2.txt.
 */
 
 import angular from 'angular';
+import template from "./mn_dropdown.html";
 
 export default 'mnDropdown';
 
@@ -69,7 +70,7 @@ function mnDropdownDirective() {
       'body': 'innerBody',
       'footer': '?innerFooter'
     },
-    templateUrl: "app/components/directives/mn_dropdown.html",
+    template,
     controller: controller
   };
 

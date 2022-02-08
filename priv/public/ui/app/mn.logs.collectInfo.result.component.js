@@ -19,6 +19,7 @@ import {MnAdminService} from './mn.admin.service.js';
 import {MnTasksService} from './mn.tasks.service.js';
 
 import {MnLogsCollectInfoStopCollectionComponent} from './mn.logs.collectInfo.stop.collection.component.js';
+import template from "./mn.logs.collectInfo.result.html";
 
 export { MnLogsCollectInfoResultComponent };
 
@@ -26,7 +27,7 @@ class MnLogsCollectInfoResultComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-logs-collect-info-result",
-      templateUrl: "/ui/app/mn.logs.collectInfo.result.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

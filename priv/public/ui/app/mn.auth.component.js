@@ -18,13 +18,14 @@ import {MnAdminService} from './mn.admin.service.js';
 import {MnFormService} from './mn.form.service.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnPools, $rootScope} from './ajs.upgraded.providers.js';
+import template from "./mn.auth.html";
 
 export {MnAuthComponent};
 
 class MnAuthComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.auth.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

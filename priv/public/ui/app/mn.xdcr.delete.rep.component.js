@@ -16,13 +16,14 @@ import {$rootScope} from './ajs.upgraded.providers.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnXDCRService} from "./mn.xdcr.service.js";
 import {MnFormService} from "./mn.form.service.js";
+import template from "./mn.xdcr.delete.rep.html";
 
 export {MnXDCRDeleteRepComponent};
 
 class MnXDCRDeleteRepComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.xdcr.delete.rep.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "item"

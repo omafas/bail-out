@@ -16,13 +16,14 @@ import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnSecurityService} from './mn.security.service.js';
 import {MnFormService} from './mn.form.service.js';
 import {MnAdminService} from './mn.admin.service.js';
+import template from "./mn.session.html";
 
 export {MnSessionComponent};
 
 class MnSessionComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.session.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

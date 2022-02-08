@@ -18,6 +18,7 @@ import {NgbDropdown} from '@ng-bootstrap/ng-bootstrap';
 
 import {MnLifeCycleHooksToStream} from "./mn.core.js";
 import {MnHelperService} from './mn.helper.service.js';
+import template from "./mn.select.html";
 
 let isString = is(String);
 
@@ -27,7 +28,7 @@ class MnSelectComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-select",
-      templateUrl: 'app/mn.select.html',
+      template,
       inputs: [
         "group",
         "mnFormControlName",

@@ -17,6 +17,7 @@ import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnPoolsService} from './mn.pools.service.js';
 import {MnAdminService} from "./mn.admin.service.js";
 import {MnWizardService} from './mn.wizard.service.js';
+import template from "./mn.services.config.html";
 
 export {MnServicesConfigComponent};
 
@@ -24,7 +25,7 @@ class MnServicesConfigComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-services-config",
-      templateUrl: "app/mn.services.config.html",
+      template,
       inputs: [
         "group",
         "initDataStream",

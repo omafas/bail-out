@@ -10,6 +10,7 @@ licenses/APL2.txt.
 
 import angular from 'angular';
 import mnMemoryQuotaService from '../mn_memory_quota/mn_memory_quota_service.js';
+import template from "./mn_services.html";
 
 export default 'mnServices';
 
@@ -25,7 +26,7 @@ function mnServicesDirective() {
       config: '=mnServices',
       mnIsEnterprise: "="
     },
-    templateUrl: 'app/components/directives/mn_services/mn_services.html',
+    template,
     controller: ["mnMemoryQuotaService", controller],
     controllerAs: "mnServicesCtl",
     bindToController: true

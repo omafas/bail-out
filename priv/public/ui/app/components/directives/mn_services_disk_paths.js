@@ -10,6 +10,7 @@ licenses/APL2.txt.
 
 import angular from 'angular';
 import mnClusterConfigurationService from '../../mn_wizard/mn_cluster_configuration/mn_cluster_configuration_service.js';
+import template from "./mn_services_disk_paths.html";
 
 export default 'mnServicesDiskPaths';
 
@@ -26,7 +27,7 @@ function mnServicesDiskPathsDirective() {
       isEnterprise: "=",
       isDisabled: "=?"
     },
-    templateUrl: "app/components/directives/mn_services_disk_paths.html",
+    template,
     controller: ["$scope", "mnClusterConfigurationService", controller],
     controllerAs: "mnCtl"
   };

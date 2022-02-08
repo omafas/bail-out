@@ -11,6 +11,7 @@ licenses/APL2.txt.
 import angular from "angular";
 import uiBootstrap from "angular-ui-bootstrap";
 import ngClipboard from "ngclipboard";
+import template from "./mn_cluster_info_dialog.html";
 
 export default "mnLogsService";
 
@@ -40,7 +41,7 @@ function mnLogsServiceFactory($http, $rootScope, $uibModal) {
       var scope = $rootScope.$new();
       scope.info = JSON.stringify(resp.data, null, 2);
       return $uibModal.open({
-        templateUrl: 'app/mn_admin/mn_cluster_info_dialog.html',
+        template,
         scope: scope
       });
     });

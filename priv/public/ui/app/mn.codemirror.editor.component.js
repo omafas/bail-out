@@ -12,6 +12,7 @@ import { Component, ChangeDetectionStrategy, ViewChild } from '@angular/core';
 import { MnLifeCycleHooksToStream } from './mn.core.js';
 import { MnHelperService } from './mn.helper.service.js';
 import '../libs/codemirror.javascript.js';
+import template from "./mn.codemirror.editor.html";
 
 export { MnCodeMirrorEditorComponent };
 
@@ -19,7 +20,7 @@ class MnCodeMirrorEditorComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-codemirror-editor",
-      templateUrl: "app/mn.codemirror.editor.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       queries: {
         editor: new ViewChild('editor')
@@ -71,4 +72,3 @@ class MnCodeMirrorEditorComponent extends MnLifeCycleHooksToStream {
     return event[0].getValue();
   }
 }
-

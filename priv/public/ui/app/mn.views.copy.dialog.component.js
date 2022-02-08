@@ -17,12 +17,14 @@ import { pipe } from 'rxjs';
 
 import { MnFormService } from './mn.form.service.js';
 import { MnViewsListService } from './mn.views.list.service.js';
+import template from "./mn.views.copy.dialog.html";
+
 export { MnViewsCopyDialogComponent };
 
 class MnViewsCopyDialogComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.views.copy.dialog.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

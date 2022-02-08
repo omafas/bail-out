@@ -14,6 +14,7 @@ import {NgbActiveModal} from '@ng-bootstrap/ng-bootstrap';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnFormService} from './mn.form.service.js';
 import {MnLogsCollectInfoService} from './mn.logs.collectInfo.service.js';
+import template from "./mn.logs.collectInfo.stop.collection.html";
 
 export {MnLogsCollectInfoStopCollectionComponent};
 
@@ -22,7 +23,7 @@ class MnLogsCollectInfoStopCollectionComponent extends MnLifeCycleHooksToStream 
   static get annotations() { return [
     new Component({
       selector: "mn-logs-collect-info-stop-collection",
-      templateUrl: "/ui/app/mn.logs.collectInfo.stop.collection.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

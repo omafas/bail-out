@@ -10,6 +10,8 @@ licenses/APL2.txt.
 
 import _ from "lodash";
 import mnStatisticsDescription from "./mn_statistics_description.js";
+import mnGsiItemDetailsTemplate from "./mn_gsi_item_details.html";
+import mnGsiDropConfirmDialogTemplate from "./mn_gsi_drop_confirm_dialog.html";
 
 export {mnGsiItemController, mnGsiItemStatsController, mnGsiItemDetails};
 
@@ -130,7 +132,7 @@ function mnGsiItemDetails() {
     },
     controller: mnGsiItemDetailsController,
     controllerAs: "mnGsiItemDetailsCtl",
-    templateUrl: 'app/mn_admin/mn_gsi_item_details.html'
+    template: mnGsiItemDetailsTemplate
   };
 
   return mnGsiItemDetails;
@@ -156,7 +158,7 @@ function mnGsiItemDetails() {
       $uibModal.open({
         windowClass: "z-index-10001",
         backdrop: 'static',
-        templateUrl: 'app/mn_admin/mn_gsi_drop_confirm_dialog.html',
+        template: mnGsiDropConfirmDialogTemplate,
         scope: scope
       }).result.then(function () {
         row.awaitingRemoval = true;

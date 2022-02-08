@@ -11,6 +11,7 @@ licenses/APL2.txt.
 import angular from 'angular';
 import mnFocus from '../mn_focus.js';
 import mnServices from '../mn_services/mn_services.js';
+import template from "./mn_memory_quota.html";
 
 export default 'mnMemoryQuota';
 
@@ -27,7 +28,7 @@ function mnMemoryQuotaDirective() {
       rbac: "=",
       mnIsEnterprise: "="
     },
-    templateUrl: 'app/components/directives/mn_memory_quota/mn_memory_quota.html',
+    template,
     controller: ["$scope", controller]
   };
 

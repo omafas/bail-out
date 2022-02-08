@@ -9,6 +9,8 @@ licenses/APL2.txt.
 */
 
 import _ from "lodash";
+import mnServersEjectDialogTemplate from "./mn_servers_eject_dialog.html";
+import mnServersFailoverDialogTemplate from "./mn_servers_failover_dialog.html";
 
 export default mnServersListItemController;
 
@@ -147,7 +149,7 @@ function mnServersListItemController($scope, $rootScope, $uibModal, mnServersSer
     }).then(function (warnings) {
       if (_.some(_.values(warnings))) {
         $uibModal.open({
-          templateUrl: 'app/mn_admin/mn_servers_eject_dialog.html',
+          template: mnServersEjectDialogTemplate,
           controller: 'mnServersEjectDialogController as serversEjectDialogCtl',
           resolve: {
             warnings: function () {
@@ -168,7 +170,7 @@ function mnServersListItemController($scope, $rootScope, $uibModal, mnServersSer
   }
   function failOverNode(node) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_servers_failover_dialog.html',
+      template: mnServersFailoverDialogTemplate,
       controller: 'mnServersFailOverDialogController as serversFailOverDialogCtl',
       resolve: {
         node: function () {

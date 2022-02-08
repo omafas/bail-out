@@ -16,7 +16,7 @@ import {not, any, all} from 'ramda';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnWizardService} from './mn.wizard.service.js';
 import {MnPoolsService} from './mn.pools.service.js';
-
+import template from "./mn.storage.mode.html";
 
 export {MnStorageModeComponent};
 
@@ -24,7 +24,7 @@ class MnStorageModeComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-storage-mode",
-      templateUrl: "app/mn.storage.mode.html",
+      template,
       inputs: [
         "control",
         "indexFlag",

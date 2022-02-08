@@ -13,6 +13,7 @@ import {takeUntil, withLatestFrom} from 'rxjs/operators';
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnFormService} from './mn.form.service.js';
+import template from "./mn.keyspace.selector.html";
 
 export {MnKeyspaceSelectorComponent};
 
@@ -20,7 +21,7 @@ class MnKeyspaceSelectorComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-keyspace-selector",
-      templateUrl: "app/mn.keyspace.selector.html",
+      template,
       inputs: [
         "service",
         "defaults"

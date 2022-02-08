@@ -13,13 +13,14 @@ import {BehaviorSubject} from 'rxjs';
 
 import {MnLifeCycleHooksToStream } from './mn.core.js';
 import {MnAdminService} from './mn.admin.service.js';
+import template from "./mn.wizard.welcome.html";
 
 export {MnWizardWelcomeComponent};
 
 class MnWizardWelcomeComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.wizard.welcome.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

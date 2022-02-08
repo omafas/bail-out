@@ -17,13 +17,14 @@ import { pipe } from 'rxjs';
 import { MnFormService } from './mn.form.service.js';
 import { MnViewsListService } from './mn.views.list.service.js';
 import { UIRouter } from '@uirouter/angular';
+import template from "./mn.views.confirm.override.dialog.html";
 
 export { MnViewsConfirmOverrideDialogComponent };
 
 class MnViewsConfirmOverrideDialogComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.views.confirm.override.dialog.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

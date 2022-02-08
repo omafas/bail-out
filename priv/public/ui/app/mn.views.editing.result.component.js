@@ -22,6 +22,7 @@ import { MnAdminService } from './mn.admin.service.js';
 import { MnDocumentsService } from './mn.documents.service.js';
 
 import { viewsPerPageLimit } from './constants/constants.js';
+import template from "./mn.views.editing.result.html";
 
 export { MnViewsEditingResultComponent };
 
@@ -29,7 +30,7 @@ class MnViewsEditingResultComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "views-editing-result",
-      templateUrl: "app/mn.views.editing.result.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

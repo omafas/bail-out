@@ -15,13 +15,14 @@ import {NgbActiveModal} from '@ng-bootstrap/ng-bootstrap';
 import {scan, startWith} from 'rxjs/operators';
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
+import template from "./mn.session.timeout.dialog.html";
 
 export {MnSessionTimeoutDialogComponent};
 
 class MnSessionTimeoutDialogComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.session.timeout.dialog.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

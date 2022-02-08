@@ -7,6 +7,7 @@ file, in accordance with the Business Source License, use of this software will
 be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 */
+import template from "./mn_statistics_scenario_delete.html";
 
 export default mnScenarioDialogController;
 
@@ -39,7 +40,7 @@ function mnScenarioDialogController($scope, $rootScope, mnStatisticsNewService, 
 
   function deleteScenario(scenarioID) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_statistics_scenario_delete.html',
+      template
     }).result.then(function () {
       mnStatisticsNewService.deleteScenario(scenarioID);
       mnUserRolesService.saveDashboard().then(() => {

@@ -20,6 +20,7 @@ import {MnXDCRService} from './mn.xdcr.service.js';
 import {MnFormService} from "./mn.form.service.js";
 import {MnHelperService} from "./mn.helper.service.js";
 import {MnXDCRDeleteRepComponent} from "./mn.xdcr.delete.rep.component.js";
+import template from "./mn.xdcr.item.details.html";
 
 export {MnXDCRItemDetailsComponent, MnReplicationStatus};
 
@@ -27,7 +28,7 @@ class MnXDCRItemDetailsComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-xdcr-item-details",
-      templateUrl: "app/mn.xdcr.item.details.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "item"

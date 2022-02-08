@@ -13,6 +13,7 @@ import _ from 'lodash';
 
 import mnFilters from '../mn_filters.js';
 import mnSearch from './mn_search/mn_search_directive.js';
+import template from "./mn_selectable_nodes_list.html";
 
 export default 'mnSelectableNodesList';
 
@@ -29,7 +30,7 @@ function mnSelectableNodesListDirective() {
       mnGroups: "=?",
       mnSelectedNodesHolder: "="
     },
-    templateUrl: "app/components/directives/mn_selectable_nodes_list.html",
+    template,
     controller: ["$scope", mnSelectableNodesListController],
     controllerAs: "mnThisCtl",
     bindToController: true

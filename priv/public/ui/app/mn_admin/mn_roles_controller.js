@@ -7,6 +7,9 @@ file, in accordance with the Business Source License, use of this software will
 be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 */
+import mnUserRolesAddDialogTemplate from "./mn_user_roles_add_dialog.html";
+import mnAddLdapDialogTemplate from "./mn_add_ldap_dialog.html";
+import mnRolesGroupsAddDialogTemplate from "./mn_roles_groups_add_dialog.html";
 
 export default mnRolesController;
 
@@ -40,7 +43,7 @@ function mnRolesController($scope, poolDefault, mnHelper, $uibModal, permissions
 
   function addUser() {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_user_roles_add_dialog.html',
+      template: mnUserRolesAddDialogTemplate,
       controller: 'mnUserRolesAddDialogController as userRolesAddDialogCtl',
       resolve: {
         user: mnHelper.wrapInFunction(undefined),
@@ -53,14 +56,14 @@ function mnRolesController($scope, poolDefault, mnHelper, $uibModal, permissions
 
   function addLDAP() {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_add_ldap_dialog.html',
+      template: mnAddLdapDialogTemplate,
       controller: 'mnAddLDAPDialogController as addLdapDialogCtl'
     });
   }
 
   function addRolesGroup() {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_roles_groups_add_dialog.html',
+      template: mnRolesGroupsAddDialogTemplate,
       controller: 'mnRolesGroupsAddDialogController as rolesGroupsAddDialogCtl',
       resolve: {
         rolesGroup: mnHelper.wrapInFunction(undefined)

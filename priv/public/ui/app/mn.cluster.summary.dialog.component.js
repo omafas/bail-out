@@ -15,6 +15,7 @@ import {takeUntil, filter, map} from 'rxjs/operators';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnAlerts} from './ajs.upgraded.providers.js';
 import {MnLogsCollectInfoService} from './mn.logs.collectInfo.service.js';
+import template from "./mn.cluster.summary.dialog.html";
 
 export {MnClusterSummaryDialogComponent};
 
@@ -23,7 +24,7 @@ class MnClusterSummaryDialogComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-cluster-summary-dialog",
-      templateUrl: "/ui/app/mn.cluster.summary.dialog.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

@@ -12,6 +12,7 @@ import angular from 'angular';
 
 import mnSearch from "../mn_search/mn_search_directive.js";
 import mnHelper from "../../mn_helper.js";
+import template from "./mn_select.html";
 
 export default "mnSelect";
 
@@ -39,7 +40,7 @@ function mnSelectDirective(mnHelper) {
       mnPlaceholder: "=",
       hasSearch: "=?"
     },
-    templateUrl: "app/components/directives/mn_select/mn_select.html",
+    template,
     link: ($scope, $element, $attributes, controllers) => {
       controllers[0].setNgModelCtl(controllers[1]);
     },

@@ -14,6 +14,7 @@ import {map, tap, withLatestFrom, takeUntil} from 'rxjs/operators';
 import {sortBy, prop} from 'ramda';
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
+import template from "./mn.warmup.progress.html";
 
 export {MnWarmupProgressComponent};
 
@@ -21,7 +22,7 @@ class MnWarmupProgressComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-warmup-progress",
-      templateUrl: 'app/mn.warmup.progress.html',
+      template,
       inputs: [
         "mnTasks",
         "mnSortBy"

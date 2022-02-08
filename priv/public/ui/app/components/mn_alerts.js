@@ -13,6 +13,7 @@ import _ from 'lodash';
 import uiBootstrap from 'angular-ui-bootstrap';
 
 import mnFilters from './mn_filters.js';
+import template from "./mn_alerts_popup_message.html";
 
 export default 'mnAlertsService';
 
@@ -47,7 +48,7 @@ function mnAlertsServiceFactory($uibModal, $rootScope, $timeout) {
     scope.title = title;
     return $uibModal.open({
       scope: scope,
-      templateUrl: "app/components/mn_alerts_popup_message.html"
+      template
     }).result;
   }
 

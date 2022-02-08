@@ -7,6 +7,7 @@ file, in accordance with the Business Source License, use of this software will
 be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 */
+import template from "./mn_multiple_failover_dialog.html";
 
 export default mnMultipleFailoverDialogController;
 
@@ -41,7 +42,7 @@ function mnMultipleFailoverDialogController(mnServersService, mnPromiseHelper, g
           if (resp.status == 504) {
             $uibModalInstance.close();
             return $uibModal.open({
-              templateUrl: 'app/mn_admin/mn_multiple_failover_dialog.html',
+              template,
               controller: 'mnMultipleFailoverDialogController as multipleFailoverDialogCtl',
               resolve: {
                 groups: mnHelper.wrapInFunction(groups),

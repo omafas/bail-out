@@ -23,6 +23,7 @@ import {MnPermissions} from './ajs.upgraded.providers.js';
 import {MnBucketDialogComponent} from './mn.bucket.dialog.component.js';
 import {MnBucketDeleteDialogComponent} from './mn.bucket.delete.dialog.component.js';
 import {MnBucketFlushDialogComponent} from './mn.bucket.flush.dialog.component.js';
+import template from "./mn.bucket.item.details.html";
 
 export {MnBucketItemDetailsComponent};
 
@@ -31,7 +32,7 @@ class MnBucketItemDetailsComponent extends MnLifeCycleHooksToStream {
     return [
       new Component({
         selector: 'mn-bucket-item-details',
-        templateUrl: 'app/mn.bucket.item.details.html',
+        template,
         inputs: [
           'bucket'
         ],

@@ -18,6 +18,7 @@ import {MnLifeCycleHooksToStream, DetailsHashObserver} from './mn.core.js';
 import {MnTasksService} from './mn.tasks.service.js';
 import {MnBucketsService} from './mn.buckets.service.js';
 import {MnAdminService} from './mn.admin.service.js';
+import template from "./mn.bucket.item.html";
 
 export {MnBucketItemComponent};
 
@@ -26,7 +27,7 @@ class MnBucketItemComponent extends MnLifeCycleHooksToStream {
     return [
       new Component({
         selector: 'mn-bucket-item',
-        templateUrl: 'app/mn.bucket.item.html',
+        template,
         inputs: [
           'bucket'
         ],

@@ -7,6 +7,7 @@ file, in accordance with the Business Source License, use of this software will
 be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 */
+import template from "./mn_servers_failover_confirmation_dialog.html";
 
 export default mnServersFailOverDialogController;
 
@@ -41,7 +42,7 @@ function mnServersFailOverDialogController(mnServersService, mnPromiseHelper, no
       .then(null, function (resp) {
         if (resp.status == 504) {
           return $uibModal.open({
-            templateUrl: 'app/mn_admin/mn_servers_failover_confirmation_dialog.html'
+            template,
           }).result.then(function () {
             return doPostFailover(true);
           });

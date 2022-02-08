@@ -9,6 +9,7 @@ licenses/APL2.txt.
 */
 
 import angular from 'angular';
+import template from "./mn_field.html";
 
 export default 'mnField';
 
@@ -29,7 +30,7 @@ function mnFieldDirective() {
       mnModel: "=",
       mnItems: "="
     },
-    templateUrl: "app/components/directives/mn_field.html",
+    template,
     controller: controller,
     controllerAs: "thisCtl"
   };

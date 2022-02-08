@@ -14,6 +14,7 @@ import {DatePipe} from '@angular/common';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnLogsListService} from './mn.logs.list.service.js';
 import {MnHelperService} from './mn.helper.service.js';
+import template from "./mn.logs.list.html";
 
 export {MnLogsListComponent};
 
@@ -22,7 +23,7 @@ class MnLogsListComponent extends MnLifeCycleHooksToStream {
   static get annotations() {
     return [
       new Component({
-        templateUrl: "app/mn.logs.list.html",
+        template,
         changeDetection: ChangeDetectionStrategy.OnPush
       })
   ]}

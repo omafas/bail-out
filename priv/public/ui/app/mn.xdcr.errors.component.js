@@ -12,13 +12,14 @@ import {Component, ChangeDetectionStrategy} from '@angular/core';
 import {NgbActiveModal} from '@ng-bootstrap/ng-bootstrap';
 
 import {MnFormService} from './mn.form.service.js';
+import template from "./mn.xdcr.errors.html";
 
 export {MnXDCRErrorsComponent};
 
 class MnXDCRErrorsComponent {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.xdcr.errors.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "errors"

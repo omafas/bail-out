@@ -21,6 +21,7 @@ import {MnFormService} from './mn.form.service.js';
 import {MnAuthService} from './mn.auth.service.js';
 import {MnAdminService} from './mn.admin.service.js';
 import {MnPools, $rootScope} from './ajs.upgraded.providers.js';
+import template from "./mn.wizard.new.cluster.config.html";
 
 export {MnWizardNewClusterConfigComponent};
 
@@ -28,7 +29,7 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
 
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.wizard.new.cluster.config.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

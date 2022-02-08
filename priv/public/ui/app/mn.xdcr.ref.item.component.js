@@ -18,6 +18,7 @@ import {MnPermissions} from './ajs.upgraded.providers.js';
 import {MnLifeCycleHooksToStream, DetailsHashObserver} from './mn.core.js';
 import {MnXDCRAddRefComponent} from "./mn.xdcr.add.ref.component.js";
 import {MnXDCRDeleteRefComponent} from "./mn.xdcr.delete.ref.component.js";
+import template from "./mn.xdcr.ref.item.html";
 
 export {MnXDCRRefItemComponent};
 
@@ -25,7 +26,7 @@ class MnXDCRRefItemComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-xdcr-ref-item",
-      templateUrl: "app/mn.xdcr.ref.item.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "item"

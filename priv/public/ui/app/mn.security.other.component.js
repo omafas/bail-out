@@ -22,13 +22,14 @@ import {MnSecurityService} from './mn.security.service.js';
 import {MnAdminService} from './mn.admin.service.js';
 import {MnPoolsService} from './mn.pools.service.js';
 import {MnHttpGroupRequest} from './mn.http.request.js';
+import template from "./mn.security.other.html";
 
 export {MnSecurityOtherComponent};
 
 class MnSecurityOtherComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: 'app/mn.security.other.html',
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

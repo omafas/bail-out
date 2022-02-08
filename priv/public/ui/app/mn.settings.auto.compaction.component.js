@@ -19,13 +19,14 @@ import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnFormService} from './mn.form.service.js';
 import {MnSettingsAutoCompactionService} from './mn.settings.auto.compaction.service.js';
 import {MnHelperService} from './mn.helper.service.js';
+import template from "./mn.settings.auto.compaction.html";
 
 export {MnSettingsAutoCompactionComponent};
 
 class MnSettingsAutoCompactionComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.settings.auto.compaction.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

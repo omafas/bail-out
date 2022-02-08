@@ -16,6 +16,12 @@ import mnRolesGroups from "./mn_roles_groups_controller.js";
 import mnElementCrane from "../components/directives/mn_element_crane/mn_element_crane.js";
 import mnPluggableUiRegistry from "../components/mn_pluggable_ui_registry.js";
 
+import mnSecurityTemplate from "./mn_security.html";
+import mnRolesTemplate from "./mn_roles.html";
+import mnUserRolesTemplate from "./mn_user_roles.html";
+import mnRolesGroupsTemplate from "./mn_roles_groups.html";
+import mnCertificatesTemplate from "./mn_certificates.html";
+
 export default 'mnSecurity';
 
 angular
@@ -43,7 +49,7 @@ function mnSecurityConfig($stateProvider) {
       views: {
         "main@app.admin": {
           controller: "mnSecurityController as securityCtl",
-          templateUrl: "app/mn_admin/mn_security.html"
+          template: mnSecurityTemplate
         }
       },
       data: {
@@ -53,7 +59,7 @@ function mnSecurityConfig($stateProvider) {
     })
     .state('app.admin.security.roles', {
       abstract: true,
-      templateUrl: "app/mn_admin/mn_roles.html",
+      template: mnRolesTemplate,
       controller: "mnRolesController as rolesCtl"
     })
     .state('app.admin.security.roles.user', {
@@ -86,7 +92,7 @@ function mnSecurityConfig($stateProvider) {
         }
       },
       controller: "mnUserRolesController as userRolesCtl",
-      templateUrl: "app/mn_admin/mn_user_roles.html"
+      template: mnUserRolesTemplate
     })
     .state('app.admin.security.roles.groups', {
       url: "/rolesGroups?startFrom&sortBy&order&substr&{pageSize:int}",
@@ -115,7 +121,7 @@ function mnSecurityConfig($stateProvider) {
         }
       },
       controller: "mnRolesGroupsController as rolesGroupsCtl",
-      templateUrl: "app/mn_admin/mn_roles_groups.html",
+      template: mnRolesGroupsTemplate,
       data: {
         enterprise: true
       }
@@ -123,7 +129,7 @@ function mnSecurityConfig($stateProvider) {
     .state('app.admin.security.certificate', {
       url: '/certificate',
       controller: 'mnCertController as certCtl',
-      templateUrl: 'app/mn_admin/mn_certificates.html',
+      template: mnCertificatesTemplate,
       data: {
         enterprise: true
       }

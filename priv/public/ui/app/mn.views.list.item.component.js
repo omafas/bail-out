@@ -28,6 +28,7 @@ import { MnViewsDeleteDialogDdocComponent } from './mn.views.delete.dialog.ddoc.
 import { MnViewsDeleteDialogViewComponent } from './mn.views.delete.dialog.view.component.js';
 import { MnViewsCopyDialogComponent } from './mn.views.copy.dialog.component.js';
 import { MnViewsConfirmOverrideDialogComponent } from './mn.views.confirm.override.dialog.component.js';
+import template from "./mn.views.list.item.html";
 
 export { MnViewsListItemComponent };
 
@@ -35,7 +36,7 @@ class MnViewsListItemComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-views-list-item",
-      templateUrl: "app/mn.views.list.item.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         'row',

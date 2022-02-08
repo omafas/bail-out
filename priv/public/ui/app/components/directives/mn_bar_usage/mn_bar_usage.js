@@ -12,6 +12,7 @@ import angular from 'angular';
 import _ from 'lodash';
 
 import mnFilters from '../../mn_filters.js';
+import template from "./mn_bar_usage.html";
 
 export default 'mnBarUsage';
 
@@ -27,7 +28,7 @@ function mnBarUsageDirective(mnRescaleForSumFilter) {
       baseInfo: '=',
     },
     isolate: false,
-    templateUrl: 'app/components/directives/mn_bar_usage/mn_bar_usage.html',
+    template,
     controller: ["$scope", controller]
   };
 

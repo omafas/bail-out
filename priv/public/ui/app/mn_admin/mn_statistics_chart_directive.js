@@ -21,6 +21,7 @@ import mnStatisticsNewService from "./mn_statistics_service.js";
 import mnMultiChartDirective from "./mn_multi_chart_directive.js";
 
 import mnPoolDefault from "../components/mn_pool_default.js";
+import template from "./mn_statistics_chart_directive.html";
 
 export default "mnStatisticsChart";
 
@@ -39,7 +40,7 @@ angular
 function mnStatisticsNewChartDirective(mnStatisticsNewService, mnFormatQuantityFilter, $state, mnTruncateTo3DigitsFilter, mnHelper, mnPoolDefault) {
   return {
     restrict: 'AE',
-    templateUrl: 'app/mn_admin/mn_statistics_chart_directive.html',
+    template,
     scope: {
       statsPoller: "=?",
       syncScope: "=?",

@@ -23,13 +23,14 @@ import {MnTasksService} from './mn.tasks.service.js';
 import {MnHelperService} from './mn.helper.service.js';
 
 import {MnXDCRAddRefComponent} from "./mn.xdcr.add.ref.component.js";
+import template from "./mn.xdcr.html";
 
 export { MnXDCRComponent };
 
 class MnXDCRComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.xdcr.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

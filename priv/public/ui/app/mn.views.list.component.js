@@ -23,6 +23,7 @@ import { MnViewsListService } from './mn.views.list.service.js';
 import { MnBucketsService } from './mn.buckets.service.js';
 
 import { MnViewsCreateDialogComponent } from './mn.views.create.dialog.component.js';
+import template from "./mn.views.list.html";
 
 export { MnViewsListComponent };
 
@@ -30,7 +31,7 @@ class MnViewsListComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-views-list",
-      templateUrl: "app/mn.views.list.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

@@ -13,6 +13,7 @@ import _ from "lodash";
 import uiBootstrap from "angular-ui-bootstrap";
 
 import mnPoolDefault from "../components/mn_pool_default.js";
+import template from "./mn_servers_stop_rebalance_dialog.html";
 
 export default "mnServersService";
 
@@ -51,7 +52,7 @@ function mnServersFactory($http, $q, $uibModal, mnPoolDefault) {
       .then(null, function (resp) {
         if (resp.status === 504) {
           return $uibModal.open({
-            templateUrl: 'app/mn_admin/mn_servers_stop_rebalance_dialog.html'
+            template
           }).result.then(function () {
             return stopRebalance(true);
           });

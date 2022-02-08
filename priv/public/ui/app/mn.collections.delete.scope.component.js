@@ -15,13 +15,14 @@ import {map} from 'rxjs/operators';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnFormService} from "./mn.form.service.js";
 import {MnCollectionsService} from './mn.collections.service.js';
+import template from "./mn.collections.delete.scope.html";
 
 export {MnCollectionsDeleteScopeComponent}
 
 class MnCollectionsDeleteScopeComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: 'app/mn.collections.delete.scope.html',
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

@@ -25,6 +25,7 @@ import mnSettingsClusterService from "./mn_settings_cluster_service.js";
 import mnXDCRService from "./mn_xdcr_service.js";
 import mnMemoryQuotaService from "../components/directives/mn_memory_quota/mn_memory_quota_service.js";
 import mnClusterConfigurationService from "../mn_wizard/mn_cluster_configuration/mn_cluster_configuration_service.js";
+import template from "./mn_settings_cluster_confirmation_dialog.html";
 
 export default 'mnSettingsCluster';
 
@@ -219,7 +220,7 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
     }
     if ((!vm.indexSettings || vm.indexSettings.storageMode === "forestdb") && vm.initialMemoryQuota != vm.memoryQuotaConfig.indexMemoryQuota) {
       $uibModal.open({
-        templateUrl: 'app/mn_admin/mn_settings_cluster_confirmation_dialog.html'
+        template,
       }).result.then(saveSettings);
     } else {
       saveSettings();

@@ -14,6 +14,7 @@ import uiRouter from "@uirouter/angularjs";
 import uiBootstrap from "angular-ui-bootstrap";
 
 import mnHelper from "../components/mn_helper.js";
+import template from "./mn_poor_mans_alerts.html";
 
 export default "mnPoorMansAlertsService";
 
@@ -70,7 +71,7 @@ function mnPoorMansAlertsFactory($http, $state, $uibModal, mnHelper, $timeout) {
 
   function doShowAlerts(alertsSilenceURL, alerts) {
     return $uibModal.open({
-      templateUrl: "app/mn_admin/mn_poor_mans_alerts.html",
+      template,
       controller: "mnPoorMansAlertsController as poorMansCtl",
       resolve: {
         alertsSilenceURL: mnHelper.wrapInFunction(alertsSilenceURL),

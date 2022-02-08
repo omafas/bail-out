@@ -13,6 +13,7 @@ import {pluck, shareReplay} from 'rxjs/operators';
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnHelperService} from './mn.helper.service.js';
+import template from "./mn.collections.scope.details.html";
 
 export {MnCollectionsScopeDetailsComponent};
 
@@ -20,7 +21,7 @@ class MnCollectionsScopeDetailsComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-collections-scope-details",
-      templateUrl: 'app/mn.collections.scope.details.html',
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "mnCollectionsStatsPoller",

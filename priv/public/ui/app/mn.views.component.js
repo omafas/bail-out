@@ -9,13 +9,14 @@ licenses/APL2.txt.
 */
 
 import { Component, ChangeDetectionStrategy } from '@angular/core';
+import template from "./mn.views.html";
 
 export { MnViewsComponent };
 
 class MnViewsComponent {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.views.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

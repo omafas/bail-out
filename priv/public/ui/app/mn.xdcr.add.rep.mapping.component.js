@@ -20,6 +20,7 @@ import {MnCollectionsService} from './mn.collections.service.js';
 import {MnHelperService} from "./mn.helper.service.js";
 
 import {MnPermissions} from './ajs.upgraded.providers.js';
+import template from "./mn.xdcr.add.rep.mapping.html";
 
 export {MnXDCRAddRepMappingComponent};
 
@@ -27,7 +28,7 @@ class MnXDCRAddRepMappingComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-xdcr-mapping",
-      templateUrl: "app/mn.xdcr.add.rep.mapping.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "explicitMappingRules",

@@ -15,6 +15,7 @@ import mnPoolDefault from '../../mn_pool_default.js';
 import mnPermissions from '../../mn_permissions.js';
 import mnSettingsClusterService from '../../../mn_admin/mn_settings_cluster_service.js';
 import mnPeriod from '../mn_period/mn_period.js';
+import template from "./mn_auto_compaction_form.html";
 
 export default 'mnAutoCompactionForm';
 
@@ -38,7 +39,7 @@ function mnAutoCompactionFormDirective($http, daysOfWeek, mnPermissions, mnPoolD
     },
     isolate: false,
     replace: true,
-    templateUrl: 'app/components/directives/mn_auto_compaction_form/mn_auto_compaction_form.html',
+    template,
     controller: ["$scope", controller]
   };
 

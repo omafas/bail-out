@@ -9,6 +9,7 @@ licenses/APL2.txt.
 */
 
 import {Component, ChangeDetectionStrategy} from '@angular/core';
+import template from "./mn.settings.auto.compaction.time.period.html";
 
 export {MnSettingsAutoCompactionTimePeriodComponent};
 
@@ -16,7 +17,7 @@ class MnSettingsAutoCompactionTimePeriodComponent {
   static get annotations() { return [
     new Component({
       selector: "mn-time-period",
-      templateUrl: "app/mn.settings.auto.compaction.time.period.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         'mnGroup',

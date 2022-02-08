@@ -18,6 +18,7 @@ import {MnXDCRService} from "./mn.xdcr.service.js";
 import {MnFormService} from "./mn.form.service.js";
 import {MnKeyspaceSelectorService} from "./mn.keyspace.selector.service.js";
 import {MnAdminService} from "./mn.admin.service.js";
+import template from "./mn.xdcr.filter.html";
 
 export {MnXDCRFilterComponent};
 
@@ -25,7 +26,7 @@ class MnXDCRFilterComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-xdcr-filter",
-      templateUrl: "app/mn.xdcr.filter.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "bucket",

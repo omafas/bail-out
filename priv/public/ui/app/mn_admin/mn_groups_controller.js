@@ -26,6 +26,10 @@ import mnGroupsDeleteDialogController from "./mn_groups_delete_dialog_controller
 import mnGroupsGroupDialogController from "./mn_groups_group_dialog_controller.js";
 import mnGroupsService from "./mn_groups_service.js";
 
+import mnGroupsTemplate from "./mn_groups.html";
+import mnGroupsDeleteDialogTemplate from "./mn_groups_delete_dialog.html";
+import mnGroupsGroupDialogTemplate from "./mn_groups_group_dialog.html";
+
 export default 'mnGroups';
 
 angular
@@ -53,7 +57,7 @@ function configure($stateProvider) {
       url: '/groups',
       views: {
         "main@app.admin": {
-          templateUrl: 'app/mn_admin/mn_groups.html',
+          template: mnGroupsTemplate,
           controller: 'mnGroupsController as groupsCtl'
         }
       },
@@ -101,7 +105,7 @@ function mnGroupsController($scope, $uibModal, mnGroupsService, mnPromiseHelper,
   function deleteGroup(group) {
     if (isGroupsEqual()) {
       return $uibModal.open({
-        templateUrl: 'app/mn_admin/mn_groups_delete_dialog.html',
+        template: mnGroupsDeleteDialogTemplate,
         controller: 'mnGroupsDeleteDialogController as groupsDeleteDialogCtl',
         resolve: {
           group: mnHelper.wrapInFunction(group)
@@ -116,7 +120,7 @@ function mnGroupsController($scope, $uibModal, mnGroupsService, mnPromiseHelper,
 
   function createGroup(group) {
     return $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_groups_group_dialog.html',
+      template: mnGroupsGroupDialogTemplate,
       controller: 'mnGroupsGroupDialogController as groupsGroupDialogCtl',
       resolve: {
         group: mnHelper.wrapInFunction(group)

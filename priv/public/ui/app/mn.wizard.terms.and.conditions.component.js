@@ -21,13 +21,14 @@ import {MnAuthService} from "./mn.auth.service.js";
 import {MnAdminService} from "./mn.admin.service.js";
 import {MnPools} from "./ajs.upgraded.providers.js";
 import {clone} from 'ramda';
+import template from "./mn.wizard.terms.and.conditions.html";
 
 export {MnWizardTermsAndConditionsComponent};
 
 class MnWizardTermsAndConditionsComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.wizard.terms.and.conditions.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

@@ -12,6 +12,7 @@ import {ChangeDetectionStrategy, Component} from '@angular/core';
 import {NgbActiveModal} from '@ng-bootstrap/ng-bootstrap';
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
+import template from "./mn.bucket.full.dialog.html";
 
 export {MnBucketFullDialogComponent};
 
@@ -19,7 +20,7 @@ class MnBucketFullDialogComponent extends MnLifeCycleHooksToStream {
 
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.bucket.full.dialog.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

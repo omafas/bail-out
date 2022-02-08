@@ -26,13 +26,14 @@ import { QwDialogService } from '../../_p/ui/query/angular-directives/qw.dialog.
 import { MnViewsCreateDialogComponent } from './mn.views.create.dialog.component.js';
 
 import js_beautify from "js-beautify";
+import template from "./mn.views.editing.html";
 
 export { MnViewsEditingComponent };
 
 class MnViewsEditingComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.views.editing.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

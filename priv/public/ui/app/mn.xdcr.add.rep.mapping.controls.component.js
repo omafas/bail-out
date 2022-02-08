@@ -16,6 +16,7 @@ import {FormBuilder} from '@angular/forms';
 import {MnHelperService} from './mn.helper.service.js';
 import {MnXDCRService, collectionDelimiter} from './mn.xdcr.service.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
+import template from "./mn.xdcr.add.rep.mapping.controls.html";
 
 export {MnXDCRAddRepMappingControlsComponent};
 
@@ -23,7 +24,7 @@ class MnXDCRAddRepMappingControlsComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-xdcr-add-rep-mapping-controls",
-      templateUrl: "app/mn.xdcr.add.rep.mapping.controls.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "item",

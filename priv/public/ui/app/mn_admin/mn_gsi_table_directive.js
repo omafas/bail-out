@@ -9,6 +9,7 @@ licenses/APL2.txt.
 */
 
 import {Subject} from 'rxjs';
+import template from "./mn_gsi_table_directive.html";
 
 export default mnGsiTableDirective;
 
@@ -26,7 +27,7 @@ function mnGsiTableDirective(mnHelper) {
     },
     controller: ["$scope", "mnHelperService", "mnPoolDefault", "mnStatisticsNewService", mnGsiTableController],
     controllerAs: "mnGsiTableCtl",
-    templateUrl: 'app/mn_admin/mn_gsi_table_directive.html'
+    template
   };
 
   return mnGsiTable;

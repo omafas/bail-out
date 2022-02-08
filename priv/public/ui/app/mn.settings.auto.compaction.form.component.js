@@ -17,6 +17,7 @@ import {MnSettingsAutoCompactionService} from './mn.settings.auto.compaction.ser
 import {MnHelperService} from './mn.helper.service.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnPermissions} from './ajs.upgraded.providers.js';
+import template from "./mn.settings.auto.compaction.form.html";
 
 export {MnSettingsAutoCompactionFormComponent};
 
@@ -24,7 +25,7 @@ class MnSettingsAutoCompactionFormComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-auto-compaction-form",
-      templateUrl: "app/mn.settings.auto.compaction.form.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         'mnGroup',

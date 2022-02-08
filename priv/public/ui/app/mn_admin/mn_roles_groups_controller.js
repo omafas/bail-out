@@ -28,6 +28,8 @@ import mnUserRolesService from "./mn_user_roles_service.js";
 
 import mnRolesGroupsDeleteDialogController from "./mn_roles_groups_delete_dialog_controller.js";
 import mnRolesGroupsAddDialogController from "./mn_roles_groups_add_dialog_controller.js";
+import mnRolesGroupsAddDialogTemplate from "./mn_roles_groups_add_dialog.html";
+import mnRolesGroupsDeleteDialogTemplate from "./mn_roles_groups_delete_dialog.html";
 
 export default "mnRolesGroups";
 
@@ -127,7 +129,7 @@ function mnRolesGroupsController($scope, $uibModal, mnPromiseHelper, mnUserRoles
 
   function editRolesGroup(rolesGroup) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_roles_groups_add_dialog.html',
+      template: mnRolesGroupsAddDialogTemplate,
       controller: 'mnRolesGroupsAddDialogController as rolesGroupsAddDialogCtl',
       resolve: {
         rolesGroup: mnHelper.wrapInFunction(rolesGroup)
@@ -136,7 +138,7 @@ function mnRolesGroupsController($scope, $uibModal, mnPromiseHelper, mnUserRoles
   }
   function addRolesGroup() {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_roles_groups_add_dialog.html',
+      template: mnRolesGroupsAddDialogTemplate,
       controller: 'mnRolesGroupsAddDialogController as rolesGroupsAddDialogCtl',
       resolve: {
         rolesGroup: mnHelper.wrapInFunction(undefined)
@@ -145,7 +147,7 @@ function mnRolesGroupsController($scope, $uibModal, mnPromiseHelper, mnUserRoles
   }
   function deleteRolesGroup(rolesGroup) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_roles_groups_delete_dialog.html',
+      template: mnRolesGroupsDeleteDialogTemplate,
       controller: 'mnRolesGroupsDeleteDialogController as rolesGroupsDeleteDialogCtl',
       resolve: {
         rolesGroup: mnHelper.wrapInFunction(rolesGroup)

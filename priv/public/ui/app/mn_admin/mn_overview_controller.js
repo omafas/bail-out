@@ -21,6 +21,8 @@ import mnStatisticsNew from "./mn_statistics_controller.js";
 import mnMainSpinner from "../components/directives/mn_main_spinner.js";
 
 import mnElementCrane from "../components/directives/mn_element_crane/mn_element_crane.js";
+import mnOverviewTemplate from "./mn_overview.html";
+import mnStatisticsTemplate from "./mn_statistics.html";
 
 export default 'mnOverview';
 
@@ -97,7 +99,7 @@ function mnOverviewConfig($stateProvider, $transitionsProvider) {
       views: {
         "main@app.admin": {
           controller: 'mnOverviewController as overviewCtl',
-          templateUrl: 'app/mn_admin/mn_overview.html'
+          template: mnOverviewTemplate
         }
       },
       data: {
@@ -107,7 +109,7 @@ function mnOverviewConfig($stateProvider, $transitionsProvider) {
     .state('app.admin.overview.statistics', {
       url: '/stats?statsHostname',
       controller: 'mnStatisticsNewController as statisticsNewCtl',
-      templateUrl: 'app/mn_admin/mn_statistics.html',
+      template: mnStatisticsTemplate,
       params: {
         statsHostname: "all"
       }

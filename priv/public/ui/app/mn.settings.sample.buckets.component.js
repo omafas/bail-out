@@ -23,13 +23,14 @@ import {MnTasksService} from './mn.tasks.service.js';
 
 import {MnPermissions} from './ajs.upgraded.providers.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
+import template from "./mn.settings.sample.buckets.html";
 
 export {MnSettingsSampleBucketsComponent};
 
 class MnSettingsSampleBucketsComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.settings.sample.buckets.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

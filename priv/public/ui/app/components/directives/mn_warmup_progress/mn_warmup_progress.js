@@ -9,6 +9,7 @@ licenses/APL2.txt.
 */
 
 import angular from 'angular';
+import template from "./mn_warmup_progress.html";
 
 export default 'mnWarmupProgress';
 
@@ -25,7 +26,7 @@ function mnWarmupProgressDirective() {
       sortBy: '@'
     },
     replace: true,
-    templateUrl: 'app/components/directives/mn_warmup_progress/mn_warmup_progress.html'
+    template
   };
 
   return mnWarmupProgress;

@@ -17,13 +17,14 @@ import { pipe } from 'rxjs';
 
 import { MnFormService } from './mn.form.service.js';
 import { MnViewsListService } from './mn.views.list.service.js';
+import template from "./mn.views.delete.dialog.ddoc.html";
 
 export { MnViewsDeleteDialogDdocComponent };
 
 class MnViewsDeleteDialogDdocComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.views.delete.dialog.ddoc.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

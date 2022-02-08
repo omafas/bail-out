@@ -17,13 +17,14 @@ import {MnFormService} from "./mn.form.service.js";
 import {MnPoolsService} from './mn.pools.service.js';
 import {MnXDCRService} from './mn.xdcr.service.js';
 import {clone} from 'ramda';
+import template from "./mn.xdcr.add.ref.html";
 
 export {MnXDCRAddRefComponent};
 
 class MnXDCRAddRefComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.xdcr.add.ref.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "item"

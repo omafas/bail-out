@@ -12,6 +12,7 @@ import {Component, ChangeDetectionStrategy} from '@angular/core'
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnHelperService} from "./mn.helper.service.js";
+import template from "./mn.xdcr.add.rep.scope.html";
 
 export {MnXDCRAddRepScopeComponent};
 
@@ -19,7 +20,7 @@ class MnXDCRAddRepScopeComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-xdcr-add-rep-scope",
-      templateUrl: "app/mn.xdcr.add.rep.scope.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "item",

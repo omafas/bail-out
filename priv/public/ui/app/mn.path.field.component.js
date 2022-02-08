@@ -12,6 +12,7 @@ import {Component, ChangeDetectionStrategy} from '@angular/core';
 import {BehaviorSubject} from 'rxjs';
 
 import {MnWizardService} from './mn.wizard.service.js';
+import template from "./mn.path.field.html";
 
 export {MnPathFieldComponent};
 
@@ -19,7 +20,7 @@ class MnPathFieldComponent {
   static get annotations() { return [
     new Component({
       selector: "mn-path-field",
-      templateUrl: "app/mn.path.field.html",
+      template,
       inputs: [
         "control",
         "controlName"

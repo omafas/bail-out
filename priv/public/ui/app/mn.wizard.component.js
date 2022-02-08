@@ -15,6 +15,7 @@ import {MnWizardService} from './mn.wizard.service.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnPoolsService} from './mn.pools.service.js';
 import {MnAdminService} from "./mn.admin.service.js";
+import template from "./mn.wizard.html";
 
 export {MnWizardComponent};
 
@@ -22,7 +23,7 @@ class MnWizardComponent extends MnLifeCycleHooksToStream {
 
   static get annotations() { return [
     new Component({
-      templateUrl: 'app/mn.wizard.html',
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

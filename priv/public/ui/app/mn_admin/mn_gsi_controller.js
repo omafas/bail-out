@@ -34,6 +34,7 @@ import {mnGsiItemController, mnGsiItemStatsController, mnGsiItemDetails} from ".
 import mnFooterStatsController from "./mn_gsi_footer_controller.js";
 import mnGsiTableDirective from "./mn_gsi_table_directive.js";
 import mnKeyspaceSelectorDowngradeModule from "../mn.keyspace.selector.downgrade.module.js"
+import template from "./mn_gsi.html";
 
 export default 'mnGsi';
 
@@ -134,7 +135,7 @@ function configure($stateProvider, $transitionsProvider) {
       views: {
         "main@app.admin": {
           controller: "mnGsiController as gsiCtl",
-          templateUrl: "app/mn_admin/mn_gsi.html"
+          template
         }
       }
     });

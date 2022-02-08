@@ -10,6 +10,7 @@ licenses/APL2.txt.
 
 import {Component, ChangeDetectionStrategy} from '@angular/core';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
+import template from "./mn.selectable.node.item.html";
 
 export {MnSelectableNodeItemComponent};
 
@@ -17,7 +18,7 @@ class MnSelectableNodeItemComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-selectable-node-item",
-      templateUrl: "/ui/app/mn.selectable.node.item.html",
+      template,
       inputs: [
         "mnSelectableNode",
         "mnGroup"

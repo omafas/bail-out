@@ -17,13 +17,14 @@ import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnFormService} from './mn.form.service.js';
 import {MnCollectionsService} from './mn.collections.service.js';
 import {MnPoolsService} from './mn.pools.service.js';
+import template from "./mn.collections.add.item.html";
 
 export {MnCollectionsAddItemComponent}
 
 class MnCollectionsAddItemComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: 'app/mn.collections.add.item.html',
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

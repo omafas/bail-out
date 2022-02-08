@@ -9,6 +9,7 @@ licenses/APL2.txt.
 */
 
 import angular from 'angular';
+import template from "./mn_storage_mode.html";
 
 export default 'mnStorageMode';
 
@@ -49,7 +50,7 @@ function mnStorageModeDirective() {
       mnServicesModel: "=?",
       mnInitial: "=?"
     },
-    templateUrl: 'app/components/directives/mn_storage_mode/mn_storage_mode.html'
+    template
   };
 
   return mnStorageMode;

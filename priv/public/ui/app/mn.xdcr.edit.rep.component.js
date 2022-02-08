@@ -20,13 +20,14 @@ import {MnXDCRService, collectionDelimiter} from "./mn.xdcr.service.js";
 import {MnFormService} from "./mn.form.service.js";
 import {MnPoolsService} from "./mn.pools.service.js";
 import {MnAdminService} from "./mn.admin.service.js";
+import template from "./mn.xdcr.edit.rep.html";
 
 export {MnXDCREditRepComponent};
 
 class MnXDCREditRepComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.xdcr.edit.rep.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "item"

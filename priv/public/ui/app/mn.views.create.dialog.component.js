@@ -18,13 +18,14 @@ import { pipe } from 'rxjs';
 
 import { MnFormService } from './mn.form.service.js';
 import { MnViewsListService } from './mn.views.list.service.js';
+import template from "./mn.views.create.dialog.html";
 
 export { MnViewsCreateDialogComponent };
 
 class MnViewsCreateDialogComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.views.create.dialog.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush
     })
   ]}

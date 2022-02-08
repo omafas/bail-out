@@ -15,6 +15,7 @@ import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnHelperService} from './mn.helper.service.js';
 import {MnServerGroupsService} from './mn.server.groups.service.js';
 import {MnFormatServices} from './mn.pipes.js';
+import template from "./mn.selectable.nodes.html";
 
 export {MnSelectableNodesComponent};
 
@@ -22,7 +23,7 @@ class MnSelectableNodesComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
       selector: "mn-selectable-nodes",
-      templateUrl: "/ui/app/mn.selectable.nodes.html",
+      template,
       inputs: [
         "mnSelectAll",
         "mnGroup"

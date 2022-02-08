@@ -49,7 +49,12 @@ import mnServersEjectDialogController from "./mn_servers_eject_dialog_controller
 import mnServersAddDialogController from "./mn_servers_add_dialog_controller.js";
 import mnMultipleFailoverDialogController from "./mn_multiple_failover_dialog.js";
 import mnClusterConfigurationService from "../mn_wizard/mn_cluster_configuration/mn_cluster_configuration_service.js";
-
+import mnServersTemplate from "./mn_servers.html";
+import mnServersListTemplate from "./mn_servers_list.html";
+import mnServersListItemDetailsTemplate from "./mn_servers_list_item_details.html";
+import mnServersListItemTemplate from "./mn_servers_list_item.html";
+import mnMultipleFailoverDialogTemplate from "./mn_multiple_failover_dialog.html";
+import mnServersAddDialogTemplate from "./mn_servers_add_dialog.html";
 
 export default "mnServers";
 
@@ -103,7 +108,7 @@ function configure($stateProvider) {
       views: {
         "main@app.admin": {
           controller: 'mnServersController as serversCtl',
-          templateUrl: 'app/mn_admin/mn_servers.html'
+          template: mnServersTemplate
         }
       },
       data: {
@@ -120,14 +125,14 @@ function configure($stateProvider) {
       },
       views: {
         "" : {
-          templateUrl: 'app/mn_admin/mn_servers_list.html'
+          template: mnServersListTemplate
         },
         "details@app.admin.servers.list": {
-          templateUrl: 'app/mn_admin/mn_servers_list_item_details.html',
+          template: mnServersListItemDetailsTemplate,
           controller: 'mnServersListItemDetailsController as serversListItemDetailsCtl'
         },
         "item@app.admin.servers.list": {
-          templateUrl: 'app/mn_admin/mn_servers_list_item.html',
+          template: mnServersListItemTemplate,
           controller: 'mnServersListItemController as serversItemCtl'
         }
       }
@@ -185,7 +190,7 @@ function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller,
   }
   function multipleFailoverDialog() {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_multiple_failover_dialog.html',
+      template: mnMultipleFailoverDialogTemplate,
       controller: 'mnMultipleFailoverDialogController as multipleFailoverDialogCtl',
       resolve: {
         groups: function () {
@@ -203,7 +208,7 @@ function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller,
   }
   function addServer() {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_servers_add_dialog.html',
+      template: mnServersAddDialogTemplate,
       controller: 'mnServersAddDialogController as serversAddDialogCtl',
       resolve: {
         groups: function () {

@@ -32,6 +32,13 @@ import mnGroupDialogController from "./mn_statistics_group_controller.js";
 import mnScenarioDialogController from "./mn_statistics_scenario_controller.js";
 import {mnStatisticsNewChartBuilderController, mnFormatStatsSections} from "./mn_statistics_chart_builder_controller.js";
 
+import mnStatisticsChartBuilderDeleteTemplate from "./mn_statistics_chart_builder_delete.html";
+import mnStatisticsDetailedChartTemplate from "./mn_statistics_detailed_chart.html";
+import mnStatisticsGroupDeleteTemplate from "./mn_statistics_group_delete.html";
+import mnStatisticsResetDialogTemplate from "./mn_statistics_reset_dialog.html";
+import mnStatisticsGroupTemplate from "./mn_statistics_group.html";
+import mnStatisticsChartBuilderTemplate from "./mn_statistics_chart_builder.html";
+
 export default "mnStatisticsNew";
 
 angular
@@ -91,7 +98,7 @@ function mnStatisticsChartsController($scope, $uibModal, mnStatisticsNewService,
   function deleteChart() {
     vm.showChartControls = false;
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_statistics_chart_builder_delete.html'
+      template: mnStatisticsChartBuilderDeleteTemplate
     }).result.then(function () {
       mnStatisticsNewService.deleteChart($scope.chartID);
       mnUserRolesService.saveDashboard();
@@ -102,7 +109,7 @@ function mnStatisticsChartsController($scope, $uibModal, mnStatisticsNewService,
   function editChart(group, scenario) {
     vm.showChartControls = false;
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_statistics_chart_builder.html',
+      template: mnStatisticsChartBuilderTemplate,
       controller: 'mnStatisticsNewChartBuilderController as builderCtl',
       resolve: {
         chart: mnHelper.wrapInFunction(vm.getChart()),
@@ -117,7 +124,7 @@ function mnStatisticsChartsController($scope, $uibModal, mnStatisticsNewService,
 
   function openDetailedChartDialog() {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_statistics_detailed_chart.html',
+      template: mnStatisticsDetailedChartTemplate,
       controller: 'mnStatisticsDetailedChartController as detailedChartCtl',
       windowTopClass: "chart-overlay",
       resolve: {
@@ -184,7 +191,7 @@ function mnStatisticsGroupsController($scope, $uibModal, $timeout,
 
   function deleteGroup(groupID) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_statistics_group_delete.html',
+      template: mnStatisticsGroupDeleteTemplate
     }).result.then(function () {
       mnStatisticsNewService.deleteGroup(groupID);
       mnUserRolesService.saveDashboard();
@@ -256,7 +263,7 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
 
   function resetDashboardConfiguration() {
     return $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_statistics_reset_dialog.html'
+      template: mnStatisticsResetDialogTemplate
     }).result
       .then(() => mnUserRolesService.resetDashboard())
       .then(() => {
@@ -271,7 +278,7 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
 
   function openGroupDialog() {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_statistics_group.html',
+      template: mnStatisticsGroupTemplate,
       controller: 'mnGroupDialogController as groupDialogCtl',
       resolve: {
         scenarioId: mnHelper.wrapInFunction(vm.scenarioId)
@@ -285,7 +292,7 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
 
   function openChartBuilderDialog(group, scenario, groupCtl) {
     $uibModal.open({
-      templateUrl: 'app/mn_admin/mn_statistics_chart_builder.html',
+      template: mnStatisticsChartBuilderTemplate,
       controller: 'mnStatisticsNewChartBuilderController as builderCtl',
       resolve: {
         scenario: mnHelper.wrapInFunction(scenario),

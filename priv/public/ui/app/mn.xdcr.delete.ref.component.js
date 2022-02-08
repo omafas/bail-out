@@ -15,13 +15,14 @@ import {map} from 'rxjs/operators';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnXDCRService} from "./mn.xdcr.service.js";
 import {MnFormService} from "./mn.form.service.js";
+import template from "./mn.xdcr.delete.ref.html";
 
 export {MnXDCRDeleteRefComponent};
 
 class MnXDCRDeleteRefComponent extends MnLifeCycleHooksToStream {
   static get annotations() { return [
     new Component({
-      templateUrl: "app/mn.xdcr.delete.ref.html",
+      template,
       changeDetection: ChangeDetectionStrategy.OnPush,
       inputs: [
         "item"

@@ -93,6 +93,9 @@ func main() {
 		// LogLevel: api.LogLevelWarning,
 		LogLevel: api.LogLevelInfo,
 		Outdir: *outDir,
+		Loader: map[string]api.Loader{
+			".html": api.LoaderText,
+		},
 		Engines: []api.Engine{
 			{api.EngineChrome, "93"},
 			{api.EngineFirefox, "92"},
