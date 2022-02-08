@@ -376,11 +376,10 @@ decide_on_failover(DownStates, State, SvcConfig) ->
             DownNodes = get_node_names_and_uuids(DownStates),
             DownNodesOrdset = ordsets:from_list(
                                 get_node_names(DownStates)),
-            {lists:flatmap(should_failover_node(
-                             State, _, SvcConfig,
-                             DownNodesOrdset), DownNodes), DownStates};
+            lists:flatmap(should_failover_node(State, _, SvcConfig,
+                                               DownNodesOrdset), DownNodes);
         false ->
-            {[], DownStates}
+            []
     end.
 
 decide_on_actions_pre_neo(DownStates, State, SvcConfig, MaxGroupSize) ->
@@ -388,14 +387,14 @@ decide_on_actions_pre_neo(DownStates, State, SvcConfig, MaxGroupSize) ->
         true ->
             issue_mail_down_warnings_pre_Neo(DownStates);
         false ->
-            decide_on_failover(DownStates, State, SvcConfig)
+            {decide_on_failover(DownStates, State, SvcConfig), DownStates}
     end.
 
 decide_on_actions(PrevDownStates, DownStates, State, SvcConfig) ->
     case decide_on_failover(DownStates, State, SvcConfig) of
-        {[], DownStates} ->
+        [] ->
             issue_mail_down_warnings(PrevDownStates, DownStates);
-        {Actions, NewDownStates} ->
+        Actions ->
             {Failovers, Other} =
                 lists:partition(fun ({failover, _}) ->
                                         true;
@@ -403,7 +402,7 @@ decide_on_actions(PrevDownStates, DownStates, State, SvcConfig) ->
                                         false
                                 end, Actions),
             {combine_failovers(Failovers, Other, SvcConfig),
-             NewDownStates}
+             DownStates}
     end.
 
 combine_failovers([], Other, _SvcConfig) ->
