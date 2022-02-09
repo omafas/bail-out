@@ -66,8 +66,11 @@ class MnSettingsSampleBucketsComponent extends MnLifeCycleHooksToStream {
         mnPermissions.stream.pipe(pluck("cluster", "buckets", "create"),
                                   distinctUntilChanged());
 
-    combineLatest(this.getSampleBuckets.pipe(startWith(null),
-                                             pairwise()),
+    combineLatest(this.getSampleBuckets
+                    .pipe(startWith(null),
+                          pairwise()),
+                  this.tasksLoadingSamples
+                    .pipe(distinctUntilChanged((p, c) => p.length === c.length)),
                   hasClusterBucketsCreate)
       .pipe(takeUntil(this.mnOnDestroy))
       .subscribe(this.addFormControls.bind(this));
@@ -114,18 +117,20 @@ class MnSettingsSampleBucketsComponent extends MnLifeCycleHooksToStream {
       .pipe(map(conditions => conditions.some(v => v)));
   }
 
-  addFormControls([[oldBuckets, buckets], hasPermission]) {
+  addFormControls([[oldBuckets, buckets], tasks, hasPermission]) {
     buckets.forEach((bucket, index) => {
+      let isInstalling = tasks.find(t => t.bucket === bucket.name);
+      let isDisabled = !hasPermission || bucket.installed || isInstalling;
       let bucketControl = this.form.group.get(bucket.name);
       if (bucketControl && oldBuckets) {
-        bucketControl[!hasPermission || bucket.installed ? 'disable' : 'enable']();
+        bucketControl[isDisabled ? 'disable' : 'enable']();
         if (bucket.installed != oldBuckets[index].installed) {
           bucketControl.patchValue(bucket.installed);
         }
       } else {
         this.form.group.addControl(bucket.name, new FormControl({
           value: bucket.installed,
-          disabled: !hasPermission || bucket.installed
+          disabled: isDisabled
         }));
       }
     });
