@@ -429,6 +429,13 @@ process_action({mail_auto_failover_disabled, Service, {Node, _}}, S, _, _, _) ->
        "Auto-failover for ~s service is disabled.",
        [Node, ns_cluster_membership:user_friendly_service_name(Service)]),
     S;
+process_action({mail_kv_not_fully_failed_over, {Node, _}}, S, _, _, _) ->
+    ?log_info_and_email(
+       auto_failover_other_nodes_down,
+       "Could not auto-failover service node (~p). "
+       "One of the data service nodes cannot be automatically failed over.",
+       [Node]),
+    S;
 process_action({failover, NodesWithUUIDs}, S, DownNodes, NodeStatuses,
                _Snapshot)
   when is_list(NodesWithUUIDs) ->

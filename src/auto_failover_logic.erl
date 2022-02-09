@@ -376,10 +376,43 @@ decide_on_failover(DownStates, State, SvcConfig) ->
             DownNodes = get_node_names_and_uuids(DownStates),
             DownNodesOrdset = ordsets:from_list(
                                 get_node_names(DownStates)),
-            lists:flatmap(should_failover_node(State, _, SvcConfig,
-                                               DownNodesOrdset), DownNodes);
+            Actions = lists:flatmap(should_failover_node(
+                                      State, _, SvcConfig,
+                                      DownNodesOrdset), DownNodes),
+            decide_on_services_failovers(Actions, SvcConfig);
         false ->
             []
+    end.
+
+is_kv_node({NodeName, _UID}, SvcConfig) ->
+    lists:member(kv, get_node_services(NodeName, SvcConfig)).
+
+get_node_from_action({mail_too_small, _, _, N}) ->
+    N;
+get_node_from_action({mail_auto_failover_disabled, _, N}) ->
+    N;
+get_node_from_action({_, N}) ->
+    N.
+
+decide_on_services_failovers(Actions, SvcConfig) ->
+    case lists:any(fun ({failover, _}) ->
+                           false;
+                       (Action) ->
+                           is_kv_node(get_node_from_action(Action), SvcConfig)
+                   end, Actions) of
+        true ->
+            lists:map(fun ({failover, NodeTuple} = Action) ->
+                              case is_kv_node(NodeTuple, SvcConfig) of
+                                  true ->
+                                      Action;
+                                  false ->
+                                      {mail_kv_not_fully_failed_over, NodeTuple}
+                              end;
+                          (Action) ->
+                              Action
+                      end, Actions);
+        false ->
+            Actions
     end.
 
 decide_on_actions_pre_neo(DownStates, State, SvcConfig, MaxGroupSize) ->
@@ -410,11 +443,7 @@ combine_failovers([], Other, _SvcConfig) ->
 combine_failovers(Failovers, Other, SvcConfig) ->
     FailoverNodes = [N || {failover, N} <- Failovers],
     {KV, OtherServiceNodes} =
-        lists:partition(
-          fun ({NodeName, _}) ->
-                  NodeSvc = get_node_services(NodeName, SvcConfig),
-                  lists:member(kv, NodeSvc)
-          end, FailoverNodes),
+        lists:partition(is_kv_node(_, SvcConfig), FailoverNodes),
     [{failover, KV ++ OtherServiceNodes} | Other].
 
 maybe_issue_mail_down_warning(
@@ -715,6 +744,8 @@ compare_with(?VERSION_NEO, {mail_too_small, Svc, SvcNodes, Node}) ->
     [{mail_too_small, Svc, SvcNodes, attach_test_uuid(Node)}];
 compare_with(?VERSION_NEO, {mail_down_warnings, Nodes}) ->
     [{mail_down_warning_multi_node, N} || N <- attach_test_uuids(Nodes)];
+compare_with(?VERSION_NEO, {mail_kv_not_fully_failed_over, Node}) ->
+    {mail_kv_not_fully_failed_over, attach_test_uuid(Node)};
 compare_with(?VERSION_70, {mail_down_warnings, Nodes}) ->
     [{mail_down_warning, N} || N <- attach_test_uuids(Nodes)].
 
@@ -808,7 +839,14 @@ multiple_services_test_() ->
         [{no_actions, 5, [a1, b1, b2, d1]},
          {[{failover, [a1, d1]},
            {mail_too_small, n1ql, [], b1},
-           {mail_too_small, n1ql, [], b2}], 1, [a1, b1, b2, d1]}]}]).
+           {mail_too_small, n1ql, [], b2}], 1, [a1, b1, b2, d1]}]},
+       {"Do not fail over services if kv cannot be failed over", 3,
+        [{no_actions, 5, [a1, b1, c1, c2, d1]},
+         {[{mail_kv_not_fully_failed_over, a1},
+           {mail_kv_not_fully_failed_over, b1},
+           {mail_kv_not_fully_failed_over, d1},
+           {mail_too_small, kv, [c3], c1},
+           {mail_too_small, kv, [c3], c2}], 1, [a1, b1, c1, c2, d1]}]}]).
 
 min_size_test_() ->
     MinSizeTest =
