@@ -234,36 +234,40 @@
       <strong>NOTE FOR GSI INDEXES</strong>
       :&nbsp; Auto-compaction settings are unnecessary for memory-optimized and plasma-based indexes.
     </div>
+  </div>
 
-    <h4 class="inline">Metadata Purge Interval</h4>
-    <span
-       class="fa-stack icon-info"
-       ngbTooltip="Sets the time period during which metadata on deleted items may remain on disk.
+  <h4 class="inline">Metadata Purge Interval</h4>
+  <span
+     class="fa-stack icon-info"
+     ngbTooltip="Sets the time period during which metadata on deleted items may remain on disk.
               The acceptable range of values is 0.04 – 60, where 0.04 = 1 hour and 1 = 1 day.
               Setting this value too high may significantly delay reclaiming of disk space; setting
               it too low may cause data inconsistencies in XDCR."
-       placement="top">
+     placement="top">
       <span class="icon fa-circle-thin fa-stack-2x"></span>
       <span class="icon fa-info fa-stack-1x"></span>
     </span><br>
-    <div class="desc">For Couchbase buckets ONLY.</div>
-    <div class="formrow form-inline">
-      <input
-         type="text"
-         formControlName="purgeInterval"
-         id="metadata-purge-frequency"
-         autocorrect="off"
-         spellcheck="false"
-         autocapitalize="off"
-         class="input-short-1">
-      <small>day{{purgeIntervalIsOne | async}}</small>
-      <br>
-      <div class="desc">Range 0.04 (1hr) - 60 days</div>
-      <div
-         [hidden]="!(mnErrors | async)?.errors.purgeInterval"
-         class="error error-field">
-        {{(mnErrors | async)?.errors.purgeInterval}}.
-      </div>
+  <div
+     class="desc"
+     [hidden]="isBucketSettings">
+    For Couchbase buckets ONLY.
+  </div>
+  <div class="formrow form-inline">
+    <input
+       type="text"
+       formControlName="purgeInterval"
+       id="metadata-purge-frequency"
+       autocorrect="off"
+       spellcheck="false"
+       autocapitalize="off"
+       class="input-short-1">
+    <small>day{{purgeIntervalIsOne | async}}</small>
+    <br>
+    <div class="desc">Range 0.04 (1hr) - 60 days</div>
+    <div
+       [hidden]="!(mnErrors | async)?.errors.purgeInterval"
+       class="error error-field">
+      {{(mnErrors | async)?.errors.purgeInterval}}.
     </div>
   </div>
 </div>

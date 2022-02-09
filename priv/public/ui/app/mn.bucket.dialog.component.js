@@ -418,6 +418,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
         switch(formData.storageBackend) {
           case 'magma':
             saveData.magmaFragmentationPercentage = autoCompactionData.magmaFragmentationPercentage;
+            saveData.purgeInterval = autoCompactionData.purgeInterval;
             break;
           case 'couchstore':
             saveData = Object.assign(saveData, autoCompactionData);
