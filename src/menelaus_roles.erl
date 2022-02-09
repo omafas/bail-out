@@ -711,8 +711,6 @@ vertex_params_match(Params, FilterParams) ->
 
 vertex_param_match({any, _}) ->
     true;
-vertex_param_match({all, any}) ->
-    true;
 vertex_param_match({_, any}) ->
     true;
 vertex_param_match({A, B}) ->
