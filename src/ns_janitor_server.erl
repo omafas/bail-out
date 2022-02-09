@@ -195,7 +195,30 @@ run_cleanup(Parent, Requests) ->
     ok = gen_server:cast(Parent, {cleanup_complete, RequestsRV, UnsafeNodes}).
 
 do_run_cleanup(compat_mode) ->
-    compat_mode_manager:consider_switching_compat_mode();
+    RV = compat_mode_manager:consider_switching_compat_mode(),
+    case RV of
+        unchanged ->
+            ok;
+        {changed, OldVersion, NewVersion} ->
+            Old = ns_cluster_membership:topology_aware_services_for_version(
+                    OldVersion),
+            New = ns_cluster_membership:topology_aware_services_for_version(
+                    NewVersion),
+            ActiveNodes = ns_cluster_membership:active_nodes(),
+            Services = [S || S <- New -- Old,
+                             ns_cluster_membership:service_nodes(
+                               ActiveNodes, S) =/= []],
+            case Services of
+                [] ->
+                    ok;
+                _ ->
+                    ale:info(?USER_LOGGER,
+                             "The following topology-aware services will be "
+                             "upgraded during the next rebalance: ~p",
+                             [Services])
+            end
+    end,
+    RV;
 do_run_cleanup(services) ->
     service_janitor:cleanup();
 do_run_cleanup({bucket, Bucket}) ->
