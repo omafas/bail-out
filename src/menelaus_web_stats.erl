@@ -21,6 +21,7 @@
 -include("ns_common.hrl").
 -include("rbac.hrl").
 -include("cut.hrl").
+-include("ns_test.hrl").
 
 -define(MAX_TS, 9999999999999).
 -define(MIN_TS, -?MAX_TS).
@@ -1090,7 +1091,11 @@ validate_time_duration(Name, State) ->
       end, Name, State).
 
 promql_filters_for_identity(Identity) ->
+    Roles = menelaus_roles:get_roles(Identity),
     CompiledRoles = menelaus_roles:get_compiled_roles(Identity),
+    promql_filters_for_roles(Roles, CompiledRoles).
+
+promql_filters_for_roles(Roles, CompiledRoles) ->
     PermCheck =
         fun (Obj) ->
             menelaus_roles:is_allowed(collection_perm(Obj), CompiledRoles)
@@ -1098,11 +1103,125 @@ promql_filters_for_identity(Identity) ->
     case PermCheck([all, all, all]) of
         true -> [{[]}]; %% one empty filter
         false ->
-            Roles = menelaus_roles:get_roles(Identity),
             Definitions = menelaus_roles:get_definitions(all),
+            %% Building a map that looks like the following:
+            %% #{"bucket1" => true,
+            %%   "bucket2" => #{"scope1" => true,
+            %%                  "scope2" => #{"collection1" => true,
+            %%                                "collection2" => true}}}
             PermMap = build_stats_perm_map(Roles, PermCheck, Definitions),
             convert_perm_map_to_promql_ast(PermMap)
     end.
+
+
+-ifdef(TEST).
+
+promql_filters_for_roles_test() ->
+    Bucket1 = "test1",
+    Bucket2 = "test2",
+    UUID1 = <<"1bfe4b1738746c446747fa83b59930f1">>,
+    UUID2 = <<"1bfe4b1738746c446747fa83b59930f1">>,
+    ChronicleRev = {<<"A">>, 18},
+    Manifest = [{uid,0},
+                {next_uid,1},
+                {next_scope_uid,8},
+                {next_coll_uid,8},
+                {num_scopes,0},
+                {num_collections,0},
+                {scopes,[{"_default",
+                          [{uid,0},{collections,[{"_default",[{uid,0}]}]}]}]}],
+    Snapshot = #{{bucket, Bucket1, collections} => {Manifest, ChronicleRev},
+                 {bucket, Bucket2, collections} => {Manifest, ChronicleRev},
+                 {bucket, Bucket1, uuid} => {UUID1, ChronicleRev},
+                 {bucket, Bucket2, uuid} => {UUID2, ChronicleRev}},
+
+    CompiledRoles = menelaus_roles:compile_roles(
+                      _,
+                      menelaus_roles:get_definitions(all),
+                      Snapshot),
+
+    Filters = fun (Roles) ->
+                  AST = promql_filters_for_roles(Roles, CompiledRoles(Roles)),
+                  promQL:format_promql({'or', AST})
+              end,
+
+    meck:new(cluster_compat_mode, [passthrough]),
+    try
+        meck:expect(cluster_compat_mode, is_enterprise,
+                    fun () -> true end),
+        meck:expect(cluster_compat_mode, get_compat_version,
+                    fun (_) -> ?LATEST_VERSION_NUM end),
+        meck:expect(cluster_compat_mode, is_developer_preview,
+                    fun () -> false end),
+
+        ?assertBinStringsEqual(
+          <<"{}">>,
+          Filters(menelaus_roles:get_roles({"Admin", admin}))),
+
+        ?assertBinStringsEqual(
+          <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
+          Filters(menelaus_roles:get_roles({Bucket1, bucket}))),
+
+        ?assertBinStringsEqual(
+          <<"{}">>,
+          Filters([{bucket_admin, [any]}])),
+
+        ?assertBinStringsEqual(
+          <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
+          Filters([{bucket_admin, [{Bucket1, UUID1}]}])),
+
+        ?assertBinStringsEqual(
+          <<"{bucket=~`test1|test2`} or {bucket!~`.+`}">>,
+          Filters([{bucket_admin, [{Bucket1, UUID1}]},
+                   {bucket_admin, [{Bucket2, UUID2}]}])),
+
+        ?assertBinStringsEqual(
+          <<"{}">>,
+          Filters([{eventing_manage_functions, [any, any]}])),
+
+        ?assertBinStringsEqual(
+          <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
+          Filters([{eventing_manage_functions, [{Bucket1, UUID1}, any]}])),
+
+        ?assertBinStringsEqual(
+          <<"{bucket=`test1`,scope=~`_default`} or {bucket!~`.+`}">>,
+          Filters([{eventing_manage_functions, [{Bucket1, UUID1},
+                                                {"_default", 0}]}])),
+
+        ?assertBinStringsEqual(
+          <<"{bucket=`test1`,scope=~`_default`} or {bucket=~`test2`} or "
+            "{bucket!~`.+`}">>,
+          Filters([{eventing_manage_functions, [{Bucket1, UUID1},
+                                                {"_default", 0}]},
+                   {eventing_manage_functions, [{Bucket2, UUID2}, any]}])),
+
+        ?assertBinStringsEqual(
+          <<"{bucket=`test1`,scope=`_default`,collection=~`_default`} or "
+            "{bucket=`test2`,scope=~`_default`} or {bucket!~`.+`}">>,
+          Filters([{data_monitoring, [{Bucket1, UUID1}, {"_default", 0},
+                                      {"_default", 0}]},
+                   {data_monitoring, [{Bucket2, UUID2}, {"_default", 0},
+                                      any]}])),
+
+        ?assertBinStringsEqual(
+          <<"{bucket=`test2`,scope=~`_default`} or {bucket=~`test1`} or "
+            "{bucket!~`.+`}">>,
+          Filters([{data_monitoring, [{Bucket1, UUID1}, {"_default", 0},
+                                      {"_default", 0}]},
+                   {data_monitoring, [{Bucket2, UUID2}, {"_default", 0}, any]},
+                   {data_monitoring, [{Bucket1, UUID1}, any, any]}])),
+
+        ?assertBinStringsEqual(
+          <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
+          Filters([{data_reader, [any, any, any]},
+                   {eventing_manage_functions, [{Bucket1, UUID1}, any]}])),
+
+        ok
+    after
+        meck:unload(cluster_compat_mode)
+    end.
+
+-endif.
 
 collection_perm([B, S, C]) -> {[{collection, [B, S, C]}, stats], read};
 collection_perm([B, S]) ->    {[{collection, [B, S, all]}, stats], read};
