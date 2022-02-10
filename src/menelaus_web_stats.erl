@@ -1113,6 +1113,20 @@ build_stats_perm_map(UserRoles, PermCheckFun, RolesDefinitions) ->
     StrippedParams =
         [{Defs, menelaus_roles:strip_ids(Defs, P)} || {R, P} <- UserRoles,
                                                       Defs <- [ParamDefs(R)]],
+
+    %% Filtering out all the params that give full access to all buckets
+    %% because: 1. the rest of the function assumes that bucket is a binary
+    %%             string (not atom 'any');
+    %%          2. perm filter is not needed in this case;
+    %%          3. this case is handled outside of this function.
+    FilteredParams =
+        lists:filter(
+          fun ({[bucket_name], [any]}) -> false;
+              ({?RBAC_SCOPE_PARAMS, [any, any]}) -> false;
+              ({?RBAC_COLLECTION_PARAMS, [any, any, any]}) -> false;
+              (_) -> true
+          end, StrippedParams),
+
     Params =
         misc:groupby_map(
           fun ({[bucket_name], B}) -> {buckets, B};
@@ -1121,7 +1135,7 @@ build_stats_perm_map(UserRoles, PermCheckFun, RolesDefinitions) ->
               ({?RBAC_SCOPE_PARAMS, S}) -> {scopes, S};
               ({?RBAC_COLLECTION_PARAMS, [B, S, any]}) -> {scopes, [B, S]};
               ({?RBAC_COLLECTION_PARAMS, P}) -> {collections, P}
-          end, StrippedParams),
+          end, FilteredParams),
 
     CheckParam =
         fun F([Obj], CheckPerm, Acc) ->
