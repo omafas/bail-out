@@ -189,6 +189,8 @@ mk_number_field_validator(Min, Max, Params) ->
 mk_number_field_validator(Min, Max, Params, ParseFn) ->
     fun ({JSONName, CfgName, HumanName}) ->
             case proplists:get_value(JSONName, Params) of
+                "undefined" ->
+                    [{ok, CfgName, undefined}];
                 undefined -> [];
                 V ->
                     case parse_validate_number(V, Min, Max, ParseFn) of
@@ -376,16 +378,13 @@ do_parse_validate_settings(Params, ExpectIndex, not_magma) ->
         proplists:get_value(view_fragmentation_threshold, GlobalSettings),
 
     PercValidator = mk_number_field_validator(2, 100, Params),
-    %% Zero means no size is specified (converts to undefined below).
-    SizeValidator = mk_number_field_validator(0, infinity, Params),
+    SizeValidator = mk_number_field_validator(1, infinity, Params),
 
     ValidatorFun =
         fun (Validator, {_, Key, _} = ValidatorParams, Default) ->
                 case Validator(ValidatorParams) of
                     [] ->
                         [{ok, Key, Default}];
-                    [{ok, Key, 0}] ->
-                        [{ok, Key, undefined}];
                     ValueOrError ->
                         ValueOrError
                 end
@@ -692,9 +691,9 @@ use_global_default_test() ->
 reset_fragmentation_size_test() ->
     setup_meck(),
 
-    %% Setting fragmention size to zero resets the value to undefined.
-    Settings = [{"databaseFragmentationThreshold[size]", "0"},
-                {"viewFragmentationThreshold[size]", "0"},
+    %% Setting fragmention size to "undefined" resets the value to undefined.
+    Settings = [{"databaseFragmentationThreshold[size]", "undefined"},
+                {"viewFragmentationThreshold[size]", "undefined"},
                 {"parallelDBAndViewCompaction", "false"}],
 
     Expected = [{parallel_db_and_view_compaction,false},
@@ -705,6 +704,19 @@ reset_fragmentation_size_test() ->
 
     {ok, Stuff, []} = parse_validate_settings(Settings, false),
     ?assertEqual(Expected, Stuff),
+
+    %% Setting fragmentation percentage to "undefined" resets the value
+    %% to undefined.
+    Settings2 = Settings ++ [{"databaseFragmentationThreshold[percentage]",
+                              "undefined"},
+                             {"viewFragmentationThreshold[percentage]",
+                              "undefined"}],
+    Expected2 = [{parallel_db_and_view_compaction,false},
+                 {database_fragmentation_threshold, {undefined, undefined}},
+                 {view_fragmentation_threshold, {undefined, undefined}}],
+    {ok, Stuff2, []} = parse_validate_settings(Settings2, false),
+    ?assertEqual(Expected2, Stuff2),
+
     teardown_meck(),
     ok.
 
