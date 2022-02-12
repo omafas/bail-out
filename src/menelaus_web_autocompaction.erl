@@ -499,10 +499,10 @@ setup_meck() ->
                 fun (_, _) ->
                         {ok,
                          {[{database_fragmentation_threshold,
-                            {global_database_fragmentation_threshold,
+                            {global_database_fragmentation_percentage,
                              undefined}},
                            {view_fragmentation_threshold,
-                            {global_view_fragmentation_threshold, undefined}},
+                            {global_view_fragmentation_percentage, undefined}},
                            {magma_fragmentation_percentage,
                             global_magma_fragmentation_percentage}],
                           {<<"f663189bff34bd2523ee5ff25480d845">>, 4}}}
@@ -642,7 +642,7 @@ use_global_default_test() ->
         [{parallel_db_and_view_compaction,false},
          {database_fragmentation_threshold,{19,undefined}},
          {view_fragmentation_threshold,
-          {global_view_fragmentation_threshold,undefined}}],
+          {global_view_fragmentation_percentage,undefined}}],
     ?assertEqual(Expected0, Result0),
 
     %% Setting view percentage only; database should use global value
@@ -654,7 +654,7 @@ use_global_default_test() ->
     Expected1 =
         [{parallel_db_and_view_compaction,false},
          {database_fragmentation_threshold,
-          {global_database_fragmentation_threshold,undefined}},
+          {global_database_fragmentation_percentage,undefined}},
          {view_fragmentation_threshold,{25,undefined}}],
     ?assertEqual(Expected1, Result1),
 
@@ -667,9 +667,9 @@ use_global_default_test() ->
     Expected2 =
         [{parallel_db_and_view_compaction,false},
          {database_fragmentation_threshold,
-          {global_database_fragmentation_threshold,12345}},
+          {global_database_fragmentation_percentage,12345}},
          {view_fragmentation_threshold,
-          {global_view_fragmentation_threshold,undefined}}],
+          {global_view_fragmentation_percentage,undefined}}],
     ?assertEqual(Expected2, Result2),
 
     %% Setting view size only; database should use global value
@@ -681,9 +681,9 @@ use_global_default_test() ->
     Expected3 =
         [{parallel_db_and_view_compaction,false},
          {database_fragmentation_threshold,
-          {global_database_fragmentation_threshold,undefined}},
+          {global_database_fragmentation_percentage,undefined}},
          {view_fragmentation_threshold,
-          {global_view_fragmentation_threshold,77777}}],
+          {global_view_fragmentation_percentage,77777}}],
     ?assertEqual(Expected3, Result3),
     teardown_meck(),
     ok.
@@ -698,9 +698,9 @@ reset_fragmentation_size_test() ->
 
     Expected = [{parallel_db_and_view_compaction,false},
                 {database_fragmentation_threshold,
-                 {global_database_fragmentation_threshold, undefined}},
+                 {global_database_fragmentation_percentage, undefined}},
                 {view_fragmentation_threshold,
-                 {global_view_fragmentation_threshold, undefined}}],
+                 {global_view_fragmentation_percentage, undefined}}],
 
     {ok, Stuff, []} = parse_validate_settings(Settings, false),
     ?assertEqual(Expected, Stuff),
