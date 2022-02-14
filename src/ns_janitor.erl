@@ -69,7 +69,7 @@ cleanup_membase_bucket(Bucket, Options, BucketConfig, Snapshot) ->
 
 cleanup_with_membase_bucket_check_servers(Bucket, Options, BucketConfig,
                                           Snapshot) ->
-    case check_server_list(Bucket, BucketConfig, Snapshot) of
+    case check_server_list(Bucket, BucketConfig, Snapshot, Options) of
         ok ->
             cleanup_with_membase_bucket_check_map(Bucket, Options, BucketConfig);
         {update_servers, NewServers} ->
@@ -407,11 +407,12 @@ maybe_reset_rebalance_status(Options) ->
 %% !!! only purely functional code below (with notable exception of logging) !!!
 %% lets try to keep as much as possible logic below this line
 check_server_list(Bucket, BucketConfig) ->
-    check_server_list(Bucket, BucketConfig, ns_config:latest()).
+    check_server_list(Bucket, BucketConfig, ns_config:latest(), []).
 
-check_server_list(Bucket, BucketConfig, Snapshot) ->
+check_server_list(Bucket, BucketConfig, Snapshot, Options) ->
     Servers = ns_bucket:get_servers(BucketConfig),
-    ActiveKVNodes = ns_cluster_membership:service_active_nodes(Snapshot, kv),
+    ActiveKVNodes = ns_cluster_membership:service_active_nodes(Snapshot, kv) --
+                        proplists:get_value(failover_nodes, Options, []),
     do_check_server_list(Bucket, Servers, ActiveKVNodes).
 
 do_check_server_list(_Bucket, [], ActiveKVNodes) ->

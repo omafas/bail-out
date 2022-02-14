@@ -474,6 +474,7 @@ failover_membase_bucket_with_map(Nodes, Bucket, BucketConfig, Map, Options) ->
 
 janitor_cleanup_options(FailedNodes, FailoverOptions) ->
     [{sync_nodes, config_sync_nodes(FailedNodes)},
+     {failover_nodes, FailedNodes},
      {pull_config, false},
      {push_config, durability_aware(FailoverOptions)}].
 
