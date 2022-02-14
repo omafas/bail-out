@@ -1063,6 +1063,7 @@ section.error {
   position: relative;
   line-height: 1rem;
   padding: 1rem 2rem;
+  word-break: break-word;
 }
 .alert a {
   font-weight: 600;
