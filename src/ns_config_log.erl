@@ -120,6 +120,12 @@ tag_user_tuples_fun({raw_url, RawUrl}) ->
     {stop, {raw_url, tag_misc_item(RawUrl)}};
 tag_user_tuples_fun({doc_id, DocId}) ->
     {stop, {doc_id, tag_user_name(DocId)}};
+tag_user_tuples_fun({<<"bindDN">>, DistinguishedName}) ->
+    {stop, {<<"bindDN">>, tag_user_name(DistinguishedName)}};
+tag_user_tuples_fun({CertType, Certificate})
+  when CertType =:= <<"cacert">> orelse
+       CertType =:= <<"clientTLSCert">> ->
+    {stop, {CertType, tag_misc_item(Certificate)}};
 tag_user_tuples_fun({UName, Type}) when Type =:= local orelse
                                         Type =:= external orelse
                                         Type =:= admin ->
@@ -146,11 +152,15 @@ do_tag_misc_item(Item) when is_binary(Item) ->
     {ok, Val} = do_tag_misc_item(binary_to_list(Item)),
     {ok, list_to_binary(Val)};
 do_tag_misc_item(_) ->
-    continue.
+    no_change.
 
 tag_misc_item(Item) ->
-    {ok, Val} = do_tag_misc_item(Item),
-    Val.
+    case do_tag_misc_item(Item) of
+        no_change ->
+            Item;
+        {ok, Val} ->
+            Val
+    end.
 
 tag_doc_id(DocId) ->
     tag_misc_item(DocId).

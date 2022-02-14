@@ -78,9 +78,12 @@ handle_ldap_settings_validate_post(Type, Req) when Type =:= "connectivity";
                          "Modified settings:~n~p~n"
                          "Full list of settings:~n~p",
                          [Type,
-                          prepare_ldap_settings(ParsedProps),
-                          prepare_ldap_settings(ParsedProps -- CurrProps),
-                          prepare_ldap_settings(NewProps)]),
+                          ns_config_log:tag_user_data(
+                            prepare_ldap_settings(ParsedProps)),
+                          ns_config_log:tag_user_data(
+                            prepare_ldap_settings(ParsedProps -- CurrProps)),
+                          ns_config_log:tag_user_data(
+                            prepare_ldap_settings(NewProps))]),
               Res = validate_ldap_settings(Type, NewProps),
               menelaus_util:reply_json(Req2, {Res})
       end, [], params() ++ validation_params(Type), fun type_spec/1, Req);
