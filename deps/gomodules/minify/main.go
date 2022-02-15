@@ -97,10 +97,10 @@ func main() {
 			".html": api.LoaderText,
 		},
 		Engines: []api.Engine{
-			{api.EngineChrome, "93"},
-			{api.EngineFirefox, "92"},
-			{api.EngineSafari, "14"},
-			{api.EngineEdge, "93"},
+			{api.EngineChrome, "67"},
+			{api.EngineFirefox, "67"},
+			{api.EngineSafari, "11.1"},
+			{api.EngineEdge, "80"},
 		},
 	})
 

@@ -118,13 +118,9 @@
     ]
   },
   "browserslist": [
-    "Chrome >= 61",
-    "Firefox >= 60",
-    "Safari >= 11",
-    "Opera >= 48",
-    "Samsung >= 8",
-    "Android >= 67",
-    "ChromeAndroid >= 74",
-    "FirefoxAndroid >= 66"
+    "Chrome >= 67",
+    "Firefox >= 67",
+    "Safari >= 11.1",
+    "Edge >= 80"
   ]
 }
