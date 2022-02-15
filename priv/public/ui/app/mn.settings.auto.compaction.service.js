@@ -145,7 +145,11 @@ class MnSettingsAutoCompactionService {
     if (values.databaseFragmentationThreshold) {
       values.databaseFragmentationThreshold.size = values.databaseFragmentationThreshold.size ?
         this.mnHelperService.transformMBToBytes(values.databaseFragmentationThreshold.size) :
-        0;
+        "undefined";
+
+      values.databaseFragmentationThreshold.percentage = values.databaseFragmentationThreshold.percentage ?
+        values.databaseFragmentationThreshold.percentage :
+        "undefined";
 
       delete values.databaseFragmentationThreshold.sizeFlag;
       delete values.databaseFragmentationThreshold.percentageFlag;
@@ -154,7 +158,11 @@ class MnSettingsAutoCompactionService {
     if (values.viewFragmentationThreshold) {
       values.viewFragmentationThreshold.size = values.viewFragmentationThreshold.size ?
         this.mnHelperService.transformMBToBytes(values.viewFragmentationThreshold.size) :
-        0;
+        "undefined";
+
+      values.viewFragmentationThreshold.percentage = values.viewFragmentationThreshold.percentage ?
+        values.viewFragmentationThreshold.percentage :
+        "undefined";
 
       delete values.viewFragmentationThreshold.sizeFlag;
       delete values.viewFragmentationThreshold.percentageFlag;
