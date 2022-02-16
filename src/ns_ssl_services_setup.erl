@@ -18,6 +18,7 @@
 -endif.
 
 -define(PKEY_REVALIDATION_INTERVAL, 5000).
+-define(WRITE_RETRIES, 7).
 
 -export([start_link/0,
          start_link_capi_service/0,
@@ -670,7 +671,7 @@ maybe_store_ca_certs() ->
         true ->
             ?log_debug("Updating CA file with ~p certificates", [N]),
             create_marker(all_services()),
-            ok = misc:atomic_write_file(Path, NewContent),
+            ok = atomic_write_file_with_retry(Path, NewContent, ?WRITE_RETRIES),
             ?log_info("CA file updated: ~b cert(s) written", [N]),
             ok = ssl:clear_pem_cache();
         false ->
@@ -788,8 +789,10 @@ save_node_certs_phase2() ->
         {ok, Bin} ->
             {node_certs, Props, Chain, PKey} = binary_to_term(Bin),
             CertsEpoch = proplists:get_value(certs_epoch, Props),
-            ok = misc:atomic_write_file(chain_file_path(), Chain),
-            ok = misc:atomic_write_file(pkey_file_path(), PKey),
+            ok = atomic_write_file_with_retry(chain_file_path(), Chain,
+                                              ?WRITE_RETRIES),
+            ok = atomic_write_file_with_retry(pkey_file_path(), PKey,
+                                              ?WRITE_RETRIES),
             CertsInfo = case proplists:get_value(type, Props) of
                             generated ->
                                 Host = proplists:get_value(hostname, Props),
@@ -1210,3 +1213,86 @@ update_node_cert_epoch() ->
 create_marker(Services) ->
     Data = iolist_to_binary(io_lib:format("~p.", [Services])),
     misc:create_marker(marker_path(), Data).
+
+%% It's possible that the target file is open while we are trying to write to it.
+%% On windows it leads to {error, eacces}. If we assume that consumers of that
+%% file don't keep it open for long, simple retry should solve this problem.
+atomic_write_file_with_retry(Path, Bytes, Retries) when Retries >= 0,
+                                                        is_binary(Bytes) ->
+    atomic_write_file_with_retry(Path, Bytes, Retries, _FirstTimeout = 10).
+
+atomic_write_file_with_retry(Path, Bytes, Retries, Timeout) ->
+    case misc:atomic_write_file(Path, Bytes) of
+        {error, eacces} = Error when Retries > 0 ->
+            ?log_warning("Got ~p when writing to ~p, will retry after ~bms",
+                         [Error, Path, Timeout]),
+            timer:sleep(Timeout),
+            atomic_write_file_with_retry(Path, Bytes, Retries - 1, Timeout * 2);
+        Other ->
+            Other
+    end.
+
+-ifdef(TEST).
+atomic_write_file_with_retry_test() ->
+    meck:new(timer, [passthrough, unstick]),
+    meck:new(misc, [passthrough]),
+    try
+        Self = self(),
+        Path = "/path/",
+        Body = <<"abc">>,
+        Ref = make_ref(),
+        meck:expect(timer, sleep, fun (T) -> Self ! {Ref, {sleep, T}}  end),
+        meck:expect(misc, atomic_write_file,
+                    fun (P, B) ->
+                        P = Path,
+                        B = Body,
+                        case get({retries, Ref}) of
+                            N when N =< 0 -> ok;
+                            N ->
+                               put({retries, Ref}, N - 1),
+                               {error, eacces}
+                        end
+                    end),
+        AssertSleeps = fun AS([]) ->
+                               receive
+                                  {Ref, {sleep, T}} ->
+                                      error({unexpected_sleep, T})
+                               after
+                                   0 -> ok
+                               end;
+                           AS([Next | Tail]) ->
+                               receive
+                                   {Ref, {sleep, T}} ->
+                                       case Next == T of
+                                           true -> AS(Tail);
+                                           false ->
+                                               error({wrong_sleep, T, Next})
+                                       end
+                               after
+                                   0 ->
+                                       error({missing_sleep, Next})
+                               end
+                       end,
+        Test = fun (RetriesNeeded, RetriesHave, ExpectedSleeps) ->
+                   put({retries, Ref}, RetriesNeeded),
+                   Res = atomic_write_file_with_retry(Path, Body, RetriesHave),
+                   case RetriesNeeded =< RetriesHave of
+                       true -> ?assertEqual(ok, Res);
+                       false -> ?assertEqual({error, eacces}, Res)
+                   end,
+                   ?assertEqual(ok, AssertSleeps(ExpectedSleeps))
+               end,
+        Test(1, 0, []),
+        Test(0, 0, []),
+        Test(4, 1, [10]),
+        Test(4, 2, [10, 20]),
+        Test(4, 3, [10, 20, 40]),
+        Test(3, 3, [10, 20, 40]),
+        Test(3, 4, [10, 20, 40]),
+        Test(8, 8, [10, 20, 40, 80, 160, 320, 640, 1280]),
+        ok
+    after
+        meck:unload(misc),
+        meck:unload(timer)
+    end.
+-endif.
