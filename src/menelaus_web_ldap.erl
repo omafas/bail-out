@@ -32,7 +32,7 @@ prepare_ldap_settings(Settings) ->
     Props.
 
 redact_ldap_cfg_keys() ->
-    [cacert, client_tls_cert].
+    [cacert, client_tls_cert, bind_dn].
 
 handle_ldap_settings_post(Req) ->
     menelaus_web_rbac:assert_groups_and_ldap_enabled(),
@@ -169,7 +169,11 @@ type_spec(user_dn_mapping) ->
       formatter => fun ({Obj, _}) -> {value, Obj} end};
 type_spec(ldap_dn) ->
     #{validators => [string, fun validate_ldap_dn/2],
-      formatter => string};
+      formatter => fun (<<"redacted">>) ->
+                           {value, <<"redacted">>};
+                       (Dn) ->
+                           {value, list_to_binary(Dn)}
+                   end};
 type_spec(ldap_groups_query) ->
     #{validators => [string, fun validate_ldap_groups_query/2],
       formatter => fun (undefined) -> ignore;
