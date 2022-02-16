@@ -197,7 +197,8 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {ui, IsSSL,
                      fun menelaus_web_misc:handle_can_use_cert_for_auth/1};
                 ["versions"] ->
-                    {done, menelaus_web_misc:handle_versions(Req)};
+                    {no_check_disallow_anonymous,
+                     fun menelaus_web_misc:handle_versions/1};
                 ["whoami"] ->
                     {no_check, fun menelaus_web_rbac:handle_whoami/1};
                 ["pools"] ->

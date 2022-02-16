@@ -513,6 +513,13 @@ extract_identity_from_cert(CertDer) ->
                               auth_failure | forbidden | allowed.
 check_permission(_Identity, no_check) ->
     allowed;
+check_permission(Identity, no_check_disallow_anonymous) ->
+    case Identity of
+        {"", anonymous} ->
+            auth_failure;
+        _ ->
+            allowed
+    end;
 check_permission(Identity, Permission) ->
     Roles = menelaus_roles:get_compiled_roles(Identity),
     case Roles of
