@@ -83,7 +83,9 @@ angular.module('mnAdmin', [
   .factory('mnStatsServiceDowngraded', downgradeInjectable(MnStatsService));
 
 //https://github.com/angular-ui/ui-select/issues/1560
-angular.module('ui.select').run(function($animate) {
+angular.module('ui.select').run(["$animate", uiSelectRun]);
+
+function uiSelectRun($animate) {
   var origEnabled = $animate.enabled
   $animate.enabled = function (elem) {
     if (arguments.length !== 1) {
@@ -93,9 +95,11 @@ angular.module('ui.select').run(function($animate) {
     }
     return false
   }
-});
+}
 
-angular.module('mnAdmin').run(function($rootScope, $uibModal, $ocLazyLoad, $injector) {
+angular.module('mnAdmin').run(["$rootScope", "$uibModal", "$ocLazyLoad", "$injector", mnAdminRun]);
+
+function mnAdminRun($rootScope, $uibModal, $ocLazyLoad, $injector) {
   let mnPoolDefault = $injector.get('mnPoolDefault');
 
   $rootScope.$on("maybeShowMemoryQuotaDialog",
@@ -140,7 +144,7 @@ angular.module('mnAdmin').run(function($rootScope, $uibModal, $ocLazyLoad, $inje
       });
     }
   };
-});
+}
 
 function mnAdminConfig($stateProvider, $urlMatcherFactoryProvider, mnPluggableUiRegistryProvider, $httpProvider) {
 
