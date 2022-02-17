@@ -152,7 +152,7 @@ function mnGsiItemDetails() {
         return 'NA';
     }
 
-    function dropIndex(row) {
+    function dropIndex(row, dropReplicaOnly) {
       var scope = $rootScope.$new();
       scope.partitioned = row.partitioned;
       $uibModal.open({
@@ -162,7 +162,7 @@ function mnGsiItemDetails() {
         scope: scope
       }).result.then(function () {
         row.awaitingRemoval = true;
-        mnPromiseHelper(vm, mnGsiService.postDropIndex(row))
+        mnPromiseHelper(vm, mnGsiService.postDropIndex(row, dropReplicaOnly))
           .showGlobalSpinner()
           .catchErrors(function (resp) {
             if (!resp) {

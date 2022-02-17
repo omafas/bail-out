@@ -39,7 +39,12 @@ licenses/APL2.txt.
          ng-if="rbac.cluster.bucket[mnGsiItemDetailsCtl.keyspace].n1ql.select.execute"
          class="outline tight"
          ng-click="mnGsiItemDetailsCtl.dropIndex(row)">
-        Drop</button>
+        Drop <span ng-if="row.numReplica > 0">All Replicas</span></button>
+      <button
+         ng-if="rbac.cluster.bucket[mnGsiItemDetailsCtl.keyspace].n1ql.select.execute && row.numReplica > 0"
+         class="outline tight"
+         ng-click="mnGsiItemDetailsCtl.dropIndex(row,true)">
+        Drop This Replica</button>
     </div>
   </div>
   <mn-detail-stats

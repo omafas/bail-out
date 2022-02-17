@@ -35,7 +35,7 @@ function mnGsiServiceFactory($http, $q, qwQueryService, mnPoolDefault) {
 
   return mnGsiService;
 
-  function postDropIndex(row) {
+  function postDropIndex(row, dropReplicaOnly) {
     // MB-48460 - only need 'default:' for 7.0 and later
     // new indexes have a scope and collection
     let indexIdentifier =
@@ -46,7 +46,7 @@ function mnGsiServiceFactory($http, $q, qwQueryService, mnPoolDefault) {
         row.indexName + '`';
     // MB-40229 - replica indexes must be removed with ALTER INDEX, others with DROP INDEX
     var query;
-    if (row.numReplica > 0) {
+    if (row.numReplica > 0 && dropReplicaOnly) {
       query = 'ALTER INDEX ' + indexIdentifier + ' WITH {"action":"drop_replica","replicaId":' + row.replicaId + '};';
     }
     else {
