@@ -75,18 +75,32 @@ IF (BUILD_ENTERPRISE)
   _maybe_add_pluggable_ui_stamp("cbas-ui" "cbas.js.stamp")
 ENDIF()
 
+SET(NS_UI_PUB_JS_OUT_DIR "${NS_UI_PUB_DIR}/jsout")
+SET(NS_UI_PUB_CSS_OUT_DIR "${NS_UI_PUB_DIR}/cssout")
+FILE (GLOB_RECURSE UI_SRC_CSS_FILES CONFIGURE_DEPENDS "${NS_UI_SRC}/*.css")
+
 ADD_CUSTOM_COMMAND (OUTPUT "${NS_UI_BUILD_DIR}/out.js.stamp"
-  COMMAND "${CMAKE_COMMAND}" -E rm -rf "${NS_UI_PUB_DIR}/jsout"
-  COMMAND "${PROJECT_BINARY_DIR}/deps/gomodules/minify/minify"
+  COMMAND "${CMAKE_COMMAND}" -E rm -rf "${NS_UI_PUB_JS_OUT_DIR}"
+  COMMAND "${PROJECT_BINARY_DIR}/deps/gomodules/minify_js/minify_js"
   "--in-dir=${NS_UI_PUB_DIR}"
-  "--out-dir=${NS_UI_PUB_DIR}/jsout"
+  "--out-dir=${NS_UI_PUB_JS_OUT_DIR}"
   "--importmap-path=${NS_UI_SRC}/importmap.json"
   COMMAND "${CMAKE_COMMAND}" -E touch "${NS_UI_BUILD_DIR}/out.js.stamp"
-  DEPENDS ns_minify
+  DEPENDS ns_minify_js
   DEPENDS "${_out_js_stamp_depends}"
   VERBATIM)
+ADD_CUSTOM_COMMAND (OUTPUT "${NS_UI_BUILD_DIR}/out.css.stamp"
+  COMMAND "${CMAKE_COMMAND}" -E rm -rf "${NS_UI_PUB_CSS_OUT_DIR}"
+  COMMAND "${PROJECT_BINARY_DIR}/deps/gomodules/minify_css/minify_css"
+  "--in-path=${NS_UI_PUB_DIR}/ui/index.css"
+  "--out-dir=${NS_UI_PUB_CSS_OUT_DIR}"
+  COMMAND "${CMAKE_COMMAND}" -E touch "${NS_UI_BUILD_DIR}/out.css.stamp"
+  DEPENDS ns_minify_css
+  DEPENDS ${UI_SRC_CSS_FILES}
+  VERBATIM)
+
 ADD_CUSTOM_TARGET (ui_build ALL
-  DEPENDS "${NS_UI_BUILD_DIR}/out.js.stamp"
+  DEPENDS "${NS_UI_BUILD_DIR}/out.js.stamp" "${NS_UI_BUILD_DIR}/out.css.stamp"
   VERBATIM)
 WATCH_AND_COPY_SOURCES (${NS_UI_SRC} ${NS_UI_BIN} ${NS_UI_STAMP} "ns")
 

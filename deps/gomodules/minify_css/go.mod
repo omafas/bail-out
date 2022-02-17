@@ -1,4 +1,4 @@
-module ns_server_minify
+module ns_server_minify_css
 
 go 1.17
 

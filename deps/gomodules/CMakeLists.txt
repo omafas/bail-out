@@ -1,2 +1,2 @@
-ADD_SUBDIRECTORY(minify)
-
+ADD_SUBDIRECTORY(minify_js)
+ADD_SUBDIRECTORY(minify_css)
