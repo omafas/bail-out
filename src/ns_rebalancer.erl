@@ -569,6 +569,8 @@ rebalance_kv(KeepNodes, EjectNodes, BucketConfigs, DeltaRecoveryBuckets) ->
 
     lists:foreach(
       fun ({I, {BucketName, BucketConfig}}) ->
+              ok = check_test_condition({fail_bucket_rebalance_at_bucket,
+                                         BucketName}),
               BucketCompletion = I / NumBuckets,
               update_kv_progress(LiveKVNodes, BucketCompletion),
 
