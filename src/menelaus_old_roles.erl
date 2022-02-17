@@ -306,6 +306,7 @@ roles_pre_66() ->
        {desc, <<"Can create XDCR streams into a given bucket. This user cannot "
                 "access the web console or read any data.">>}],
       [{[{bucket, bucket_name}, settings], [read]},
+       {[{bucket, bucket_name}, data, docs], [read]},
        {[{bucket, bucket_name}, data, meta], [read, write]},
        {[{bucket, bucket_name}, stats], [read]},
        {[pools], [read]}]},
@@ -618,6 +619,7 @@ roles_pre_70() ->
        {desc, <<"Can create XDCR streams into a given bucket. This user cannot "
                 "access the web console or read any data.">>}],
       [{[{bucket, bucket_name}, settings], [read]},
+       {[{bucket, bucket_name}, data, docs], [read]},
        {[{bucket, bucket_name}, data, meta], [read, write]},
        {[{bucket, bucket_name}, stats], [read]},
        {[pools], [read]}]},
@@ -1108,6 +1110,7 @@ roles_pre_NEO() ->
        {desc, <<"Can create XDCR streams into a given bucket. This user cannot "
                 "access the web console or read any data.">>}],
       [{[{bucket, bucket_name}, settings], [read]},
+       {[{bucket, bucket_name}, data, docs], [read]},
        {[{bucket, bucket_name}, data, meta], [read, write]},
        {[{bucket, bucket_name}, stats], [read]},
        {[{bucket, bucket_name}, collections], [read]},
