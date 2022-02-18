@@ -406,6 +406,5 @@ get_version() ->
 welcome_message(WelcomeMessage) ->
     [
      {couchdb, WelcomeMessage},
-     {version, list_to_binary(couch_server:get_version())},
-     {couchbase, list_to_binary(get_version())}
+     {version, list_to_binary(couch_server:get_version())}
     ].
