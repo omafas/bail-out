@@ -1143,7 +1143,8 @@ afamily_validators() ->
      validator:boolean(afamilyOnly, _),
      validator:validate(fun ("ipv4") -> {value, inet};
                             ("ipv6") -> {value, inet6}
-                        end, afamily, _)].
+                        end, afamily, _),
+     validator:changeable_in_enterprise_only(afamily, inet, _)].
 
 node_encryption_validators() ->
     [validator:one_of(nodeEncryption, ["on", "off"], _),
