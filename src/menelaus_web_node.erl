@@ -1149,7 +1149,8 @@ node_encryption_validators() ->
     [validator:one_of(nodeEncryption, ["on", "off"], _),
      validator:validate(fun ("on") -> {value, true};
                             ("off") -> {value, false}
-                        end, nodeEncryption, _)].
+                        end, nodeEncryption, _),
+     validator:changeable_in_enterprise_only(nodeEncryption, false, _)].
 
 handle_setup_net_config(Req) ->
     validator:handle(
