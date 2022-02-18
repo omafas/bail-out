@@ -78,7 +78,6 @@
     "mn.http.interceptor": "./app/mn.http.interceptor.js",
     "mn.input.filter.module": "./app/mn.input.filter.module.js",
     "components/mn_alerts": "./app/components/mn_alerts.js",
-    "components/mn_jquery": "./app/components/mn_jquery.js",
     "components/mn_pools": "./app/components/mn_pools.js",
     "components/mn_filters": "./app/components/mn_filters.js",
     "components/mn_poll": "./app/components/mn_poll.js",
