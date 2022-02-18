@@ -201,7 +201,7 @@
   .dialog-resizable {
     width: 98vw;
   }
-  .panel.width-520, a.supported-browsers-520  {
+  .panel.width-520, .supported-browsers-520  {
     width: 100vw!important;
   }
   input.filter-input,
@@ -342,7 +342,7 @@
     padding: .5rem .75rem;
     line-height: 1.8;
   }
-  .panel.width-520, a.supported-browsers-520 {
+  .panel.width-520, .supported-browsers-520 {
     width: 100vw!important;
   }
 }

@@ -3875,8 +3875,8 @@ button.replication .fa-spinner {
   content: "\f00c";
 }
 
-a.supported-browsers,
-a.supported-browsers-520 {
+.supported-browsers,
+.supported-browsers-520 {
   color: #555;
   margin-top: .5rem;
   font-size: .688rem;
@@ -3884,11 +3884,7 @@ a.supported-browsers-520 {
   text-align: center;
   display: inline-block;
 }
-a:hover.supported-browsers,
-a:hover.supported-browsers-520 {
-  color: #000;
-}
-a.supported-browsers-520 {
+.supported-browsers-520 {
   width: 520px !important;
 }
 

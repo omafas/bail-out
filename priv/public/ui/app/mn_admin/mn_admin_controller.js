@@ -35,6 +35,7 @@ function mnAdminController($scope, $rootScope, $state, $window, $uibModal, mnAle
   vm.showClusterInfoDialog = showClusterInfoDialog;
   vm.isDeveloperPreview = pools.isDeveloperPreview;
   vm.mainSpinnerCounter = mnHelper.mainSpinnerCounter;
+  vm.majorMinorVersion = pools.implementationVersion.split('.').splice(0,2).join('.');
 
   $rootScope.mnGlobalSpinnerFlag = false;
 

@@ -14,7 +14,6 @@ import {BehaviorSubject} from 'rxjs';
 import {UIRouter} from '@uirouter/angular';
 
 import {MnAuthService} from './mn.auth.service.js';
-import {MnAdminService} from './mn.admin.service.js';
 import {MnFormService} from './mn.form.service.js';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnPools, $rootScope} from './ajs.upgraded.providers.js';
@@ -33,18 +32,16 @@ class MnAuthComponent extends MnLifeCycleHooksToStream {
   static get parameters() { return [
     MnFormService,
     MnAuthService,
-    MnAdminService,
     UIRouter,
     MnPools,
     $rootScope
   ]}
 
-  constructor(mnFormService, mnAuthService, MnAdminService, uiRouter, mnPools, $rootScope) {
+  constructor(mnFormService, mnAuthService, uiRouter, mnPools, $rootScope) {
     super();
     this.focusFieldSubject = new BehaviorSubject(true);
 
     this.postUILogin = mnAuthService.stream.postUILogin;
-    this.majorMinorVersion = MnAdminService.stream.majorMinorVersion;
 
     this.form = mnFormService.create(this)
       .setFormGroup({
