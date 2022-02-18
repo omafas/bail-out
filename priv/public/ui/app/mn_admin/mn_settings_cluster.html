@@ -705,7 +705,7 @@
           </div>
 
           <div class="formrow"
-             ng-show="adminCtl.poolDefault.compat.atLeast70">
+             ng-show="adminCtl.poolDefault.isEnterprise && adminCtl.poolDefault.compat.atLeast70">
             <label for="redistribute_indexes">
               Indexer Rebalance Settings
             </label>
@@ -744,7 +744,7 @@
 
           <div
              class="formrow"
-             ng-show="adminCtl.poolDefault.compat.atLeast71">
+             ng-show="adminCtl.poolDefault.isEnterprise && adminCtl.poolDefault.compat.atLeast71">
             <label
                class="inline"
                for="enablePageBloomFilter">
@@ -793,7 +793,7 @@
         </div>
 
         <div
-           ng-if="adminCtl.poolDefault.compat.atLeast71 && rbac.cluster.settings.read"
+           ng-if="adminCtl.poolDefault.isEnterprise && adminCtl.poolDefault.compat.atLeast71 && rbac.cluster.settings.read"
            class="formrow margin-top-1-5 margin-bottom-3">
           <label
              class="inline"

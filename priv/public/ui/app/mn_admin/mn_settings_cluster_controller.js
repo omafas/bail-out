@@ -165,6 +165,7 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
     }
 
     if (mnPoolDefault.export.compat.atLeast71 &&
+        mnPoolDefault.export.isEnterprise &&
         $scope.rbac.cluster.settings.write) {
       promise10 = mnPromiseHelper(vm, mnSettingsClusterService
                                  .postSettingsAnalytics(vm.settingsAnalytics))
@@ -251,6 +252,9 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
       ((compat.atLeast65 && mnPoolDefault.export.isEnterprise && cluster.settings.read) ?
        (vm.retryRebalanceCfg != void 0) : true) &&
       (cluster.settings.indexes.read ? (vm.indexSettings != void 0) : true) &&
+      ((compat.atLeast71 && mnPoolDefault.export.isEnterprise && cluster.settings.read) ?
+        (vm.settingsAnalytics != void 0) : true) &&
+
       mnSettingsClusterService.getInitChecker().every(v => v());
 
   }
@@ -287,7 +291,9 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
       });
     }
 
-    if (mnPoolDefault.export.compat.atLeast71 && $scope.rbac.cluster.settings.read) {
+    if (mnPoolDefault.export.compat.atLeast71  &&
+        mnPoolDefault.export.isEnterprise &&
+        $scope.rbac.cluster.settings.read) {
       mnSettingsClusterService.getSettingsAnalytics()
         .then(settings => vm.settingsAnalytics = settings);
     }
