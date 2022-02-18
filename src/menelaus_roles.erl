@@ -512,6 +512,7 @@ roles() ->
       [{[{bucket, bucket_name}, settings], [read]},
        {[{bucket, bucket_name}, data, docs], [read]},
        {[{bucket, bucket_name}, data, meta], [write]},
+       {[{bucket, bucket_name}, data, sxattr], [read, write]},
        {[{bucket, bucket_name}, stats], [read]},
        {[{bucket, bucket_name}, collections], [read]},
        {[pools], [read]}]},
