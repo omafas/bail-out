@@ -1602,7 +1602,7 @@ parse_validate_storage_quota_percentage_inner(true = _IsEnterprise,
                                               BucketCfg, IsNew,
                                               true = _IsMagma) ->
     DefaultVal = case IsNew of
-                     true -> "10";
+                     true -> integer_to_list(?MAGMA_STORAGE_QUOTA_PERCENTAGE);
                      false -> proplists:get_value(storage_quota_percentage,
                                                   BucketCfg)
                  end,
