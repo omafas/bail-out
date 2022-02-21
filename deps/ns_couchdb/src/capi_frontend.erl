@@ -405,6 +405,5 @@ get_version() ->
 -spec welcome_message(binary()) -> [{atom(), binary()}].
 welcome_message(WelcomeMessage) ->
     [
-     {couchdb, WelcomeMessage},
-     {version, list_to_binary(couch_server:get_version())}
+     {couchdb, WelcomeMessage}
     ].
