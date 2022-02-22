@@ -51,6 +51,7 @@ export default "query-formatter";
             '|\\b(' + newline_before + '|' + newline_before_plus_indent + ')\\b','ig');
       var newline_before_and_after_regex = new RegExp(prefix + '|\\b(' + newline_before_and_after + ')\\b','ig');
       var newline_after_over_paren_regex = /(\bOVER[\s]*\([\s]*\))|(\bOVER[\s]*\([\s]*)/ig;
+      var newline_after_create_analytics_regex = /(CREATE\s+ANALYTICS\s+VIEW\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\()(.*)$/ig;
       // we need an indent if the line starts with one of these
       var needs_indent_regex = new RegExp('^(' + newline_before_plus_indent + ')\\b','ig');
 
@@ -117,6 +118,7 @@ export default "query-formatter";
         str2 = str2.replace(newline_before_and_after_regex, function(match,p1) {if (p1) return "~::~" + p1 + "~::~"; else return match});
         str2 = str2.replace(newline_after_regex, function(match,p1) {if (p1) return p1 + "~::~"; else return match});
         str2 = str2.replace(newline_after_over_paren_regex, function(match,p1) {if (p1) return p1; else return 'OVER (~::~';});  // put a newline after ( in "OVER ("
+        str2 = str2.replace(newline_after_create_analytics_regex, function(match, p1, p2) {if (p2.startsWith(')')) return match; else return p1 + '~::~' + p2}); // put a newline after ( in "CREATE ANALYTICS VIEW *identifier* ("
         str2 = str2.replace(/\([\s]*SELECT\b/ig, function(match) {return '(~::~SELECT'});  // put a newline after ( in "( SELECT"
         str2 = str2.replace(/\)[\s]*SELECT\b/ig, function(match) {return ')~::~SELECT'});  // put a newline after ) in ") SELECT"
         str2 = str2.replace(/\)[\s]*,/ig,function(match) {return '),'});                   // remove any whitespace between ) and ,
@@ -238,7 +240,9 @@ export default "query-formatter";
                 break;
               }
             // subsequent lines should be indented by this much
-            indents.push(indent + ' '.repeat(fs));
+            if (fs > 0) {
+              indents.push(indent + ' '.repeat(fs));
+            }
           }
 
           // if the nesting level goes up, add elements to the indent array,
