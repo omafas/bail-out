@@ -141,7 +141,8 @@ general_settings_lens_props(ClusterVersion) ->
         _ ->
             []
     end ++
-    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_NEO) of
+    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_NEO) andalso
+         ns_config_default:init_is_enterprise() of
         true ->
             [{enablePageBloomFilter,
               id_lens(<<"indexer.settings.enable_page_bloom_filter">>)}];
@@ -180,7 +181,8 @@ general_settings_defaults(ClusterVersion) ->
         _ ->
             []
     end ++
-    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_NEO) of
+    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_NEO) andalso
+         ns_config_default:init_is_enterprise() of
         true ->
             [{enablePageBloomFilter, false}];
         false ->
@@ -315,6 +317,11 @@ config_upgrade_test() ->
     [{set, {metakv, Meta3}, Data3}] = CmdList3,
     ?assertEqual(<<"/indexing/settings/config">>, Meta3),
     ?assertEqual(<<"{\"indexer.settings.num_replica\":0}">>, Data3),
+
+    CmdList4 = config_upgrade_to_NEO([]),
+    [{set, {metakv, Meta4}, Data4}] = CmdList4,
+    ?assertEqual(<<"/indexing/settings/config">>, Meta4),
+    ?assertEqual(<<"{}">>, Data4),
 
     teardown_meck().
 
