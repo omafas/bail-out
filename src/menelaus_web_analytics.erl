@@ -13,6 +13,7 @@
 -export([handle_settings_get/1, handle_settings_post/1]).
 
 handle_settings_get(Req) ->
+    menelaus_util:assert_is_enterprise(),
     menelaus_util:assert_is_NEO(),
     Settings = get_settings(),
     menelaus_util:reply_json(Req, {Settings}).
@@ -34,6 +35,7 @@ update_settings(Key, Value) ->
     end.
 
 handle_settings_post(Req) ->
+    menelaus_util:assert_is_enterprise(),
     menelaus_util:assert_is_NEO(),
     validator:handle(
       fun (Values) ->
