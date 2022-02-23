@@ -30,8 +30,13 @@ settings_post_validators() ->
      validator:integer(maxRollbackPoints, 1, infinity, _)] ++
         case cluster_compat_mode:is_cluster_70() of
             true ->
-                [validator:boolean(redistributeIndexes, _),
-                 validator:integer(numReplica, 0, 16, _)];
+                [validator:integer(numReplica, 0, 16, _)] ++
+                case cluster_compat_mode:is_enterprise() of
+                    true ->
+                        [validator:boolean(redistributeIndexes, _)];
+                    false ->
+                        []
+                end;
             _ ->
                 []
         end ++

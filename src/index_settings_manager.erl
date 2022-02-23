@@ -128,10 +128,16 @@ indexer_threads_lens() ->
 general_settings_lens_props(ClusterVersion) ->
     case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_70) of
         true ->
-            [{redistributeIndexes,
-              id_lens(<<"indexer.settings.rebalance.redistribute_indexes">>)},
-             {numReplica,
-              id_lens(<<"indexer.settings.num_replica">>)}];
+            [{numReplica,
+              id_lens(<<"indexer.settings.num_replica">>)}] ++
+            case ns_config_default:init_is_enterprise() of
+                true ->
+                    [{redistributeIndexes,
+                      id_lens(<<"indexer.settings.rebalance."
+                                "redistribute_indexes">>)}];
+                false ->
+                    []
+            end;
         _ ->
             []
     end ++
@@ -164,8 +170,13 @@ default_rollback_points() ->
 general_settings_defaults(ClusterVersion) ->
     case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_70) of
         true ->
-            [{redistributeIndexes, false},
-             {numReplica, 0}];
+            [{numReplica, 0}] ++
+            case ns_config_default:init_is_enterprise() of
+                true ->
+                    [{redistributeIndexes, false}];
+                false ->
+                    []
+            end;
         _ ->
             []
     end ++
@@ -259,15 +270,30 @@ config_upgrade_settings(Config, OldVersion, NewVersion) ->
       known_settings(NewVersion)).
 
 -ifdef(TEST).
+setup_meck() ->
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:expect(cluster_compat_mode, is_enterprise,
+                fun () -> true end),
+    meck:new(ns_config_default, [passthrough]),
+    meck:expect(ns_config_default, init_is_enterprise,
+                fun () -> true end).
+
+teardown_meck() ->
+    meck:unload(cluster_compat_mode),
+    meck:unload(ns_config_default).
+
 defaults_test() ->
+    setup_meck(),
     Keys = fun (L) -> lists:sort([K || {K, _} <- L]) end,
 
     ?assertEqual(Keys(known_settings(?LATEST_VERSION_NUM)), Keys(default_settings())),
     ?assertEqual(Keys(compaction_lens_props()), Keys(compaction_defaults())),
     ?assertEqual(Keys(general_settings_lens_props(?LATEST_VERSION_NUM)),
-                 Keys(general_settings_defaults(?LATEST_VERSION_NUM))).
+                 Keys(general_settings_defaults(?LATEST_VERSION_NUM))),
+    teardown_meck().
 
 config_upgrade_test() ->
+    setup_meck(),
     CmdList = config_upgrade_to_70([]),
     [{set, {metakv, Meta}, Data}] = CmdList,
     ?assertEqual(<<"/indexing/settings/config">>, Meta),
@@ -278,5 +304,18 @@ config_upgrade_test() ->
     [{set, {metakv, Meta2}, Data2}] = CmdList2,
     ?assertEqual(<<"/indexing/settings/config">>, Meta2),
     ?assertEqual(<<"{\"indexer.settings.enable_page_bloom_filter\":false}">>,
-                 Data2).
+                 Data2),
+
+    meck:expect(cluster_compat_mode, is_enterprise,
+                fun () -> false end),
+    meck:expect(ns_config_default, init_is_enterprise,
+                fun () -> false end),
+
+    CmdList3 = config_upgrade_to_70([]),
+    [{set, {metakv, Meta3}, Data3}] = CmdList3,
+    ?assertEqual(<<"/indexing/settings/config">>, Meta3),
+    ?assertEqual(<<"{\"indexer.settings.num_replica\":0}">>, Data3),
+
+    teardown_meck().
+
 -endif.
