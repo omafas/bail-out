@@ -28,9 +28,7 @@
           name :: term(),
           down_counter = 0 :: non_neg_integer(),
           state :: new|half_down|nearly_down|failover|up,
-          %% Whether are down_warning for this node was already
-          %% mailed or not
-          mailed_down_warning = false :: boolean()
+          issued_warning = undefined :: atom()
          }).
 
 -record(service_state, {
@@ -261,7 +259,7 @@ process_frame(Nodes, DownNodes, State = #state{nodes_states = NodeStates,
     UpStates = filter_node_states(SortedUpNodes, NodeStates),
     NewUpStates =
         [NS#node_state{state = up, down_counter = 0,
-                       mailed_down_warning = false} || NS <- UpStates],
+                       issued_warning = undefined} || NS <- UpStates],
 
     DownStates = filter_node_states(SortedDownNodes, NodeStates),
 
@@ -379,40 +377,55 @@ decide_on_failover(DownStates, State, SvcConfig) ->
             Actions = lists:flatmap(should_failover_node(
                                       State, _, SvcConfig,
                                       DownNodesOrdset), DownNodes),
-            decide_on_services_failovers(Actions, SvcConfig);
+            decide_on_services_failovers(Actions, SvcConfig, DownNodes,
+                                         DownStates);
         false ->
-            []
+            {[], DownStates}
     end.
 
 is_kv_node({NodeName, _UID}, SvcConfig) ->
     lists:member(kv, get_node_services(NodeName, SvcConfig)).
 
-get_node_from_action({mail_too_small, _, _, N}) ->
-    N;
-get_node_from_action({mail_auto_failover_disabled, _, N}) ->
-    N;
-get_node_from_action({_, N}) ->
-    N.
-
-decide_on_services_failovers(Actions, SvcConfig) ->
-    case lists:any(fun ({failover, _}) ->
-                           false;
-                       (Action) ->
-                           is_kv_node(get_node_from_action(Action), SvcConfig)
-                   end, Actions) of
-        true ->
-            lists:map(fun ({failover, NodeTuple} = Action) ->
-                              case is_kv_node(NodeTuple, SvcConfig) of
-                                  true ->
-                                      Action;
-                                  false ->
-                                      {mail_kv_not_fully_failed_over, NodeTuple}
-                              end;
-                          (Action) ->
-                              Action
-                      end, Actions);
+maybe_issue_mail_kv_not_fully_failed_over(NodeTuple, Actions, NodeStates) ->
+    NodeState = lists:keyfind(NodeTuple, #node_state.name, NodeStates),
+    case maybe_issue_warning(mail_kv_not_fully_failed_over, NodeState) of
         false ->
-            Actions
+            {Actions, NodeStates};
+        {Action, NewNodeState} ->
+            {[Action | Actions],
+             lists:keyreplace(NodeTuple, #node_state.name, NodeStates,
+                              NewNodeState)}
+    end.
+
+is_non_kv_failover({failover, NodeTuple}, SvcConfig) ->
+    {not is_kv_node(NodeTuple, SvcConfig), NodeTuple};
+is_non_kv_failover(_, _) ->
+    false.
+
+decide_on_services_failovers(Actions, SvcConfig, DownNodes, DownStates) ->
+    FailOverNodes = [N || {failover, N} <- Actions],
+    NotFailedOver = DownNodes -- FailOverNodes,
+
+    case lists:any(is_kv_node(_, SvcConfig), NotFailedOver) of
+        true ->
+            %% if any single KV node is not failover-able then
+            %% (1) we expect all KV nodes to be non failover-able and
+            %% (2) we filter out all failover actions on non-KV nodes and
+            %%     replace with alert emails, if needed.
+            {ReversedActions, NewDownStates} =
+                lists:foldl(
+                  fun (Action, {ActionsAcc, DownStatesAcc}) ->
+                          case is_non_kv_failover(Action, SvcConfig) of
+                              {true, NodeTuple} ->
+                                  maybe_issue_mail_kv_not_fully_failed_over(
+                                    NodeTuple, ActionsAcc, DownStatesAcc);
+                              _ ->
+                                  {[Action | ActionsAcc], DownStatesAcc}
+                          end
+                  end, {[], DownStates}, Actions),
+            {lists:reverse(ReversedActions), NewDownStates};
+        false ->
+            {Actions, DownStates}
     end.
 
 decide_on_actions_pre_neo(DownStates, State, SvcConfig, MaxGroupSize) ->
@@ -420,14 +433,14 @@ decide_on_actions_pre_neo(DownStates, State, SvcConfig, MaxGroupSize) ->
         true ->
             issue_mail_down_warnings_pre_Neo(DownStates);
         false ->
-            {decide_on_failover(DownStates, State, SvcConfig), DownStates}
+            decide_on_failover(DownStates, State, SvcConfig)
     end.
 
 decide_on_actions(PrevDownStates, DownStates, State, SvcConfig) ->
     case decide_on_failover(DownStates, State, SvcConfig) of
-        [] ->
-            issue_mail_down_warnings(PrevDownStates, DownStates);
-        Actions ->
+        {[], NewDownStates} ->
+            issue_mail_down_warnings(PrevDownStates, NewDownStates);
+        {Actions, NewDownStates} ->
             {Failovers, Other} =
                 lists:partition(fun ({failover, _}) ->
                                         true;
@@ -435,7 +448,7 @@ decide_on_actions(PrevDownStates, DownStates, State, SvcConfig) ->
                                         false
                                 end, Actions),
             {combine_failovers(Failovers, Other, SvcConfig),
-             DownStates}
+             NewDownStates}
     end.
 
 combine_failovers([], Other, _SvcConfig) ->
@@ -446,12 +459,19 @@ combine_failovers(Failovers, Other, SvcConfig) ->
         lists:partition(is_kv_node(_, SvcConfig), FailoverNodes),
     [{failover, KV ++ OtherServiceNodes} | Other].
 
-maybe_issue_mail_down_warning(
-  Warning, S = #node_state{name = Node, mailed_down_warning = false},
-  true, {Warnings, DS}) ->
-    {[{Warning, Node} | Warnings],
-     [S#node_state{mailed_down_warning = true} | DS]};
-maybe_issue_mail_down_warning(_Warning, S, _, {Warnings, DS}) ->
+maybe_issue_warning(Warning, #node_state{issued_warning = Warning}) ->
+    false;
+maybe_issue_warning(Warning, S = #node_state{name = Node}) ->
+    {{Warning, Node}, S#node_state{issued_warning = Warning}}.
+
+maybe_issue_warning(Warning, S, true, {Warnings, DS}) ->
+    case maybe_issue_warning(Warning, S) of
+        false ->
+            {Warnings, [S | DS]};
+        {W, NewS} ->
+            {[W | Warnings], [NewS | DS]}
+    end;
+maybe_issue_warning(_Warning, S, false, {Warnings, DS}) ->
     {Warnings, [S | DS]}.
 
 fold_states(Fun, List) ->
@@ -462,7 +482,7 @@ fold_states(Fun, List) ->
 issue_mail_down_warnings_pre_Neo(DownStates) ->
     fold_states(
       fun (#node_state{state = DownState} = S, Acc) ->
-              maybe_issue_mail_down_warning(
+              maybe_issue_warning(
                 mail_down_warning, S, DownState =:= nearly_down, Acc)
       end, DownStates).
 
@@ -479,7 +499,7 @@ should_issue_mail_down_warning(_, _) ->
 issue_mail_down_warnings(PrevDownStates, DownStates) ->
     fold_states(
       fun ({PrevDownState, DownState}, Acc) ->
-              maybe_issue_mail_down_warning(
+              maybe_issue_warning(
                 mail_down_warning_multi_node,
                 DownState,
                 should_issue_mail_down_warning(PrevDownState, DownState), Acc)
@@ -846,7 +866,10 @@ multiple_services_test_() ->
            {mail_kv_not_fully_failed_over, b1},
            {mail_kv_not_fully_failed_over, d1},
            {mail_too_small, kv, [c3], c1},
-           {mail_too_small, kv, [c3], c2}], 1, [a1, b1, c1, c2, d1]}]}]).
+           {mail_too_small, kv, [c3], c2}], 1, [a1, b1, c1, c2, d1]},
+         {no_actions, 1, [a1, b1, c1, c2, d1]},
+         {{mail_down_warnings, [a1, b1, c1, d1]}, 1, [a1, b1, c1, d1]},
+         {{failover, [a1, b1, c1, d1]}, 2, [a1, b1, c1, d1]}]}]).
 
 min_size_test_() ->
     MinSizeTest =
