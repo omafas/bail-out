@@ -150,7 +150,6 @@ maybe_notify_cbauth(#state{rpc_processes = Processes,
     end.
 
 personalize_info(Label, Info) ->
-    SpecialUser = ns_config_auth:get_user(special) ++ Label,
     "htuabc-" ++ ReversedTrimmedLabel = lists:reverse(Label),
     MemcachedUser = [$@ | lists:reverse(ReversedTrimmedLabel)],
 
@@ -179,7 +178,7 @@ personalize_info(Label, Info) ->
                   end, Nodes),
 
     misc:update_proplist(Info,
-                         [{specialUser, erlang:list_to_binary(SpecialUser)},
+                         [{specialUser, erlang:list_to_binary(MemcachedUser)},
                           {nodes, NewNodes},
                           {tlsConfig, TLSConfig}]).
 
