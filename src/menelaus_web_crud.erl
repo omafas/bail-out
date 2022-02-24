@@ -127,9 +127,11 @@ do_handle_list(Req, _Bucket, _Params, 0) ->
                 {reason, <<"could not get consistent vbucket map">>}]}, 503);
 do_handle_list(Req, Bucket, {Skip, Limit, Params}, N) ->
     NodeVBuckets = dict:to_list(vbucket_map_mirror:must_node_vbuckets_dict(Bucket)),
-    Identity = get_identity(Req),
 
-    case build_keys_heap(Bucket, NodeVBuckets, Params, Identity) of
+    %% We pass undefined as Identity for now to disable the sending of identity
+    %% for get_keys() requests to memcached. Changes made for passing identity
+    %% for MB-50896 are left in place.
+    case build_keys_heap(Bucket, NodeVBuckets, Params, undefined) of
         {ok, Heap} ->
             Heap1 = handle_skip(Heap, Skip),
             menelaus_util:reply_json(Req,
