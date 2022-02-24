@@ -116,7 +116,7 @@ def main():
         elif o == "--static-cookie":
             params['static_cookie'] = True
         elif o == '--loglevel':
-            if loglevel not in LOGLEVELS:
+            if a not in LOGLEVELS:
                 print("Valid log levels are the following: %s" % ', '.join(LOGLEVELS))
                 sys.exit(1)
             params['loglevel'] = a
