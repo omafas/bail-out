@@ -852,7 +852,8 @@ def make_index_task(name, api, passwd, index_port, logfile="couchbase.log", **kw
     return make_curl_task(name, "@", passwd, index_url, log_file=logfile, **kwargs)
 
 
-def make_golang_profile_tasks(service_name, passwd, port, log_prefix, no_header=True, **kwargs):
+def make_golang_profile_tasks(service_name, passwd, port, log_prefix,
+                              no_header=True, tls=False, **kwargs):
     """
     Helper function to create the various tasks needed to collect profiling
     information from Golang components
@@ -874,7 +875,9 @@ def make_golang_profile_tasks(service_name, passwd, port, log_prefix, no_header=
 
     # Iterate through each API, create the full URL, and then append the
     # resulting cURL task to the list of tasks
-    base_url = f'http://{local_url_addr}:{port}'
+    secure = "s" if tls else ""
+    base_url = f'http{secure}://{local_url_addr}:{port}'
+
     tasks = []
     for descr, postfix, api in apis:
         api_url = f'{base_url}/{api}'
@@ -1248,6 +1251,7 @@ def correct_split(string, splitchar):
 
 
 def make_product_task(guts, initargs_path, memcached_pass, options):
+    tls = read_guts(guts, "tls")
     root = os.path.abspath(os.path.join(initargs_path, "..", "..", "..", ".."))
     dbdir = os.path.realpath(read_guts(guts, "db_dir"))
     viewdir = os.path.realpath(read_guts(guts, "idx_dir"))
@@ -1363,7 +1367,7 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
     if proj_port:
         projector_tasks = [
             *make_golang_profile_tasks('Projector', memcached_pass, proj_port,
-                                       'projector')
+                                       'projector', tls=tls)
         ]
 
     goxdcr_tasks = []

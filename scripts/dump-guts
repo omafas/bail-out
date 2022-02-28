@@ -551,6 +551,7 @@ main_with_everything(StaticTerms, NSConfig, Node) ->
     Ports = [{P, N} || {S, P, N} <- confget(#config.ports),
                        S =:= ns_server orelse S =:= xdcr orelse
                        lists:member(S, Services)],
+    Tls = search_config_for_node(NSConfig, Node, node_encryption, false),
 
     Pairs = Ports ++
         [{ns_config, iolist_to_binary(io_lib:format("~p", [sanitize_config(NSConfig)]))},
@@ -566,6 +567,7 @@ main_with_everything(StaticTerms, NSConfig, Node) ->
          {memcached_breakpad_minidump_dir, PerNodeMDD},
          {nodes, string:join(Nodes, ",")},
          {relative_prom_stats_dir, PromStoragePath},
+         {tls, Tls},
          {ipv6, Ipv6}],
 
     output([E || {K, V} <- Pairs,
