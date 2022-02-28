@@ -285,14 +285,14 @@ function getStatAdditionalConfig(statName) {
   case "@kv-.kv_ep_resident_items_ratio":
   case "@kv-.kv_vb_avg_total_queue_age_seconds":
   case "@kv-.kv_disk_write_queue":
-  case "@kv-.kv_ep_ops_create":
-  case "@kv-.kv_ep_ops_update":
     return {nodesAggregation: "special"};
 
   case "@kv-.kv_hit_ratio":
   case "@kv-.kv_ep_cache_miss_ratio":
   case "@kv-.kv_avg_bg_wait_time_seconds":
   case "@kv-.kv_xdc_ops":
+  case "@kv-.kv_ep_ops_create":
+  case "@kv-.kv_ep_ops_update":
     return {nodesAggregation: "special", applyFunctions: ["irate"]};
 
   case "@system.sys_cpu_utilization_rate":
