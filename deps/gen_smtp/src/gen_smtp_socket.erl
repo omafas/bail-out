@@ -31,7 +31,6 @@
                               {reuseaddr, true}]).
 -define(TCP_CONNECT_OPTIONS,[ {active, false},
                               {packet, line},
-                              {ip, {0,0,0,0}},
                               {port, 0}]).
 -define(SSL_LISTEN_OPTIONS, [ {active, false},
                               {backlog, 30},

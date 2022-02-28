@@ -175,6 +175,10 @@ close({Socket, _Extensions, _Options}) ->
 
 -spec send_it(Email :: email(), Options :: list()) -> binary() | {'error', any(), any()}.
 send_it(Email, Options) ->
+	send_it(Email, Options, true).
+
+-spec send_it(Email :: email(), Options :: list(), RetryV6 :: boolean()) -> binary() | {'error', any(), any()}.
+send_it(Email, Options, RetryV6) ->
 	RelayDomain = to_string(proplists:get_value(relay, Options)),
 	MXRecords = case proplists:get_value(no_mx_lookups, Options) of
 		true ->
@@ -194,6 +198,13 @@ send_it(Email, Options) ->
 			Receipt = try_sending_it(Email, Socket, Extensions, Options),
 			quit(Socket),
 			Receipt;
+		{error, _, {network_failure, _, {error, nxdomain}}} = Error ->
+			case RetryV6 of
+				true ->
+					send_it(Email, [{sockopts, [inet6]} | Options], false);
+				false ->
+					Error
+			end;
 		{error, _, _} = Error ->
 			Error
 	end.
