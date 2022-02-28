@@ -126,7 +126,10 @@ class MnLogsCollectInfoFormComponent extends MnLifeCycleHooksToStream {
     let upload = this.form.group.controls.upload.getRawValue();
 
     packedData.nodes = Object.keys(nodes).filter(node => nodes[node]).join(",");
-    packedData.logRedactionLevel = logs.logRedactionLevel;
+
+    if (logs.logRedactionLevel) {
+      packedData.logRedactionLevel = logs.logRedactionLevel;
+    }
 
     if (logs.enableTmpDir) {
       packedData.tmpDir = logs.tmpDir;
