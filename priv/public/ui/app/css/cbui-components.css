@@ -1086,8 +1086,7 @@ section.error {
   background-color: #fdebcf;
   margin-bottom: 2px;
 }
-.alert-warning a,
-.alert-warning span {
+.alert-warning a {
   color: #f5a623;
   text-transform: uppercase;
   font-size: .825rem;
