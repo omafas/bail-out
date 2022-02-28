@@ -463,7 +463,7 @@ goport_args(fts, Config, _Cmd, NodeUUID) ->
     Options =
         "startCheckServer=skip," ++
         "slowQueryLogTimeout=5s," ++
-        "defaultMaxPartitionsPerPIndex=171," ++
+        "defaultMaxPartitionsPerPIndex=1024," ++
         "bleveMaxResultWindow=10000," ++
         "failoverAssignAllPrimaries=false," ++
         "hideUI=true," ++
