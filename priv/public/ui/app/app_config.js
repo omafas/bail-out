@@ -60,11 +60,11 @@ function appConfig($httpProvider, $stateProvider, $urlRouterProvider, $transitio
     },
     abstract: true,
     resolve: {
-      env: function (mnEnv, $rootScope) {
+      env: ['mnEnv', '$rootScope', function (mnEnv, $rootScope) {
         return mnEnv.loadEnv().then(function(env) {
           $rootScope.ENV = env;
         });
-      }
+      }]
     },
     template: '<div ui-view="" class="root-container"></div>' +
       '<div ng-show="mnGlobalSpinnerFlag" class="global-spinner"></div>'

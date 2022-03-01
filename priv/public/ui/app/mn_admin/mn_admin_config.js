@@ -131,12 +131,12 @@ function mnAdminRun($rootScope, $uibModal, $ocLazyLoad, $injector) {
         template: memoryQuotaDialogTemplate,
         controller: 'mnMemoryQuotaDialogController as memoryQuotaDialogCtl',
         resolve: {
-          memoryQuotaConfig: function (mnMemoryQuotaService) {
+          memoryQuotaConfig: ['mnMemoryQuotaService', function (mnMemoryQuotaService) {
             return mnMemoryQuotaService.memoryQuotaConfig(services, true, false);
-          },
-          indexSettings: function (mnSettingsClusterService) {
+          }],
+          indexSettings: ['mnSettingsClusterService', function (mnSettingsClusterService) {
             return mnSettingsClusterService.getIndexSettings();
-          },
+          }],
           firstTimeAddedServices: function() {
             return firstTimeAddedServices;
           }
@@ -222,18 +222,18 @@ function mnAdminConfig($stateProvider, $urlMatcherFactoryProvider, mnPluggableUi
         }
       },
       resolve: {
-        poolDefault: function (mnPoolDefault) {
+        poolDefault: ['mnPoolDefault', function (mnPoolDefault) {
           return mnPoolDefault.getFresh();
-        },
-        pools: function (mnPools) {
+        }],
+        pools: ['mnPools', function (mnPools) {
           return mnPools.get();
-        },
-        permissions: function (mnPermissions) {
+        }],
+        permissions: ['mnPermissions', function (mnPermissions) {
           return mnPermissions.check();
-        },
-        whoami: function (mnAuthService) {
+        }],
+        whoami: ['mnAuthService', function (mnAuthService) {
           return mnAuthService.whoami();
-        }
+        }]
       },
       views: {
         "": {
