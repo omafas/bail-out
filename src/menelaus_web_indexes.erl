@@ -40,8 +40,7 @@ settings_post_validators() ->
             _ ->
                 []
         end ++
-        case cluster_compat_mode:is_cluster_NEO() andalso
-             cluster_compat_mode:is_enterprise() of
+        case cluster_compat_mode:is_cluster_NEO() of
             true ->
                 [validator:boolean(enablePageBloomFilter, _)];
             false ->
