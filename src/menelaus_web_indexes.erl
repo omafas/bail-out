@@ -19,9 +19,25 @@ handle_settings_get(Req) ->
     true = (Settings =/= undefined),
     menelaus_util:reply_json(Req, {Settings}).
 
+enterprise_only_settings() ->
+    [redistributeIndexes, enablePageBloomFilter].
+
+maybe_filter_settings(Settings) ->
+    case cluster_compat_mode:is_enterprise() of
+        true ->
+            Settings;
+        false ->
+            lists:filter(
+              fun ({Key, _Value}) ->
+                      not lists:member(Key, enterprise_only_settings())
+              end, Settings)
+    end.
+
 get_settings() ->
-    index_settings_manager:get(generalSettings) ++
-        [{storageMode, index_settings_manager:get(storageMode)}].
+    Settings =
+        index_settings_manager:get(generalSettings) ++
+        [{storageMode, index_settings_manager:get(storageMode)}],
+    maybe_filter_settings(Settings).
 
 settings_post_validators() ->
     [validator:integer(indexerThreads, 0, 1024, _),
@@ -30,12 +46,18 @@ settings_post_validators() ->
      validator:integer(maxRollbackPoints, 1, infinity, _)] ++
         case cluster_compat_mode:is_cluster_70() of
             true ->
-                [validator:boolean(redistributeIndexes, _),
-                 validator:integer(numReplica, 0, 16, _)];
+                [validator:integer(numReplica, 0, 16, _)] ++
+                case cluster_compat_mode:is_enterprise() of
+                    true ->
+                        [validator:boolean(redistributeIndexes, _)];
+                    false ->
+                        []
+                end;
             _ ->
                 []
         end ++
-        case cluster_compat_mode:is_cluster_71() of
+        case cluster_compat_mode:is_cluster_71() andalso
+             cluster_compat_mode:is_enterprise() of
             true ->
                 [validator:boolean(enablePageBloomFilter, _)];
             false ->
