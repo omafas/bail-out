@@ -32,7 +32,7 @@ get_current_version() ->
     %% changed in 6.0.4 after 6.5.0 had shipped.  As 6.5.0 had no knowledge
     %% of the 6.0.4 version (as it didn't exist when 6.5.0 shipped) it
     %% was unable to perform an upgrade.
-    list_to_tuple(?VERSION_NEO).
+    list_to_tuple(?VERSION_71).
 
 get_data_dir() ->
     RawDir = path_config:component_path(data),
@@ -353,7 +353,7 @@ upgrade_config(Config) ->
             %% service_ports.
             service_ports:offline_upgrade(Config) ++
                 [{set, {node, node(), config_version}, CurrentVersion} |
-                 upgrade_config_from_7_0_to_NEO(Config)];
+                 upgrade_config_from_7_0_to_7_1(Config)];
         OldVersion ->
             ?log_error("Detected an attempt to offline upgrade from "
                        "unsupported version ~p. Terminating.", [OldVersion]),
@@ -409,11 +409,11 @@ do_upgrade_config_from_6_5_1_to_7_0(Config, DefaultConfig) ->
      upgrade_key(memcached_defaults, DefaultConfig),
      upgrade_sub_keys(memcached, [other_users], Config, DefaultConfig)].
 
-upgrade_config_from_7_0_to_NEO(Config) ->
+upgrade_config_from_7_0_to_7_1(Config) ->
     DefaultConfig = default(),
-    do_upgrade_config_from_7_0_to_NEO(Config, DefaultConfig).
+    do_upgrade_config_from_7_0_to_7_1(Config, DefaultConfig).
 
-do_upgrade_config_from_7_0_to_NEO(Config, DefaultConfig) ->
+do_upgrade_config_from_7_0_to_7_1(Config, DefaultConfig) ->
     [upgrade_key(memcached_config, DefaultConfig),
      upgrade_key(memcached_defaults, DefaultConfig),
      %% Do targeted upgrade of specific memcached keys/subkeys to preserve

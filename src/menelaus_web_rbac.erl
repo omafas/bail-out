@@ -237,7 +237,7 @@ user_to_json({Id, Domain}, Props) ->
 user_to_json({Id, Domain}, Props, Limits) ->
     RolesJson = user_roles_to_json(Props),
     Name = proplists:get_value(name, Props),
-    %% UUID is only defined for local users in VERSION_NEO clusters.
+    %% UUID is only defined for local users in VERSION_71 clusters.
     UUID = proplists:get_value(uuid, Props),
     Groups = proplists:get_value(groups, Props),
     ExtGroups = proplists:get_value(external_groups, Props),
@@ -997,7 +997,7 @@ put_user_validators(Domain) ->
      validate_roles(roles, _)] ++
         case Domain of
             local ->
-                ValidateLimits = case cluster_compat_mode:is_cluster_NEO() of
+                ValidateLimits = case cluster_compat_mode:is_cluster_71() of
                                      true -> [validate_limits(_)];
                                      false -> []
                                  end,

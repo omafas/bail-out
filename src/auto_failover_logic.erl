@@ -325,7 +325,7 @@ process_frame(Nodes, DownNodes, State = #state{nodes_states = NodeStates,
 
 process_with_group_failover(DownStates, State, SvcConfig,
                             #down_group_state{name = nil}) ->
-    decide_on_actions_pre_neo(DownStates, State, SvcConfig, 1);
+    decide_on_actions_pre_71(DownStates, State, SvcConfig, 1);
 process_with_group_failover(DownStates, _, _,
                             #down_group_state{state = nearly_down}) ->
     {[], DownStates};
@@ -428,10 +428,10 @@ decide_on_services_failovers(Actions, SvcConfig, DownNodes, DownStates) ->
             {Actions, DownStates}
     end.
 
-decide_on_actions_pre_neo(DownStates, State, SvcConfig, MaxGroupSize) ->
+decide_on_actions_pre_71(DownStates, State, SvcConfig, MaxGroupSize) ->
     case length(DownStates) > MaxGroupSize of
         true ->
-            issue_mail_down_warnings_pre_Neo(DownStates);
+            issue_mail_down_warnings_pre_71(DownStates);
         false ->
             decide_on_failover(DownStates, State, SvcConfig)
     end.
@@ -479,7 +479,7 @@ fold_states(Fun, List) ->
     {lists:reverse(Actions), lists:reverse(NewDownStates)}.
 
 %% Return separate events for all nodes that are down.
-issue_mail_down_warnings_pre_Neo(DownStates) ->
+issue_mail_down_warnings_pre_71(DownStates) ->
     fold_states(
       fun (#node_state{state = DownState} = S, Acc) ->
               maybe_issue_warning(
@@ -744,7 +744,7 @@ test_body(Threshold, DownSG, Steps, RawSvcConfig) ->
               NewState
       end, test_init(Threshold), Steps).
 
-get_sg(?VERSION_NEO) ->
+get_sg(?VERSION_71) ->
     undefined;
 get_sg(?VERSION_70) ->
     [].
@@ -754,17 +754,17 @@ ver_suffix(Ver) ->
 
 compare_with(_Ver, no_actions) ->
     [];
-compare_with(?VERSION_NEO, List) when is_list(List) ->
-    lists:flatten([compare_with(?VERSION_NEO, X) || X <- List]);
-compare_with(?VERSION_NEO, {failover, Nodes}) ->
+compare_with(?VERSION_71, List) when is_list(List) ->
+    lists:flatten([compare_with(?VERSION_71, X) || X <- List]);
+compare_with(?VERSION_71, {failover, Nodes}) ->
     [{failover, [N || N <- attach_test_uuids(Nodes)]}];
 compare_with(?VERSION_70, {failover, Nodes}) ->
     [{failover, N} || N <- attach_test_uuids(Nodes)];
-compare_with(?VERSION_NEO, {mail_too_small, Svc, SvcNodes, Node}) ->
+compare_with(?VERSION_71, {mail_too_small, Svc, SvcNodes, Node}) ->
     [{mail_too_small, Svc, SvcNodes, attach_test_uuid(Node)}];
-compare_with(?VERSION_NEO, {mail_down_warnings, Nodes}) ->
+compare_with(?VERSION_71, {mail_down_warnings, Nodes}) ->
     [{mail_down_warning_multi_node, N} || N <- attach_test_uuids(Nodes)];
-compare_with(?VERSION_NEO, {mail_kv_not_fully_failed_over, Node}) ->
+compare_with(?VERSION_71, {mail_kv_not_fully_failed_over, Node}) ->
     {mail_kv_not_fully_failed_over, attach_test_uuid(Node)};
 compare_with(?VERSION_70, {mail_down_warnings, Nodes}) ->
     [{mail_down_warning, N} || N <- attach_test_uuids(Nodes)].
@@ -784,7 +784,7 @@ generate(Versions, RawSvcConfig, Tests) ->
         {Title, Threshold, Steps} <- Tests,
         Ver <- Versions].
 
-pre_Neo_process_frame_test_() ->
+pre_71_process_frame_test_() ->
     generate(
       [?VERSION_70],
       [{"Two nodes down at the same time", 3,
@@ -809,7 +809,7 @@ pre_Neo_process_frame_test_() ->
 
 common_process_frame_test_() ->
     generate(
-      [?VERSION_70, ?VERSION_NEO],
+      [?VERSION_70, ?VERSION_71],
       [{"Basic one node failover", 3,
         [{no_actions, 1, []},
          {{failover, [b]}, 6, [b]}]},
@@ -824,7 +824,7 @@ common_process_frame_test_() ->
 
 process_frame_test_() ->
     generate(
-      [?VERSION_NEO],
+      [?VERSION_71],
       [{"Basic 2 nodes down.", 3,
         [{no_actions, 5, [b, c]},
          {{failover, [b, c]}, 1, [b, c]}]},
@@ -849,7 +849,7 @@ process_frame_test_() ->
 
 multiple_services_test_() ->
     generate(
-      [?VERSION_NEO],
+      [?VERSION_71],
       [{fts, [a1, a2]}, {n1ql, [b1, b2]}, {kv, [c1, c2, c3]},
        {index, [d1, d2]}],
       [{"3 nodes of different services are down.", 3,
@@ -894,10 +894,10 @@ min_size_test_() ->
     [{lists:flatten(
         io_lib:format("Min size test. Threshold = ~p, Ver = ~p", [T, V])),
       ?cut(MinSizeTest(T, V))} || T <- [2, 3, 4],
-                                  V <- [?VERSION_70, ?VERSION_NEO]] ++
+                                  V <- [?VERSION_70, ?VERSION_71]] ++
         [{lists:flatten(
             io_lib:format("Min size and increasing. Ver = ~p", [V])),
-          ?cut(MinSizeAndIncreasing(V))} || V <- [?VERSION_70, ?VERSION_NEO]].
+          ?cut(MinSizeAndIncreasing(V))} || V <- [?VERSION_70, ?VERSION_71]].
 
 filter_node_states_test() ->
     Test = fun (Nodes, NodesForStates) ->

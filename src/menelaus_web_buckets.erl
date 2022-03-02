@@ -1281,16 +1281,16 @@ get_storage_mode_based_on_storage_backend(Params, Version, IsEnterprise) ->
                                          "couchstore"),
     do_get_storage_mode_based_on_storage_backend(
       StorageBackend, IsEnterprise,
-      cluster_compat_mode:is_version_NEO(Version)).
+      cluster_compat_mode:is_version_71(Version)).
 
-do_get_storage_mode_based_on_storage_backend("magma", false, _IsNEO) ->
+do_get_storage_mode_based_on_storage_backend("magma", false, _Is71) ->
     {error, storageBackend,
      <<"Magma is supported in enterprise edition only">>};
 do_get_storage_mode_based_on_storage_backend("magma", true, false) ->
     {error, storageBackend,
-     <<"Not allowed until entire cluster is upgraded to NEO">>};
+     <<"Not allowed until entire cluster is upgraded to 7.1">>};
 do_get_storage_mode_based_on_storage_backend(StorageBackend, _IsEnterprise,
-                                             _IsNEO) ->
+                                             _Is71) ->
     case StorageBackend of
         "couchstore" ->
             {ok, storage_mode, couchstore};
@@ -1558,7 +1558,7 @@ is_magma(_Params, BucketCfg, false = _IsNew) ->
 parse_validate_storage_quota_percentage(Params, BucketConfig, IsNew, Version,
                                         IsEnterprise) ->
     Percent = proplists:get_value("storageQuotaPercentage", Params),
-    IsCompat = cluster_compat_mode:is_version_NEO(Version),
+    IsCompat = cluster_compat_mode:is_version_71(Version),
     IsMagma = is_magma(Params, BucketConfig, IsNew),
     parse_validate_storage_quota_percentage_inner(IsEnterprise, IsCompat,
                                                   Percent, BucketConfig, IsNew,
@@ -1584,7 +1584,7 @@ parse_validate_storage_quota_percentage_inner(_IsEnterprise, false = _IsCompat,
                                               _IsMagma) ->
     {error, storageQuotaPercentage,
      <<"Storage Quota Percentage cannot be set until the cluster is fully "
-       "NEO">>};
+       "7.1">>};
 parse_validate_storage_quota_percentage_inner(true = _IsEnterprise,
                                               true = _IsCompat, undefined,
                                               _BucketCfg, _IsNew,
@@ -2263,7 +2263,7 @@ basic_bucket_params_screening_test() ->
 
 basic_parse_validate_bucket_auto_compaction_settings_test() ->
     meck:new(cluster_compat_mode, [passthrough]),
-    meck:expect(cluster_compat_mode, is_cluster_NEO,
+    meck:expect(cluster_compat_mode, is_cluster_71,
                 fun () -> true end),
     meck:new(ns_config, [passthrough]),
     meck:expect(ns_config, get,

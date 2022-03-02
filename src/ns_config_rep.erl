@@ -156,7 +156,7 @@ handle_call(Msg, _From, State) ->
     {reply, error, State}.
 
 handle_cast({merge_compressed, Node, Rev, Blob}, State) ->
-    %% Neo and later.
+    %% 7.1 and later.
     case accept_merge(Node, Rev, State) of
         true ->
             merge_blob(Blob);
@@ -165,7 +165,7 @@ handle_cast({merge_compressed, Node, Rev, Blob}, State) ->
     end,
     {noreply, State};
 handle_cast({merge_compressed, Blob}, State) ->
-    %% Pre-Neo
+    %% Pre-7.1
     merge_blob(Blob),
     {noreply, State};
 handle_cast({sync_reply, StartTS, From}, State) ->
@@ -523,7 +523,7 @@ merge_blob(Blob) ->
     ns_config_rep_merger ! {merge_compressed, Blob}.
 
 update_nodes(State) ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             {ok, {Nodes, Rev}} = chronicle_kv:get(kv, nodes_wanted),
             State#state{nodes = Nodes, nodes_rev = Rev};
@@ -533,7 +533,7 @@ update_nodes(State) ->
     end.
 
 accept_merge(_Node, _OtherRev, #state{nodes_rev = undefined}) ->
-    %% This node/process has not switched to Neo yet. Accept all incoming
+    %% This node/process has not switched to 7.1 yet. Accept all incoming
     %% merge requests.
     true;
 accept_merge(Node, OtherRev,
@@ -579,7 +579,7 @@ maybe_force_pull(#state{nodes_rev = NewRev} = NewState,
                  #state{nodes_rev = OldRev}) ->
     case NewRev =:= undefined orelse OldRev =:= undefined of
         true ->
-            %% Still in pre-Neo compat mode. Nothing to be done.
+            %% Still in pre-7.1 compat mode. Nothing to be done.
             ok;
         false ->
             case chronicle:compare_revisions(NewRev, OldRev) of

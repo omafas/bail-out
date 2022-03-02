@@ -105,7 +105,7 @@ handle_log_post(Req) ->
 
 handle_event_log_post(Req) ->
     %% If cluster_compat < 7.1.0, drop the log and return 200 ok.
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             do_handle_event_log_post(Req);
         false ->

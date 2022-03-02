@@ -37,7 +37,7 @@
          validate_pkey/2,
          get_chain_info/2,
          trusted_CAs/1,
-         trusted_CAs_pre_NEO/1,
+         trusted_CAs_pre_71/1,
          generate_node_certs/1,
          filter_nodes_by_ca/2,
          inbox_chain_path/0]).
@@ -68,7 +68,7 @@ this_node_uses_self_generated_certs(Config) ->
     generated == proplists:get_value(type, CertProps).
 
 self_generated_ca() ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             case chronicle_kv:get(kv, root_cert_and_pkey) of
                 {ok, {{CA, _}, _}} -> CA;
@@ -87,7 +87,7 @@ self_generated_ca() ->
     end.
 
 self_generated_ca_and_pkey() ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             case chronicle_kv:get(kv, root_cert_and_pkey) of
                 {ok, {Pair, _}} -> Pair;
@@ -105,7 +105,7 @@ generate_and_set_cert_and_pkey() ->
     generate_and_set_cert_and_pkey(true).
 
 generate_and_set_cert_and_pkey(Force) ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             NewPair = generate_cert_and_pkey(),
             {ok, AddCA} = add_CAs_txn_fun(generated, element(1, NewPair), []),
@@ -139,10 +139,10 @@ generate_and_set_cert_and_pkey(Force) ->
                   end),
             Pair;
         false ->
-            generate_and_set_cert_and_pkey_pre_NEO(Force)
+            generate_and_set_cert_and_pkey_pre_71(Force)
     end.
 
-generate_and_set_cert_and_pkey_pre_NEO(Force) ->
+generate_and_set_cert_and_pkey_pre_71(Force) ->
     Pair = generate_cert_and_pkey(),
     RV = ns_config:run_txn(
            fun (Config, SetFn) ->
@@ -505,7 +505,7 @@ parse_cluster_ca(CA) ->
             end
     end.
 
-%% Deprecated. Can be used in pre-NEO clusters only.
+%% Deprecated. Can be used in pre-7.1 clusters only.
 set_cluster_ca(CA) ->
     case parse_cluster_ca(CA) of
         {ok, Props} ->
@@ -548,7 +548,7 @@ set_cluster_ca(CA) ->
     end.
 
 set_generated_ca(CA) ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true -> chronicle_kv:set(kv, root_cert_and_pkey, {CA, undefined});
         false -> ns_config:set(cert_and_pkey, {CA, undefined})
     end,
@@ -679,14 +679,14 @@ get_chain_info(Chain, CA) when is_binary(Chain), is_binary(CA) ->
 
 trusted_CAs(Format) ->
     Certs =
-        case cluster_compat_mode:is_cluster_NEO() of
+        case cluster_compat_mode:is_cluster_71() of
             true ->
                 case chronicle_kv:get(kv, ca_certificates) of
                     {ok, {Cs, _}} -> Cs;
                     {error, not_found} -> []
                 end;
             false ->
-                trusted_CAs_pre_NEO(ns_config:latest())
+                trusted_CAs_pre_71(ns_config:latest())
         end,
 
     SortedCerts = lists:sort(fun (PL1, PL2) ->
@@ -707,7 +707,7 @@ trusted_CAs(Format) ->
               end, SortedCerts)
     end.
 
-trusted_CAs_pre_NEO(Config) ->
+trusted_CAs_pre_71(Config) ->
     CertAndPKey = ns_config:search(Config, cert_and_pkey),
     Extra = [{origin, upgrade}],
 
@@ -1145,7 +1145,7 @@ get_warnings() ->
     Config = ns_config:get(),
     Nodes = ns_node_disco:nodes_wanted(Config),
     TrustedCAs = trusted_CAs(pem),
-    IsNeo = cluster_compat_mode:is_cluster_NEO(),
+    Is71 = cluster_compat_mode:is_cluster_71(),
     NodeWarnings =
         lists:flatmap(
           fun (Node) ->
@@ -1159,10 +1159,10 @@ get_warnings() ->
                               %% is joining the cluster right now)
                               undefined ->
                                   [];
-                              NodeVsn when NodeVsn < ?VERSION_NEO ->
-                                  node_cert_warnings_pre_neo(TrustedCAs,
-                                                             Node,
-                                                             Config);
+                              NodeVsn when NodeVsn < ?VERSION_71 ->
+                                  node_cert_warnings_pre_71(TrustedCAs,
+                                                            Node,
+                                                            Config);
                               _NodeVsn ->
                                   []
                           end
@@ -1184,7 +1184,7 @@ get_warnings() ->
                           generated ->
                               CAPem = proplists:get_value(pem, CAProps, <<>>),
                               case filter_nodes_by_ca(Nodes, CAPem) of
-                                  [] when IsNeo -> [unused];
+                                  [] when Is71 -> [unused];
                                   _ -> []
                               end;
                           _ -> []
@@ -1199,7 +1199,7 @@ expiration_warnings(CertProps) ->
     WarningDays = ns_config:read_key_fast({cert, expiration_warning_days}, 7),
     WarningThreshold = Now + WarningDays * 24 * 60 * 60,
 
-    Expire = proplists:get_value(expires, CertProps), %% For pre-NEO only
+    Expire = proplists:get_value(expires, CertProps), %% For pre-7.1 only
     NotAfter = proplists:get_value(not_after, CertProps, Expire),
     case NotAfter of
         A when is_integer(A) andalso A =< Now ->
@@ -1224,7 +1224,7 @@ node_cert_warnings(TrustedCAs, NodeCertProps) ->
     MissingCAWarnings =
         case proplists:get_value(ca, NodeCertProps) of
             undefined ->
-                %% For pre-NEO clusters, old nodes don't have ca prop
+                %% For pre-7.1 clusters, old nodes don't have ca prop
                 VerifiedWith =
                     proplists:get_value(verified_with, NodeCertProps),
                 CAMd5s = [erlang:md5(C) || C <- TrustedCAs],
@@ -1249,7 +1249,7 @@ node_cert_warnings(TrustedCAs, NodeCertProps) ->
 
     MissingCAWarnings ++ ExpirationWarnings ++ SelfSignedWarnings.
 
-node_cert_warnings_pre_neo(TrustedCAs, Node, Config) ->
+node_cert_warnings_pre_71(TrustedCAs, Node, Config) ->
     case ns_config:search(Config, cert_and_pkey) of
         {value, {_, _}} ->
             [self_signed];

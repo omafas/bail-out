@@ -39,7 +39,7 @@
          honor_cipher_order/1,
          honor_cipher_order/2,
          set_certs/4,
-         chronicle_upgrade_to_NEO/2,
+         chronicle_upgrade_to_71/2,
          remove_node_certs/0,
          update_node_cert_epoch/0]).
 
@@ -460,7 +460,7 @@ init([]) ->
                        [CertsDir, Reason]),
             exit({certs_dir, CertsDir, Reason})
     end,
-    maybe_convert_pre_NEO_certs(),
+    maybe_convert_pre_71_certs(),
     _ = save_node_certs_phase2(),
     maybe_store_ca_certs(),
     maybe_generate_node_certs(),
@@ -588,7 +588,7 @@ handle_info(cert_and_pkey_changed, #state{} = State) ->
     misc:flush(cert_and_pkey_changed),
     NeedReload =
         maybe_generate_node_certs() or
-        case cluster_compat_mode:is_cluster_NEO() of
+        case cluster_compat_mode:is_cluster_71() of
             true -> false;
             false -> maybe_store_ca_certs()
         end,
@@ -690,8 +690,8 @@ maybe_generate_node_certs() ->
     %% Based on this wrong info it might decide to regenerate certs when it
     %% should not.
     CurCertsEpoch = certs_epoch(),
-    RemoveUploadedCertPreNeo =
-        (not cluster_compat_mode:is_cluster_NEO()) andalso
+    RemoveUploadedCertPre71 =
+        (not cluster_compat_mode:is_cluster_71()) andalso
         case ns_config:search(cert_and_pkey) of
             {value, {_, _}} -> true;
             _ -> false
@@ -702,8 +702,8 @@ maybe_generate_node_certs() ->
                 ?log_info("Regenerating certs because epoch has changed "
                           "(~p -> ~p)", [CertsEpoch, CurCertsEpoch]),
                 true;
-            {ok, [{uploaded, _}]} when RemoveUploadedCertPreNeo ->
-                ?log_info("Regenerating certs because cluster is pre-NEO and "
+            {ok, [{uploaded, _}]} when RemoveUploadedCertPre71 ->
+                ?log_info("Regenerating certs because cluster is pre-7.1 and "
                           "cert_and_pkey doesn't seem to contain user's CA "
                           "anymore"),
                 true;
@@ -1033,14 +1033,14 @@ extract_user_name_test() ->
     ?assertEqual(extract_user_name(["xyz.abc.com"], "", "-"), "xyz.abc.com").
 -endif.
 
-maybe_convert_pre_NEO_certs() ->
-    ShouldConvert = should_convert_pre_neo_certs(),
+maybe_convert_pre_71_certs() ->
+    ShouldConvert = should_convert_pre_71_certs(),
 
     case ShouldConvert of
         true ->
-            ?log_info("Upgrading certs to NEO..."),
+            ?log_info("Upgrading certs to 7.1..."),
             %% Use cert_and_pkey from ns_config because it contains information
-            %% about user uploaded CA (pre-NEO style)
+            %% about user uploaded CA (pre-7.1 style)
             %% Note: it should be ok to use it instead of root_cert_and_pkey
             %%       from chronicle because (1) we don't remove it from
             %%       ns_config during upgrade, and (2) user didn't have a chance
@@ -1090,7 +1090,7 @@ maybe_convert_pre_NEO_certs() ->
                     _ = save_uploaded_certs(CA, Chain, NodePKey, [])
             end,
 
-            FilesToRemove = pre_NEO_files_to_remove(),
+            FilesToRemove = pre_71_files_to_remove(),
 
             lists:foreach(
               fun (F) ->
@@ -1104,7 +1104,7 @@ maybe_convert_pre_NEO_certs() ->
             ok
     end.
 
-pre_NEO_files_to_remove() ->
+pre_71_files_to_remove() ->
     [raw_ssl_cacert_key_path(),
      ssl_cert_key_path(),
      memcached_cert_path(),
@@ -1116,17 +1116,17 @@ pre_NEO_files_to_remove() ->
      user_set_key_path(),
      user_set_ca_chain_path()].
 
-should_convert_pre_neo_certs() ->
+should_convert_pre_71_certs() ->
     case ns_config:read_key_fast(cert_and_pkey, undefined) of
         undefined ->
-            % The system has never been pre-neo, no need in upgrade
+            % The system has never been pre-7.1, no need in upgrade
             false;
         _ ->
             case ns_config:read_key_fast({node, node(), node_cert},
                                          undefined) of
                 undefined ->
                     lists:any(fun (P) -> filelib:is_file(P) end,
-                              pre_NEO_files_to_remove());
+                              pre_71_files_to_remove());
                 _ -> false
             end
     end.
@@ -1162,9 +1162,9 @@ user_set_ca_chain_path() ->
     filename:join(path_config:component_path(data, "config"),
                   "user-set-ca.pem").
 
-chronicle_upgrade_to_NEO(ChronicleTxn, NsConfig) ->
-    Props = ns_server_cert:trusted_CAs_pre_NEO(NsConfig),
-    ?log_info("Upgrading CA certs to NEO: setting ca_certificates to the "
+chronicle_upgrade_to_71(ChronicleTxn, NsConfig) ->
+    Props = ns_server_cert:trusted_CAs_pre_71(NsConfig),
+    ?log_info("Upgrading CA certs to 7.1: setting ca_certificates to the "
               "following props:~n ~p", [Props]),
     ChronicleTxn2 =
         case ns_config:search(NsConfig, cert_and_pkey) of

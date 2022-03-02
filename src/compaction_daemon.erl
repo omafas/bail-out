@@ -22,7 +22,7 @@
 -export([get_autocompaction_settings/1,
          set_autocompaction_settings/1,
          global_magma_frag_percent/0,
-         chronicle_upgrade_to_NEO/2]).
+         chronicle_upgrade_to_71/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2,
@@ -155,7 +155,7 @@ uninhibit_view_compaction(Bucket, Ref) ->
                     infinity).
 
 get_autocompaction_settings(Config) ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             get_autocompaction_from_chronicle();
         false ->
@@ -175,7 +175,7 @@ get_autocompaction_from_ns_config(Config) ->
     end.
 
 set_autocompaction_settings(Settings) ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             {ok, _} = chronicle_kv:set(kv, autocompaction, Settings),
             ok;
@@ -183,10 +183,10 @@ set_autocompaction_settings(Settings) ->
             ns_config:set(autocompaction, Settings)
     end.
 
-chronicle_upgrade_to_NEO(ChronicleTxn, Config) ->
+chronicle_upgrade_to_71(ChronicleTxn, Config) ->
     Props0 = ns_config:search(Config, autocompaction, []),
     Props = lists:append(Props0, [{magma_fragmentation_percentage, 50}]),
-    ?log_info("Upgrading autocompaction to NEO: ~n~p", [Props]),
+    ?log_info("Upgrading autocompaction to 7.1: ~n~p", [Props]),
     chronicle_upgrade:set_key(autocompaction, Props, ChronicleTxn).
 
 %% gen_server callbacks

@@ -324,7 +324,7 @@ do_parse_validate_purge_interval(Params, LowerLimit) ->
     end.
 
 parse_validate_magma_fragmentation_percentage(Params) ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             Fun = mk_number_field_validator(10, 100, Params),
             case Fun({"magmaFragmentationPercentage", magma_fragmentation_percentage,
@@ -346,7 +346,7 @@ parse_validate_magma_fragmentation_percentage(Params) ->
                 _ ->
                     [{error, "magmaFragmentationPercentage",
                       <<"Magma Fragmentation Percentage is not allowed until "
-                        "entire cluster is upgraded to NEO">>}]
+                        "entire cluster is upgraded to 7.1">>}]
             end
     end.
 
@@ -484,7 +484,7 @@ do_parse_validate_settings(Params, ExpectIndex, not_magma) ->
 -ifdef(TEST).
 setup_meck() ->
     meck:new(cluster_compat_mode, [passthrough]),
-    meck:expect(cluster_compat_mode, is_cluster_NEO,
+    meck:expect(cluster_compat_mode, is_cluster_71,
                 fun () -> true end),
     meck:new(ns_config, [passthrough]),
     meck:expect(ns_config, search,
@@ -541,13 +541,13 @@ basic_parse_validate_settings_test() ->
     Stuff1 = lists:sort(Stuff0),
     ?assertEqual(Expected, Stuff1),
 
-    meck:expect(cluster_compat_mode, is_cluster_NEO,
+    meck:expect(cluster_compat_mode, is_cluster_71,
                 fun () -> false end),
     Stuff2 = parse_validate_settings(Settings, false),
     ?assertEqual(
        {errors,[{<<"magmaFragmentationPercentage">>,
          <<"Magma Fragmentation Percentage is not allowed until "
-           "entire cluster is upgraded to NEO">>}]},
+           "entire cluster is upgraded to 7.1">>}]},
        Stuff2),
 
     %% Show that magmaFragmentation isn't required

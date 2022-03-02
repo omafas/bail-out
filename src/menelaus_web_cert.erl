@@ -44,7 +44,7 @@ handle_get_trustedCAs(Req) ->
              fun (Props) ->
                  CAId = proplists:get_value(id, Props),
                  Pem = proplists:get_value(pem, Props, <<>>),
-                 IsNeo = cluster_compat_mode:is_cluster_NEO(),
+                 Is71 = cluster_compat_mode:is_cluster_71(),
                  CANodes =
                      case Extended of
                          true -> ns_server_cert:filter_nodes_by_ca(Nodes, Pem);
@@ -55,7 +55,7 @@ handle_get_trustedCAs(Req) ->
                    maybe_filter_cert_props(
                      Props ++
                      [{warnings, CAWarnings}] ++
-                     [{nodes, CANodes} || IsNeo], not Extended))
+                     [{nodes, CANodes} || Is71], not Extended))
              end, ns_server_cert:trusted_CAs(props)),
     menelaus_util:reply_json(Req, Json).
 
@@ -74,7 +74,7 @@ maybe_filter_cert_props(Props, _ShouldFilter = false) ->
 
 handle_delete_trustedCA(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_NEO(),
+    menelaus_util:assert_is_71(),
     CurNodes = nodes(),
     try list_to_integer(IdStr) of
         Id ->
@@ -233,7 +233,7 @@ jsonify_cert_props(Props) ->
 
 handle_cluster_certificate_extended(Req) ->
     CertProps =
-        lists:filtermap( %% to be compatible with pre-NEO
+        lists:filtermap( %% to be compatible with pre-7.1
           fun ({not_after, V}) -> {true, {expires, V}};
               ({not_before, _}) -> false;
               ({id, _}) -> false;
@@ -245,7 +245,7 @@ handle_cluster_certificate_extended(Req) ->
 
 handle_regenerate_certificate(Req) ->
     menelaus_util:assert_is_enterprise(),
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true -> ok;
         false -> assert_n2n_encryption_is_disabled()
     end,
@@ -265,7 +265,7 @@ reply_error(Req, Error) ->
 
 handle_load_ca_certs(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_NEO(),
+    menelaus_util:assert_is_71(),
     Nodes = nodes(),
     menelaus_util:survive_web_server_restart(
       fun () ->
@@ -296,7 +296,7 @@ handle_load_ca_certs(Req) ->
 
 handle_upload_cluster_ca(Req) ->
     menelaus_util:assert_is_enterprise(),
-    case (not cluster_compat_mode:is_cluster_NEO()) orelse
+    case (not cluster_compat_mode:is_cluster_71()) orelse
          ns_config:read_key_fast(allow_non_local_ca_upload, false) of
         true -> ok;
         false ->
@@ -312,7 +312,7 @@ handle_upload_cluster_ca(Req) ->
         PemEncodedCA ->
             menelaus_util:survive_web_server_restart(
               fun () ->
-                  case cluster_compat_mode:is_cluster_NEO() of
+                  case cluster_compat_mode:is_cluster_71() of
                       true ->
                           AddOpts = [{single_cert, true},
                                      {extra_props, [{origin, upload_api}]}],

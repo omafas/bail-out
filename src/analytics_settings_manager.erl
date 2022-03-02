@@ -42,7 +42,7 @@ cfg_key() ->
     ?ANALYTICS_CONFIG_KEY.
 
 is_enabled() ->
-    cluster_compat_mode:is_cluster_NEO().
+    cluster_compat_mode:is_cluster_71().
 
 on_update(_Key, _Value) ->
     ok.

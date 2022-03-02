@@ -315,7 +315,7 @@ prepare_nodes_for_rebalance(Bucket, Nodes, RebalancerPid) ->
                    ?PREPARE_REBALANCE_TIMEOUT),
     BadReplies = lists:filter(fun ({_, ok}) ->
                                       false;
-                                  %% this clause is not needed after pre-Neo
+                                  %% this clause is not needed after pre-7.1
                                   %% support is discontinued
                                   ({_, {ok, _}}) ->
                                       false;

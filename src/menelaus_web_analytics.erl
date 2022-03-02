@@ -14,7 +14,7 @@
 
 handle_settings_get(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_NEO(),
+    menelaus_util:assert_is_71(),
     Settings = get_settings(),
     menelaus_util:reply_json(Req, {Settings}).
 
@@ -36,7 +36,7 @@ update_settings(Key, Value) ->
 
 handle_settings_post(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_NEO(),
+    menelaus_util:assert_is_71(),
     validator:handle(
       fun (Values) ->
               case Values of

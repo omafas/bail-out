@@ -111,7 +111,7 @@
          deactivate_bucket_data_on_this_node/1,
          config_upgrade_to_66/1,
          upgrade_to_chronicle/2,
-         chronicle_upgrade_to_NEO/1,
+         chronicle_upgrade_to_71/1,
          extract_bucket_props/1,
          build_bucket_props_json/1,
          build_compaction_settings_json/1]).
@@ -605,7 +605,7 @@ failover_warnings(Snapshot) ->
                  end,
 
     Warnings = [S || S <- [BaseSafety, ExtraSafety], S =/= ok],
-    case cluster_compat_mode:is_cluster_NEO() andalso
+    case cluster_compat_mode:is_cluster_71() andalso
         not racks_balanced(KvGroups) of
         true ->
             [unbalancedServerGroups | Warnings];
@@ -839,7 +839,7 @@ generate_sasl_password(Props) ->
     end.
 
 add_auth_type(Props) ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             Props;
         false ->
@@ -1486,7 +1486,7 @@ chronicle_upgrade_bucket(BucketName, ChronicleTxn) ->
     NewBucketConfig = lists:keydelete(auth_type, 1, BucketConfig),
     chronicle_upgrade:set_key(PropsKey, NewBucketConfig, ChronicleTxn).
 
-chronicle_upgrade_to_NEO(ChronicleTxn) ->
+chronicle_upgrade_to_71(ChronicleTxn) ->
     {ok, BucketNames} = chronicle_upgrade:get_key(root(), ChronicleTxn),
     lists:foldl(
       fun (Name, Acc) ->

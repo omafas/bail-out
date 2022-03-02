@@ -30,9 +30,9 @@
          is_cluster_70/0,
          is_cluster_70/1,
          is_version_70/1,
-         is_cluster_NEO/0,
-         is_cluster_NEO/1,
-         is_version_NEO/1,
+         is_cluster_71/0,
+         is_cluster_71/1,
+         is_version_71/1,
          is_enterprise/0,
          is_enterprise/1,
          should_enforce_limits/0,
@@ -77,7 +77,7 @@ get_ns_config_compat_version(Config) ->
 
 get_compat_version(Config) ->
     case get_ns_config_compat_version(Config) of
-        V when V =:= undefined orelse V < ?VERSION_NEO ->
+        V when V =:= undefined orelse V < ?VERSION_71 ->
             V;
         _ ->
             chronicle_compat:get(Config, cluster_compat_version,
@@ -143,27 +143,27 @@ is_cluster_70() ->
 is_cluster_70(Config) ->
     is_enabled(Config, ?VERSION_70).
 
-is_version_NEO(ClusterVersion) ->
-    is_enabled_at(ClusterVersion, ?VERSION_NEO).
+is_version_71(ClusterVersion) ->
+    is_enabled_at(ClusterVersion, ?VERSION_71).
 
-is_cluster_NEO() ->
-    is_cluster_NEO(ns_config:latest()).
+is_cluster_71() ->
+    is_cluster_71(ns_config:latest()).
 
-is_cluster_NEO(Config) ->
-    is_enabled(Config, ?VERSION_NEO).
+is_cluster_71(Config) ->
+    is_enabled(Config, ?VERSION_71).
 
 should_enforce_limits(Snapshot) ->
     case maps:find(cluster_compat_version, Snapshot) of
         {ok, {Version, _}} ->
             ns_config:read_key_fast(enforce_limits, false) andalso
-                is_enabled_at(Version, ?VERSION_NEO);
+                is_enabled_at(Version, ?VERSION_71);
         error ->
             false
     end.
 
 should_enforce_limits() ->
     ns_config:read_key_fast(enforce_limits, false) andalso
-        is_cluster_NEO().
+        is_cluster_71().
 
 is_index_aware_rebalance_on() ->
     not ns_config:read_key_fast(index_aware_rebalance_disabled, false).
@@ -226,7 +226,7 @@ consider_switching_compat_mode() ->
 upgrades() ->
     [{?VERSION_66, rbac, menelaus_users, upgrade},
      {?VERSION_70, rbac, menelaus_users, upgrade},
-     {?VERSION_NEO, rbac, menelaus_users, upgrade}].
+     {?VERSION_71, rbac, menelaus_users, upgrade}].
 
 do_upgrades(undefined, _, _, _) ->
     %% this happens during the cluster initialization. no upgrade needed

@@ -678,8 +678,8 @@ get_public_definitions(Version) when Version < ?VERSION_66 ->
     menelaus_old_roles:roles_pre_66();
 get_public_definitions(Version) when Version < ?VERSION_70 ->
     menelaus_old_roles:roles_pre_70();
-get_public_definitions(Version) when Version < ?VERSION_NEO ->
-    menelaus_old_roles:roles_pre_NEO();
+get_public_definitions(Version) when Version < ?VERSION_71 ->
+    menelaus_old_roles:roles_pre_71();
 get_public_definitions(_) ->
     roles() ++ maybe_add_developer_preview_roles().
 
@@ -1761,7 +1761,7 @@ validate_roles(Roles) ->
 
 roles_format_test() ->
     ?assert(validate_roles(roles())),
-    ?assert(validate_roles(menelaus_old_roles:roles_pre_NEO())),
+    ?assert(validate_roles(menelaus_old_roles:roles_pre_71())),
     ?assert(validate_roles(menelaus_old_roles:roles_pre_70())),
     ?assert(validate_roles(menelaus_old_roles:roles_pre_66())).
 

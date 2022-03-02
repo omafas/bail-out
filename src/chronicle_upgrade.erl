@@ -86,9 +86,9 @@ upgrade_loop(UpgradeTxn, FinalVersion, Config) ->
     end.
 
 upgrade_to(?VERSION_70, UpgradeTxn, Config) ->
-    {?VERSION_NEO,
+    {?VERSION_71,
      functools:chain(
        UpgradeTxn,
-       [ns_ssl_services_setup:chronicle_upgrade_to_NEO(_, Config),
-        ns_bucket:chronicle_upgrade_to_NEO(_),
-        compaction_daemon:chronicle_upgrade_to_NEO(_, Config)])}.
+       [ns_ssl_services_setup:chronicle_upgrade_to_71(_, Config),
+        ns_bucket:chronicle_upgrade_to_71(_),
+        compaction_daemon:chronicle_upgrade_to_71(_, Config)])}.

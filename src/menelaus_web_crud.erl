@@ -281,7 +281,7 @@ get_identity(Req) ->
     %% In a mixed cluster with 7.0.x and 7.1.0 nodes, a 7.1.0 node can send via
     %% menelaus_web_crud:attempt/5 a 'capi_crud:Oper' RPC request to a 7.0.x
     %% node. Return Identity only when cluster_compact_mode is at 7.1.0.
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         false -> undefined;
         true -> menelaus_auth:get_identity(Req)
     end.

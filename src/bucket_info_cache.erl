@@ -282,7 +282,7 @@ build_bucket_capabilities(BucketConfig) ->
                      {'subdoc.DocumentMacroSupport',
                       cluster_compat_mode:is_cluster_70()},
                      {'subdoc.ReviveDocument',
-                      cluster_compat_mode:is_cluster_NEO()}],
+                      cluster_compat_mode:is_cluster_71()}],
 
                 [C || {C, true} <- Conditional] ++
                     [dcp, cbhello, touch, cccp, xdcrCheckpointing, nodesExt,

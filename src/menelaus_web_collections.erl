@@ -130,7 +130,7 @@ service_scope_limit_validators(kv) ->
      validator:unsupported(_)].
 
 scope_limit_validators(Type) ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             get_scope_limit_validators(Type);
         false ->

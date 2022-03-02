@@ -57,7 +57,7 @@ default_config(IsEnterprise) ->
        {?CAN_ABORT_REBALANCE_CONFIG_KEY, IsEnterprise}]}].
 
 max_events_allowed() ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             100;
         false ->
@@ -245,7 +245,7 @@ set_failover_on_disk_issues(Enabled, TP) ->
     [{?DATA_DISK_ISSUES_CONFIG_KEY, [{enabled, Enabled}, {timePeriod, TP}]}].
 
 parse_validate_server_group_failover(Args, CurrRV) ->
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         false ->
             parse_validate_server_group_failover_inner(Args, CurrRV);
         true ->
@@ -292,7 +292,7 @@ get_extra_settings(Config) ->
                [{failoverServerGroup,
                  proplists:get_value(?FAILOVER_SERVER_GROUP_CONFIG_KEY,
                                      Config)} ||
-                   not cluster_compat_mode:is_cluster_NEO()]]);
+                   not cluster_compat_mode:is_cluster_71()]]);
         false ->
             []
     end.
@@ -305,7 +305,7 @@ disable_extras(Config) ->
               [disable_failover_on_disk_issues(CurrTP),
                [{?CAN_ABORT_REBALANCE_CONFIG_KEY, false}],
                [{?FAILOVER_SERVER_GROUP_CONFIG_KEY, false} ||
-                   not cluster_compat_mode:is_cluster_NEO()]]);
+                   not cluster_compat_mode:is_cluster_71()]]);
         false ->
             []
     end.

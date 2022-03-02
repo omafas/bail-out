@@ -155,7 +155,7 @@ supported_services(Node) ->
 
 supported_services_by_version(ClusterVersion) ->
     [kv] ++
-        case cluster_compat_mode:is_version_NEO(ClusterVersion) of
+        case cluster_compat_mode:is_version_71(ClusterVersion) of
             true ->
                 [index];
             false ->

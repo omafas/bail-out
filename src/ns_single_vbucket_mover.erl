@@ -580,7 +580,7 @@ get_takeover_connection_name_test() ->
                  ConnAB),
     ?assertEqual(true, length(ConnAB) =< ?MAX_DCP_CONNECTION_NAME),
 
-    %% Test where the connection name, using the pre-NEO method, won't
+    %% Test where the connection name, using the pre-7.1 method, won't
     %% fit into the maximum allowed.
 
     Node1 = "ns_1@platform-couchbase-cluster-0000.platform-couchbase-cluster."

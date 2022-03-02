@@ -295,7 +295,7 @@ handle_info(tick, State0) ->
 
     NodeStatuses = ns_doctor:get_nodes(),
     DownNodes = fastfo_down_nodes(NonPendingNodes),
-    DownSG = case cluster_compat_mode:is_cluster_NEO() of
+    DownSG = case cluster_compat_mode:is_cluster_71() of
                  true ->
                      undefined;
                  false ->
@@ -450,7 +450,7 @@ process_action({failover, NodesWithUUIDs}, S, DownNodes, NodeStatuses,
                   NotFailedOver, max_nodes_error_msg(S), S)
         end,
     failover_nodes(TrimmedNodes, S1, DownNodes, NodeStatuses, true);
-%% pre-Neo only
+%% pre-7.1 only
 process_action({failover, {Node, _UUID}}, S, DownNodes, NodeStatuses,
                Snapshot) ->
     SG = ns_cluster_membership:get_node_server_group(Node, Snapshot),
@@ -460,7 +460,7 @@ process_action({failover, {Node, _UUID}}, S, DownNodes, NodeStatuses,
         {true, UpdateCount} ->
             failover_nodes([Node], S, DownNodes, NodeStatuses, UpdateCount)
     end;
-% pre-Neo only
+% pre-7.1 only
 process_action({failover_group, SG, Nodes0}, S, DownNodes, NodeStatuses, _) ->
     Nodes = [N || {N, _} <- Nodes0],
     case allow_failover(SG, S, failover_group) of
@@ -505,7 +505,7 @@ trim_nodes(Nodes, #state{count = Count, max_count = Max}) ->
     lists:sublist(Nodes, Max - Count).
 
 max_nodes_error_msg(#state{max_count = Max}) ->
-    EventsStr = case cluster_compat_mode:is_cluster_NEO() of
+    EventsStr = case cluster_compat_mode:is_cluster_71() of
                     true ->
                         nodes;
                     false ->
@@ -953,7 +953,7 @@ all_services_config(Config, Snapshot) ->
                            Snapshot, Service),
               %% Is auto-failover for the service disabled?
               ServiceKey = {auto_failover_disabled, Service},
-              DV = not (cluster_compat_mode:is_cluster_NEO() orelse
+              DV = not (cluster_compat_mode:is_cluster_71() orelse
                         Service =/= index),
               AutoFailoverDisabled = ns_config:search(Config, ServiceKey, DV),
               {Service, {{disable_auto_failover, AutoFailoverDisabled},
@@ -1041,7 +1041,7 @@ validate_durability_failover_for_bucket(BucketName, Map, FailoverNodes,
     end.
 
 has_safe_check(index) ->
-    cluster_compat_mode:is_cluster_NEO();
+    cluster_compat_mode:is_cluster_71();
 has_safe_check(_) ->
     false.
 

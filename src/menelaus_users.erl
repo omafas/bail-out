@@ -929,7 +929,7 @@ upgrade(Version, Config, Nodes) ->
                 ok;
             ?VERSION_70 ->
                 do_upgrade(Version, group);
-            ?VERSION_NEO ->
+            ?VERSION_71 ->
                 ok
         end,
         sync_with_remotes(Nodes, Version),
@@ -955,7 +955,7 @@ upgrade_props(?VERSION_66, _Key, Props) ->
     lists:keydelete(user_roles, 1, Props);
 upgrade_props(?VERSION_70, _Key, Props) ->
     upgrade_roles(fun maybe_upgrade_role_to_70/1, Props);
-upgrade_props(?VERSION_NEO, Key, Props) ->
+upgrade_props(?VERSION_71, Key, Props) ->
     add_uuid(Key, Props).
 
 add_uuid({_, local}, Props) ->

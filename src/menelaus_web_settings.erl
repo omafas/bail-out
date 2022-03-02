@@ -403,9 +403,9 @@ services_with_security_settings() ->
 is_allowed_on_cluster([secure_headers]) ->
     cluster_compat_mode:is_cluster_70();
 is_allowed_on_cluster([event_logs_limit]) ->
-    cluster_compat_mode:is_cluster_NEO();
+    cluster_compat_mode:is_cluster_71();
 is_allowed_on_cluster([enforce_limits]) ->
-    cluster_compat_mode:is_cluster_NEO();
+    cluster_compat_mode:is_cluster_71();
 is_allowed_on_cluster(_) ->
     true.
 

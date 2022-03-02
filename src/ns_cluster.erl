@@ -126,7 +126,7 @@ engage_cluster_apply_certs(NodeKVList) ->
             %% by this moment certs should have been loaded already (otherwise
             %% a tls connection for /engageCluster call won't be possibe), but
             %% there are some cases when it's still possible that use hasn't
-            %% loaded certs yet. For example, when the remote node is pre-NEO,
+            %% loaded certs yet. For example, when the remote node is pre-7.1,
             %% it might use http for /engageCluster.
             case apply_certs() of
                 ok -> engage_cluster_apply_net_config(NodeKVList);
@@ -915,8 +915,8 @@ do_add_node_with_connectivity(Scheme, RemoteAddr, RestPort, Auth, GroupUUID,
             _ when not IsEnterprise ->
                 [];
             false ->
-                %% We don't need clusterCA to be present when Neo node is
-                %% joining the cluster, but pre-NEO nodes expect clusterCA to be
+                %% We don't need clusterCA to be present when 7.1 node is
+                %% joining the cluster, but pre-7.1 nodes expect clusterCA to be
                 %% sent in encgageCluster. Can be removed when support of 7.0 is
                 %% dropped.
                 CA = ns_server_cert:this_node_ca(Config),
@@ -1173,8 +1173,8 @@ do_add_node_engaged_inner(ChronicleInfo, {Scheme, Hostname, Port},
                       ChronicleInfo =/= undefined]},
 
     %% Making sure peer verification is enabled even when this node uses
-    %% self-signed certs (starting from Neo)
-    TLSOpts = case {Scheme, cluster_compat_mode:is_cluster_NEO()} of
+    %% self-signed certs (starting from 7.1)
+    TLSOpts = case {Scheme, cluster_compat_mode:is_cluster_71()} of
                   {https, true} -> ns_ssl_services_setup:ssl_client_opts();
                   _ -> []
               end,

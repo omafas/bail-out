@@ -646,7 +646,7 @@ do_handle_call({get_vbucket_high_seqno, VBucketId}, _From, State) ->
     {reply, Res, State};
 
 %% This is left in place to support backwards compat from nodes with version
-%% lower than Neo. Lower than Neo version Nodes won't provide identity.
+%% lower than 7.1. Lower than 7.1 version Nodes won't provide identity.
 do_handle_call({get_keys, VBuckets, Params}, From, State) ->
     do_handle_call({get_keys, VBuckets, Params, undefined}, From, State);
 do_handle_call({get_keys, VBuckets, Params, Identity}, _From,
@@ -1553,7 +1553,7 @@ get_keys(Bucket, NodeVBuckets, Params, Identity) ->
     end.
 
 do_get_keys_call(Bucket, Node, VBuckets, Params, Identity) ->
-    %% This is to handle cluster compat scenario to support pre Neo get_keys
+    %% This is to handle cluster compat scenario to support pre 7.1 get_keys
     %% request to continue to work as before without the Identity info
     GetKeys = case Identity of
                   undefined -> {get_keys, VBuckets, Params};

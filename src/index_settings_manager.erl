@@ -30,7 +30,7 @@
          known_settings/0,
          on_update/2,
          config_upgrade_to_70/1,
-         config_upgrade_to_NEO/1]).
+         config_upgrade_to_71/1]).
 
 -import(json_settings_manager,
         [id_lens/1]).
@@ -135,7 +135,7 @@ general_settings_lens_props(ClusterVersion) ->
         _ ->
             []
     end ++
-    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_NEO) of
+    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_71) of
         true ->
             [{enablePageBloomFilter,
               id_lens(<<"indexer.settings.enable_page_bloom_filter">>)}];
@@ -169,7 +169,7 @@ general_settings_defaults(ClusterVersion) ->
         _ ->
             []
     end ++
-    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_NEO) of
+    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_71) of
         true ->
             [{enablePageBloomFilter, false}];
         false ->
@@ -248,8 +248,8 @@ compaction_lens() ->
 config_upgrade_to_70(Config) ->
     config_upgrade_settings(Config, ?VERSION_66, ?VERSION_70).
 
-config_upgrade_to_NEO(Config) ->
-    config_upgrade_settings(Config, ?VERSION_70, ?VERSION_NEO).
+config_upgrade_to_71(Config) ->
+    config_upgrade_settings(Config, ?VERSION_70, ?VERSION_71).
 
 config_upgrade_settings(Config, OldVersion, NewVersion) ->
     NewSettings = general_settings_defaults(NewVersion) --
@@ -274,7 +274,7 @@ config_upgrade_test() ->
     ?assertEqual(<<"{\"indexer.settings.rebalance.redistribute_indexes\":false,"
                    "\"indexer.settings.num_replica\":0}">>, Data),
 
-    CmdList2 = config_upgrade_to_NEO([]),
+    CmdList2 = config_upgrade_to_71([]),
     [{set, {metakv, Meta2}, Data2}] = CmdList2,
     ?assertEqual(<<"/indexing/settings/config">>, Meta2),
     ?assertEqual(<<"{\"indexer.settings.enable_page_bloom_filter\":false}">>,

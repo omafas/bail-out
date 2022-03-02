@@ -40,7 +40,7 @@ handle_get(Req) ->
     reply_json(Req, Map).
 
 handle_post(Req) ->
-    menelaus_util:assert_is_NEO(),
+    menelaus_util:assert_is_71(),
     menelaus_web_rbac:assert_no_users_upgrade(),
     case try_decode(mochiweb_request:recv_body(Req)) of
         {ok, Samples} ->

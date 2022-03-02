@@ -234,7 +234,7 @@ add_log(Event) ->
 
 add_log(Event, Extras) ->
     %% Event logs are enabled only when all the nodes are at 7.1.0.
-    case cluster_compat_mode:is_cluster_NEO() of
+    case cluster_compat_mode:is_cluster_71() of
         true ->
             Timestamp = misc:timestamp_iso8601(erlang:timestamp(), utc),
             Id = misc:uuid_v4(),

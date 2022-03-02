@@ -15,7 +15,7 @@
 
 -export([roles_pre_66/0,
          roles_pre_70/0,
-         roles_pre_NEO/0]).
+         roles_pre_71/0]).
 
 -spec roles_pre_66() -> [rbac_role_def(), ...].
 roles_pre_66() ->
@@ -678,8 +678,8 @@ roles_pre_70() ->
        {[settings, autocompaction], [read]},
        {[pools], [read]}]}].
 
--spec roles_pre_NEO() -> [rbac_role_def(), ...].
-roles_pre_NEO() ->
+-spec roles_pre_71() -> [rbac_role_def(), ...].
+roles_pre_71() ->
     [{admin, [],
       [{name, <<"Full Admin">>},
        {folder, admin},

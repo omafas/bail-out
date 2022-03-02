@@ -86,7 +86,7 @@ handle_events_validators() ->
      validator:unsupported(_)].
 
 handle_events(Req) ->
-    menelaus_util:assert_is_NEO(),
+    menelaus_util:assert_is_71(),
     validator:handle(fun (Values) ->
                        {SinceTime, Limit} = get_handle_events_params(Values),
                        Events = event_log_server:build_events_json(SinceTime,
@@ -95,7 +95,7 @@ handle_events(Req) ->
                      end, Req, qs, handle_events_validators()).
 
 handle_events_streaming(Req) ->
-    menelaus_util:assert_is_NEO(),
+    menelaus_util:assert_is_71(),
     Ref = make_ref(),
     Self = self(),
     ns_pubsub:subscribe_link(event_log_events,

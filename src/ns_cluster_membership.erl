@@ -459,7 +459,7 @@ prepare_to_join(RemoteNode, Cookie) ->
               %% redundant history.
               {set_fresh, Pair};
           %% We are getting rid of cert_and_pkey but we need it here to
-          %% correcly upgrade from pre-NEO:
+          %% correcly upgrade from pre-7.1:
           ({cert_and_pkey, V}) ->
               {set_initial, {cert_and_pkey, V}};
           ({K, _V}) ->
@@ -501,7 +501,7 @@ services_by_version() ->
 topology_aware_services_by_version() ->
     [{?PREHISTORIC, [fts, index, cbas, eventing]},
      {?VERSION_70, [backup]},
-     {?VERSION_NEO, [n1ql]}].
+     {?VERSION_71, [n1ql]}].
 
 filter_services_by_version(Version, ServicesTable) ->
     lists:flatmap(fun ({V, Services}) ->
@@ -663,10 +663,10 @@ topology_aware_services_for_version_test() ->
 community_services_test() ->
     ?assertEqual(
        lists:sort([fts,kv,index,n1ql]),
-       lists:sort(supported_services_for_version(?VERSION_NEO, false))).
+       lists:sort(supported_services_for_version(?VERSION_71, false))).
 
 enterprise_services_test() ->
     ?assertEqual(
        lists:sort([backup,cbas,eventing,fts,kv,index,n1ql]),
-       lists:sort(supported_services_for_version(?VERSION_NEO, true))).
+       lists:sort(supported_services_for_version(?VERSION_71, true))).
 -endif.
