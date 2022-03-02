@@ -482,10 +482,12 @@ build_node_hostname(Config, Node, LocalAddr, Options) ->
                true  -> LocalAddr;
                false -> H
            end,
-    Port = proplists:get_value(port, Options, rest_port),
-    list_to_binary(
-      misc:join_host_port(Host,
-                          service_ports:get_port(Port, Config, Node))).
+    PortName = proplists:get_value(port, Options, rest_port),
+    Port = case service_ports:get_port(PortName, Config, Node) of
+               undefined -> error(no_port);
+               P -> P
+           end,
+    list_to_binary(misc:join_host_port(Host, Port)).
 
 alternate_addresses_json(Node, Config, Snapshot, WantedPorts) ->
     {ExtHostname, ExtPorts} =
@@ -592,7 +594,16 @@ get_hostnames(Req, NodeStatus, Options) when is_atom(NodeStatus) ->
 get_hostnames(Req, Nodes, Options) when is_list(Nodes) ->
     Config = ns_config:get(),
     LocalAddr = local_addr(Req),
-    [{N, build_node_hostname(Config, N, LocalAddr, Options)} || N <- Nodes].
+    lists:filtermap(
+      fun (N) ->
+          try build_node_hostname(Config, N, LocalAddr, Options) of
+              NodeHostname -> {true, {N, NodeHostname}}
+          catch
+              %% Might happen when the node is CE and we are searching by
+              %% ssl port
+              error:no_port -> false
+          end
+      end, Nodes).
 
 %% Node list
 %% GET /pools/default/buckets/{Id}/nodes
@@ -632,13 +643,7 @@ find_node_hostname(HostPortStr, Req, NodeStatus) ->
         Normalized ->
             HostPortBin = list_to_binary(Normalized),
             NHs = get_hostnames(Req, NodeStatus) ++
-                      case cluster_compat_mode:is_enterprise() of
-                          true ->
-                              get_hostnames(Req, NodeStatus,
-                                            [{port, ssl_rest_port}]);
-                          false ->
-                              []
-                      end,
+                  get_hostnames(Req, NodeStatus, [{port, ssl_rest_port}]),
             case [N || {N, CandidateHostPort} <- NHs,
                        CandidateHostPort =:= HostPortBin] of
                 [] ->
