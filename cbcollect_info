@@ -771,7 +771,7 @@ class CollectFile(AllOsTask):
 def make_curl_task(name, user, password, url,
                    timeout=60, log_file="couchbase.log", base_task=AllOsTask,
                    **kwargs):
-    return base_task(name, ["curl", "-sS", "--proxy", "", "-K-", url],
+    return base_task(name, ["curl", "-sS", "-k", "--proxy", "", "-K-", url],
                      timeout=timeout,
                      log_file=log_file,
                      to_stdin="--user %s:%s" % (user, password),
