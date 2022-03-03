@@ -54,7 +54,13 @@ let bucketSpecificPermissions = [function (bucket) {
       "cluster.bucket[" + name + "].data!read",
       "cluster.bucket[" + name + "].data.docs!read",
       "cluster.bucket[" + name + "].data.docs!write",
-      "cluster.bucket[" + name + "].data.docs!upsert"
+      "cluster.bucket[" + name + "].data.docs!upsert",
+      "cluster.collection[" + name + ":.:.].data.docs!read",
+      "cluster.collection[" + name + ":.:.].data.docs!write",
+      "cluster.collection[" + name + ":.:.].data.docs!upsert",
+      "cluster.collection[" + name + ":.:.].n1ql.index!read",
+      "cluster.collection[" + name + ":.:.].n1ql.index!write",
+      "cluster.collection[" + name + ":.:.].n1ql.select!execute"
     ]);
   }
 

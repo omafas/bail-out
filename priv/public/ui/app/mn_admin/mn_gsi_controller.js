@@ -76,7 +76,7 @@ function configure($stateProvider, $transitionsProvider) {
 
     return mnPermissionsService.check().then(function (permissions) {
       let params = Object.assign({}, original);
-      var indexesRead = permissions.bucketNames['.n1ql.index!read'];
+      var indexesRead = permissions.bucketCollectionsNames['.n1ql.index!read'];
 
       if (!params.commonBucket && indexesRead && indexesRead[0]) {
         params.commonBucket = indexesRead[0];
@@ -130,7 +130,7 @@ function configure($stateProvider, $transitionsProvider) {
       },
       data: {
         title: "Indexes",
-        permissions: "cluster.bucket['.'].n1ql.index.read"
+        permissions: "cluster.collection['.:.:.'].n1ql.index.read"
       },
       views: {
         "main@app.admin": {

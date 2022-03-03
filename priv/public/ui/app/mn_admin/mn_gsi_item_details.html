@@ -36,12 +36,12 @@ licenses/APL2.txt.
          ui-sref="app.admin.query.workbench({query: row.definition})">
         Open in Workbench</button>
       <button
-         ng-if="rbac.cluster.bucket[mnGsiItemDetailsCtl.keyspace].n1ql.select.execute"
+         ng-if="rbac.cluster.collection[mnGsiItemDetailsCtl.keyspace].n1ql.select.execute"
          class="outline tight"
          ng-click="mnGsiItemDetailsCtl.dropIndex(row)">
         Drop <span ng-if="row.numReplica > 0">All Replicas</span></button>
       <button
-         ng-if="rbac.cluster.bucket[mnGsiItemDetailsCtl.keyspace].n1ql.select.execute && row.numReplica > 0"
+         ng-if="rbac.cluster.collection[mnGsiItemDetailsCtl.keyspace].n1ql.select.execute && row.numReplica > 0"
          class="outline tight"
          ng-click="mnGsiItemDetailsCtl.dropIndex(row,true)">
         Drop This Replica</button>

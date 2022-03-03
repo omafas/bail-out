@@ -46,7 +46,6 @@ function mnPermissionsProvider() {
       "cluster.collection[" + name + ":.:.].stats!read",
       "cluster.collection[" + name + ":.:.].collections!read",
       "cluster.collection[" + name + ":.:.].collections!write"
-
     ];
     if (name === "." || buckets.byName[name].isMembase) {
       basePermissions = basePermissions.concat([
@@ -61,7 +60,14 @@ function mnPermissionsProvider() {
         "cluster.bucket[" + name + "].data!read",
         "cluster.bucket[" + name + "].data.docs!read",
         "cluster.bucket[" + name + "].data.docs!write",
-        "cluster.bucket[" + name + "].data.docs!upsert"
+        "cluster.bucket[" + name + "].data.docs!upsert",
+        "cluster.bucket[" + name + "].n1ql.index!read",
+        "cluster.collection[" + name + ":.:.].data.docs!read",
+        "cluster.collection[" + name + ":.:.].data.docs!write",
+        "cluster.collection[" + name + ":.:.].data.docs!upsert",
+        "cluster.collection[" + name + ":.:.].n1ql.index!read",
+        "cluster.collection[" + name + ":.:.].n1ql.index!write",
+        "cluster.collection[" + name + ":.:.].n1ql.select!execute"
       ]);
     }
 
@@ -176,12 +182,12 @@ function mnPermissionsProvider() {
       let all = bucketName + ":" + scopeName + ":*"
       return ["cluster.collection[" + any + "].data.docs!read",
               "cluster.collection[" + all + "].collections!write",
-              "cluster.bucket[" + any + "].n1ql.select!execute"];
+              "cluster.collection[" + any + "].n1ql.select!execute"];
     }
     function getPerCollectionPermissions(bucketName, scopeName, collectionName) {
       let params = bucketName + ":" + scopeName + ":" + collectionName;
       return ["cluster.collection[" + params + "].data.docs!read",
-              "cluster.bucket[" + params + "].n1ql.select!execute"];
+              "cluster.collection[" + params + "].n1ql.select!execute"];
     }
 
     function clear() {
@@ -222,18 +228,31 @@ function mnPermissionsProvider() {
             }
             return doCheck(permissions).then(function (resp) {
               var bucketNamesByPermission = {};
+              var bucketCollectionsNames = {};
               var permissions = resp.data;
               angular.forEach(bucketsDetails, function (bucket) {
                 var interesting = generateBucketPermissions(bucket.name, bucketsDetails);
                 angular.forEach(interesting, function (permission) {
                   var bucketPermission = permission.split("[" + bucket.name + "]")[1];
-                  bucketNamesByPermission[bucketPermission] = bucketNamesByPermission[bucketPermission] || [];
-                  if (permissions[permission]) {
+                  var collectionPermission = permission.split("[" + bucket.name + ":.:.]")[1];
+
+                  bucketNamesByPermission[bucketPermission] =
+                    bucketNamesByPermission[bucketPermission] || [];
+
+                  bucketCollectionsNames[collectionPermission] =
+                    bucketCollectionsNames[collectionPermission] || [];
+
+                  if (bucketPermission && permissions[permission]) {
                     bucketNamesByPermission[bucketPermission].push(bucket.name);
+                  }
+
+                  if (collectionPermission && permissions[permission]) {
+                    bucketCollectionsNames[collectionPermission].push(bucket.name);
                   }
                 });
               });
               resp.bucketNames = bucketNamesByPermission;
+              resp.bucketCollectionsNames = bucketCollectionsNames;
               return resp;
             });
           });
@@ -246,6 +265,7 @@ function mnPermissionsProvider() {
         mnPermissions.export.data = resp.data;
         mnPermissions.export.cluster = cache.cluster;
         mnPermissions.export.bucketNames = resp.bucketNames || {};
+        mnPermissions.export.bucketCollectionsNames = resp.bucketCollectionsNames || {};
 
         mnPermissions.stream.next(mnPermissions.export);
 

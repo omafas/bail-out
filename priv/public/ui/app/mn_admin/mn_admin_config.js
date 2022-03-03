@@ -185,7 +185,7 @@ function mnAdminConfig($stateProvider, $urlMatcherFactoryProvider, mnPluggableUi
     includedByState: 'app.admin.gsi',
     plugIn: 'workbenchTab',
     index: 2,
-    ngShow: "rbac.cluster.bucket['.'].n1ql.index.read"
+    ngShow: "rbac.cluster.collection['.:.:.'].n1ql.index.read"
   });
 
   $stateProvider

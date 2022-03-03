@@ -183,8 +183,9 @@ class MnViewsEditingComponent extends MnLifeCycleHooksToStream {
   }
 
   hasReadPermission([permissions, bucket]) {
-    return permissions.cluster.bucket[bucket] &&
-      permissions.cluster.bucket[bucket].data.docs.read;
+    let name = bucket + ":.:.";
+    let perm = permissions.cluster.collection[name];
+    return perm && perm.data.docs.read;
   }
 
   packSaveData([, data, commonBucket, ddocumentId, viewId]) {

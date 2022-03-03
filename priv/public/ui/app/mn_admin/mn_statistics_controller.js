@@ -379,7 +379,7 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
         .cycle();
     }
 
-    if ($scope.rbac.cluster.bucket['.'].n1ql.index.read) {
+    if ($scope.rbac.cluster.collection['.:.:.'].n1ql.index.read) {
       new mnPoller($scope, function () {
         return mnGsiService.getIndexStatus().then(function (rv) {
           if (!$state.params.commonBucket) {

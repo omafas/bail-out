@@ -120,8 +120,9 @@ class MnBucketItemComponent extends MnLifeCycleHooksToStream {
   }
 
   isDocumentsLinkVisible(permissions) {
-    let bucketPerm = permissions.cluster.bucket[this.bucket.name];
-    return bucketPerm && bucketPerm.data.docs.read;
+    let name = this.bucket.name + ":.:.";
+    let bucketPerm = permissions.cluster.collection[name];
+    return bucketPerm && bucketPerm.data.docs.read && bucketPerm.collections.read;
   }
 
   isScopesAndCollectionsLinkVisible([permissions, compat70]) {

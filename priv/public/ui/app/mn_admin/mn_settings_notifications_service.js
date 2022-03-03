@@ -420,7 +420,7 @@ angular.module('mnSettingsNotificationsService', [
       queries.push(pools);
       queries.push(poolDefault);
 
-      if (mnPermissions.export.cluster.bucket['.'].n1ql.index.read) {
+      if (mnPermissions.export.cluster.collection['.:.:.'].n1ql.index.read) {
         queries[4] = mnGsiService.getIndexStatus(mnHttpParams);
       }
       if (mnPools.export.isEnterprise && mnPermissions.export.cluster.admin.security.read) {
