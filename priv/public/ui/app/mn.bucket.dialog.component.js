@@ -209,14 +209,19 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
     this.durabilityMinLevelOptions = this.bucketType
       .pipe(map(this.setDurabilityMinLevelOptions.bind(this)));
 
-    this.showStorageBackend =
-      combineLatest(this.isEnterprise,
-                    this.bucketType)
-      .pipe(map(this.isStorageBackendVisible.bind(this)));
+    this.isNotEnterpriseOrEditAndNotMembase = this.isEnterprise
+      .pipe(map((isEnterprise) => {
+        return !isEnterprise || (this.bucket && this.bucket.bucketType !== "membase");
+      }));
 
     this.storageBackend = this.form.group.get('storageBackend').valueChanges
       .pipe(startWith(this.form.group.get('storageBackend').value),
             shareReplay({bufferSize: 1}));
+
+    this.bucketType
+      .pipe(takeUntil(this.mnOnDestroy))
+      .subscribe(bucketType =>
+                 this.maybeDisableField('storageBackend', !this.bucket && bucketType === 'membase'));
 
     this.autoCompactionDefined = this.form.group.get('autoCompactionDefined').valueChanges
       .pipe(startWith(this.form.group.get('autoCompactionDefined').value),
@@ -244,7 +249,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
 
     if (this.bucket) {
       ['name', 'bucketType', 'conflictResolutionType',
-        'evictionPolicyEphemeral', 'storageBackend']
+        'evictionPolicyEphemeral']
         .forEach(field =>
                  this.maybeDisableField(field, false));
 
@@ -338,10 +343,6 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
       case 'ephemeral':
         return durabilityMinLevelOptionsBasic;
     }
-  }
-
-  isStorageBackendVisible([isEnterprise, bucketType]) {
-    return isEnterprise && bucketType === 'membase';
   }
 
   getAutoCompactionMode([autoCompactionDefined, storageBackend]) {

@@ -59,27 +59,6 @@ licenses/APL2.txt.
       </div>
 
       <div class="formrow">
-        <label>Memory Quota <small>in megabytes per server node</small></label>
-        <div class="form-inline margin-bottom-1">
-          <input
-             type="number"
-             formControlName="ramQuotaMB">
-          <abbr>MiB</abbr>
-        </div>
-        <mn-bar-usage
-           class="bar-usages mn-bar-usages bucket-add"
-           [ngClass]="{overcommitted: !!(bucketRam | async)?.topLeft}"
-           [total]="bucketTotalRam"
-           [baseInfo]="bucketRam">
-        </mn-bar-usage>
-        <div
-           class="error"
-           [hidden]="!(httpError | async)?.errors?.ramQuota">
-          {{(httpError | async)?.errors?.ramQuota}}
-        </div>
-      </div>
-
-      <div class="formrow">
         <label>Bucket Type</label>
         <input
            type="radio"
@@ -104,6 +83,52 @@ licenses/APL2.txt.
            class="error error-form"
            [hidden]="(bucketType | async) !== 'memcached'">
           Warning: Memcached buckets are deprecated.
+        </div>
+      </div>
+
+      <div
+         [hidden]="isNotEnterpriseOrEditAndNotMembase | async"
+         class="formrow checkbox-list">
+        <label>Storage Backend</label>
+        <div class="formrow checkbox-list">
+          <input
+             type="radio"
+             formControlName="storageBackend"
+             value="couchstore"
+             id="for-storage-backend-couchstore">
+          <label for="for-storage-backend-couchstore">CouchStore</label>
+          <input
+             type="radio"
+             formControlName="storageBackend"
+             value="magma"
+             id="for-storage-backend-magma">
+          <label for="for-storage-backend-magma">Magma</label>
+          <div
+             class="error"
+             [hidden]="!(httpError | async)?.errors?.storageBackend">
+            {{(httpError | async)?.errors?.storageBackend}}
+          </div>
+        </div>
+      </div>
+
+      <div class="formrow">
+        <label>Memory Quota <small>in megabytes per server node</small></label>
+        <div class="form-inline margin-bottom-1">
+          <input
+             type="number"
+             formControlName="ramQuotaMB">
+          <abbr>MiB</abbr>
+        </div>
+        <mn-bar-usage
+           class="bar-usages mn-bar-usages bucket-add"
+           [ngClass]="{overcommitted: !!(bucketRam | async)?.topLeft}"
+           [total]="bucketTotalRam"
+           [baseInfo]="bucketRam">
+        </mn-bar-usage>
+        <div
+           class="error"
+           [hidden]="!(httpError | async)?.errors?.ramQuota">
+          {{(httpError | async)?.errors?.ramQuota}}
         </div>
       </div>
 
@@ -297,31 +322,6 @@ licenses/APL2.txt.
               on all the nodes in your replication topology to ensure high-quality time synchronization.
               See  <a href="https://docs.couchbase.com/server/{{majorMinorVersion | async}}/install/synchronize-clocks-using-ntp.html"
                       target="_blank" rel="noopener noreferrer">Setting Up NTP</a> in the Couchbase documentation.
-            </div>
-          </div>
-        </div>
-
-        <div
-           class="formrow checkbox-list"
-           [hidden]="!(showStorageBackend | async)">
-          <label>Storage Backend</label>
-          <div class="formrow checkbox-list">
-            <input
-               type="radio"
-               formControlName="storageBackend"
-               value="couchstore"
-               id="for-storage-backend-couchstore">
-            <label for="for-storage-backend-couchstore">CouchStore</label>
-            <input
-               type="radio"
-               formControlName="storageBackend"
-               value="magma"
-               id="for-storage-backend-magma">
-            <label for="for-storage-backend-magma">Magma</label>
-            <div
-               class="error"
-               [hidden]="!(httpError | async)?.errors?.storageBackend">
-              {{(httpError | async)?.errors?.storageBackend}}
             </div>
           </div>
         </div>
