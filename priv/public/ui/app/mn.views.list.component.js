@@ -127,10 +127,11 @@ class MnViewsListComponent extends MnLifeCycleHooksToStream {
     this.showAddView =
       combineLatest(this.isDevelopmentViews,
                     this.bucketsMembaseCouchstore,
-                    this.commonBucket)
-      .pipe(map(([isDevViews, buckets, commonBucket]) => {
+                    this.commonBucket,
+                    this.hasWritePermission)
+      .pipe(map(([isDevViews, buckets, commonBucket, hasWritePermission]) => {
 
-        if (!isDevViews || !buckets.length) {
+        if (!isDevViews || !buckets.length || !hasWritePermission) {
           return;
         }
 
