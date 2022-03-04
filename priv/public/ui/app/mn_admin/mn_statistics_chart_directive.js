@@ -52,7 +52,7 @@ function mnStatisticsNewChartDirective(mnStatisticsNewService, mnFormatQuantityF
       items: "=?",
       api: "=?"
     },
-    controller: controller
+    controller: ["$scope", controller]
   };
 
   function controller($scope) {

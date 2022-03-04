@@ -130,7 +130,7 @@ function mnGsiItemDetails() {
       pools: "=",
       nodeName: "@?"
     },
-    controller: mnGsiItemDetailsController,
+    controller: ["$rootScope", "$scope", "mnGsiService", "$uibModal", "$filter", "mnPromiseHelper", "mnAlertsService", mnGsiItemDetailsController],
     controllerAs: "mnGsiItemDetailsCtl",
     template: mnGsiItemDetailsTemplate
   };

@@ -73,7 +73,7 @@ function mnUserRolesSelectFormDirective(mnKeyspaceSelectorServiceDowngrade) {
   var mnUserRolesSelectForm = {
     restrict: 'AE',
     template: mnUserRolesSelectFormTemplate,
-    controller: mnUserRolesSelectFormController,
+    controller: ["$scope", mnUserRolesSelectFormController],
     scope: {
       item: "=",
       state: "="

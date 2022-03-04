@@ -71,7 +71,7 @@ function mnDropdownDirective() {
       'footer': '?innerFooter'
     },
     template,
-    controller: controller
+    controller: ["$scope", "$transclude", controller]
   };
 
   return mnDropdown;

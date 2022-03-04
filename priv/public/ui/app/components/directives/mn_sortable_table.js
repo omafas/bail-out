@@ -62,7 +62,7 @@ function mnSortableTableDirective() {
     transclude: 'element',
     restrict: 'A',
     link: link,
-    controller: controller,
+    controller: ["$scope", "$element", "$attrs", "$parse", controller],
     controllerAs: "mnSortableTable"
   };
 
