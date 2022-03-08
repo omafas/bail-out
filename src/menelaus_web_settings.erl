@@ -406,6 +406,8 @@ is_allowed_on_cluster([event_logs_limit]) ->
     cluster_compat_mode:is_cluster_71();
 is_allowed_on_cluster([enforce_limits]) ->
     cluster_compat_mode:is_cluster_71();
+is_allowed_on_cluster([magma_min_memory_quota]) ->
+    cluster_compat_mode:is_cluster_71();
 is_allowed_on_cluster(_) ->
     true.
 
@@ -447,6 +449,7 @@ localhost_only_settings(_) -> false.
 ee_only_settings([ssl_minimum_protocol]) -> true;
 ee_only_settings([cipher_suites]) -> true;
 ee_only_settings([honor_cipher_order]) -> true;
+ee_only_settings([magma_min_memory_quota]) -> true;
 ee_only_settings([{security_settings, _} | _]) -> true;
 ee_only_settings(_) -> false.
 
@@ -494,6 +497,8 @@ conf(internal) ->
       <<>>, get_number(1, 1024)},
      {max_bucket_count, maxBucketCount, ?MAX_BUCKETS_SUPPORTED,
       get_number(1, 8192)},
+     {magma_min_memory_quota, magmaMinMemoryQuota, 1024,
+      get_number(256, 1024, 1024)},
      {event_logs_limit, eventLogsLimit, 10000,
       get_number(3000, 20000, 10000)},
      {gotraceback, gotraceback, <<"single">>, fun get_string/1},
