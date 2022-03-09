@@ -39,7 +39,7 @@ licenses/APL2.txt.
       <span
          ng-if="!vm.hasSearchInput()"
          class="block option"
-         ng-repeat="value in vm.values track by value">
+         ng-repeat="value in vm.values track by $index">
         <input
            type="radio"
            id="mn-select-{{vm.id}}-{{$index}}"
@@ -59,7 +59,7 @@ licenses/APL2.txt.
       <span
          ng-if="vm.hasSearchInput() && !vm.labels"
          class="block option"
-         ng-repeat="value in vm.getPreparedValues() | filter: vm.mnSearchValue track by value">
+         ng-repeat="value in vm.getPreparedValues() | filter: vm.mnSearchValue track by $index">
         <input
            type="radio"
            id="mn-select-{{vm.id}}-{{$index}}"
@@ -79,7 +79,7 @@ licenses/APL2.txt.
       <span
          ng-if="vm.hasSearchInput() && vm.labels"
          class="block option"
-         ng-repeat="label in vm.labels | filter: vm.mnSearchValue track by label">
+         ng-repeat="label in vm.labels | filter: vm.mnSearchValue track by $index">
         <input
            type="radio"
            id="mn-select-{{vm.id}}-{{$index}}"
