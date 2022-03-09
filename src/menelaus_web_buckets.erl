@@ -2021,6 +2021,11 @@ basic_bucket_params_screening(IsNew, Name, Params, AllBuckets, KvNodes) ->
     basic_bucket_params_screening(Ctx, Params).
 
 basic_bucket_params_screening_test() ->
+    meck:new(ns_config, [passthrough]),
+    meck:expect(ns_config, read_key_fast,
+                fun (_, Default) ->
+                        Default
+                end),
     AllBuckets = [{"mcd",
                    [{type, memcached},
                     {num_vbuckets, 16},
@@ -2261,6 +2266,8 @@ basic_bucket_params_screening_test() ->
                                [node1, node2]),
               [] = E19
       end, MajorityDurabilityLevelReplicas),
+
+    meck:unload(ns_config),
 
     ok.
 
