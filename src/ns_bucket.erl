@@ -1404,7 +1404,7 @@ buckets_with_data_on_this_node() ->
     Node = node(),
     Snapshot =
         chronicle_compat:get_snapshot(
-          [fetch_snapshot(all, _),
+          [fetch_snapshot(all, _, [uuid, props]),
            chronicle_compat:txn_get_many([buckets_with_data_key(Node)], _)]),
     BucketConfigs = get_buckets(Snapshot),
     Stored = membase_buckets_with_data_on_node(Snapshot, Node),
@@ -1421,7 +1421,7 @@ activate_bucket_data_on_this_node(Name) ->
     RV =
         chronicle_compat:txn(
           fun (Txn) ->
-                  Snapshot = fetch_snapshot(all, Txn),
+                  Snapshot = fetch_snapshot(all, Txn, [uuid]),
                   BucketsWithData =
                       case chronicle_compat:txn_get(NodeKey, Txn) of
                           {ok, {V, _}} ->
