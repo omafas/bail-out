@@ -28,6 +28,8 @@ stop() ->
     %% when a user does "service couchbase-server stop").  The init:stop
     %% smoothly takes down all applications, unloads code, etc.
     (catch ?log_info("~s: got shutdown request. Terminating.", [os:getpid()])),
+    %% ... but in order to make this operation synchronous, we explicitly call:
+    application:stop(ns_babysitter),
     init:stop().
 
 remote_stop(Node) ->
