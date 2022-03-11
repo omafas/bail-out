@@ -211,7 +211,7 @@ current_status_quick(TS) ->
 
 eat_all_reqs(TS, Count) ->
     receive
-        {req, AnotherTS} ->
+        {req, AnotherTS, _} ->
             true = (AnotherTS > TS),
             eat_all_reqs(AnotherTS, Count + 1)
     after 0 ->
