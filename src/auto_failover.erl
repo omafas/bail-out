@@ -65,7 +65,7 @@
          is_enabled/0,
          is_enabled/1,
          validate_kv/2,
-         validate_services_safety/2]).
+         validate_services_safety/3]).
 
 %% For email alert notificatons
 -export([alert_keys/0]).
@@ -601,7 +601,8 @@ failover_nodes(Nodes, S, DownNodes, NodeStatuses, UpdateCount) ->
 try_autofailover(Nodes, DownNodes, FailoverReasons) ->
     case ns_cluster_membership:service_nodes(Nodes, kv) of
         [] ->
-            {ValidNodes, UnsafeNodes} = validate_services_safety(Nodes, []),
+            {ValidNodes, UnsafeNodes} =
+                validate_services_safety(Nodes, DownNodes, []),
             case ValidNodes of
                 [] ->
                     {ok, UnsafeNodes};
@@ -1097,8 +1098,15 @@ validate_services_safety([Service | Rest], DownNodes, UUIDDict, Cache) ->
             {{error, Error}, Service, NewCache}
     end.
 
-validate_services_safety(DownNodes, KVNodes) ->
-    NonKVNodes = DownNodes -- KVNodes,
+%% Returns the list of nodes that are OK to failover and those
+%% that are not taking into account the service safety check.
+%% Note: the service safety check may involve an RPC to
+%%       the service on a remote node.
+%% Note: NodesToFailover should be a subset of DownNodes.
+-spec validate_services_safety([node()], [node()], [node()]) ->
+                                      {[node()], [{node(), {atom(), list()}}]}.
+validate_services_safety(NodesToFailover, DownNodes, KVNodes) ->
+    NonKVNodes = NodesToFailover -- KVNodes,
     UUIDDict = ns_config:get_node_uuid_map(ns_config:latest()),
 
     {ValidNodes, UnsafeNodes, _} =
