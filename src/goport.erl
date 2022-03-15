@@ -26,7 +26,7 @@
           cmd :: string(),
           args :: [string()],
           stderr_to_stdout :: boolean(),
-          env :: [{string(), string()}],
+          env :: [{string(), string()}] | sanitized,
           cd :: undefined | string(),
           exit_status :: boolean(),
           line :: undefined | pos_integer(),
@@ -113,6 +113,8 @@ init([Owner, Path, Opts]) ->
             process_flag(trap_exit, true),
             Port = start_port(Config),
 
+            SanitizedConfig = Config#config{env = sanitized},
+
             State = #state{port = Port,
                            owner = Owner,
                            ctx = #decoding_context{},
@@ -126,7 +128,7 @@ init([Owner, Path, Opts]) ->
                            delivered_bytes = 0,
                            pending_ack_bytes = 0,
                            have_pending_ack = false,
-                           config = Config},
+                           config = SanitizedConfig},
             {ok, State};
         {error, Reason} ->
             {stop, Reason}
