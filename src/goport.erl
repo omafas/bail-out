@@ -492,7 +492,7 @@ flush_invalid_data(#state{ctx = Ctx} = State) ->
 
             %% pretend it's the regular port output; that way, we'll even try
             %% to break it into lines if requested
-            NewState1 = handle_port_output(stdout, Data, NewState),
+            {ok, NewState1} = handle_port_output(stdout, Data, NewState),
             flush_packet_context(stdout, NewState1);
         false ->
             State
