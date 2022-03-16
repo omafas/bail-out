@@ -90,7 +90,7 @@ is_interesting(ssl_minimum_protocol) -> true;
 is_interesting(cluster_encryption_level) -> true;
 is_interesting({security_settings, _}) -> true;
 is_interesting({node, N, prometheus_auth_info}) when N =:= node() -> true;
-is_interesting(_) -> false.
+is_interesting(Key) -> collections:key_match(Key) =/= false.
 
 handle_call(_Msg, _From, State) ->
     {reply, not_implemented, State}.
