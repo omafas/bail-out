@@ -298,7 +298,9 @@ call_engage_cluster(NodeKVList) ->
                     ?ENGAGE_TIMEOUT).
 
 complete_join(NodeKVList) ->
-    gen_server:call(?MODULE, {complete_join, NodeKVList}, ?COMPLETE_TIMEOUT).
+    NodeKVListThunk  = fun () -> NodeKVList end,
+    gen_server:call(?MODULE, {complete_join, NodeKVListThunk},
+                    ?COMPLETE_TIMEOUT).
 
 multi_call(Nodes, Call, Timeout) ->
     {_Replies, BadNodes} =
@@ -416,7 +418,8 @@ handle_call({engage_cluster, NodeKVListThunk}, _From, State) ->
     ?cluster_debug("engage_cluster(..) -> ~p", [RV]),
     {reply, RV, State};
 
-handle_call({complete_join, NodeKVList}, _From, State) ->
+handle_call({complete_join, NodeKVListThunk}, _From, State) ->
+    NodeKVList = NodeKVListThunk(),
     ?cluster_debug("handling complete_join(~p)", [sanitize_node_info(NodeKVList)]),
     RV = do_complete_join(NodeKVList),
     ?cluster_debug("complete_join(~p) -> ~p", [sanitize_node_info(NodeKVList), RV]),
