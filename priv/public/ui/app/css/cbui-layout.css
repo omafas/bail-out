@@ -60,7 +60,6 @@ nav.nav-sidebar {
 /* wrapper for all content in <main> besides sidebar -------------------- */
 .main-content {
   flex: 1;
-  min-height: 800px;
 }
 section {
   border-bottom: 1px solid #d1d1d1;
