@@ -293,7 +293,9 @@ ensure_dist_ports_match(NodeKVList) ->
     end.
 
 call_engage_cluster(NodeKVList) ->
-    gen_server:call(?MODULE, {engage_cluster, NodeKVList}, ?ENGAGE_TIMEOUT).
+    NodeKVListThunk  = fun () -> NodeKVList end,
+    gen_server:call(?MODULE, {engage_cluster, NodeKVListThunk},
+                    ?ENGAGE_TIMEOUT).
 
 complete_join(NodeKVList) ->
     gen_server:call(?MODULE, {complete_join, NodeKVList}, ?COMPLETE_TIMEOUT).
@@ -407,7 +409,8 @@ handle_call({add_node_to_group, Scheme, RemoteAddr, RestPort, Auth, GroupUUID,
                    [Scheme, RemoteAddr, RestPort, GroupUUID, RV]),
     {reply, RV, State};
 
-handle_call({engage_cluster, NodeKVList}, _From, State) ->
+handle_call({engage_cluster, NodeKVListThunk}, _From, State) ->
+    NodeKVList = NodeKVListThunk(),
     ?cluster_debug("handling engage_cluster(~p)", [sanitize_node_info(NodeKVList)]),
     RV = do_engage_cluster(NodeKVList),
     ?cluster_debug("engage_cluster(..) -> ~p", [RV]),
