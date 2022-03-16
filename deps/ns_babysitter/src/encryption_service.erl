@@ -30,7 +30,9 @@
 data_key_store_path() ->
     filename:join(path_config:component_path(data, "config"), "encrypted_data_keys").
 
-remote_set_password([Node, Password]) ->
+remote_set_password([Node]) ->
+    remote_set_password([Node, os:getenv("SETPASSWORD")]);
+remote_set_password([Node, Password]) when is_list(Password) ->
     N = list_to_atom(Node),
     RV = rpc:call(N, encryption_service, set_password, [Password]),
 
