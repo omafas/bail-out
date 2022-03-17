@@ -422,6 +422,10 @@ function mnAdminController($scope, $rootScope, $state, $window, $uibModal, mnAle
       mnBucketsService.getBucketsByType();
     });
     $rootScope.$broadcast("reloadBucketStats");
+
+    mnAdminService.stream.hideNavSidebar
+      .pipe(takeUntil(mnOnDestroy))
+      .subscribe(hideSidebar => vm.setHideNavSidebar(hideSidebar));
   }
 }
 

@@ -192,6 +192,8 @@ class MnAdminService {
     this.stream.postPoolsDefault =
       new MnHttpRequest(this.postPoolsDefault(false).bind(this)).addSuccess().addError();
 
+    this.stream.hideNavSidebar = new BehaviorSubject(false);
+
   }
 
   getVersion() {

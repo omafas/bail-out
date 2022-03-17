@@ -187,6 +187,14 @@ function appConfig($httpProvider, $stateProvider, $urlRouterProvider, $transitio
     });
   });
 
+  $transitionsProvider.onBefore({
+    from: "app.admin.cbas|query.**",
+    to: "app.admin.**"
+  }, function (trans) {
+    let mnPoolDefault = trans.injector().get('mnPoolDefault');
+    mnPoolDefault.setHideNavSidebar(false);
+  });
+
   $transitionsProvider.onStart({
     to: function (state) {
       return state.data && state.data.permissions;
