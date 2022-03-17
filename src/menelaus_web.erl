@@ -362,6 +362,9 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {{[settings], read}, fun menelaus_web_settings:handle_settings_web/1};
                 ["settings", "alerts"] ->
                     {{[settings], read}, fun menelaus_alert:handle_settings_alerts/1};
+                ["settings", "alerts", "limits"] ->
+                    {{[settings], read},
+                     fun menelaus_web_alerts_srv:handle_settings_alerts_limits_get/1};
                 ["settings", "stats"] ->
                     {{[settings], read}, fun menelaus_web_settings:handle_settings_stats/1};
                 ["internal", "settings", "metrics" | PathRest] ->
@@ -626,6 +629,9 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["settings", "alerts", "testEmail"] ->
                     {{[settings], write},
                      fun menelaus_alert:handle_settings_alerts_send_test_email/1};
+                ["settings", "alerts", "limits"] ->
+                    {{[settings], write},
+                     fun menelaus_web_alerts_srv:handle_settings_alerts_limits_post/1};
                 ["settings", "stats"] ->
                     {{[settings], write}, fun menelaus_web_settings:handle_settings_stats_post/1};
                 ["internal", "settings", "metrics" | PathRest] ->

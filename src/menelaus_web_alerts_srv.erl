@@ -24,7 +24,8 @@
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+         terminate/2, code_change/3, handle_settings_alerts_limits_post/1,
+         handle_settings_alerts_limits_get/1]).
 
 -export([alert_keys/0, config_upgrade_to_70/1, config_upgrade_to_71/1]).
 
@@ -802,6 +803,38 @@ config_email_alerts_upgrade_to_71(EmailAlerts) ->
         false ->
             [{set, email_alerts, Result}]
     end.
+
+type_spec(undefined) ->
+    undefined.
+
+params() ->
+    [{"maxOverheadPerc", #{type => {int, 0, 100},
+                           cfg_key => max_overhead_perc}},
+     {"maxDiskUsedPerc", #{type => {int, 0, 100},
+                           cfg_key => max_disk_used}},
+     {"maxIndexerRamPerc", #{type => {int, 0, 100},
+                             cfg_key => max_indexer_ram}}].
+
+build_alert_limits() ->
+    case ns_config:search(alert_limits) of
+        false ->
+            [];
+        {value, Values} ->
+            Values
+    end.
+
+handle_settings_alerts_limits_get(Req) ->
+    menelaus_web_settings2:handle_get([], params(), fun type_spec/1,
+                                      build_alert_limits(), Req).
+
+handle_settings_alerts_limits_post(Req) ->
+    menelaus_web_settings2:handle_post(
+        fun (Params, Req2) ->
+            NewParams = [{Key, Val} || {[Key], Val} <- Params],
+            NewLimits = misc:update_proplist(build_alert_limits(), NewParams),
+            ns_config:set(alert_limits, NewLimits),
+            handle_settings_alerts_limits_get(Req2)
+        end, [], params(), fun type_spec/1, Req).
 
 -ifdef(TEST).
 %% Cant currently test the alert timeouts as would need to mock
