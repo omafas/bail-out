@@ -334,6 +334,10 @@ position(E, [_|List], N) -> position(E, List, N+1).
 msecs_to_usecs(MilliSec) ->
     MilliSec * 1000.
 
+%% just because we need to mock node() sometimes
+this_node() ->
+    node().
+
 % Returns just the node name string that's before the '@' char.
 % For example, returns "test" instead of "test@myhost.com".
 %

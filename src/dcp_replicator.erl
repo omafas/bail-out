@@ -221,26 +221,48 @@ get_docs_estimate(Bucket, Partition, ConsumerNode) ->
     ns_memcached:get_dcp_docs_estimate(Bucket, Partition, Connection).
 
 get_connection_name(ConsumerNode, ProducerNode, Bucket) ->
-    ConsumerNodeList = atom_to_list(ConsumerNode),
-    ProducerNodeList = atom_to_list(ProducerNode),
-    CName = "replication:" ++ ProducerNodeList ++ "->" ++ ConsumerNodeList ++
-        ":" ++ Bucket,
+    CName = "replication:" ++ atom_to_list(ProducerNode) ++ "->" ++
+        atom_to_list(ConsumerNode) ++ ":" ++ Bucket,
 
     case length(CName) =< ?MAX_DCP_CONNECTION_NAME of
         true ->
             CName;
         false ->
-            %% Trim off the common prefix to shorten the names.
-            {CNode, PNode} = trim_common_prefix(ConsumerNode, ProducerNode),
-
-            Hash = binary_to_list(base64:encode(crypto:hash(sha, CName))),
-            Bkt = string:slice(Bucket, 0, 60),
-
-            CName2 = "replication:" ++ PNode ++ "->" ++ CNode ++ ":" ++ Bkt ++
-                     ":" ++ Hash,
-            true = length(CName2) =< ?MAX_DCP_CONNECTION_NAME,
-            CName2
+            case should_truncate_name(ConsumerNode, ProducerNode) of
+                true ->
+                    get_truncated_connection_name(
+                      CName, ConsumerNode, ProducerNode, Bucket);
+                false ->
+                    CName
+            end
     end.
+
+get_truncated_connection_name(LongName, ConsumerNode, ProducerNode, Bucket) ->
+    %% Trim off the common prefix to shorten the names.
+    {CNode, PNode} = trim_common_prefix(ConsumerNode, ProducerNode),
+
+    Hash = binary_to_list(base64:encode(crypto:hash(sha, LongName))),
+    Bkt = string:slice(Bucket, 0, 60),
+
+    CName = "replication:" ++ PNode ++ "->" ++ CNode ++ ":" ++ Bkt ++
+        ":" ++ Hash,
+    true = length(CName) =< ?MAX_DCP_CONNECTION_NAME,
+    CName.
+
+node_supports_truncated_names(Node) ->
+    case Node == misc:this_node() of
+        true ->
+            true;
+        false ->
+            Quirks = rebalance_quirks:get_quirks([Node], long_names),
+            not rebalance_quirks:is_enabled(
+                  dont_truncate_long_names,
+                  rebalance_quirks:get_node_quirks(Node, Quirks))
+    end.
+
+should_truncate_name(ConsumerNode, ProducerNode) ->
+    lists:all(fun node_supports_truncated_names/1,
+              [ConsumerNode, ProducerNode]).
 
 trim_common_prefix(Consumer, Producer) ->
     %% Find the longest common prefix for the two nodes and chop
@@ -324,59 +346,108 @@ maybe_shut_consumer(Reason, Consumer) ->
     end.
 
 -ifdef(TEST).
-get_connection_name_test() ->
-
-    %% Connection name fits into the maximum allowed
-
-    NodeA = 'nodeA.eng.couchbase.com',
-    NodeB = 'nodeB.eng.couchbase.com',
-    BucketAB = "bucket1",
-    ConnAB = get_connection_name(NodeA, NodeB, BucketAB),
-    ?assertEqual("replication:nodeB.eng.couchbase.com->"
-                 "nodeA.eng.couchbase.com:bucket1", ConnAB),
-    ?assertEqual(true, length(ConnAB) =< ?MAX_DCP_CONNECTION_NAME),
-
-    %% Test where the connection name, using the previous method, won't
-    %% fit into the maximum allowed.
-
-    Node1 = "ns_1@platform-couchbase-cluster-0000.platform-couchbase-cluster."
-            "couchbase-new-pxxxxxxx.svc",
-    Node2 = "ns_1@platform-couchbase-cluster-0001.platform-couchbase-cluster."
-            "couchbase-new-pxxxxxxx.svc",
-    Bucket12 = "com.yyyyyy.digital.ms.shoppingcart.shoppingcart.1234567890"
-               "12345678901234567890",
-    Conn12 = get_connection_name(list_to_atom(Node1), list_to_atom(Node2),
-                                 Bucket12),
-    ?assertEqual("replication:1.platform-couchbase-cluster.couchb->"
-                 "0.platform-couchbase-cluster.couchb:com.yyyyyy.digital.ms."
-                 "shoppingcart.shoppingcart.123456789012:"
-                 "TYFMH5ZD2gPLOaLgcuA2VijsZvc=", Conn12),
-
-    %% Test that the node names aren't shortened too much (note the only
-    %% difference is the last character).
-
-    Node3 = "ManyManyManyManyCommonCharacters_ns_1@platform-couchbase-cluster"
-            "-0000",
-    Node4 = "ManyManyManyManyCommonCharacters_ns_1@platform-couchbase-cluster"
-            "-0001",
+get_connection_name_test_() ->
     LongBucket = "travel-sample-with-a-very-very-very-very-long-bucket-name",
-    Conn34 = get_connection_name(list_to_atom(Node3), list_to_atom(Node4),
-                                 LongBucket),
-    ?assertEqual("replication:s_1@platform-couchbase-cluster-0001->"
-                 "s_1@platform-couchbase-cluster-0000:travel-sample-with-a-"
-                 "very-very-very-very-long-bucket-name:"
-                 "D/D56MpAKsDt/0yqg6IXKBEaIcY=", Conn34),
-
-    %% Test with unique node names but one is much longer than the other.
-
-    Node5 = "AShortNodeName",
-    Node6 = "ManyManyManyManyCommonCharacters_ns_1@platform-couchbase-cluster"
-            "-AndEvenMoreCharactersToMakeThisNodeNameLongEnoughToRequireIt"
-            "ToBeShortened",
-    Conn56 = get_connection_name(list_to_atom(Node5), list_to_atom(Node6),
-                                 LongBucket),
-    ?assertEqual("replication:ManyManyManyManyCommonCharacters_ns->"
-                 "AShortNodeName:travel-sample-with-a-very-very-very-very-"
-                 "long-bucket-name:A3aPD1Sik+5ZIz43M6NNTGn9XFw=", Conn56).
-
+    ConsumerNode = list_to_atom(
+                     "ns_1@platform-couchbase-cluster-0000."
+                     "platform-couchbase-cluster.couchbase-new-pxxxxxxx.svc"),
+    ProducerNode = list_to_atom(
+                     "ns_1@platform-couchbase-cluster-0001."
+                     "platform-couchbase-cluster.couchbase-new-pxxxxxxx.svc"),
+    VeryLongBucket = "com.yyyyyy.digital.ms.shoppingcart."
+        "shoppingcart.123456789012345678901234567890",
+    TrimmedName =
+        "replication:1.platform-couchbase-cluster.couchb->0.platform-couchbase"
+        "-cluster.couchb:com.yyyyyy.digital.ms.shoppingcart.shoppingcart."
+        "123456789012:TYFMH5ZD2gPLOaLgcuA2VijsZvc=",
+    {foreach,
+     fun () ->
+             meck:new(rebalance_quirks, [passthrough]),
+             meck:new(misc, [passthrough])
+     end,
+     fun (_) ->
+             meck:unload(rebalance_quirks),
+             meck:unload(misc)
+     end,
+     [{"Connection name fits into the maximum allowed",
+       fun () ->
+               Conn = get_connection_name(
+                        'nodeA.eng.couchbase.com', 'nodeB.eng.couchbase.com',
+                        "bucket1"),
+               ?assertEqual("replication:nodeB.eng.couchbase.com->"
+                            "nodeA.eng.couchbase.com:bucket1", Conn),
+               ?assertEqual(true, length(Conn) =< ?MAX_DCP_CONNECTION_NAME)
+       end},
+      {"Connection name won't fit into the maximum allowed.",
+       fun () ->
+               meck:expect(rebalance_quirks, get_quirks,
+                           fun (_, long_names) -> [{ProducerNode, []}] end),
+               meck:expect(misc, this_node, fun () -> ConsumerNode end),
+               ?assertEqual(
+                  TrimmedName,
+                  get_connection_name(ConsumerNode, ProducerNode,
+                                      VeryLongBucket))
+       end},
+      {"Connection name won't fit into the maximum allowed. Pre 7.1 "
+       "Against the node that supports trimming",
+       fun () ->
+               meck:expect(rebalance_quirks, get_quirks,
+                           fun (_, long_names) -> [{ProducerNode, []}] end),
+               meck:expect(misc, this_node, fun () -> ConsumerNode end),
+               ?assertEqual(
+                  TrimmedName,
+                  get_connection_name(ConsumerNode, ProducerNode,
+                                      VeryLongBucket))
+       end},
+      {"Connection name won't fit into the maximum allowed, but name trimming "
+       "is not supported",
+       fun () ->
+               meck:expect(rebalance_quirks, get_quirks,
+                           fun (_, long_names) ->
+                                   [{ProducerNode, [dont_truncate_long_names]}]
+                           end),
+               meck:expect(misc, this_node, fun () -> ConsumerNode end),
+               Conn = get_connection_name(ConsumerNode, ProducerNode,
+                                          VeryLongBucket),
+               ?assertEqual(
+                  "replication:ns_1@platform-couchbase-cluster-0001.platform"
+                  "-couchbase-cluster.couchbase-new-pxxxxxxx.svc->ns_1@platform"
+                  "-couchbase-cluster-0000.platform-couchbase-cluster.couchbase"
+                  "-new-pxxxxxxx.svc:com.yyyyyy.digital.ms.shoppingcart."
+                  "shoppingcart.123456789012345678901234567890", Conn)
+       end},
+      {"Test that the node names aren't shortened too much (note the only "
+       "difference is the last character).",
+       fun () ->
+               Node1 = "ManyManyManyManyCommonCharacters_ns_1@platform-"
+                   "couchbase-cluster-0000",
+               Node2 = "ManyManyManyManyCommonCharacters_ns_1@platform-"
+                   "couchbase-cluster-0001",
+               meck:expect(rebalance_quirks, get_quirks,
+                           fun (_, long_names) -> [{Node1, []}] end),
+               meck:expect(misc, this_node, fun () -> Node2 end),
+               Conn = get_connection_name(
+                        list_to_atom(Node1), list_to_atom(Node2), LongBucket),
+               ?assertEqual(
+                  "replication:s_1@platform-couchbase-cluster-0001->"
+                  "s_1@platform-couchbase-cluster-0000:travel-sample-with-a-"
+                  "very-very-very-very-long-bucket-name:"
+                  "D/D56MpAKsDt/0yqg6IXKBEaIcY=", Conn)
+       end},
+      {"Test with unique node names but one is much longer than the other.",
+       fun () ->
+               Node1 = "AShortNodeName",
+               Node2 = "ManyManyManyManyCommonCharacters_ns_1@platform-"
+                   "couchbase-cluster-AndEvenMoreCharactersToMakeThisNodeName"
+                   "LongEnoughToRequireItToBeShortened",
+               meck:expect(rebalance_quirks, get_quirks,
+                           fun (_, long_names) -> [{Node1, []}] end),
+               meck:expect(misc, this_node, fun () -> Node2 end),
+               Conn = get_connection_name(
+                        list_to_atom(Node1), list_to_atom(Node2), LongBucket),
+               ?assertEqual(
+                  "replication:ManyManyManyManyCommonCharacters_ns->"
+                  "AShortNodeName:travel-sample-with-a-very-very-very-very-"
+                  "long-bucket-name:A3aPD1Sik+5ZIz43M6NNTGn9XFw=", Conn)
+       end}]}.
 -endif.
