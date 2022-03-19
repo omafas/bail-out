@@ -19,7 +19,8 @@
 -type quirk() :: takeover_via_orchestrator |
                  disable_old_master |
                  reset_replicas |
-                 trivial_moves.
+                 trivial_moves |
+                 dont_truncate_long_names.
 
 %% APIs
 get_quirks(Nodes) ->
@@ -120,12 +121,17 @@ all_quirks() ->
     [takeover_via_orchestrator,
      disable_old_master,
      reset_replicas,
-     trivial_moves].
+     trivial_moves,
+     dont_truncate_long_names].
 
 quirks_for_version(Version) ->
     [Quirk || Quirk <- all_quirks(),
               is_quirk_required(Quirk, Version)].
 
+is_quirk_required(dont_truncate_long_names, [7, 0, X]) when X < 2 ->
+    true;
+is_quirk_required(dont_truncate_long_names, Version) ->
+    Version < [6, 6, 5];
 is_quirk_required(takeover_via_orchestrator, Version) ->
     Version < [5, 1, 0];
 is_quirk_required(_, _) ->
