@@ -24,7 +24,7 @@
 
 %% APIs
 get_quirks(Nodes) ->
-    Config = ns_config:get(),
+    Config = ns_config:latest(),
     OverrideQuirks =
         lists:filtermap(
           fun (Node) ->
