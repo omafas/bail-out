@@ -277,7 +277,7 @@ should_truncate_name(ProducerNode) ->
         true ->
             true;
         false ->
-            Quirks = rebalance_quirks:get_quirks([ProducerNode]),
+            Quirks = rebalance_quirks:get_quirks([ProducerNode], long_names),
             not rebalance_quirks:is_enabled(
                   dont_truncate_long_names,
                   rebalance_quirks:get_node_quirks(ProducerNode, Quirks))
@@ -412,7 +412,7 @@ get_connection_name_test_() ->
                meck:expect(cluster_compat_mode, is_cluster_71,
                            fun () -> false end),
                meck:expect(rebalance_quirks, get_quirks,
-                           fun (_) -> [{ProducerNode, []}] end),
+                           fun (_, long_names) -> [{ProducerNode, []}] end),
                ?assertEqual(
                   TrimmedName,
                   get_connection_name(ConsumerNode, ProducerNode,
@@ -424,7 +424,7 @@ get_connection_name_test_() ->
                meck:expect(cluster_compat_mode, is_cluster_71,
                            fun () -> false end),
                meck:expect(rebalance_quirks, get_quirks,
-                           fun (_) ->
+                           fun (_, long_names) ->
                                    [{ProducerNode, [dont_truncate_long_names]}]
                            end),
                Conn = get_connection_name(ConsumerNode, ProducerNode,

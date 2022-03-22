@@ -12,7 +12,7 @@
 -define(WAIT_STATUSES_TIMEOUT,
         ns_config:get_timeout({?MODULE, wait_statuses}, 15000)).
 
--export([get_quirks/1, is_enabled/2, get_node_quirks/2,
+-export([get_quirks/2, is_enabled/2, get_node_quirks/2,
          default_config/0, upgrade_config_project_intact_patched/0]).
 -export_type([quirk/0]).
 
@@ -23,7 +23,7 @@
                  dont_truncate_long_names.
 
 %% APIs
-get_quirks(Nodes) ->
+get_quirks(Nodes, Type) ->
     Config = ns_config:latest(),
     OverrideQuirks =
         lists:filtermap(
@@ -37,7 +37,7 @@ get_quirks(Nodes) ->
           end, Nodes),
 
     OtherNodes     = Nodes -- proplists:get_keys(OverrideQuirks),
-    ComputedQuirks = compute_quirks(OtherNodes, Config),
+    ComputedQuirks = compute_quirks(OtherNodes, Config, Type),
 
     OverrideQuirks ++
         lists:map(
@@ -73,7 +73,7 @@ get_disabled_quirks(Node, Config) ->
     ns_config:search_node_with_default(Node, Config,
                                        disable_rebalance_quirks, []).
 
-compute_quirks(Nodes, Config) ->
+compute_quirks(Nodes, Config, project_intact) ->
     Unpatched = [N || N <- Nodes,
                       not has_project_intact_patches(N, Config)],
 
@@ -81,15 +81,20 @@ compute_quirks(Nodes, Config) ->
         [] ->
             [{N, []} || N <- Nodes];
         _ ->
-            lists:map(fun ({Node, Status}) ->
-                              case get_version(Status) of
-                                  {ok, Version} ->
-                                      {Node, quirks_for_version(Version)};
-                                  no_version ->
-                                      exit({no_version_for_node, Node})
-                              end
-                      end, get_statuses(Nodes))
-    end.
+            compute_quirks(Nodes)
+    end;
+compute_quirks(Nodes, _Config, long_names) ->
+    compute_quirks(Nodes).
+
+compute_quirks(Nodes) ->
+    lists:map(fun ({Node, Status}) ->
+                      case get_version(Status) of
+                          {ok, Version} ->
+                              {Node, quirks_for_version(Version)};
+                          no_version ->
+                              exit({no_version_for_node, Node})
+                      end
+              end, get_statuses(Nodes)).
 
 get_statuses(Nodes) ->
     case ns_doctor:wait_statuses(Nodes, ?WAIT_STATUSES_TIMEOUT) of

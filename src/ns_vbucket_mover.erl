@@ -140,7 +140,7 @@ init({Bucket, Nodes, OldMap, NewMap, ProgressCallback}) ->
     ets:new(compaction_inhibitions, [named_table, private, set]),
     ets:new(workers, [named_table, private, set]),
 
-    Quirks = rebalance_quirks:get_quirks(Nodes),
+    Quirks = rebalance_quirks:get_quirks(Nodes, project_intact),
     SchedulerState = vbucket_move_scheduler:prepare(
                        OldMap, NewMap, Quirks,
                        menelaus_web_settings:get_rebalance_moves_per_node(),
