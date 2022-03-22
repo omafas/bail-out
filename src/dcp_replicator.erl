@@ -251,7 +251,7 @@ get_connection_name(ConsumerNode, ProducerNode, Bucket) ->
         true ->
             CName;
         false ->
-            case should_truncate_name(ProducerNode) of
+            case should_truncate_name(ConsumerNode, ProducerNode) of
                 true ->
                     get_truncated_connection_name(
                       CName, ConsumerNode, ProducerNode, Bucket);
@@ -272,15 +272,24 @@ get_truncated_connection_name(LongName, ConsumerNode, ProducerNode, Bucket) ->
     true = length(CName) =< ?MAX_DCP_CONNECTION_NAME,
     CName.
 
-should_truncate_name(ProducerNode) ->
+node_supports_truncated_names(Node) ->
+    case Node == misc:this_node() of
+        true ->
+            true;
+        false ->
+            Quirks = rebalance_quirks:get_quirks([Node], long_names),
+            not rebalance_quirks:is_enabled(
+                  dont_truncate_long_names,
+                  rebalance_quirks:get_node_quirks(Node, Quirks))
+    end.
+
+should_truncate_name(ConsumerNode, ProducerNode) ->
     case cluster_compat_mode:is_cluster_71() of
         true ->
             true;
         false ->
-            Quirks = rebalance_quirks:get_quirks([ProducerNode], long_names),
-            not rebalance_quirks:is_enabled(
-                  dont_truncate_long_names,
-                  rebalance_quirks:get_node_quirks(ProducerNode, Quirks))
+            lists:all(fun node_supports_truncated_names/1,
+                      [ConsumerNode, ProducerNode])
     end.
 
 trim_common_prefix(Consumer, Producer) ->
@@ -383,12 +392,14 @@ get_connection_name_test_() ->
      fun () ->
              meck:new(cluster_compat_mode, [passthrough]),
              meck:new(rebalance_quirks, [passthrough]),
+             meck:new(misc, [passthrough]),
              meck:expect(cluster_compat_mode, is_cluster_71,
                          fun () -> true end)
      end,
      fun (_) ->
              meck:unload(cluster_compat_mode),
-             meck:unload(rebalance_quirks)
+             meck:unload(rebalance_quirks),
+             meck:unload(misc)
      end,
      [{"Connection name fits into the maximum allowed",
        fun () ->
@@ -413,6 +424,7 @@ get_connection_name_test_() ->
                            fun () -> false end),
                meck:expect(rebalance_quirks, get_quirks,
                            fun (_, long_names) -> [{ProducerNode, []}] end),
+               meck:expect(misc, this_node, fun () -> ConsumerNode end),
                ?assertEqual(
                   TrimmedName,
                   get_connection_name(ConsumerNode, ProducerNode,
@@ -427,6 +439,7 @@ get_connection_name_test_() ->
                            fun (_, long_names) ->
                                    [{ProducerNode, [dont_truncate_long_names]}]
                            end),
+               meck:expect(misc, this_node, fun () -> ConsumerNode end),
                Conn = get_connection_name(ConsumerNode, ProducerNode,
                                           VeryLongBucket),
                ?assertEqual(
