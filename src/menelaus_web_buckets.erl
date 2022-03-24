@@ -298,7 +298,6 @@ build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx) ->
                 {rawRAM, ns_bucket:raw_ram_quota(BucketConfig)}]}},
       {basicStats, {build_bucket_stats(InfoLevel, Id, Ctx)}},
       {evictionPolicy, build_eviction_policy(BucketConfig)},
-      {storageBackend, ns_bucket:storage_backend(BucketConfig)},
       {durabilityMinLevel, build_durability_min_level(BucketConfig)},
       build_pitr_dynamic_bucket_info(BucketConfig),
       build_magma_bucket_info(BucketConfig),
