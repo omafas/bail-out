@@ -2488,7 +2488,6 @@ ul.pagination li span {
 }
 /* wrapper for query editor and results area ----------- */
 .wb-main-wrapper {
-  height: calc(100vh - 130px); /* magic number - 155px for the header */
   overflow: hidden;
   transition: all 1s;
   margin: 0 0 0 0;
@@ -2678,6 +2677,7 @@ ul.pagination li span {
   background-color: #f6f7f9;
   margin-top: .5rem;
   height: calc(100vh - 360px);
+  min-height: 150px;
 }
 /* the wrappers around the various results views --------------------------- */
 .wb-results-json,
@@ -2826,7 +2826,6 @@ button.ace-search-options-buttons.checked {
 }
 .insights-sidebar-body {
   overflow: auto;
-  height: calc(100vh - 210px);
 }
 .insights-sidebar section {
   overflow: auto;
