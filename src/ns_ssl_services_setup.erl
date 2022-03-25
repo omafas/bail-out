@@ -371,17 +371,32 @@ ssl_server_opts() ->
     %% the following behavior:
     %% web server doesn't load new CA (after cert rotation) until
     %% all connections to the server are closed
-    ssl_auth_options() ++
-        [{keyfile, pkey_file_path()},
-         {certfile, chain_file_path()},
-         {versions, supported_versions(ssl_minimum_protocol(ns_server))},
-         {cacerts, read_ca_certs(ca_file_path())},
-         {dh, dh_params_der()},
-         {ciphers, CipherSuites},
-         {honor_cipher_order, Order},
-         {secure_renegotiate, true},
-         {client_renegotiation, ClientReneg},
-         {password, PassphraseFun()}].
+    Versions = supported_versions(ssl_minimum_protocol(ns_server)),
+    VersionsSet = sets:from_list(Versions, [{version, 2}]),
+    lists:filter(
+      fun ({Key, _}) ->
+          case tls_option_versions(Key) of
+              all -> true;
+              List when is_list(List) ->
+                  not sets:is_disjoint(sets:from_list(List, [{version, 2}]),
+                                       VersionsSet)
+          end
+      end,
+      ssl_auth_options() ++
+          [{keyfile, pkey_file_path()},
+           {certfile, chain_file_path()},
+           {versions, Versions},
+           {cacerts, read_ca_certs(ca_file_path())},
+           {dh, dh_params_der()},
+           {ciphers, CipherSuites},
+           {honor_cipher_order, Order},
+           {secure_renegotiate, true},
+           {client_renegotiation, ClientReneg},
+           {password, PassphraseFun()}]).
+
+tls_option_versions(secure_renegotiate) -> [tlsv1, 'tlsv1.1', 'tlsv1.2'];
+tls_option_versions(client_renegotiation) -> [tlsv1, 'tlsv1.1', 'tlsv1.2'];
+tls_option_versions(_) -> all.
 
 read_ca_certs(File) ->
     case file:read_file(File) of
