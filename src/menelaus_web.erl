@@ -891,7 +891,7 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {{[admin, internal], all},
                      fun goxdcr_rest:proxy/2, [XdcrPath]};
                 ["_goxdcr", "_pre_replicate", Bucket] ->
-                    {{[{bucket, Bucket}, data, meta], read},
+                    {{[{bucket, Bucket}, data, docs], read},
                      fun menelaus_web_xdcr_target:handle_pre_replicate/2,
                      [Bucket]};
                 ["xdcr" | _RestPath] ->
