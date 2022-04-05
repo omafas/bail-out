@@ -1069,6 +1069,13 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 _ ->
                     {done, reply_text(Req, "Method Not Allowed", 405)}
             end;
+        "PATCH" ->
+            case PathTokens of
+                ["settings", "rbac", "users", "local", UserId] ->
+                    {{[admin, security], write},
+                    fun menelaus_web_rbac:handle_user_change_password_patch/2,
+                        [UserId]}
+            end;
         "RPCCONNECT" ->
             {{[admin, internal], all}, fun json_rpc_connection_sup:handle_rpc_connect/1};
 

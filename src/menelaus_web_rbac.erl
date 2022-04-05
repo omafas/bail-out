@@ -29,6 +29,7 @@
          handle_get_user/3,
          handle_whoami/1,
          handle_put_user/3,
+         handle_user_change_password_patch/2,
          handle_delete_user/3,
          handle_change_password/1,
          handle_reset_admin_password/1,
@@ -961,6 +962,15 @@ is_valid_password(P, {MinLength, MustPresent}) ->
 
     execute_verifiers(Verifiers).
 
+handle_user_change_password_patch(UserId, Req) ->
+    assert_no_users_upgrade(),
+    case validate_cred(UserId, username) of
+        true ->
+            handle_change_password_with_identity(Req, {UserId, local});
+        Error ->
+            menelaus_util:reply_global_error(Req, Error)
+    end.
+
 handle_put_user(Domain, UserId, Req) ->
     assert_no_users_upgrade(),
 
@@ -1211,15 +1221,7 @@ reply_put_delete_users(Req) ->
 
 change_password_validators() ->
     [validator:required(password, _),
-     validator:validate(
-       fun (P) ->
-               case validate_cred(P, password) of
-                   true ->
-                       ok;
-                   Error ->
-                       {error, Error}
-               end
-       end, password, _),
+     validate_password(_),
      validator:unsupported(_)].
 
 handle_change_password(Req) ->
