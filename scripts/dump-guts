@@ -549,6 +549,15 @@ main_with_everything(StaticTerms, NSConfig, Node) ->
                        S =:= ns_server orelse S =:= xdcr orelse
                        lists:member(S, Services)],
 
+    Tls = case search_config(NSConfig, cluster_encryption_level, none) of
+              strict ->
+                  true;
+              all ->
+                  true;
+              _ ->
+                  false
+          end,
+
     Pairs = Ports ++
         [{ns_config, iolist_to_binary(io_lib:format("~p", [sanitize_config(NSConfig)]))},
          {static_config, iolist_to_binary(io_lib:format("~p", [StaticTerms]))},
@@ -562,6 +571,7 @@ main_with_everything(StaticTerms, NSConfig, Node) ->
          {memcached_breakpad_minidump_dir, PerNodeMDD},
          {nodes, string:join(Nodes, ",")},
          {relative_prom_stats_dir, PromStoragePath},
+         {tls, Tls},
          {ipv6, Ipv6}],
 
     output([E || {K, V} <- Pairs,
