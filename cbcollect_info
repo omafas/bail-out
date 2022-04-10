@@ -1251,7 +1251,10 @@ def correct_split(string, splitchar):
 
 
 def make_product_task(guts, initargs_path, memcached_pass, options):
-    tls = read_guts(guts, "tls")
+    if read_guts(guts, "tls") == "true":
+        tls = True
+    else:
+        tls = False
     root = os.path.abspath(os.path.join(initargs_path, "..", "..", "..", ".."))
     dbdir = os.path.realpath(read_guts(guts, "db_dir"))
     viewdir = os.path.realpath(read_guts(guts, "idx_dir"))

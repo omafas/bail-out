@@ -553,6 +553,15 @@ main_with_everything(StaticTerms, NSConfig, Node) ->
                        lists:member(S, Services)],
     Tls = search_config_for_node(NSConfig, Node, node_encryption, false),
 
+    Tls = case search_config(NSConfig, cluster_encryption_level, none) of
+              strict ->
+                  true;
+              all ->
+                  true;
+              _ ->
+                  false
+          end,
+
     Pairs = Ports ++
         [{ns_config, iolist_to_binary(io_lib:format("~p", [sanitize_config(NSConfig)]))},
          {static_config, iolist_to_binary(io_lib:format("~p", [StaticTerms]))},
