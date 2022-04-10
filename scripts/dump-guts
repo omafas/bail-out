@@ -551,7 +551,6 @@ main_with_everything(StaticTerms, NSConfig, Node) ->
     Ports = [{P, N} || {S, P, N} <- confget(#config.ports),
                        S =:= ns_server orelse S =:= xdcr orelse
                        lists:member(S, Services)],
-    Tls = search_config_for_node(NSConfig, Node, node_encryption, false),
 
     Tls = case search_config(NSConfig, cluster_encryption_level, none) of
               strict ->
