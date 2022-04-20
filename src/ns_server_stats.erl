@@ -329,7 +329,7 @@ init_stats() ->
     ets:new(ns_server_system_stats, [public, named_table, set]).
 
 handle_call(get_stats, _From, State = #state{port = Port, prev = Prev}) ->
-    Data = grab_stats(Port),
+    Data = sigar:grab_stats(Port),
     {Stats, NewPrev} =
         process_stats(os:system_time(millisecond), Data, Prev, State),
     {reply, Stats, State#state{prev = NewPrev}};
@@ -366,7 +366,7 @@ handle_info(Info, State) ->
     ?log_warning("Unhandled info: ~p", [Info]),
     {noreply, State}.
 
-unpack_data({Bin, LocalStats}, PrevCounters, State) ->
+unpack_data(Bin, PrevCounters, State) ->
     <<_Version:32/native,
       StructSize:32/native,
       CPUTotalMS:64/native,
@@ -388,6 +388,7 @@ unpack_data({Bin, LocalStats}, PrevCounters, State) ->
 
     ProcessesBin = binary:part(Rest, 0, byte_size(Rest) - ?CGROUPS_INFO_SIZE),
     NowSamplesProcs0 = unpack_processes(ProcessesBin, State),
+    CgroupsInfo = sigar:unpack_cgroups_info(Rest),
 
     NowSamplesProcs =
         case NowSamplesProcs0 of
@@ -397,11 +398,22 @@ unpack_data({Bin, LocalStats}, PrevCounters, State) ->
                 NowSamplesProcs0
         end,
 
-    #{cgroup_mem := CGroupMem, cpu_count := CPUcount} = LocalStats,
+    CGroupMem = {maps:get(memory_max, CgroupsInfo, 0),
+                 maps:get(memory_current, CgroupsInfo, 0)},
     {MemLimit, _} = memory_quota:choose_limit(MemTotal, MemUsed, CGroupMem),
-    CoresAvailable = case CPUcount of
-                         unknown -> 0;
-                         N -> N
+    CoresAvailable = case maps:get(num_cpu_prc, CgroupsInfo, undefined) of
+                         undefined ->
+                             %% Suppressing dialyzer warning here
+                             %% Dialyzer thinks that system_info can't return
+                             %% 'unknown', while according to doc it seems like
+                             %% it actually can. So, in order to avoid a warning
+                             %% the value is compared with 0 insead of explicit
+                             %% match to 'unknown'
+                             case erlang:system_info(logical_processors) of
+                                 N when is_number(N), N > 0 -> N;
+                                 _ -> 0
+                             end;
+                         N -> N / 100
                      end,
 
     Counters = #{cpu_total_ms => CPUTotalMS,
@@ -499,13 +511,6 @@ log_system_stats(TS) ->
     NSCouchDbStats = ns_couchdb_api:fetch_stats(),
 
     log_stats(TS, "@system", lists:keymerge(1, NSServerStats, NSCouchDbStats)).
-
-grab_stats(Port) ->
-    {sigar:grab_stats(Port), grab_local_stats()}.
-
-grab_local_stats() ->
-    #{cgroup_mem => memory_quota:cgroup_memory_data(),
-      cpu_count => misc:cpu_count()}.
 
 process_stats(TS, Binary, PrevSample, State) ->
     {{Stats0, ProcStats}, NewPrevSample} = unpack_data(Binary, PrevSample,

@@ -29,7 +29,6 @@
          service_to_json_name/1,
          aware_services/0,
          aware_services/1,
-         cgroup_memory_data/0,
          choose_limit/3]).
 
 %% based on https://www.kernel.org/doc/Documentation/cgroup-v1/memory.txt
