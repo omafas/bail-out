@@ -16,6 +16,7 @@
 %% API
 -export([start_link/0,
          get_all/2,
+         get_gauges/1,
          get_cgroups_info/0,
          stop/0]).
 
@@ -24,7 +25,13 @@
          terminate/2, code_change/3]).
 
 -record(state, {
-          port :: port() | undefined
+          port :: port() | undefined,
+          most_recent_data :: binary() | undefined,
+          most_recent_data_ts :: integer() | undefined,
+          most_recent_unpacked :: {#{atom() := number()},
+                                   [{atom(), number()}],
+                                   #{atom() := number() | boolean()}}
+                                   | undefined
          }).
 
 -define(SIGAR_CACHE_TIME, 1000).
@@ -41,6 +48,9 @@ start_link() ->
 get_all(Opaque, PidNames) ->
     gen_server:call(?MODULE, {get_all, Opaque, PidNames}).
 
+get_gauges(Items) ->
+    gen_server:call(?MODULE, {get_gauges, Items}).
+
 get_cgroups_info() ->
     gen_server:call(?MODULE, get_cgroups_info).
 
@@ -56,21 +66,27 @@ init([]) ->
     Port = spawn_sigar(Name, ns_server:get_babysitter_pid()),
     {ok, #state{port = Port}}.
 
-handle_call({get_all, PrevCounters, PidNames}, _From,
-            #state{port = Port} = State) ->
-    Bin = grab_stats(Port),
-    {Counters, Gauges, _} = unpack_global(Bin),
+handle_call({get_all, PrevCounters, PidNames}, _From, State) ->
+    NewState = update_sigar_data(State),
+    #state{most_recent_unpacked = {Counters, Gauges, _}} = NewState,
     CountersIncrease =
         case PrevCounters of
             undefined -> [];
             _ -> compute_cpu_stats(PrevCounters, Counters)
         end,
-    ProcStats = unpack_processes(Bin, PidNames),
-    {reply, {{CountersIncrease, Gauges, ProcStats}, Counters}, State};
+    ProcStats = unpack_processes(NewState#state.most_recent_data, PidNames),
+    {reply, {{CountersIncrease, Gauges, ProcStats}, Counters}, NewState};
 
-handle_call(get_cgroups_info, _From, #state{port = Port} = State) ->
-    Bin = grab_stats(Port),
-    {reply, unpack_cgroups_info(Bin), State};
+handle_call({get_gauges, Items}, _From, State) ->
+    NewState = maybe_update_stats(State),
+    {_, Gauges, _} = NewState#state.most_recent_unpacked,
+    Res = [{I, proplists:get_value(I, Gauges)} || I <- Items],
+    {reply, Res, NewState};
+
+handle_call(get_cgroups_info, _From, State) ->
+    NewState = maybe_update_stats(State),
+    {_, _, CGroupsInfo} = NewState#state.most_recent_unpacked,
+    {reply, CGroupsInfo, State};
 
 handle_call(stop, _From, #state{port = Port} = State) ->
     catch port_close(Port),
@@ -353,3 +369,17 @@ unpack_cgroups(<<_:8/native,
       throttled_usec => ThrottledUsec,
       nr_bursts => NrBursts,
       burst_usec => BurstUsec}.
+
+maybe_update_stats(#state{most_recent_data_ts = TS} = State) ->
+    case TS == undefined orelse timestamp() - TS >= ?SIGAR_CACHE_TIME of
+        true -> update_sigar_data(State);
+        false -> State
+    end.
+
+timestamp() -> erlang:monotonic_time(millisecond).
+
+update_sigar_data(#state{port = Port} = State) ->
+    Bin = grab_stats(Port),
+    State#state{most_recent_data = Bin,
+                most_recent_data_ts = timestamp(),
+                most_recent_unpacked = unpack_global(Bin)}.
