@@ -47,6 +47,8 @@ init([]) ->
             permanent, 5000, worker, [chronicle_local]},
            {ns_cluster, {ns_cluster, start_link, []},
             permanent, 5000, worker, [ns_cluster]},
+           {sigar, {sigar, start_link, []},
+            permanent, 5000, worker, []},
            {ns_config_sup, {ns_config_sup, start_link, []},
             permanent, infinity, supervisor,
             [ns_config_sup]},

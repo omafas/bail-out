@@ -8,20 +8,106 @@
 %% the file licenses/APL2.txt.
 -module(sigar).
 
--export([stats/2, spawn/2, grab_stats/1, unpack_cgroups_info/1]).
+-behaviour(gen_server).
 
 -include("ns_common.hrl").
 
-stats(Name, BabysitterPid) ->
-    Port = ?MODULE:spawn(Name, BabysitterPid),
-    try
-        grab_stats(Port)
-    after
-        port_close(Port)
-    end.
 
-spawn(Name, BabysitterPid) ->
+%% API
+-export([start_link/0,
+         get_all/2,
+         get_cgroups_info/0,
+         stop/0]).
+
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-record(state, {
+          port :: port() | undefined
+         }).
+
+-define(SIGAR_CACHE_TIME, 1000).
+-define(CGROUPS_INFO_SIZE, 88).
+-define(GLOBAL_STATS_SIZE, 112).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+get_all(Opaque, PidNames) ->
+    gen_server:call(?MODULE, {get_all, Opaque, PidNames}).
+
+get_cgroups_info() ->
+    gen_server:call(?MODULE, get_cgroups_info).
+
+stop() ->
+    gen_server:call(?MODULE, stop).
+
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
+
+init([]) ->
+    Name = lists:flatten(io_lib:format("portsigar for ~s", [node()])),
+    Port = spawn_sigar(Name, ns_server:get_babysitter_pid()),
+    {ok, #state{port = Port}}.
+
+handle_call({get_all, PrevCounters, PidNames}, _From,
+            #state{port = Port} = State) ->
+    Bin = grab_stats(Port),
+    {Counters, Gauges, _} = unpack_global(Bin),
+    CountersIncrease =
+        case PrevCounters of
+            undefined -> [];
+            _ -> compute_cpu_stats(PrevCounters, Counters)
+        end,
+    ProcStats = unpack_processes(Bin, PidNames),
+    {reply, {{CountersIncrease, Gauges, ProcStats}, Counters}, State};
+
+handle_call(get_cgroups_info, _From, #state{port = Port} = State) ->
+    Bin = grab_stats(Port),
+    {reply, unpack_cgroups_info(Bin), State};
+
+handle_call(stop, _From, #state{port = Port} = State) ->
+    catch port_close(Port),
+    {stop, normal, ok, State#state{port = undefined}};
+
+handle_call(Request, _From, State) ->
+    ?log_error("Unhandled call: ~p", [Request]),
+    {noreply, State}.
+
+handle_cast(Msg, State) ->
+    ?log_error("Unhandled cast: ~p", [Msg]),
+    {noreply, State}.
+
+handle_info({Port, {exit_status, Status}}, #state{port = Port} = State) ->
+    ?log_error("Received exit_status ~p from sigar", [Status]),
+    {stop, {sigar, Status}, State};
+handle_info({Port, eof}, #state{port = Port} = State) ->
+    ?log_error("Received eof from sigar"),
+    {stop, {sigar, eof}, State};
+handle_info(Info, State) ->
+    ?log_error("Unhandled info: ~p", [Info]),
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+spawn_sigar(Name, BabysitterPid) ->
     Path = path_config:component_path(bin, "sigar_port"),
+    ?log_info("Spawing sigar process '~s'(~p) with babysitter pid: ~p",
+              [Name, Path, BabysitterPid]),
     open_port({spawn_executable, Path},
               [stream, use_stdio, exit_status, binary, eof,
                {arg0, Name},
@@ -30,6 +116,167 @@ spawn(Name, BabysitterPid) ->
 grab_stats(Port) ->
     port_command(Port, <<0:32/native>>),
     recv_data(Port).
+
+unpack_global(Bin) ->
+    <<_Version:32/native,
+      StructSize:32/native,
+      CPUTotalMS:64/native,
+      CPUIdleMS:64/native,
+      CPUUserMS:64/native,
+      CPUSysMS:64/native,
+      CPUIrqMS:64/native,
+      CPUStolenMS:64/native,
+      SwapTotal:64/native,
+      SwapUsed:64/native,
+      MemTotal:64/native,
+      MemUsed:64/native,
+      MemActualUsed:64/native,
+      MemActualFree:64/native,
+      AllocStall:64/native,
+      _/binary>> = Bin,
+
+    CgroupsInfo = unpack_cgroups_info(Bin),
+
+    StructSize = erlang:size(Bin),
+
+    CGroupMem = {maps:get(memory_max, CgroupsInfo, 0),
+                 maps:get(memory_current, CgroupsInfo, 0)},
+    {MemLimit, _} = memory_quota:choose_limit(MemTotal, MemUsed, CGroupMem),
+    CoresAvailable = case maps:get(num_cpu_prc, CgroupsInfo, undefined) of
+                         undefined ->
+                             %% Suppressing dialyzer warning here
+                             %% Dialyzer thinks that system_info can't return
+                             %% 'unknown', while according to doc it seems like
+                             %% it actually can. So, in order to avoid a warning
+                             %% the value is compared with 0 insead of explicit
+                             %% match to 'unknown'
+                             case erlang:system_info(logical_processors) of
+                                 N when is_number(N), N > 0 -> N;
+                                 _ -> 0
+                             end;
+                         N -> N / 100
+                     end,
+
+    Counters = #{cpu_total_ms => CPUTotalMS,
+                 cpu_idle_ms => CPUIdleMS,
+                 cpu_user_ms => CPUUserMS,
+                 cpu_sys_ms => CPUSysMS,
+                 cpu_irq_ms => CPUIrqMS,
+                 cpu_stolen_ms => CPUStolenMS},
+
+    Gauges =
+        [{cpu_cores_available, CoresAvailable},
+         {swap_total, SwapTotal},
+         {swap_used, SwapUsed},
+         {mem_limit, MemLimit},
+         {mem_total, MemTotal},
+         {mem_used_sys, MemUsed},
+         {mem_actual_used, MemActualUsed},
+         {mem_actual_free, MemActualFree},
+         {mem_free, MemActualFree},
+         {allocstall, AllocStall}],
+
+    {Counters, Gauges, CgroupsInfo}.
+
+unpack_processes(Bin, ProcNames) ->
+    ProcBinLength = byte_size(Bin) - ?GLOBAL_STATS_SIZE - ?CGROUPS_INFO_SIZE,
+    ProcessesBin = binary:part(Bin, ?GLOBAL_STATS_SIZE, ProcBinLength),
+    NewSample0 = do_unpack_processes(ProcessesBin, [], ProcNames),
+    collapse_duplicates(NewSample0).
+
+collapse_duplicates(Sample) ->
+    Sorted = lists:keysort(1, Sample),
+    lists:foldl(fun do_collapse_duplicates/2, [], Sorted).
+
+do_collapse_duplicates({K, V1}, [{K, V2} | Acc]) ->
+    [{K, V1 + V2} | Acc];
+do_collapse_duplicates(KV, Acc) ->
+    [KV | Acc].
+
+do_unpack_processes(Bin, Acc, _) when size(Bin) =:= 0 ->
+    Acc;
+do_unpack_processes(Bin, NewSampleAcc, ProcNames) ->
+    <<Name0:60/binary,
+      CpuUtilization:32/native,
+      Pid:64/native,
+      _PPid:64/native,
+      MemSize:64/native,
+      MemResident:64/native,
+      MemShare:64/native,
+      MinorFaults:64/native,
+      MajorFaults:64/native,
+      PageFaults:64/native,
+      Rest/binary>> = Bin,
+
+    RawName = extract_string(Name0),
+    case RawName of
+        <<>> ->
+            NewSampleAcc;
+        _ ->
+            Name = adjust_process_name(Pid, RawName, ProcNames),
+
+            NewSample =
+                [{proc_stat_name(Name, mem_size), MemSize},
+                 {proc_stat_name(Name, mem_resident), MemResident},
+                 {proc_stat_name(Name, mem_share), MemShare},
+                 {proc_stat_name(Name, cpu_utilization), CpuUtilization},
+                 {proc_stat_name(Name, minor_faults_raw), MinorFaults},
+                 {proc_stat_name(Name, major_faults_raw), MajorFaults},
+                 {proc_stat_name(Name, page_faults_raw), PageFaults}],
+
+            Acc1 = NewSample ++ NewSampleAcc,
+            do_unpack_processes(Rest, Acc1, ProcNames)
+    end.
+
+extract_string(Bin) ->
+    do_extract_string(Bin, size(Bin) - 1).
+
+do_extract_string(_Bin, 0) ->
+    <<>>;
+do_extract_string(Bin, Pos) ->
+    case binary:at(Bin, Pos) of
+        0 ->
+            do_extract_string(Bin, Pos - 1);
+        _ ->
+            binary:part(Bin, 0, Pos + 1)
+    end.
+
+proc_stat_name(Name, Stat) ->
+    <<Name/binary, $/, (atom_to_binary(Stat, latin1))/binary>>.
+
+adjust_process_name(Pid, Name, PidNames) ->
+    case lists:keyfind(Pid, 1, PidNames) of
+        false ->
+            Name;
+        {Pid, BetterName} ->
+            BetterName
+    end.
+
+compute_cpu_stats(OldCounters, Counters) ->
+    Diffs = maps:map(fun (Key, Value) ->
+                             OldValue = maps:get(Key, OldCounters),
+                             Value - OldValue
+                     end, Counters),
+
+    #{cpu_idle_ms := Idle,
+      cpu_user_ms := User,
+      cpu_sys_ms := Sys,
+      cpu_irq_ms := Irq,
+      cpu_stolen_ms := Stolen,
+      cpu_total_ms := Total} = Diffs,
+
+    [{cpu_utilization_rate, compute_utilization(Total - Idle, Total)},
+     {cpu_user_rate, compute_utilization(User, Total)},
+     {cpu_sys_rate, compute_utilization(Sys, Total)},
+     {cpu_irq_rate, compute_utilization(Irq, Total)},
+     {cpu_stolen_rate, compute_utilization(Stolen, Total)}].
+
+compute_utilization(Used, Total) ->
+    try
+        100 * Used / Total
+    catch error:badarith ->
+            0
+    end.
 
 recv_data(Port) ->
     recv_data_loop(Port, <<"">>).

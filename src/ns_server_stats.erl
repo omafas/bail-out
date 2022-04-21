@@ -48,9 +48,9 @@
 -type os_pid() :: integer().
 
 -record(state, {
-          port      :: port() | undefined,
+          process_stats_timer :: reference() | undefined,
           pid_names :: [{os_pid(), binary()}],
-          prev      :: term()
+          sigar_opaque :: term()
          }).
 
 start_link() ->
@@ -314,25 +314,18 @@ init([]) ->
     increment_counter(odp_report_failed, 0),
     _ = spawn_link(fun stale_histo_epoch_cleaner/0),
 
-    Name = lists:flatten(io_lib:format("portsigar for ~s", [node()])),
-    Port = sigar:spawn(Name, ns_server:get_babysitter_pid()),
     spawn_ale_stats_collector(),
 
-    State = #state{port = Port,
-                   pid_names = grab_pid_names()},
-
-    {ok, State}.
+    {ok, restart_process_stats_timer(#state{pid_names = grab_pid_names()})}.
 
 init_stats() ->
     ets:new(?MODULE, [public, named_table, set]),
     %% Deprecated table, will be removed:
     ets:new(ns_server_system_stats, [public, named_table, set]).
 
-handle_call(get_stats, _From, State = #state{port = Port, prev = Prev}) ->
-    Data = sigar:grab_stats(Port),
-    {Stats, NewPrev} =
-        process_stats(os:system_time(millisecond), Data, Prev, State),
-    {reply, Stats, State#state{prev = NewPrev}};
+handle_call(get_stats, _From, State) ->
+    {Stats, NewState} = process_stats(State),
+    {reply, Stats, NewState};
 
 %% Can be called from another node. Introduced in 7.0
 handle_call({stats_interface, Function, Args}, From, State) ->
@@ -356,155 +349,20 @@ handle_cast({extract, {From, Ref}, Query, Start, End, Step, Timeout}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({Port, {exit_status, Status}}, #state{port = Port} = State) ->
-    ?log_error("Received exit_status ~p from sigar", [Status]),
-    {stop, {sigar, Status}, State};
-handle_info({Port, eof}, #state{port = Port} = State) ->
-    ?log_error("Received eof from sigar"),
-    {stop, {sigar, eof}, State};
+handle_info(process_ns_server_stats, State) ->
+    case ets:update_counter(ns_server_system_stats, log_counter,
+                            {2, 1, ?ETS_LOG_INTVL, 0}) of
+        0 ->
+            log_system_stats(os:system_time(millisecond));
+        _ ->
+            ok
+    end,
+    update_merger_rates(),
+    sample_ns_memcached_queues(),
+    {noreply, restart_process_stats_timer(State)};
 handle_info(Info, State) ->
     ?log_warning("Unhandled info: ~p", [Info]),
     {noreply, State}.
-
-unpack_data(Bin, PrevCounters, State) ->
-    <<_Version:32/native,
-      StructSize:32/native,
-      CPUTotalMS:64/native,
-      CPUIdleMS:64/native,
-      CPUUserMS:64/native,
-      CPUSysMS:64/native,
-      CPUIrqMS:64/native,
-      CPUStolenMS:64/native,
-      SwapTotal:64/native,
-      SwapUsed:64/native,
-      MemTotal:64/native,
-      MemUsed:64/native,
-      MemActualUsed:64/native,
-      MemActualFree:64/native,
-      AllocStall:64/native,
-      Rest/binary>> = Bin,
-
-    StructSize = erlang:size(Bin),
-
-    ProcessesBin = binary:part(Rest, 0, byte_size(Rest) - ?CGROUPS_INFO_SIZE),
-    NowSamplesProcs0 = unpack_processes(ProcessesBin, State),
-    CgroupsInfo = sigar:unpack_cgroups_info(Rest),
-
-    NowSamplesProcs =
-        case NowSamplesProcs0 of
-            [] ->
-                undefined;
-            _ ->
-                NowSamplesProcs0
-        end,
-
-    CGroupMem = {maps:get(memory_max, CgroupsInfo, 0),
-                 maps:get(memory_current, CgroupsInfo, 0)},
-    {MemLimit, _} = memory_quota:choose_limit(MemTotal, MemUsed, CGroupMem),
-    CoresAvailable = case maps:get(num_cpu_prc, CgroupsInfo, undefined) of
-                         undefined ->
-                             %% Suppressing dialyzer warning here
-                             %% Dialyzer thinks that system_info can't return
-                             %% 'unknown', while according to doc it seems like
-                             %% it actually can. So, in order to avoid a warning
-                             %% the value is compared with 0 insead of explicit
-                             %% match to 'unknown'
-                             case erlang:system_info(logical_processors) of
-                                 N when is_number(N), N > 0 -> N;
-                                 _ -> 0
-                             end;
-                         N -> N / 100
-                     end,
-
-    Counters = #{cpu_total_ms => CPUTotalMS,
-                 cpu_idle_ms => CPUIdleMS,
-                 cpu_user_ms => CPUUserMS,
-                 cpu_sys_ms => CPUSysMS,
-                 cpu_irq_ms => CPUIrqMS,
-                 cpu_stolen_ms => CPUStolenMS},
-    NowSamplesGlobal =
-        case PrevCounters of
-            undefined ->
-                undefined;
-            _ ->
-                compute_cpu_stats(PrevCounters, Counters) ++
-                    [{cpu_cores_available, CoresAvailable},
-                     {swap_total, SwapTotal},
-                     {swap_used, SwapUsed},
-                     {mem_limit, MemLimit},
-                     {mem_total, MemTotal},
-                     {mem_used_sys, MemUsed},
-                     {mem_actual_used, MemActualUsed},
-                     {mem_actual_free, MemActualFree},
-                     {mem_free, MemActualFree},
-                     {allocstall, AllocStall}]
-        end,
-
-    {{NowSamplesGlobal, NowSamplesProcs}, Counters}.
-
-unpack_processes(Bin, State) ->
-    NewSample0 = do_unpack_processes(Bin, [], State),
-    collapse_duplicates(NewSample0).
-
-collapse_duplicates(Sample) ->
-    Sorted = lists:keysort(1, Sample),
-    lists:foldl(fun do_collapse_duplicates/2, [], Sorted).
-
-do_collapse_duplicates({K, V1}, [{K, V2} | Acc]) ->
-    [{K, V1 + V2} | Acc];
-do_collapse_duplicates(KV, Acc) ->
-    [KV | Acc].
-
-do_unpack_processes(Bin, Acc, _) when size(Bin) =:= 0 ->
-    Acc;
-do_unpack_processes(Bin, NewSampleAcc, State) ->
-    <<Name0:60/binary,
-      CpuUtilization:32/native,
-      Pid:64/native,
-      _PPid:64/native,
-      MemSize:64/native,
-      MemResident:64/native,
-      MemShare:64/native,
-      MinorFaults:64/native,
-      MajorFaults:64/native,
-      PageFaults:64/native,
-      Rest/binary>> = Bin,
-
-    RawName = extract_string(Name0),
-    case RawName of
-        <<>> ->
-            NewSampleAcc;
-        _ ->
-            Name = adjust_process_name(Pid, RawName, State),
-
-            NewSample =
-                [{proc_stat_name(Name, mem_size), MemSize},
-                 {proc_stat_name(Name, mem_resident), MemResident},
-                 {proc_stat_name(Name, mem_share), MemShare},
-                 {proc_stat_name(Name, cpu_utilization), CpuUtilization},
-                 {proc_stat_name(Name, minor_faults_raw), MinorFaults},
-                 {proc_stat_name(Name, major_faults_raw), MajorFaults},
-                 {proc_stat_name(Name, page_faults_raw), PageFaults}],
-
-            Acc1 = NewSample ++ NewSampleAcc,
-            do_unpack_processes(Rest, Acc1, State)
-    end.
-
-extract_string(Bin) ->
-    do_extract_string(Bin, size(Bin) - 1).
-
-do_extract_string(_Bin, 0) ->
-    <<>>;
-do_extract_string(Bin, Pos) ->
-    case binary:at(Bin, Pos) of
-        0 ->
-            do_extract_string(Bin, Pos - 1);
-        _ ->
-            binary:part(Bin, 0, Pos + 1)
-    end.
-
-proc_stat_name(Name, Stat) ->
-    <<Name/binary, $/, (atom_to_binary(Stat, latin1))/binary>>.
 
 log_system_stats(TS) ->
     NSServerStats = lists:sort(ets:tab2list(ns_server_system_stats)),
@@ -512,33 +370,11 @@ log_system_stats(TS) ->
 
     log_stats(TS, "@system", lists:keymerge(1, NSServerStats, NSCouchDbStats)).
 
-process_stats(TS, Binary, PrevSample, State) ->
-    {{Stats0, ProcStats}, NewPrevSample} = unpack_data(Binary, PrevSample,
-                                                       State),
-    RetStats =
-        case Stats0 of
-            undefined ->
-                [];
-            _ ->
-                case ets:update_counter(ns_server_system_stats, log_counter,
-                                        {2, 1, ?ETS_LOG_INTVL, 0}) of
-                    0 ->
-                        log_system_stats(TS);
-                    _ ->
-                        ok
-                end,
-                [{"@system", Stats0}]
-        end ++
-        case ProcStats of
-            undefined ->
-                [];
-            _ ->
-                [{"@system-processes", ProcStats}]
-        end,
-
-    update_merger_rates(),
-    sample_ns_memcached_queues(),
-    {RetStats, NewPrevSample}.
+process_stats(#state{sigar_opaque = Opaque, pid_names = PidNames} = State) ->
+    {{Counters, Gauges, ProcStats}, NewOpaque} = sigar:get_all(Opaque, PidNames),
+    RetStats = [{"@system", Counters ++ Gauges},
+                {"@system-processes", ProcStats}],
+    {RetStats, State#state{sigar_opaque = NewOpaque}}.
 
 increment_counter(Name, By) ->
     try
@@ -732,39 +568,6 @@ grab_pid_names() ->
      {BabysitterPid, <<"babysitter">>},
      {CouchdbPid, <<"couchdb">>}].
 
-adjust_process_name(Pid, Name, #state{pid_names = PidNames}) ->
-    case lists:keyfind(Pid, 1, PidNames) of
-        false ->
-            Name;
-        {Pid, BetterName} ->
-            BetterName
-    end.
-
-compute_cpu_stats(OldCounters, Counters) ->
-    Diffs = maps:map(fun (Key, Value) ->
-                             OldValue = maps:get(Key, OldCounters),
-                             Value - OldValue
-                     end, Counters),
-
-    #{cpu_idle_ms := Idle,
-      cpu_user_ms := User,
-      cpu_sys_ms := Sys,
-      cpu_irq_ms := Irq,
-      cpu_stolen_ms := Stolen,
-      cpu_total_ms := Total} = Diffs,
-
-    [{cpu_utilization_rate, compute_utilization(Total - Idle, Total)},
-     {cpu_user_rate, compute_utilization(User, Total)},
-     {cpu_sys_rate, compute_utilization(Sys, Total)},
-     {cpu_irq_rate, compute_utilization(Irq, Total)},
-     {cpu_stolen_rate, compute_utilization(Stolen, Total)}].
-
-compute_utilization(Used, Total) ->
-    try
-        100 * Used / Total
-    catch error:badarith ->
-            0
-    end.
 
 -define(WIDTH, 30).
 
@@ -882,3 +685,12 @@ notify_moving_window_test() ->
     end.
 
 -endif.
+
+restart_process_stats_timer(#state{process_stats_timer = undefined} = State) ->
+    misc:flush(process_ns_server_stats),
+    Ref = erlang:send_after(?get_timeout(process_stats, 1000), self(),
+                            process_ns_server_stats),
+    State#state{process_stats_timer = Ref};
+restart_process_stats_timer(#state{process_stats_timer = Ref} = State) ->
+    catch erlang:cancel_timer(Ref),
+    restart_process_stats_timer(State#state{process_stats_timer = undefined}).

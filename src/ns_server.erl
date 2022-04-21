@@ -19,6 +19,8 @@
 -include("ns_common.hrl").
 -include_lib("ale/include/ale.hrl").
 
+-define(BABYSITTER_NODE_PREFIX, "babysitter_of_").
+
 log_pending() ->
     receive
         done ->
@@ -236,7 +238,7 @@ stop(_State) ->
 
 setup_node_names() ->
     Name =  misc:node_name_short(),
-    Babysitter = list_to_atom("babysitter_of_" ++ Name ++ "@" ++
+    Babysitter = list_to_atom(?BABYSITTER_NODE_PREFIX ++ Name ++ "@" ++
                                   misc:localhost_alias()),
     Couchdb = list_to_atom("couchdb_" ++ Name ++ "@" ++ misc:localhost_alias()),
     application:set_env(ns_server, ns_couchdb_node, Couchdb),
@@ -258,4 +260,7 @@ get_babysitter_node() ->
     Node.
 
 get_babysitter_pid() ->
-    list_to_integer(os:getenv("NS_SERVER_BABYSITTER_PID")).
+    list_to_integer(case atom_to_list(node()) of
+                        ?BABYSITTER_NODE_PREFIX ++ _ -> os:getpid();
+                        _ -> os:getenv("NS_SERVER_BABYSITTER_PID")
+                    end).

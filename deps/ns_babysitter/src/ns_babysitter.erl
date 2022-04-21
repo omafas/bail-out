@@ -273,8 +273,9 @@ set_cpu_count_var(CPUCount) when is_integer(CPUCount) ->
     os:putenv(?CPU_COUNT_VAR, integer_to_list(CPUCount)).
 
 determine_cpu_num() ->
-    StatsBin = sigar:stats("cores_count", list_to_integer(os:getpid())),
-    CGroupsStats = sigar:unpack_cgroups_info(StatsBin),
+    {ok, _} = sigar:start_link(),
+    CGroupsStats = sigar:get_cgroups_info(),
+    sigar:stop(),
     case CGroupsStats of
         #{supported := true, num_cpu_prc := CPUPercent} when CPUPercent > 0 ->
             CPUCount = ceil(CPUPercent/100),
