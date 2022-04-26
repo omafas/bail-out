@@ -274,14 +274,15 @@ current_status_slow_inner() ->
 
     ProcFSFiles = grab_procfs_files(),
     ServiceStatuses = grab_service_statuses(),
-
+    [{cpu_cores_available, CoresAvailable}] =
+        sigar:get_gauges([cpu_cores_available]),
     ns_bootstrap:ensure_os_mon(),
     failover_safeness_level:build_local_safeness_info(BucketNames) ++
         ServiceStatuses ++
         ProcFSFiles ++
         [{local_tasks, Tasks},
          {memory, misc:memory()},
-         {cpu_count, misc:cpu_count()},
+         {cpu_count, ceil(CoresAvailable)},
          {system_memory_data, memsup:get_system_memory_data()},
          {node_storage_conf, StorageConf},
          {statistics, erlang_stats()},

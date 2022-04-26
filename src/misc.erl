@@ -1748,61 +1748,6 @@ memory() ->
             notsup
     end.
 
-%% based on https://www.kernel.org/doc/Documentation/cgroup-v1/cpusets.txt
-%%          https://www.kernel.org/doc/Documentation/scheduler/sched-bwc.txt
--define(CGROUP_CPU_CFS_QUOTA_FILE, "/sys/fs/cgroup/cpu/cpu.cfs_quota_us").
--define(CGROUP_CPU_CFS_PERIOD_FILE, "/sys/fs/cgroup/cpu/cpu.cfs_period_us").
--define(CGROUP_CPUSET_CPUS_FILE, "/sys/fs/cgroup/cpuset/cpuset.cpus").
-cpu_count() ->
-    CPUs1 =
-        case read_int_from_file(?CGROUP_CPU_CFS_QUOTA_FILE, unknown) of
-            -1 -> unknown;
-            unknown -> unknown;
-            CPUquota ->
-                case read_int_from_file(?CGROUP_CPU_CFS_PERIOD_FILE, unknown) of
-                    unknown -> unknown;
-                    CPUperiod -> CPUquota / CPUperiod
-                end
-        end,
-    CPUs2 =
-        case (catch raw_read_file(?CGROUP_CPUSET_CPUS_FILE)) of
-            {ok, Bin} ->
-                Str = string:strip(binary_to_list(Bin), right, $\n),
-                try length(parse_cpuset_cpus(Str))
-                catch _:_ -> unknown end;
-            _ -> unknown
-        end,
-
-    CPUs3 = erlang:system_info(logical_processors),
-    lists:min([CPUs1, CPUs2, CPUs3]).
-
-parse_cpuset_cpus(Str) ->
-    try
-        Tokens = [string:strip(T) || T <- string:tokens(Str, ",")],
-        R = lists:flatmap(
-              fun (T) ->
-                      case string:tokens(T, "-") of
-                          [N] -> [list_to_integer(N)];
-                          [N1, N2] -> lists:seq(list_to_integer(N1),
-                                                list_to_integer(N2))
-                      end
-              end, Tokens),
-        lists:usort(R)
-    catch
-        _:_ -> erlang:error(badarg)
-    end.
-
--ifdef(TEST).
-parse_cpuset_cpus_test() ->
-    ?assertEqual([], parse_cpuset_cpus("")),
-    ?assertEqual([2], parse_cpuset_cpus("2")),
-    ?assertEqual([1,2], parse_cpuset_cpus("1-2")),
-    ?assertEqual([1,3,5], parse_cpuset_cpus("1,3,5")),
-    ?assertEqual([1,2,3,5,6,7], parse_cpuset_cpus("1-3,5-7")),
-    ?assertEqual([1,2,3,4,5,6,7], parse_cpuset_cpus("1,2,5-7,3,4")),
-    ?assertException(error, badarg, parse_cpuset_cpus("1,aa")).
--endif.
-
 %% What platform are we running on?
 
 is_linux() ->
@@ -3019,21 +2964,6 @@ rand_uniform_test() ->
                           ?assert(lists:member(R, lists:seq(10,99)))
                   end).
 -endif.
-
-read_int_from_file(File) ->
-    case raw_read_file(File) of
-        {ok, Data} ->
-            Str = string:strip(binary_to_list(Data), right, $\n),
-            {ok, list_to_integer(Str)};
-        Error -> Error
-    end.
-read_int_from_file(File, Default) ->
-    try read_int_from_file(File) of
-        {ok, N} -> N;
-        {error, _} -> Default
-    catch
-        _:_ -> Default
-    end.
 
 is_valid_hostname(Address) ->
     case inet:parse_address(Address) of
