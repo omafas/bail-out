@@ -15,6 +15,8 @@
 %% needed to mock ns_config in tests
 -include("ns_config.hrl").
 
+-define(MAX_DISK_USAGE_MISSED_CHECKS, 2).
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
@@ -304,15 +306,26 @@ check(ip, Opaque, _History, _Stats) ->
     Opaque;
 
 check(disk_usage_analyzer_stuck, Opaque, _History, _Stats) ->
-    case ns_disksup:is_stale() of
-        true ->
-            global_alert(disk_usage_analyzer_stuck,
-                         fmt_to_bin(
-                           errors(disk_usage_analyzer_stuck), [node()]));
-        false -> ok
-    end,
+    IsStale = ns_disksup:is_stale(),
+    Missed = case dict:find(disk_usage_missed_checks, Opaque) of
+                 {ok, M} -> M;
+                 error -> 0
+             end,
 
-    Opaque;
+    NewMissed = case {IsStale, Missed} of
+                    {false, _} ->
+                        0;
+                    {true, Missed}
+                      when Missed < ?MAX_DISK_USAGE_MISSED_CHECKS ->
+                        Missed + 1;
+                    {true, Missed} ->
+                        global_alert(disk_usage_analyzer_stuck,
+                                     fmt_to_bin(
+                                       errors(disk_usage_analyzer_stuck),
+                                       [node()])),
+                        Missed + 1
+                end,
+    dict:store(disk_usage_missed_checks, NewMissed, Opaque);
 
 %% @doc check the capacity of the drives used for db and log files
 check(disk, Opaque, _History, _Stats) ->
