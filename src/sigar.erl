@@ -82,6 +82,7 @@ unpack_cgroups(<<0:8/native, _/binary>>) ->
 unpack_cgroups(<<_:8/native,
                  CgroupsVsn:8/native,
                  NumCpuPrc:16/native,
+                 _Padding:32,
                  MemMax:64/native,
                  MemCurr:64/native,
                  UsageUsec:64/native,
