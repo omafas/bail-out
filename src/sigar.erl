@@ -27,14 +27,14 @@
 -record(state, {
           port :: port() | undefined,
           most_recent_data :: binary() | undefined,
-          most_recent_data_ts :: integer() | undefined,
+          most_recent_data_ts_usec :: integer() | undefined,
           most_recent_unpacked :: {#{atom() := number()},
                                    [{atom(), number()}],
                                    #{atom() := number() | boolean()}}
                                    | undefined
          }).
 
--define(SIGAR_CACHE_TIME, 1000).
+-define(SIGAR_CACHE_TIME_USEC, 1000000).
 -define(CGROUPS_INFO_SIZE, 88).
 -define(GLOBAL_STATS_SIZE, 112).
 
@@ -66,16 +66,26 @@ init([]) ->
     Port = spawn_sigar(Name, ns_server:get_babysitter_pid()),
     {ok, #state{port = Port}}.
 
-handle_call({get_all, PrevCounters, PidNames}, _From, State) ->
+handle_call({get_all, undefined, PidNames}, _From, State) ->
+    handle_call({get_all, {undefined, undefined, undefined}, PidNames}, _From,
+                State);
+handle_call({get_all, {PrevTS, PrevCounters, PrevCGroups}, PidNames}, _From,
+            State) ->
     NewState = update_sigar_data(State),
-    #state{most_recent_unpacked = {Counters, Gauges, _}} = NewState,
-    CountersIncrease =
-        case PrevCounters of
-            undefined -> [];
-            _ -> compute_cpu_stats(PrevCounters, Counters)
+    #state{most_recent_unpacked = {Counters, Gauges, CGroups},
+           most_recent_data_ts_usec = TS} = NewState,
+    HostCounters = compute_cpu_stats(PrevCounters, Counters),
+    Cores = proplists:get_value(cpu_cores_available, Gauges),
+    CGroupsCounters =
+        case maps:get(supported, CGroups, false) of
+            true -> compute_cgroups_counters(Cores, PrevTS, TS,
+                                             PrevCGroups, CGroups);
+            false when HostCounters == [] -> [];
+            false -> default_cgroups_counters(HostCounters)
         end,
     ProcStats = unpack_processes(NewState#state.most_recent_data, PidNames),
-    {reply, {{CountersIncrease, Gauges, ProcStats}, Counters}, NewState};
+    {reply, {{HostCounters ++ CGroupsCounters, Gauges, ProcStats},
+     {TS, Counters, CGroups}}, NewState};
 
 handle_call({get_gauges, Items}, _From, State) ->
     NewState = maybe_update_stats(State),
@@ -170,7 +180,8 @@ unpack_global(Bin) ->
                                  N when is_number(N), N > 0 -> N;
                                  _ -> 0
                              end;
-                         N -> N / 100
+                         N -> N / 100 %% do not round it,
+                                      %% cpu utilization will break
                      end,
 
     Counters = #{cpu_total_ms => CPUTotalMS,
@@ -268,6 +279,7 @@ adjust_process_name(Pid, Name, PidNames) ->
             BetterName
     end.
 
+compute_cpu_stats(undefined, _Counters) -> [];
 compute_cpu_stats(OldCounters, Counters) ->
     Diffs = maps:map(fun (Key, Value) ->
                              OldValue = maps:get(Key, OldCounters),
@@ -281,11 +293,38 @@ compute_cpu_stats(OldCounters, Counters) ->
       cpu_stolen_ms := Stolen,
       cpu_total_ms := Total} = Diffs,
 
-    [{cpu_utilization_rate, compute_utilization(Total - Idle, Total)},
-     {cpu_user_rate, compute_utilization(User, Total)},
-     {cpu_sys_rate, compute_utilization(Sys, Total)},
+    [{cpu_host_utilization_rate, compute_utilization(Total - Idle, Total)},
+     {cpu_host_user_rate, compute_utilization(User, Total)},
+     {cpu_host_sys_rate, compute_utilization(Sys, Total)},
      {cpu_irq_rate, compute_utilization(Irq, Total)},
      {cpu_stolen_rate, compute_utilization(Stolen, Total)}].
+
+compute_cgroups_counters(Cores, PrevTS, TS,
+                         #{supported := true} = Old,
+                         #{supported := true} = New)
+                                        when is_number(PrevTS), is_number(TS),
+                                             is_number(Cores), Cores > 0 ->
+    TimeDelta = TS - PrevTS,
+    ComputeRate = fun (Key) ->
+                      OldV = maps:get(Key, Old),
+                      NewV = maps:get(Key, New),
+                      compute_utilization(NewV - OldV, TimeDelta * Cores)
+                  end,
+    [{cpu_utilization_rate, ComputeRate(usage_usec)},
+     {cpu_user_rate, ComputeRate(user_usec)},
+     {cpu_sys_rate, ComputeRate(system_usec)},
+     {cpu_throttled_rate, ComputeRate(throttled_usec)},
+     {cpu_burst_rate, ComputeRate(burst_usec)}];
+compute_cgroups_counters(_, _, _, _, _) ->
+    [].
+
+default_cgroups_counters(HostCounters) ->
+    [{cpu_utilization_rate,
+      proplists:get_value(cpu_host_utilization_rate, HostCounters)},
+     {cpu_user_rate,
+      proplists:get_value(cpu_host_user_rate, HostCounters)},
+     {cpu_sys_rate,
+      proplists:get_value(cpu_host_sys_rate, HostCounters)}].
 
 compute_utilization(Used, Total) ->
     try
@@ -370,16 +409,16 @@ unpack_cgroups(<<_:8/native,
       nr_bursts => NrBursts,
       burst_usec => BurstUsec}.
 
-maybe_update_stats(#state{most_recent_data_ts = TS} = State) ->
-    case TS == undefined orelse timestamp() - TS >= ?SIGAR_CACHE_TIME of
+maybe_update_stats(#state{most_recent_data_ts_usec = TS} = State) ->
+    case TS == undefined orelse timestamp() - TS >= ?SIGAR_CACHE_TIME_USEC of
         true -> update_sigar_data(State);
         false -> State
     end.
 
-timestamp() -> erlang:monotonic_time(millisecond).
+timestamp() -> erlang:monotonic_time(microsecond).
 
 update_sigar_data(#state{port = Port} = State) ->
     Bin = grab_stats(Port),
     State#state{most_recent_data = Bin,
-                most_recent_data_ts = timestamp(),
+                most_recent_data_ts_usec = timestamp(),
                 most_recent_unpacked = unpack_global(Bin)}.
