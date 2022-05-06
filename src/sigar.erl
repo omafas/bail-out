@@ -168,18 +168,16 @@ unpack_global(Bin) ->
     CGroupMem = {maps:get(memory_max, CgroupsInfo, 0),
                  maps:get(memory_current, CgroupsInfo, 0)},
     {MemLimit, _} = memory_quota:choose_limit(MemTotal, MemUsed, CGroupMem),
+    %% Suppressing dialyzer warning here
+    %% Dialyzer thinks that system_info can't return 'unknown', while according
+    %% to doc it seems like it actually can. So, in order to avoid a warning
+    %% the value is compared with 0 insead of explicit match to 'unknown'
+    HostCoresAvailable = case erlang:system_info(logical_processors) of
+                             P when is_number(P), P > 0 -> P;
+                             _ -> 0
+                         end,
     CoresAvailable = case maps:get(num_cpu_prc, CgroupsInfo, undefined) of
-                         undefined ->
-                             %% Suppressing dialyzer warning here
-                             %% Dialyzer thinks that system_info can't return
-                             %% 'unknown', while according to doc it seems like
-                             %% it actually can. So, in order to avoid a warning
-                             %% the value is compared with 0 insead of explicit
-                             %% match to 'unknown'
-                             case erlang:system_info(logical_processors) of
-                                 N when is_number(N), N > 0 -> N;
-                                 _ -> 0
-                             end;
+                         undefined -> HostCoresAvailable;
                          N -> N / 100 %% do not round it,
                                       %% cpu utilization will break
                      end,
@@ -193,6 +191,7 @@ unpack_global(Bin) ->
 
     Gauges =
         [{cpu_cores_available, CoresAvailable},
+         {cpu_host_cores_available, HostCoresAvailable},
          {swap_total, SwapTotal},
          {swap_used, SwapUsed},
          {mem_limit, MemLimit},
