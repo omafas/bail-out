@@ -2238,6 +2238,12 @@ def main():
     runner.run_tasks(make_product_task(guts, guts_initargs_path,
                                        memcached_password, options))
 
+    for f in glob.glob(os.path.join(guts.get("path_config_datadir"),
+                                    "config", "certs", "*")):
+        base = os.path.basename(f)
+        if base not in ["pkey.pem", "client_pkey.pem"]:
+            runner.collect_file(f, f"certs/{base}")
+
     # Collect breakpad crash dumps.
     if options.bypass_sensitive_data:
         log("Bypassing Sensitive Data: Breakpad crash dumps")
