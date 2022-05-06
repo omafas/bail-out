@@ -502,8 +502,14 @@ no_upgrade_on_current_version_test() ->
 
 all_upgrades_test_() ->
     {setup,
-     fun ns_config:mock_tombstone_agent/0,
+     fun () ->
+             ns_config:mock_tombstone_agent(),
+             meck:new(sigar),
+             meck:expect(sigar, get_cgroups_info,
+                         fun () ->  #{supported => false} end)
+     end,
      fun (_) ->
+             meck:unload(sigar),
              ns_config:unmock_tombstone_agent()
      end,
      ?_test(test_all_upgrades())}.
