@@ -1198,8 +1198,6 @@ def add_required_data_paths(guts):
     guts["indexer_breakpad_minidump_dir"] = os.path.join(data_dir, "crash")
     guts["users_storage_path"] = os.path.join(data_dir, "config", "users.dets")
     guts["dist_cfg_path"] = os.path.join(data_dir, "config", "dist_cfg")
-    guts["memcached_cert_pem"] = os.path.join(data_dir, "config", "memcached-cert.pem")
-    guts["local_ssl_cert_pem"] = os.path.join(data_dir, "config", "local-ssl-cert.pem")
     guts["chronicle_dir"] = os.path.join(data_dir, "config", "chronicle")
     guts["localtoken_path"] = os.path.join(data_dir, "localtoken")
 
@@ -1679,11 +1677,6 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
         CollectFile("Users storage", read_guts(guts, "users_storage_path")),
 
         CollectFile("Dist configuration (dist_cfg)", read_guts(guts, "dist_cfg_path")),
-
-        CollectFile("Memcached cert (memcached-cert.pem)",
-                    read_guts(guts, "memcached_cert_pem")),
-        CollectFile("Local SSL cert (local-ssl-cert.pem)",
-                    read_guts(guts, "local_ssl_cert_pem")),
 
         [CollectFile("Rebalance Report: %s" % path, path)
          for path in glob.glob(os.path.join(rebdir, "rebalance_report*"))],
