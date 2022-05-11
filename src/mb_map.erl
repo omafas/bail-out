@@ -66,10 +66,10 @@ promote_replicas_for_graceful_failover_for_chain(Chain, RemoveNodes) ->
     ChangedChain ++ RemoveNodesChain ++ Undefineds.
 
 vbucket_movements_rec(AccMasters, AccReplicas, [], []) ->
-    {AccMasters, AccReplicas};
+    {AccReplicas, AccMasters};
 vbucket_movements_rec(AccMasters, AccReplicas,
                       [[MasterSrc|_] = SrcChain | RestSrcChains],
-                      [[MasterDst|RestDst] | RestDstChains]) ->
+                      [[MasterDst|_] = DstChain | RestDstChains]) ->
     true = (MasterDst =/= undefined),
     AccMasters2 = case MasterSrc =:= MasterDst of
                       true ->
@@ -84,7 +84,7 @@ vbucket_movements_rec(AccMasters, AccReplicas,
                       true -> Acc;
                       false -> Acc+1
                   end
-          end, AccReplicas, RestDst),
+          end, AccReplicas, DstChain),
     vbucket_movements_rec(AccMasters2, AccReplicas2, RestSrcChains, RestDstChains).
 
 %% returns 'score' for difference between Src and Dst map. It's a
@@ -297,8 +297,9 @@ matching_renamings_same_vbuckets_count(KeepNodesSet, CurrentTags,
 generate_map(Map, NumReplicas, Nodes, Options) ->
     Tags = proplists:get_value(tags, Options),
     UseOldCode = (Tags =:= undefined) andalso (NumReplicas =< 1),
+    UseGreedy = proplists:get_bool(use_vbmap_greedy_optimization, Options),
 
-    case UseOldCode of
+    case UseOldCode andalso not UseGreedy of
         true ->
             generate_map_old(Map, NumReplicas, Nodes, Options);
         false ->
@@ -317,6 +318,7 @@ generate_map_new(Map, NumReplicas, Nodes, Options) ->
     NumVBuckets = length(Map),
     NumSlaves = proplists:get_value(max_slaves, Options, 10),
     Tags = proplists:get_value(tags, Options),
+    UseGreedy = proplists:get_bool(use_vbmap_greedy_optimization, Options),
 
     MapsFromPast0 = find_matching_past_maps(Nodes, Map, Options, MapsHistory),
     MapsFromPast = score_maps(Map, MapsFromPast0),
@@ -324,10 +326,8 @@ generate_map_new(Map, NumReplicas, Nodes, Options) ->
 
     GeneratedMaps0 =
         lists:append(
-          %% vbmap itself randomizes some things internally so let's give it a
-          %% chance
           [[invoke_vbmap(Map, ShuffledNodes, NumVBuckets,
-                         NumSlaves, NumReplicas, Tags) ||
+                         NumSlaves, NumReplicas, Tags, UseGreedy) ||
                _ <- lists:seq(1, 3)] ||
               ShuffledNodes <- [misc:shuffle(KeepNodes) || _ <- lists:seq(1, 3)]]),
 
@@ -693,7 +693,7 @@ slaves([], _, _, Set) ->
 testnodes(NumNodes) ->
     [list_to_atom([$n | tl(integer_to_list(1000+N))]) || N <- lists:seq(1, NumNodes)].
 
-invoke_vbmap(CurrentMap, Nodes, NumVBuckets, NumSlaves, NumReplicas, Tags) ->
+invoke_vbmap(CurrentMap, Nodes, NumVBuckets, NumSlaves, NumReplicas, Tags, UseGreedy) ->
     VbmapName =
         case misc:is_windows() of
             true ->
@@ -707,22 +707,26 @@ invoke_vbmap(CurrentMap, Nodes, NumVBuckets, NumSlaves, NumReplicas, Tags) ->
 
     try
         {ok, Map} = do_invoke_vbmap(VbmapPath, DiagPath, CurrentMap, Nodes,
-                                    NumVBuckets, NumSlaves, NumReplicas, Tags),
+                                    NumVBuckets, NumSlaves, NumReplicas, Tags,
+                                    UseGreedy),
         Map
     after
         file:delete(DiagPath)
     end.
 
 do_invoke_vbmap(VbmapPath, DiagPath,
-                CurrentMap, Nodes, NumVBuckets, NumSlaves, NumReplicas, Tags) ->
+                CurrentMap, Nodes, NumVBuckets, NumSlaves, NumReplicas, Tags,
+                UseGreedy) ->
     misc:executing_on_new_process(
       fun () ->
               do_invoke_vbmap_body(VbmapPath, DiagPath, CurrentMap, Nodes,
-                                   NumVBuckets, NumSlaves, NumReplicas, Tags)
+                                   NumVBuckets, NumSlaves, NumReplicas, Tags,
+                                   UseGreedy)
       end).
 
 do_invoke_vbmap_body(VbmapPath, DiagPath, CurrentMap, Nodes,
-                     NumVBuckets, NumSlaves, NumReplicas, Tags) ->
+                     NumVBuckets, NumSlaves, NumReplicas, Tags,
+                     UseGreedy) ->
     NumNodes = length(Nodes),
 
     Args0 = ["--diag", DiagPath,
@@ -731,8 +735,41 @@ do_invoke_vbmap_body(VbmapPath, DiagPath, CurrentMap, Nodes,
              "--num-nodes", integer_to_list(NumNodes),
              "--num-slaves", integer_to_list(NumSlaves),
              "--num-replicas", integer_to_list(NumReplicas),
-             "--relax-all"],
-    Args = vbmap_tags_args(Nodes, Tags) ++ Args0,
+             "--relax-all"] ++
+        case UseGreedy of
+            true ->
+                ["--greedy"];
+            _ ->
+                []
+        end,
+
+    MaxNodeId = length(Nodes) - 1,
+    NodeIdList = lists:zip(Nodes, lists:seq(0, MaxNodeId)),
+    ?log_debug("Node Id Map: ~p", [NodeIdList]),
+
+    NodeIdMap = dict:from_list(NodeIdList),
+
+    IdVbMap = make_vbmap_with_node_ids(MaxNodeId, NodeIdMap, CurrentMap),
+
+    PrevMapFile = path_config:tempfile("prev-vbmap", ".json"),
+
+    ChainsWritten =
+        case write_vbmap_to_file(IdVbMap, PrevMapFile) of
+            ok ->
+                ?log_debug("Wrote vbmap to ~p", [PrevMapFile]),
+                ok;
+            Err ->
+                ?log_debug("Couldn't write to file: ~p, reason: ~p", [PrevMapFile, Err]),
+                not_ok
+        end,
+
+    Args = vbmap_tags_args(NodeIdMap, Tags) ++ Args0 ++
+        (case ChainsWritten of
+             ok ->
+                 ["--current-map", PrevMapFile];
+             _ ->
+                 []
+         end),
 
     Port = erlang:open_port({spawn_executable, VbmapPath},
                             [stderr_to_stdout, binary,
@@ -750,28 +787,45 @@ do_invoke_vbmap_body(VbmapPath, DiagPath, CurrentMap, Nodes,
 
     case PortResult of
         {ok, Output} ->
-            NodesMapping = dict:from_list(misc:enumerate(Nodes, 0)),
+            IdNodeMap = dict:from_list(misc:enumerate(Nodes, 0)),
 
             try
                 Chains0 = ejson:decode(Output),
                 Chains = lists:map(
                            fun (Chain) ->
-                                 [dict:fetch(N, NodesMapping) || N <- Chain]
+                                   [dict:fetch(N, IdNodeMap) || N <- Chain]
                            end, Chains0),
 
                 EffectiveNumCopies = length(hd(Chains)),
+                S1 = vbucket_movements(CurrentMap, Chains),
+                ?log_debug("Score before simple minimization: ~p", [S1]),
 
                 Map0 = simple_minimize_moves(CurrentMap, Chains,
                                              EffectiveNumCopies, Nodes),
+
+                S2 = vbucket_movements(CurrentMap, Map0),
+                ?log_debug("Score after simple minimization: ~p", [S2]),
+
+                MapToUse =
+                    case S1 < S2 of
+                        true ->
+                            ?log_debug("Map from vbmap better before simple
+                                       minimization; using it"),
+                            Chains;
+                        _ ->
+                            ?log_debug("Map better after simple minimization;
+                                       using it"),
+                            Map0
+                    end,
 
                 Map =
                     case EffectiveNumCopies < NumReplicas + 1 of
                         true ->
                             N = NumReplicas + 1 - EffectiveNumCopies,
                             Extension = lists:duplicate(N, undefined),
-                            [Chain ++ Extension || Chain <- Map0];
+                            [Chain ++ Extension || Chain <- MapToUse];
                         false ->
-                            Map0
+                            MapToUse
                     end,
 
                 {ok, Map}
@@ -788,14 +842,31 @@ do_invoke_vbmap_body(VbmapPath, DiagPath, CurrentMap, Nodes,
             exit({vbmap_error, iolist_to_binary(Output)})
     end.
 
-map_tags(Nodes, RawTags) ->
-    {_, NodeIxMap} =
+map_chain(Chain, MaxNodeId, NodeIdMap) ->
+    {ReversedChain, MaxNodeIdx1, NodeIdxMap1} =
         lists:foldl(
-          fun (Node, {Ix, Acc}) ->
-                  Acc1 = dict:store(Node, Ix, Acc),
-                  {Ix + 1, Acc1}
-          end, {0, dict:new()}, Nodes),
+          fun(N, {ChainPart, MaxNId, NIdMap}) ->
+                  case dict:find(N, NIdMap) of
+                      {ok, Idx} ->
+                          {[Idx | ChainPart], MaxNId, NIdMap};
+                      error ->
+                          {[MaxNodeId + 1 | ChainPart], MaxNodeId + 1,
+                           dict:store(N, MaxNId + 1, NIdMap)}
+                  end
+          end, {[], MaxNodeId, NodeIdMap}, Chain),
+    {lists:reverse(ReversedChain), MaxNodeIdx1, NodeIdxMap1}.
 
+make_vbmap_with_node_ids(MaxNodeId, NodeIdMap, CurrentMap) ->
+    NodeIdMapWithUndefined = dict:store(undefined, -1, NodeIdMap),
+    {ReversedChains, _, _} =
+        lists:foldl(
+          fun (Chain, {NewChains, MaxNId, NIdMap}) ->
+                  {Chain1, MaxNId1, NIdMap1} = map_chain(Chain, MaxNId, NIdMap),
+                  {[Chain1 | NewChains], MaxNId1, NIdMap1}
+          end, {[], MaxNodeId, NodeIdMapWithUndefined}, CurrentMap),
+    lists:reverse(ReversedChains).
+
+map_tags(NodeIxMap, RawTags) ->
     {_, TagIxMap} =
         lists:foldl(
           fun (Tag, {Ix, Acc}) ->
@@ -810,16 +881,25 @@ map_tags(Nodes, RawTags) ->
 
     [{dict:fetch(N, NodeIxMap), dict:fetch(T, TagIxMap)} || {N, T} <- RawTags].
 
-vbmap_tags_args(Nodes, RawTags) ->
-        case RawTags of
-            undefined ->
-                [];
-            _ ->
-                Tags = map_tags(Nodes, RawTags),
-                TagsStrings = [?i2l(N) ++ ":" ++ ?i2l(T) || {N, T} <- Tags],
-                TagsString = string:join(TagsStrings, ","),
-                ["--tags", TagsString]
-        end.
+vbmap_tags_args(NodeIdMap, RawTags) ->
+    case RawTags of
+        undefined ->
+            [];
+        _ ->
+            Tags = map_tags(NodeIdMap, RawTags),
+            TagsStrings = [?i2l(N) ++ ":" ++ ?i2l(T) || {N, T} <- Tags],
+            TagsString = string:join(TagsStrings, ","),
+            ["--tags", TagsString]
+    end.
+
+write_vbmap_to_file(VbMap, Filename) ->
+    try
+        BinChains = ejson:encode(VbMap),
+        file:write_file(Filename, BinChains)
+    catch T1:E1:S1 ->
+            {error, {T1, E1, S1}}
+    end.
+
 
 collect_vbmap_output(Port) ->
     do_collect_vbmap_output(Port, []).

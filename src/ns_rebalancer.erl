@@ -82,6 +82,7 @@ generate_vbucket_map_options(KeepNodes, BucketConfig) ->
            end,
 
     Opts0 = ns_bucket:config_to_map_options(BucketConfig),
+    UseGreedy = ns_config:read_key_fast(use_vbmap_greedy_optimization, true),
 
     %% Note that we don't need to have replication_topology here (in fact as
     %% of today it's still returned by ns_bucket:config_to_map_options/1), but
@@ -90,7 +91,8 @@ generate_vbucket_map_options(KeepNodes, BucketConfig) ->
     %% wrongly believe that rebalance is needed even when the cluster is
     %% balanced. See MB-15543 for details.
     misc:update_proplist(Opts0, [{replication_topology, star},
-                                 {tags, Tags}]).
+                                 {tags, Tags},
+                                 {use_vbmap_greedy_optimization, UseGreedy}]).
 
 generate_vbucket_map(CurrentMap, KeepNodes, BucketConfig) ->
     Opts = generate_vbucket_map_options(KeepNodes, BucketConfig),
