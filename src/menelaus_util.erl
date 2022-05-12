@@ -757,10 +757,14 @@ proxy_req({Scheme, Host, Port, AFamily}, Path, Headers, Timeout,
           RespHeaderFilterFun, ExtraConnectOpts, Req) ->
     Method = mochiweb_request:get(method, Req),
     Body = get_body(Req),
+    IsSSL = Scheme =:= https,
     Options = [{partial_download, [{window_size, ?WINDOW_SIZE},
                                    {part_size, ?PART_SIZE}]},
-               {connect_options, [AFamily | ExtraConnectOpts]}],
-    Resp = lhttpc:request(Host, Port, Scheme =:= https, Path, Method, Headers,
+               {connect_options, [AFamily | ExtraConnectOpts] ++
+                   %% Remove this line when merging forwards, as we will enable
+                   %% peer verification in trinity and later
+                   [{verify, verify_none} || IsSSL]}],
+    Resp = lhttpc:request(Host, Port, IsSSL, Path, Method, Headers,
                           Body, Timeout, Options),
     handle_resp(Resp, RespHeaderFilterFun, Req).
 
