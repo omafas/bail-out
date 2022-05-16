@@ -215,6 +215,8 @@ sanitize(Config, TagUserTuples) ->
               {stop, {{metakv, K}, {?METAKV_SENSITIVE, sanitize_value(V)}}};
           ({cookie, Cookie}) ->
               {stop, {cookie, ns_cookie_manager:sanitize_cookie(Cookie)}};
+          ({privateKeyPassphrase, _}) ->
+              {stop, {privateKeyPassphrase, "*****"}};
           ({UName, {auth, Auth}}) ->
               {stop, {tag_user_name(UName),
                       {auth, sanitize(Auth, TagUserTuples)}}};
