@@ -476,7 +476,8 @@ init_bucket_validation_context(IsNew, BucketName, AllBuckets,
     MaxReplicas =
         case ns_cluster_membership:rack_aware(KvServerGroups) of
             true ->
-                min(length(KvServerGroups), NumKvNodes) - 1;
+                ns_cluster_membership:get_max_replicas(NumKvNodes,
+                                                       KvServerGroups);
             false ->
                 NumKvNodes - 1
         end,

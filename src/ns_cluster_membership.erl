@@ -80,7 +80,8 @@
          should_run_service/2,
          should_run_service/3,
          user_friendly_service_name/1,
-         json_service_name/1]).
+         json_service_name/1,
+         get_max_replicas/2]).
 
 fetch_snapshot(Txn) ->
     Snapshot =
@@ -197,6 +198,12 @@ get_nodes_server_groups(Nodes, Groups) ->
                                             {nodes, NewGroupNodes})}
               end
       end, Groups).
+
+get_max_replicas(NumKvNodes, KvServerGroups) ->
+    lists:foldl(fun (Group, MaxReplicas) ->
+                    NumGroupNodes = length(proplists:get_value(nodes, Group)),
+                    min(MaxReplicas, NumKvNodes - NumGroupNodes)
+                end, NumKvNodes - 1, KvServerGroups).
 
 system_joinable() ->
     nodes_wanted() =:= [node()].
