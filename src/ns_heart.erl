@@ -250,6 +250,7 @@ current_status_slow_inner() ->
 
     InterestingStats =
         lists:foldl(fun ({BucketName, InterestingValues}, Acc) ->
+                            ValuesDict = orddict:from_list(InterestingValues),
                             orddict:merge(fun (K, V1, V2) ->
                                                   try
                                                       V1 + V2
@@ -258,8 +259,8 @@ current_status_slow_inner() ->
                                                                      [{BucketName, K, V1, V2}]),
                                                           V1
                                                   end
-                                          end, Acc, InterestingValues)
-                    end, [], PerBucketInterestingStats),
+                                          end, Acc, ValuesDict)
+                    end, orddict:new(), PerBucketInterestingStats),
 
     Tasks = lists:filter(
         fun (Task) ->
