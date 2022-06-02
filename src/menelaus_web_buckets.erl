@@ -64,6 +64,23 @@
 
 -define(MAX_BUCKET_NAME_LEN, 100).
 
+may_expose_bucket_auth(Name, Req) ->
+    case menelaus_auth:get_token(Req) of
+        undefined ->
+            case cluster_compat_mode:is_cluster_71() of
+                false ->
+                    %% The bucket password permission was removed in 7.1
+                    %% so would only come into play when running mixed versions
+                    %% with pre-7.1 nodes.
+                    menelaus_auth:has_permission({[{bucket, Name}, password],
+                                                  read}, Req);
+                true ->
+                    false
+            end;
+        _ ->
+            false
+    end.
+
 get_info_level(Req) ->
     case proplists:get_value("basic_stats", mochiweb_request:parse_qs(Req)) of
         undefined ->
@@ -227,10 +244,11 @@ build_buckets_info(Req, Buckets, Ctx, InfoLevel) ->
     SkipMap = InfoLevel =/= streaming andalso
         proplists:get_value(
           "skipMap", mochiweb_request:parse_qs(Req)) =:= "true",
-    [build_bucket_info(BucketName, Ctx, InfoLevel, SkipMap) ||
+    [build_bucket_info(BucketName, Ctx, InfoLevel,
+                      may_expose_bucket_auth(BucketName, Req), SkipMap) ||
         BucketName <- Buckets].
 
-build_bucket_info(Id, Ctx, InfoLevel, SkipMap) ->
+build_bucket_info(Id, Ctx, InfoLevel, MayExposeAuth, SkipMap) ->
     Snapshot = menelaus_web_node:get_snapshot(Ctx),
     {ok, BucketConfig} = ns_bucket:get_bucket(Id, Snapshot),
     BucketUUID = ns_bucket:uuid(Id, Snapshot),
@@ -254,10 +272,35 @@ build_bucket_info(Id, Ctx, InfoLevel, SkipMap) ->
                                                "Directory"])},
            {nodeStatsListURI,
             bucket_info_cache:build_pools_uri(["buckets", Id, "nodes"])}]}},
+        build_authType(BucketConfig),
         build_auto_compaction_info(BucketConfig),
         build_purge_interval_info(BucketConfig),
         build_replica_index(BucketConfig),
-        build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx)])}.
+        build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx),
+        [build_sasl_password(BucketConfig) || MayExposeAuth]])}.
+
+build_authType(BucketConfig) ->
+    case cluster_compat_mode:is_cluster_71() of
+        false ->
+            [{authType, misc:expect_prop_value(auth_type, BucketConfig)}];
+        true ->
+            []
+    end.
+
+build_sasl_password(BucketConfig) ->
+    case cluster_compat_mode:is_cluster_71() of
+        true ->
+            [];
+        false ->
+            case cluster_compat_mode:is_cluster_70() of
+                true ->
+                    {saslPassword, <<>>};
+                false ->
+                    {saslPassword,
+                     list_to_binary(proplists:get_value(sasl_password,
+                                                        BucketConfig, ""))}
+            end
+    end.
 
 build_replica_index(BucketConfig) ->
     [{replicaIndex, proplists:get_value(replica_index, BucketConfig, true)} ||
