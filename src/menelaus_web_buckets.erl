@@ -284,7 +284,10 @@ build_authType(BucketConfig) ->
         false ->
             [{authType, misc:expect_prop_value(auth_type, BucketConfig)}];
         true ->
-            []
+            %% Needed by XDCR on versions prior to 7.0. This must remain
+            %% until there are no supported pre-7.0 versions that can
+            %% replicate to us.
+            [{authType, sasl}]
     end.
 
 build_sasl_password(BucketConfig) ->
