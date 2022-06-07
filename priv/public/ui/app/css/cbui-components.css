@@ -2485,6 +2485,7 @@ ul.pagination li span {
   justify-content: space-between;
   position: relative;
   overflow: hidden;
+  height: calc(100vh - 140px);
 }
 /* wrapper for query editor and results area ----------- */
 .wb-main-wrapper {
@@ -2820,7 +2821,8 @@ button.ace-search-options-buttons.checked {
   flex: 0 0 auto;
   transition: all .8s;
   margin: 0 -.5rem 0 1rem;
-  overflow: hidden;
+  overflow: scroll;
+  height: 100%;
   border-left: 1px solid #d1d1d1;
   padding: .25rem 0 2rem 1rem;
 }
