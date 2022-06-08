@@ -749,7 +749,7 @@ do_invoke_vbmap_body(VbmapPath, DiagPath, CurrentMap, Nodes,
 
     NodeIdMap = dict:from_list(NodeIdList),
 
-    IdVbMap = make_vbmap_with_node_ids(MaxNodeId, NodeIdMap, CurrentMap),
+    IdVbMap = make_vbmap_with_node_ids(NodeIdMap, CurrentMap),
 
     PrevMapFile = path_config:tempfile("prev-vbmap", ".json"),
 
@@ -842,29 +842,13 @@ do_invoke_vbmap_body(VbmapPath, DiagPath, CurrentMap, Nodes,
             exit({vbmap_error, iolist_to_binary(Output)})
     end.
 
-map_chain(Chain, MaxNodeId, NodeIdMap) ->
-    {ReversedChain, MaxNodeIdx1, NodeIdxMap1} =
-        lists:foldl(
-          fun(N, {ChainPart, MaxNId, NIdMap}) ->
-                  case dict:find(N, NIdMap) of
-                      {ok, Idx} ->
-                          {[Idx | ChainPart], MaxNId, NIdMap};
-                      error ->
-                          {[MaxNodeId + 1 | ChainPart], MaxNodeId + 1,
-                           dict:store(N, MaxNId + 1, NIdMap)}
-                  end
-          end, {[], MaxNodeId, NodeIdMap}, Chain),
-    {lists:reverse(ReversedChain), MaxNodeIdx1, NodeIdxMap1}.
-
-make_vbmap_with_node_ids(MaxNodeId, NodeIdMap, CurrentMap) ->
-    NodeIdMapWithUndefined = dict:store(undefined, -1, NodeIdMap),
-    {ReversedChains, _, _} =
-        lists:foldl(
-          fun (Chain, {NewChains, MaxNId, NIdMap}) ->
-                  {Chain1, MaxNId1, NIdMap1} = map_chain(Chain, MaxNId, NIdMap),
-                  {[Chain1 | NewChains], MaxNId1, NIdMap1}
-          end, {[], MaxNodeId, NodeIdMapWithUndefined}, CurrentMap),
-    lists:reverse(ReversedChains).
+make_vbmap_with_node_ids(NodeIdMap, CurrentMap) ->
+    [[case dict:find(N, NodeIdMap) of
+          {ok, Idx} ->
+              Idx;
+          error ->
+              -1
+      end || N <- Chain] || Chain <- CurrentMap].
 
 map_tags(NodeIxMap, RawTags) ->
     {_, TagIxMap} =
@@ -1366,5 +1350,23 @@ enumerate_chains_test() ->
 
     EnumeratedChains2 = enumerate_chains(Map, undefined),
     [{0, [a, b, c], []}, {1, [b, c, a], []}] = EnumeratedChains2.
+
+make_vbmap_with_node_ids_test() ->
+    NodeIdMap = dict:from_list([{a, 0}, {b, 1}, {c, 2}]),
+
+    Map = [[a, b, c], [b, c, a]],
+    [[0, 1, 2], [1, 2, 0]] = make_vbmap_with_node_ids(NodeIdMap, Map),
+
+    Map1 = [[a, b, c], [b, c, undefined]],
+    [[0, 1, 2], [1, 2, -1]] = make_vbmap_with_node_ids(NodeIdMap, Map1),
+
+    Map2 = [[undefined, b, c], [b, c, undefined]],
+    [[-1, 1, 2], [1, 2, -1]] = make_vbmap_with_node_ids(NodeIdMap, Map2),
+
+    Map3 = [[a, b, d], [b, c, e]],
+    [[0, 1, -1], [1, 2, -1]] = make_vbmap_with_node_ids(NodeIdMap, Map3),
+
+    Map4 = [[undefined, b, d], [b, undefined, e]],
+    [[-1, 1, -1], [1, -1, -1]] = make_vbmap_with_node_ids(NodeIdMap, Map4).
 
 -endif.
