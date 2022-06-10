@@ -1052,6 +1052,7 @@ validate_functions(Functions) ->
           ("min") -> min;
           ("max") -> max;
           ("avg") -> avg;
+          ("count") -> count;
           ("p" ++ PStr) ->
               {histogram_quantile, validate_percentile(PStr)};
           (_) -> error(invalid_function)
