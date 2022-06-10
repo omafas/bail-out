@@ -234,7 +234,8 @@ angular.module('mnSettingsNotificationsService', [
         "total_avg_view_accesses",
         "total_avg_index_num_rows_returned",
         "vb_active_sync_write_committed_count",
-        "total_curr_items_tot"
+        "total_curr_items_tot",
+        "kv_vb_sync_write_accepted_count"
       ]).map(function (stat, index) {
         let day = dayStats[index].data[0];
         let hour = hourStats[index].data[0];
@@ -393,6 +394,10 @@ angular.module('mnSettingsNotificationsService', [
         }, {
           applyFunctions: ["sum"],
           metric: [{label: "name", value: "kv_curr_items_tot"}]//kv_curr_items_tot
+        }, {
+          applyFunctions: ["sum"],
+          metric: [{label: "name", value: "kv_vb_sync_write_accepted_count"},
+                   {label: "state", value: "active"}]//kv_vb_sync_write_accepted_count
         }];
         let dayStatsConfigs = interestingStats.map(metric => {
           return Object.assign({}, avgCommonSettingsDay, metric);
