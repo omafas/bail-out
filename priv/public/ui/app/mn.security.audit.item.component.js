@@ -12,7 +12,7 @@ import {Component, ChangeDetectionStrategy} from '@angular/core';
 import {pluck, scan, distinctUntilChanged, shareReplay,
         takeUntil, startWith, map} from 'rxjs/operators';
 import {Subject, combineLatest} from 'rxjs';
-import {not, pipe, contains, all, equals} from 'ramda';
+import {not, pipe, includes, all, equals} from 'ramda';
 import {FormControl, FormGroup} from '@angular/forms';
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
@@ -77,7 +77,7 @@ class MnSecurityAuditItemComponent extends MnLifeCycleHooksToStream {
       .subscribe(this.maybeDisableFields.bind(this));
 
     this.isThereEnabledField =
-      this.thisModuleChanges.pipe(map(pipe(Object.values, contains(true))),
+      this.thisModuleChanges.pipe(map(pipe(Object.values, includes(true))),
                                   shareReplay({refCount: true, bufferSize: 1}));
 
     this.thisModuleChanges
