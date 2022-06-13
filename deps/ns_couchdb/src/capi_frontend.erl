@@ -80,10 +80,17 @@ get_oper('GET') ->
 get_oper(_) ->
     write.
 
+get_oper_views('GET') ->
+    read;
+get_oper_views('POST') ->
+    read;
+get_oper_views(_) ->
+    write.
+
 get_required_permission(BucketName, Method, xdcr) ->
     {[{bucket, BucketName}, data, meta], get_oper(Method)};
 get_required_permission(BucketName, Method, views) ->
-    {[{bucket, BucketName}, views], get_oper(Method)};
+    {[{bucket, BucketName}, views], get_oper_views(Method)};
 get_required_permission(BucketName, Method, kv) ->
     {[{bucket, BucketName}, data, couchdb], get_oper(Method)}.
 
