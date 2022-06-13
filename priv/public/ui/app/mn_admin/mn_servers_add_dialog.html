@@ -22,10 +22,10 @@ licenses/APL2.txt.
       <div class="error error-form">
         Warning: Adding a server to this cluster means any previous Couchbase Server data on that server will be removed.
       </div>
-      <!-- <div class="error error-form"
-           ng-show="serversAddDialogCtl.certificate.cert.type == 'generated'">
-           This cluster is using self-signed certificates. No peer verification between nodes will be done.
-           </div> -->
+      <div class="error error-form"
+         ng-show="serversAddDialogCtl.certificatesByNode[serversAddDialogCtl.selfConfig.selfConfig.configuredHostname].type === 'generated'">
+        This cluster is using self-signed certificates. No peer verification between nodes will be done.
+      </div>
       <div class="error error-form" ng-if="('isString' | lodash:serversAddDialogCtl.errors)">
         Attention: {{serversAddDialogCtl.errors}}</div>
       <div class="error error-form" ng-if="('isArray' | lodash:serversAddDialogCtl.errors)">
