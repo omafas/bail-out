@@ -1306,9 +1306,9 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
             make('SELECT requests.*, '
                  '"<ud>"||requests.statement||"</ud>" AS statement, '
                  '"<ud>"||requests.preparedText||"</ud>" AS preparedText, '
-                 '"<ud>"||meta().plan||"</ud>" AS plan, '
-                 '"<ud>"||requests.namedArgs||"</ud>" AS namedArgs, '
-                 '"<ud>"||requests.positionalArgs||"</ud>" AS positionalArgs, '
+                 '"<ud>"||encode_json(meta().plan)||"</ud>" AS plan, '
+                 '"<ud>"||encode_json(requests.namedArgs)||"</ud>" AS namedArgs, '
+                 '"<ud>"||encode_json(requests.positionalArgs)||"</ud>" AS positionalArgs, '
                  '"<ud>"||requests.users||"</ud>" AS users '
                  'FROM system:completed_requests AS requests;',
                  logfile="completed_requests.json", no_header=True),
