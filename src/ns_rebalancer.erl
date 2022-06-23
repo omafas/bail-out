@@ -38,6 +38,7 @@
 
 
 -define(BAD_REPLICATORS, 2).
+-define(MAX_REPLICA_COUNT_RANGE, 5).
 
 -define(BUCKETS_SHUTDOWN_WAIT_TIMEOUT, ?get_timeout(buckets_shutdown, 60000)).
 
@@ -735,8 +736,14 @@ do_unbalanced(Map, Servers) ->
 
     NumServers = length(Servers),
 
+    %% With the new greedy vbmap approach - the acceptable
+    %% difference in replica count between two nodes is ?MAX_REPLICA_COUNT_RANGE
+    %% by default.
+    %% The default value can be changed via 'max_replica_count_range' config
+    %% knob, if necessary.
+
     lists:any(
-      fun (Counts0) ->
+      fun ({MaxCountsRange, Counts0}) ->
               Counts1 = [C || {_, C} <- Counts0],
               Len = length(Counts1),
               Counts = case Len < NumServers of
@@ -746,8 +753,11 @@ do_unbalanced(Map, Servers) ->
                                true = Len =:= NumServers,
                                Counts1
                        end,
-              Counts =/= [] andalso lists:max(Counts) - lists:min(Counts) > 1
-      end, [MastersCounts, ReplicasCounts]).
+              Counts =/= [] andalso
+                lists:max(Counts) - lists:min(Counts) > MaxCountsRange
+      end, [{1, MastersCounts},
+            {?get_param(max_replica_count_range, ?MAX_REPLICA_COUNT_RANGE),
+             ReplicasCounts}]).
 
 bucket_needs_rebalance(BucketConfig, Nodes) ->
     Servers = ns_bucket:get_servers(BucketConfig),
@@ -1626,6 +1636,42 @@ find_active_nodes_of_vbuckets_test() ->
     ?assertEqual(#{ a => [0, 2] },
                  SortMap(find_active_nodes_of_vbuckets(
                            Map, sets:from_list([0, 2])))).
+
+do_unbalanced_test() ->
+    Servers = [0,1,2,3],
+
+    % Per-node Vb Stats (greedy):
+    % Active Vbs:  [0:2 1:2 2:2 3:2]
+    % Replica Vbs: [0:4 1:4 2:4 3:4]
+    Map = [[1,3,2],[1,0,2],[0,2,1],[0,3,1],[2,0,3],[2,1,3],[3,2,0],[3,1,0]],
+
+    meck:new(ns_config, [passthrough]),
+
+    meck:expect(ns_config, search_node_with_default,
+                fun({?MODULE, max_replica_count_range}, _) ->
+                        5
+                end),
+    false = do_unbalanced(Map, Servers),
+
+    meck:expect(ns_config, search_node_with_default,
+                fun({?MODULE, max_replica_count_range}, _) ->
+                        1
+                end),
+    % Per-node Vb Stats (greedy):
+    % Active Vbs:  [0:2 1:2 2:2 3:2]
+    % Replica Vbs: [0:4 1:4 2:3 3:5]
+    Map1 = [[3,2,0],[3,0,1],[0,1,2],[0,1,3],[2,0,3],[2,3,1],[1,3,0],[1,2,3]],
+
+    true = do_unbalanced(Map1, Servers),
+
+    meck:expect(ns_config, search_node_with_default,
+                fun({?MODULE, max_replica_count_range}, _) ->
+                        2
+                end),
+
+    false = do_unbalanced(Map1, Servers),
+
+    meck:unload(ns_config).
 -endif.
 
 complete_delta_recovery(Nodes) ->
