@@ -317,6 +317,9 @@ footer {
 .max-width-12 {
   max-width: 80rem; /* 1280px */
 }
+.max-width-30 {
+  max-width: 30%;
+}
 .max-width-50 {
   max-width: 50%;
 }

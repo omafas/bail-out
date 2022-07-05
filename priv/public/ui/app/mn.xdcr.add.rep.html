@@ -72,7 +72,7 @@ licenses/APL2.txt.
              autocapitalize="off"
              placeholder="type remote bucket name (required)">
         </div>
-        <div class="flex-grow-1">
+        <div class="flex-grow-1 max-width-30">
           <label for="replication_to_cluster" class="nowrap">Remote Cluster</label>
           <mn-select
              [values]="remoteClusters | async"
