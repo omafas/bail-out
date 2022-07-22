@@ -45,7 +45,8 @@
       'audit_dropped_events',
       'indexer_ram_max_usage',
       'ep_clock_cas_drift_threshold_exceeded',
-      'communication_issue'
+      'communication_issue',
+      'memory_threshold'
     ])
     .constant('timeUnitToSeconds', {
       minute: 60,

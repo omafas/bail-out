@@ -191,8 +191,8 @@ validate_settings_alerts_query(alerts, Alerts, Args) ->
         _ ->
             Keys2 = list_to_binary(string:join(
                                      [atom_to_list(K) || K <- Keys], ", ")),
-            {alerts, <<"alerts contained invalid keys. Valid keys are: ",
-                       Keys2/binary, ".">>}
+            <<"alerts contained invalid keys. Valid keys are: ",
+              Keys2/binary, ".">>
     end;
 validate_settings_alerts_query(email_encrypt, error, _Args) ->
     <<"emailEncrypt must be either true or false.">>;

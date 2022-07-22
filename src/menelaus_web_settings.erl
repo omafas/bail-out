@@ -865,14 +865,51 @@ do_handle_settings_web_post(Port, U, P, Req) ->
 
 handle_settings_alerts(Req) ->
     {value, Config} = ns_config:search(email_alerts),
-    reply_json(Req, {struct, menelaus_alert:build_alerts_json(Config)}).
+    %% memory_alert_email is not put to email_alerts for backward compatibility
+    %% This is basically a hack to make it possible to add new alert in
+    %% a minor release. It can be removed when memory_alert_email is added as
+    %% a proper alert (first major release after 7.1)
+    Config2 =
+        case ns_config:read_key_fast(memory_alert_email, true) of
+            true ->
+                case proplists:get_all_values(alerts, Config) of
+                    [] -> Config;
+                    [Alerts] ->
+                        Alerts2 = [memory_threshold | Alerts],
+                        misc:update_proplist(Config, [{alerts, Alerts2}])
+                end;
+            false ->
+                Config
+        end,
+    reply_json(Req, {struct, menelaus_alert:build_alerts_json(Config2)}).
 
 handle_settings_alerts_post(Req) ->
     PostArgs = mochiweb_request:parse_post(Req),
     ValidateOnly = proplists:get_value("just_validate", mochiweb_request:parse_qs(Req)) =:= "1",
     case {ValidateOnly, menelaus_alert:parse_settings_alerts_post(PostArgs)} of
         {false, {ok, Config}} ->
-            ns_config:set(email_alerts, Config),
+            %% memory_alert_email is not put to email_alerts for backward
+            %% compatibility. This is basically a hack to make it possible to
+            %% add new alert in a minor release. It can be removed when
+            %% memory_alert_email is added as a proper alert (first major
+            %% release after 7.1)
+            Config2 =
+                case proplists:get_all_values(alerts, Config) of
+                    [] -> Config;
+                    [Alerts] ->
+                        case lists:member(memory_threshold, Alerts) of
+                            true ->
+                                ns_config:set(memory_alert_email, true),
+                                Alerts2 = lists:delete(memory_threshold,
+                                                       Alerts),
+                                misc:update_proplist(Config,
+                                                     [{alerts, Alerts2}]);
+                            false ->
+                                ns_config:set(memory_alert_email, false),
+                                Config
+                        end
+                end,
+            ns_config:set(email_alerts, Config2),
             ns_audit:alerts(Req, Config),
             reply(Req, 200);
         {false, {error, Errors}} ->

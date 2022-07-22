@@ -80,6 +80,8 @@ short_description(ep_clock_cas_drift_threshold_exceeded) ->
     "cas drift threshold exceeded error";
 short_description(communication_issue) ->
     "communication issue among some nodes";
+short_description(memory_threshold) ->
+    "system memory usage threshold exceeded";
 short_description(Other) ->
     %% this case is needed for tests to work
     couch_util:to_list(Other).
@@ -104,7 +106,16 @@ errors(ep_clock_cas_drift_threshold_exceeded) ->
     "than ~p milliseconds ahead of local clock. Please ensure that NTP is set up correctly "
     "on all nodes across the replication topology and clocks are synchronized.";
 errors(communication_issue) ->
-    "Warning: Node \"~s\" is having issues communicating with following nodes \"~s\".".
+    "Warning: Node \"~s\" is having issues communicating with following nodes \"~s\".";
+errors(memory_critical) ->
+    "CRITICAL: On node ~s system memory use is ~.2f% of total available "
+    "memory, above the critical threshold of ~b%.";
+errors(memory_warning) ->
+    "Warning: On node ~s system memory use is ~.2f% of total available "
+    "memory, above the warning threshold of ~b%.";
+errors(memory_notice) ->
+    "Notice: On node ~s system memory use is ~.2f% of total available "
+    "memory, above the notice threshold of ~b%.".
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -244,7 +255,7 @@ do_handle_check_alerts_info(#state{history=Hist, opaque=Opaque}) ->
                 false ->
                     []
             end,
-    AllNames = ["@global" | BucketNames] ++ Index,
+    AllNames = ["@global", "@system" | BucketNames] ++ Index,
     RawPairs = [{Name, stats_reader:latest(minute, node(), Name, 1)} || Name <- AllNames],
     Stats = [{Name, OrdDict}
              || {Name, {ok, [#stat_entry{values = OrdDict}|_]}} <- RawPairs],
@@ -269,7 +280,8 @@ start_timer() ->
 %% broadcast alerts to clients connected to any particular node
 global_checks() ->
     [oom, ip, write_fail, overhead, disk, audit_write_fail,
-     indexer_ram_max_usage, cas_drift_threshold, communication_issue].
+     indexer_ram_max_usage, cas_drift_threshold, communication_issue,
+     memory_threshold].
 
 %% @doc fires off various checks
 check_alerts(Opaque, Hist, Stats) ->
@@ -445,6 +457,54 @@ check(communication_issue, Opaque, _History, _Stats) ->
                       ok
               end
       end, ClusterStatus),
+    Opaque;
+
+check(memory_threshold, Opaque, _History, Stats) ->
+    case proplists:get_value("@system", Stats) of
+        undefined ->
+            ok;
+        SysStats ->
+            Free = proplists:get_value(mem_actual_free, SysStats),
+            Used = proplists:get_value(mem_actual_used, SysStats),
+            case is_number(Free) andalso is_number(Used) andalso
+                 (Free + Used) > 0 of
+                true ->
+                    Percentage = (Used * 100) / (Free + Used),
+                    {value, Config} = ns_config:search(alert_limits),
+                    Threshold1 = proplists:get_value(memory_notice_threshold,
+                                                     Config, undefined),
+                    Threshold2 = proplists:get_value(memory_warning_threshold,
+                                                     Config, 90),
+                    Threshold3 = proplists:get_value(memory_critical_threshold,
+                                                     Config, 95),
+
+                    Res =
+                        if
+                            Percentage >= Threshold3 ->
+                                {alert, memory_critical, Threshold3};
+                            Percentage >= Threshold2 ->
+                                {alert, memory_warning, Threshold2};
+                            Percentage >= Threshold1 ->
+                                {alert, memory_notice, Threshold1};
+                            true ->
+                                ok
+                        end,
+
+                    case Res of
+                        ok -> ok;
+                        {alert, Error, Threshold} when is_float(Percentage),
+                                                       is_integer(Threshold) ->
+                            Node = node(),
+                            Host = misc:extract_node_address(Node),
+                            Err = fmt_to_bin(errors(Error),
+                                             [Host, Percentage, Threshold]),
+                            global_alert({memory_threshold, {Node, Threshold}},
+                                         Err)
+                    end;
+                false ->
+                    ok
+            end
+    end,
     Opaque.
 
 %% @doc only check for disk usage if there has been no previous
@@ -624,7 +684,7 @@ alert_keys() ->
     [ip, disk, overhead, ep_oom_errors, ep_item_commit_failed,
      audit_dropped_events, indexer_ram_max_usage,
      ep_clock_cas_drift_threshold_exceeded,
-     communication_issue].
+     communication_issue, memory_threshold].
 
 
 -ifdef(TEST).
