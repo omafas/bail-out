@@ -54,7 +54,8 @@ let knownAlerts = [
   'ep_clock_cas_drift_threshold_exceeded',
   'communication_issue',
   'time_out_of_sync',
-  'disk_usage_analyzer_stuck'
+  'disk_usage_analyzer_stuck',
+  'memory_threshold'
 ];
 
 let timeUnitToSeconds = {

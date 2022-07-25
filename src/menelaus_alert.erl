@@ -46,16 +46,54 @@ handle_logs(Req) ->
 %% @doc Handle the email alerts request.
 handle_settings_alerts(Req) ->
     {value, Config} = ns_config:search(email_alerts),
-    reply_json(Req, {struct, build_alerts_json(Config)}).
+    %% memory_alert_email is not put to email_alerts for backward compatibility
+    %% This is basically a hack to make it possible to add new alert in
+    %% a minor release. It can be removed when memory_alert_email is added as
+    %% a proper alert (first major release after 7.1)
+    Config2 =
+        case ns_config:read_key_fast(memory_alert_email, true) of
+            true ->
+                case proplists:get_all_values(alerts, Config) of
+                    [] -> Config;
+                    [Alerts] ->
+                        Alerts2 = [memory_threshold | Alerts],
+                        misc:update_proplist(Config, [{alerts, Alerts2}])
+                end;
+            false ->
+                Config
+        end,
+    reply_json(Req, {struct, build_alerts_json(Config2)}).
 
 %% @doc Handle the email alerts post.
 handle_settings_alerts_post(Req) ->
-    validator:handle(fun (Values) ->
-                             Config = build_alerts_config(Values),
-                             ns_config:set(email_alerts, Config),
-                             ns_audit:alerts(Req, Config),
-                             reply(Req, 200)
-                     end, Req, form, alerts_query_validators()).
+    validator:handle(
+      fun (Values) ->
+              Config = build_alerts_config(Values),
+              %% memory_alert_email is not put to email_alerts for backward
+              %% compatibility. This is basically a hack to make it possible to
+              %% add new alert in a minor release. It can be removed when
+              %% memory_alert_email is added as a proper alert (first major
+              %% release after 7.1)
+              Config2 =
+                  case proplists:get_all_values(alerts, Config) of
+                      [] -> Config;
+                      [Alerts] ->
+                          case lists:member(memory_threshold, Alerts) of
+                              true ->
+                                  ns_config:set(memory_alert_email, true),
+                                  Alerts2 = lists:delete(memory_threshold,
+                                                         Alerts),
+                                  misc:update_proplist(Config,
+                                                       [{alerts, Alerts2}]);
+                              false ->
+                                  ns_config:set(memory_alert_email, false),
+                                  Config
+                          end
+                  end,
+              ns_config:set(email_alerts, Config2),
+              ns_audit:alerts(Req, Config2),
+              reply(Req, 200)
+      end, Req, form, alerts_query_validators()).
 
 %% @doc Sends a test email with the current settings
 handle_settings_alerts_send_test_email(Req) ->

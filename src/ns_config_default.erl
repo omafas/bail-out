@@ -302,9 +302,9 @@ default() ->
                        {host, "localhost"},
                        {port, 25},
                        {encrypt, false}]},
-       {alerts, menelaus_alert:alert_keys()},
+       {alerts, alert_keys_no_memory_check() },
        %% The alerts which should produce UI pop-ups.
-       {pop_up_alerts, menelaus_alert:alert_keys()}
+       {pop_up_alerts, alert_keys_no_memory_check()}
       ]},
      {alert_limits, [
        %% Maximum percentage of overhead compared to max bucket size (%)
@@ -345,6 +345,13 @@ default() ->
      {password_policy, [{min_length, 6}, {must_present, []}]}] ++
         service_ports:default_config(IsEnterprise) ++
         rebalance_quirks:default_config().
+
+%% memory_threshold is excluded from alerts and pop_up_alerts here for
+%% backward compatibility reasons (because it was added in a minor
+%% release). It can be removed when memory_alert_email is added as
+%% a proper alert (first major release after 7.1).
+alert_keys_no_memory_check() ->
+    menelaus_alert:alert_keys() -- [memory_threshold].
 
 %% returns list of changes to config to upgrade it to current version.
 %% This will be invoked repeatedly by ns_config until list is empty.

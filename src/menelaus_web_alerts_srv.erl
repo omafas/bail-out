@@ -78,6 +78,8 @@ short_description(time_out_of_sync) ->
     "node time not in sync";
 short_description(disk_usage_analyzer_stuck) ->
     "disks usage worker is stuck and unresponsive";
+short_description(memory_threshold) ->
+    "system memory usage threshold exceeded";
 short_description(Other) ->
     %% this case is needed for tests to work
     couch_util:to_list(Other).
@@ -109,7 +111,16 @@ errors(time_out_of_sync) ->
 errors(disk_usage_analyzer_stuck) ->
     "Disk usage worker is stuck on node \"~s\". Please ensure all mounts are "
         "accessible via \"df\" and consider killing any existing \"df\" "
-        "processes.".
+        "processes.";
+errors(memory_critical) ->
+    "CRITICAL: On node ~s system memory use is ~.2f% of total available "
+    "memory, above the critical threshold of ~b%.";
+errors(memory_warning) ->
+    "Warning: On node ~s system memory use is ~.2f% of total available "
+    "memory, above the warning threshold of ~b%.";
+errors(memory_notice) ->
+    "Notice: On node ~s system memory use is ~.2f% of total available "
+    "memory, above the notice threshold of ~b%.".
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -257,7 +268,8 @@ alert_keys() ->
     [ip, disk, overhead, ep_oom_errors, ep_item_commit_failed,
      audit_dropped_events, indexer_ram_max_usage,
      ep_clock_cas_drift_threshold_exceeded,
-     communication_issue, time_out_of_sync, disk_usage_analyzer_stuck].
+     communication_issue, time_out_of_sync, disk_usage_analyzer_stuck,
+     memory_threshold].
 
 config_upgrade_to_70(Config) ->
     case ns_config:search(Config, email_alerts) of
@@ -281,7 +293,7 @@ start_timer() ->
 global_checks() ->
     [oom, ip, write_fail, overhead, disk, audit_write_fail,
      indexer_ram_max_usage, cas_drift_threshold, communication_issue,
-     time_out_of_sync, disk_usage_analyzer_stuck].
+     time_out_of_sync, disk_usage_analyzer_stuck, memory_threshold].
 
 %% @doc fires off various checks
 check_alerts(Opaque, Hist, Stats) ->
@@ -484,6 +496,58 @@ check(time_out_of_sync, Opaque, _History, _Stats) ->
         false ->
             ok
     end,
+    Opaque;
+
+check(memory_threshold, Opaque, _History, Stats) ->
+    case proplists:get_value("@system", Stats) of
+        undefined ->
+            ?log_debug("Skipping memory threshold check as there is no "
+                       "system stats: ~p", [Stats]),
+            ok;
+        SysStats ->
+            Free = proplists:get_value(mem_actual_free, SysStats),
+            Used = proplists:get_value(mem_actual_used, SysStats),
+            case is_number(Free) andalso is_number(Used) andalso
+                 (Free + Used) > 0 of
+                true ->
+                    Percentage = (Used * 100) / (Free + Used),
+                    {value, Config} = ns_config:search(alert_limits),
+                    Threshold1 = proplists:get_value(memory_notice_threshold,
+                                                     Config, undefined),
+                    Threshold2 = proplists:get_value(memory_warning_threshold,
+                                                     Config, 90),
+                    Threshold3 = proplists:get_value(memory_critical_threshold,
+                                                     Config, 95),
+
+                    Res =
+                        if
+                            Percentage >= Threshold3 ->
+                                {alert, memory_critical, Threshold3};
+                            Percentage >= Threshold2 ->
+                                {alert, memory_warning, Threshold2};
+                            Percentage >= Threshold1 ->
+                                {alert, memory_notice, Threshold1};
+                            true ->
+                                ok
+                        end,
+
+                    case Res of
+                        ok -> ok;
+                        {alert, Error, Threshold} when is_float(Percentage),
+                                                       is_integer(Threshold) ->
+                            Node = node(),
+                            Host = misc:extract_node_address(Node),
+                            Err = fmt_to_bin(errors(Error),
+                                             [Host, Percentage, Threshold]),
+                            global_alert({memory_threshold, {Node, Threshold}},
+                                         Err)
+                    end;
+                false ->
+                    ?log_debug("Skipping memory threshold check as there is no "
+                               "mem stats: ~p", [SysStats]),
+                    ok
+            end
+    end,
     Opaque.
 
 alert_if_time_out_of_sync({time_offset_status, true}) ->
@@ -683,11 +747,16 @@ add_proplist_list_elem(ListKey, Elem, PList) ->
     misc:update_proplist(PList, [{ListKey, lists:usort([Elem | List])}]).
 
 config_email_alerts_upgrade_to_70(EmailAlerts) ->
+    %% memory_threshold is excluded from alerts and pop_up_alerts here for
+    %% backward compatibility reasons (because it was added in a minor
+    %% release). It can be removed when memory_alert_email is added as
+    %% a proper alert (first major release after 7.1).
     Result =
         functools:chain(
           EmailAlerts,
           [add_proplist_list_elem(alerts, time_out_of_sync, _),
-           add_proplist_kv(pop_up_alerts, alert_keys(), _)]),
+           add_proplist_kv(pop_up_alerts, alert_keys() --
+                                          [memory_threshold], _)]),
 
     case misc:sort_kv_list(Result) =:= misc:sort_kv_list(EmailAlerts) of
         true ->

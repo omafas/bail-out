@@ -50,6 +50,7 @@ function alertsLabelFilter(knownAlerts) {
     case knownAlerts[13]: return 'Communication issues among some nodes in the cluster';
     case knownAlerts[14]: return 'Node\'s time is out of sync with some nodes in the cluster';
     case knownAlerts[15]: return 'Disk usage analyzer is stuck; cannot fetch disk usage data';
+    case knownAlerts[16]: return 'Memory usage threshold exceeded';
     }
   };
 }
