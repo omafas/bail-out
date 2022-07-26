@@ -36,13 +36,7 @@ send(Subject, Body, Config, Timeout) ->
     await_response(Ref, Pid, Timeout).
 
 send_alert_async(AlertKey, Subject0, Message, Config) when is_atom(AlertKey) ->
-    %% memory_alert_email is not put to email_alerts for backward compatibility
-    %% This is basically a hack to make it possible to add new alert in
-    %% a minor release. It can be removed when memory_alert_email is added as
-    %% a proper alert (first major release after 7.1)
-    MemoryAlertEnabled = ns_config:read_key_fast(memory_alert_email, true),
-    EnabledAlerts = proplists:get_value(alerts, Config, []) ++
-                    [memory_threshold || MemoryAlertEnabled],
+    EnabledAlerts = proplists:get_value(alerts, Config, []),
     case lists:member(AlertKey, EnabledAlerts) of
         true ->
             Subject =

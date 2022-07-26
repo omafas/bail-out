@@ -195,7 +195,8 @@ handle_call(fetch_alert, _From, #state{queue=Alerts0, change_counter=Counter}=St
     %% suppress alert UI pop-ups.
     Alerts = lists:map(
                fun ({Key, Msg, Time, Offset}) ->
-                       {AlertKey, _Node} = Key,
+                       {AlertKey0, _Node} = Key,
+                       AlertKey = extract_alert_key(AlertKey0),
                        NoPopUp = not lists:member(AlertKey, PopUps),
                        {Key, Msg, Offset + Time, NoPopUp}
                end, Alerts0),
@@ -717,7 +718,7 @@ maybe_send_out_email_alert({Key0, Node}, Message) ->
         true ->
             Key = extract_alert_key(Key0),
 
-            {value, Config} = ns_config:search(email_alerts),
+            Config = menelaus_alert:get_config(),
             case proplists:get_bool(enabled, Config) of
                 true ->
                     Description = short_description(Key),
@@ -843,7 +844,7 @@ config_update_to_70_test() ->
     Expected3 =
         [{alerts, [ip, communication_issue, time_out_of_sync]},
          {enabled, false},
-         {pop_up_alerts, alert_keys()}],
+         {pop_up_alerts, alert_keys() -- [memory_threshold]}],
     [{set, email_alerts, Actual3}] = config_upgrade_to_70(Config3),
     ?assertEqual(misc:sort_kv_list(Expected3), misc:sort_kv_list(Actual3)),
 
@@ -856,7 +857,7 @@ config_update_to_70_test() ->
     Expected4 =
         [{alerts, [ip, communication_issue, time_out_of_sync]},
          {enabled, false},
-         {pop_up_alerts, alert_keys()}],
+         {pop_up_alerts, alert_keys() -- [memory_threshold]}],
     [{set, email_alerts, Actual4}] = config_upgrade_to_70(Config4),
     ?assertEqual(misc:sort_kv_list(Expected4), misc:sort_kv_list(Actual4)).
 

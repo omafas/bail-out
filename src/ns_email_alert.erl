@@ -25,7 +25,7 @@ alert(AlertKey, Fmt, Args) ->
                            end).
 
 handle_alert({alert, AlertKey, Fmt, Args}) ->
-    {value, Config} = ns_config:search(email_alerts),
+    Config = menelaus_alert:get_config(),
     case proplists:get_bool(enabled, Config) of
         true ->
             Message = lists:flatten(io_lib:format(Fmt, Args)),
