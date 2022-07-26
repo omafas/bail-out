@@ -165,6 +165,15 @@ unpack_global(Bin) ->
 
     StructSize = erlang:size(Bin),
 
+    {CGMemLimit, CGMemUsed} =
+        case maps:get(supported, CgroupsInfo) of
+            true ->
+                {maps:get(memory_max, CgroupsInfo),
+                 maps:get(memory_current, CgroupsInfo)};
+            false ->
+                {undefined, undefined}
+        end,
+
     CGroupMem = {maps:get(memory_max, CgroupsInfo, 0),
                  maps:get(memory_current, CgroupsInfo, 0)},
     {MemLimit, _} = memory_quota:choose_limit(MemTotal, MemUsed, CGroupMem),
@@ -207,7 +216,9 @@ unpack_global(Bin) ->
          {mem_actual_used, MemActualUsed},
          {mem_actual_free, MemActualFree},
          {mem_free, MemActualFree},
-         {allocstall, AllocStall}],
+         {allocstall, AllocStall}] ++
+        [{mem_cgroup_limit, CGMemLimit} || CGMemLimit /= undefined] ++
+        [{mem_cgroup_used, CGMemUsed} || CGMemUsed /= undefined],
 
     {Counters, Gauges, CgroupsInfo}.
 
