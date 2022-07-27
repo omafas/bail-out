@@ -26,7 +26,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([alert_keys/0, config_upgrade_to_70/1]).
+-export([alert_keys/0, config_upgrade_to_70/1, config_upgrade_to_71/1]).
 
 %% @doc Hold client state for any alerts that need to be shown in
 %% the browser, is used by menelaus_web to piggy back for a transport
@@ -268,6 +268,14 @@ config_upgrade_to_70(Config) ->
             [];
         {value, EmailAlerts} ->
             config_email_alerts_upgrade_to_70(EmailAlerts)
+    end.
+
+config_upgrade_to_71(Config) ->
+    case ns_config:search(Config, email_alerts) of
+        false ->
+            [];
+        {value, EmailAlerts} ->
+            config_email_alerts_upgrade_to_71(EmailAlerts)
     end.
 
 %% ------------------------------------------------------------------
@@ -702,6 +710,21 @@ config_email_alerts_upgrade_to_70(EmailAlerts) ->
           EmailAlerts,
           [add_proplist_list_elem(alerts, time_out_of_sync, _),
            add_proplist_kv(pop_up_alerts, alert_keys(), _)]),
+
+    case misc:sort_kv_list(Result) =:= misc:sort_kv_list(EmailAlerts) of
+        true ->
+            %% No change due to upgrade
+            [];
+        false ->
+            [{set, email_alerts, Result}]
+    end.
+
+config_email_alerts_upgrade_to_71(EmailAlerts) ->
+    Result =
+        functools:chain(
+          EmailAlerts,
+          [add_proplist_list_elem(pop_up_alerts, A, _)
+           || A <- auto_failover:alert_keys()]),
 
     case misc:sort_kv_list(Result) =:= misc:sort_kv_list(EmailAlerts) of
         true ->

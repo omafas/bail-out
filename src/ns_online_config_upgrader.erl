@@ -99,4 +99,5 @@ upgrade(?VERSION_66, Config) ->
 upgrade(?VERSION_70, Config) ->
     {?VERSION_71,
      menelaus_users:config_upgrade() ++
-        index_settings_manager:config_upgrade_to_71(Config)}.
+        index_settings_manager:config_upgrade_to_71(Config) ++
+        menelaus_web_alerts_srv:config_upgrade_to_71(Config)}.
