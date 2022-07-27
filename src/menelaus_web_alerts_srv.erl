@@ -756,8 +756,9 @@ config_email_alerts_upgrade_to_70(EmailAlerts) ->
         functools:chain(
           EmailAlerts,
           [add_proplist_list_elem(alerts, time_out_of_sync, _),
-           add_proplist_kv(pop_up_alerts, alert_keys() --
-                                          [memory_threshold], _)]),
+              add_proplist_kv(pop_up_alerts, auto_failover:alert_keys() ++
+                                             (alert_keys() --
+                                             [memory_threshold]), _)]),
 
     case misc:sort_kv_list(Result) =:= misc:sort_kv_list(EmailAlerts) of
         true ->
@@ -844,7 +845,9 @@ config_update_to_70_test() ->
     Expected3 =
         [{alerts, [ip, communication_issue, time_out_of_sync]},
          {enabled, false},
-         {pop_up_alerts, alert_keys() -- [memory_threshold]}],
+         {pop_up_alerts, auto_failover:alert_keys() ++
+                         (alert_keys() --
+                         [memory_threshold])}],
     [{set, email_alerts, Actual3}] = config_upgrade_to_70(Config3),
     ?assertEqual(misc:sort_kv_list(Expected3), misc:sort_kv_list(Actual3)),
 
@@ -857,7 +860,9 @@ config_update_to_70_test() ->
     Expected4 =
         [{alerts, [ip, communication_issue, time_out_of_sync]},
          {enabled, false},
-         {pop_up_alerts, alert_keys() -- [memory_threshold]}],
+         {pop_up_alerts, auto_failover:alert_keys() ++
+                         (alert_keys() --
+                         [memory_threshold])}],
     [{set, email_alerts, Actual4}] = config_upgrade_to_70(Config4),
     ?assertEqual(misc:sort_kv_list(Expected4), misc:sort_kv_list(Actual4)).
 
