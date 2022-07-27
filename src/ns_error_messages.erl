@@ -294,6 +294,9 @@ reload_node_certificate_error({script_execution_failed,
                                {status, Status, Output}}) ->
     iolist_to_binary(io_lib:format("Script exited with status ~p:~n~s",
                                    [Status, Output]));
+reload_node_certificate_error({script_execution_failed, {reason, Reason}}) ->
+    iolist_to_binary(io_lib:format(
+      "Script execution failed: ~s. See logs for more details.", [Reason]));
 reload_node_certificate_error({script_execution_failed, exception}) ->
     <<"Script executor crashed, see logs for details">>;
 reload_node_certificate_error({rest_failed, URL, {status, Status}}) ->

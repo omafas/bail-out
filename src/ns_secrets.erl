@@ -145,6 +145,12 @@ extract_pkey_pass_with_script(PassSettings) ->
                        [Path, Args, Status, Output]),
             {error, {script_execution_failed, {status, Status, Output}}}
     catch
+        _:E:ST when E =:= eacces ->
+            ?log_error("Do not have permission to execute the file in ~s."
+                       "~nArgs: ~p~nException: ~p~n"
+                       "Stacktrace: ~p", [Path, Args, E, ST]),
+            {error, {script_execution_failed, {reason, "Not "
+                       "enough permission to run the file"}}};
         _:E:ST ->
             ?log_error("External pkey passphrase script execution "
                        "exception: ~s~nArgs: ~p~nException: ~p~n"
