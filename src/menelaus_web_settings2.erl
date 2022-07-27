@@ -136,7 +136,13 @@ prepare_json(Path, ParamSpecs, UserTypesFun, Values) ->
                         InternalName = cfg_key(Name, Spec),
                         Formatter = extract_formatter(Type, TypesFuns),
                         case extract_value(InternalName, Values) of
-                            not_found -> false;
+                            not_found ->
+                                case maps:find(default, Spec) of
+                                    {ok, Default} ->
+                                        {true, {FormattedKey, Default}};
+                                    error ->
+                                        false
+                                end;
                             {value, Value} ->
                                 case Formatter(Value) of
                                     {value, FormattedValue} ->

@@ -54,6 +54,11 @@
 %% Amount of time to wait before reporting communication issues (s)
 -define(COMMUNICATION_ISSUE_TIMEOUT, 60 * 5).
 
+%% Default memory thresholds (in percents)
+-define(MEM_NOTICE_PERC, -1).
+-define(MEM_WARN_PERC, 90).
+-define(MEM_CRIT_PERC, 95).
+
 -export([start_link/0, stop/0, local_alert/2, global_alert/2,
          fetch_alerts/0, consume_alerts/1]).
 
@@ -536,11 +541,11 @@ check(memory_threshold, Opaque, _History, Stats) ->
                     Percentage = (Used * 100) / (Free + Used),
                     {value, Config} = ns_config:search(alert_limits),
                     Threshold1 = proplists:get_value(memory_notice_threshold,
-                                                     Config, -1),
+                                                     Config, ?MEM_NOTICE_PERC),
                     Threshold2 = proplists:get_value(memory_warning_threshold,
-                                                     Config, 90),
+                                                     Config, ?MEM_WARN_PERC),
                     Threshold3 = proplists:get_value(memory_critical_threshold,
-                                                     Config, 95),
+                                                     Config, ?MEM_CRIT_PERC),
 
                     Res =
                         if
@@ -813,7 +818,16 @@ params() ->
      {"maxDiskUsedPerc", #{type => {int, 0, 100},
                            cfg_key => max_disk_used}},
      {"maxIndexerRamPerc", #{type => {int, 0, 100},
-                             cfg_key => max_indexer_ram}}].
+                             cfg_key => max_indexer_ram}},
+     {"memoryNoticeThreshold", #{type => {int, -1, 100},
+                                 cfg_key => memory_notice_threshold,
+                                 default => ?MEM_NOTICE_PERC}},
+     {"memoryWarningThreshold", #{type => {int, -1, 100},
+                                  cfg_key => memory_warning_threshold,
+                                  default => ?MEM_WARN_PERC}},
+     {"memoryCriticalThreshold", #{type => {int, -1, 100},
+                                   cfg_key => memory_critical_threshold,
+                                   default => ?MEM_CRIT_PERC}}].
 
 build_alert_limits() ->
     case ns_config:search(alert_limits) of
