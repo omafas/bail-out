@@ -144,7 +144,8 @@ for_alerts() ->
                         "`name`, `audit_dropped_events`,``,``) or "
           "label_replace(({name=`index_memory_used_total`} / ignoring(name) "
                          "{name=`index_memory_quota`}) * 100,"
-                        "`name`,`index_ram_percent`,``,``)">>,
+                        "`name`,`index_ram_percent`,``,``) or "
+         "{name=~`sys_mem_actual_free|sys_mem_actual_used`}">>,
 
     Res = latest(Q, fun (Props) ->
                         case proplists:get_value(<<"name">>, Props) of
@@ -155,6 +156,9 @@ for_alerts() ->
                             <<"kv_", N/binary>> ->
                                 B = proplists:get_value(<<"bucket">>, Props),
                                 {true, {binary_to_list(B),
+                                        binary_to_atom(N, latin1)}};
+                            <<"sys_", N/binary>> ->
+                                {true, {"@system",
                                         binary_to_atom(N, latin1)}};
                             _ ->
                                 false

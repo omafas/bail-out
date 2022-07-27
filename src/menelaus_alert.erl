@@ -29,8 +29,8 @@
          build_alerts_json/1,
          build_alerts_config/1,
          alert_keys/0,
-         popup_alerts_config/0]).
-         %% handle_streaming_wakeup/5]).
+         popup_alerts_config/0,
+         get_config/0]).
 
 -export([category_bin/1]).
 
@@ -119,17 +119,48 @@ handle_events_streaming(Req) ->
 
 %% @doc Handle the email alerts request.
 handle_settings_alerts(Req) ->
-    {value, Config} = ns_config:search(email_alerts),
+    Config = get_config(),
     reply_json(Req, {struct, build_alerts_json(Config)}).
 
 %% @doc Handle the email alerts post.
 handle_settings_alerts_post(Req) ->
-    validator:handle(fun (Values) ->
-                             Config = build_alerts_config(Values),
-                             ns_config:set(email_alerts, Config),
-                             ns_audit:alerts(Req, Config),
-                             reply(Req, 200)
-                     end, Req, form, alerts_query_validators()).
+    validator:handle(
+      fun (Values) ->
+              Config = build_alerts_config(Values),
+              %% memory_alert_email is not put to email_alerts for backward
+              %% compatibility. This is basically a hack to make it possible to
+              %% add new alert in a minor release. It can be removed when
+              %% memory_alert_email is added as a proper alert (first major
+              %% release after 7.1)
+              SetMemAlertKey =
+                  fun (NsConfigKey, AlertsKey, Cfg) ->
+                      case proplists:get_all_values(AlertsKey, Cfg) of
+                          [] -> Cfg;
+                          [Alerts] ->
+                              case lists:member(memory_threshold, Alerts) of
+                                  true ->
+                                      ns_config:set(NsConfigKey, true),
+                                      Alerts2 = lists:delete(memory_threshold,
+                                                             Alerts),
+                                      misc:update_proplist(
+                                        Cfg, [{AlertsKey, Alerts2}]);
+                                  false ->
+                                      ns_config:set(NsConfigKey, false),
+                                      Cfg
+                              end
+                      end
+                  end,
+
+              Config2 =
+                  functools:chain(
+                    Config,
+                    [SetMemAlertKey(memory_alert_email, alerts, _),
+                     SetMemAlertKey(memory_alert_popup, pop_up_alerts, _)]),
+
+              ns_config:set(email_alerts, Config2),
+              ns_audit:alerts(Req, Config2),
+              reply(Req, 200)
+      end, Req, form, alerts_query_validators()).
 
 %% @doc Sends a test email with the current settings
 handle_settings_alerts_send_test_email(Req) ->
@@ -189,7 +220,7 @@ alert_keys() ->
 %% a pop-up in the UI.
 -spec popup_alerts_config() -> [atom()].
 popup_alerts_config() ->
-    {value, EmailAlerts} = ns_config:search(email_alerts),
+    EmailAlerts = get_config(),
     proplists:get_value(pop_up_alerts, EmailAlerts, []).
 
 %%
@@ -381,6 +412,31 @@ common_params(Params) ->
                 L -> list_to_integer(L)
             end,
     {MinTStamp, Limit}.
+
+get_config() ->
+    {value, Config} = ns_config:search(email_alerts),
+    %% memory_alert_email is not put to email_alerts for backward compatibility
+    %% This is basically a hack to make it possible to add new alert in
+    %% a minor release. It can be removed when memory_alert_email is added as
+    %% a proper alert (first major release after 7.1)
+    ReplaceMemAlertKey =
+        fun (NsConfigKey, AlertsKey, Cfg) ->
+            case ns_config:read_key_fast(NsConfigKey, true) of
+                true ->
+                    case proplists:get_all_values(AlertsKey, Cfg) of
+                        [] -> Cfg;
+                        [Alerts] ->
+                            Alerts2 = [memory_threshold | Alerts],
+                            misc:update_proplist(Cfg,
+                                                 [{AlertsKey, Alerts2}])
+                    end;
+                false ->
+                    Cfg
+            end
+        end,
+    functools:chain(Config,
+                    [ReplaceMemAlertKey(memory_alert_email, alerts, _),
+                     ReplaceMemAlertKey(memory_alert_popup, pop_up_alerts, _)]).
 
 -ifdef(TEST).
 validate_all_params_correct_test() ->
