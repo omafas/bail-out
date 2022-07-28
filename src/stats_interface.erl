@@ -145,7 +145,8 @@ for_alerts() ->
           "label_replace(({name=`index_memory_used_total`} / ignoring(name) "
                          "{name=`index_memory_quota`}) * 100,"
                         "`name`,`index_ram_percent`,``,``) or "
-         "{name=~`sys_mem_actual_free|sys_mem_actual_used`}">>,
+         "{name=~`sys_mem_actual_free|sys_mem_actual_used|"
+                 "sys_mem_cgroup_limit|sys_mem_cgroup_used`}">>,
 
     Res = latest(Q, fun (Props) ->
                         case proplists:get_value(<<"name">>, Props) of

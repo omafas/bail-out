@@ -121,13 +121,13 @@ errors(disk_usage_analyzer_stuck) ->
         "accessible via \"df\" and consider killing any existing \"df\" "
         "processes.";
 errors(memory_critical) ->
-    "CRITICAL: On node ~s system memory use is ~.2f% of total available "
+    "CRITICAL: On node ~s ~p memory use is ~.2f% of total available "
     "memory, above the critical threshold of ~b%.";
 errors(memory_warning) ->
-    "Warning: On node ~s system memory use is ~.2f% of total available "
+    "Warning: On node ~s ~p memory use is ~.2f% of total available "
     "memory, above the warning threshold of ~b%.";
 errors(memory_notice) ->
-    "Notice: On node ~s system memory use is ~.2f% of total available "
+    "Notice: On node ~s ~p memory use is ~.2f% of total available "
     "memory, above the notice threshold of ~b%.".
 
 %% ------------------------------------------------------------------
@@ -538,45 +538,59 @@ check(memory_threshold, Opaque, _History, Stats) ->
             case is_number(Free) andalso is_number(Used) andalso
                  (Free + Used) > 0 of
                 true ->
-                    Percentage = (Used * 100) / (Free + Used),
-                    {value, Config} = ns_config:search(alert_limits),
-                    Threshold1 = proplists:get_value(memory_notice_threshold,
-                                                     Config, ?MEM_NOTICE_PERC),
-                    Threshold2 = proplists:get_value(memory_warning_threshold,
-                                                     Config, ?MEM_WARN_PERC),
-                    Threshold3 = proplists:get_value(memory_critical_threshold,
-                                                     Config, ?MEM_CRIT_PERC),
-
-                    Res =
-                        if
-                            Threshold3 >= 0 andalso Percentage >= Threshold3 ->
-                                {alert, memory_critical, Threshold3};
-                            Threshold2 >= 0 andalso Percentage >= Threshold2 ->
-                                {alert, memory_warning, Threshold2};
-                            Threshold1 >= 0 andalso Percentage >= Threshold1 ->
-                                {alert, memory_notice, Threshold1};
-                            true ->
-                                ok
-                        end,
-
-                    case Res of
-                        ok -> ok;
-                        {alert, Error, Threshold} when is_float(Percentage),
-                                                       is_integer(Threshold) ->
-                            Node = node(),
-                            Host = misc:extract_node_address(Node),
-                            Err = fmt_to_bin(errors(Error),
-                                             [Host, Percentage, Threshold]),
-                            global_alert({memory_threshold, {Node, Threshold}},
-                                         Err)
-                    end;
+                    check_memory_threshold(Used, Used + Free, system);
                 false ->
                     ?log_debug("Skipping memory threshold check as there is no "
                                "mem stats: ~p", [SysStats]),
                     ok
+            end,
+
+            CGLimit = proplists:get_value(mem_cgroup_limit, SysStats),
+            CGUsed = proplists:get_value(mem_cgroup_used, SysStats),
+
+            case is_number(CGUsed) andalso is_number(CGLimit) andalso
+                 CGLimit > 0 of
+                true ->
+                    check_memory_threshold(CGUsed, CGLimit, cgroup);
+                false ->
+                    ok
             end
     end,
     Opaque.
+
+check_memory_threshold(MemUsed, MemTotal, Type) ->
+    Percentage = (MemUsed * 100) / MemTotal,
+    {value, Config} = ns_config:search(alert_limits),
+    Threshold1 = proplists:get_value(memory_notice_threshold,
+                                     Config, ?MEM_NOTICE_PERC),
+    Threshold2 = proplists:get_value(memory_warning_threshold,
+                                     Config, ?MEM_WARN_PERC),
+    Threshold3 = proplists:get_value(memory_critical_threshold,
+                                     Config, ?MEM_CRIT_PERC),
+
+    Res =
+        if
+            Threshold3 >= 0 andalso Percentage >= Threshold3 ->
+                {alert, memory_critical, Threshold3};
+            Threshold2 >= 0 andalso Percentage >= Threshold2 ->
+                {alert, memory_warning, Threshold2};
+            Threshold1 >= 0 andalso Percentage >= Threshold1 ->
+                {alert, memory_notice, Threshold1};
+            true ->
+                ok
+        end,
+
+    case Res of
+        ok -> ok;
+        {alert, Error, Threshold} when is_float(Percentage),
+                                       is_integer(Threshold) ->
+            Node = node(),
+            Host = misc:extract_node_address(Node),
+            Err = fmt_to_bin(errors(Error),
+                             [Host, Type, Percentage, Threshold]),
+            global_alert({memory_threshold, {Node, Threshold, Type}}, Err)
+    end.
+
 
 alert_if_time_out_of_sync({time_offset_status, true}) ->
     Err = fmt_to_bin(errors(time_out_of_sync), [node()]),
