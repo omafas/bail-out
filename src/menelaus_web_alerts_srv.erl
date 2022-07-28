@@ -535,7 +535,7 @@ check(memory_threshold, Opaque, _History, Stats) ->
                     Percentage = (Used * 100) / (Free + Used),
                     {value, Config} = ns_config:search(alert_limits),
                     Threshold1 = proplists:get_value(memory_notice_threshold,
-                                                     Config, undefined),
+                                                     Config, -1),
                     Threshold2 = proplists:get_value(memory_warning_threshold,
                                                      Config, 90),
                     Threshold3 = proplists:get_value(memory_critical_threshold,
@@ -543,11 +543,11 @@ check(memory_threshold, Opaque, _History, Stats) ->
 
                     Res =
                         if
-                            Percentage >= Threshold3 ->
+                            Threshold3 >= 0 andalso Percentage >= Threshold3 ->
                                 {alert, memory_critical, Threshold3};
-                            Percentage >= Threshold2 ->
+                            Threshold2 >= 0 andalso Percentage >= Threshold2 ->
                                 {alert, memory_warning, Threshold2};
-                            Percentage >= Threshold1 ->
+                            Threshold1 >= 0 andalso Percentage >= Threshold1 ->
                                 {alert, memory_notice, Threshold1};
                             true ->
                                 ok
