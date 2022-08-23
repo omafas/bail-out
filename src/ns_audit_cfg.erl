@@ -22,7 +22,7 @@
 -export([start_link/0, get_global/0, set_global/1, sync_set_global/1,
          default_audit_json_path/0, get_log_path/0, get_uid/0]).
 
--export([upgrade_descriptors/0, get_descriptors/1,
+-export([upgrade_descriptors/0, get_descriptors/1, is_enabled/0,
          jsonifier/1, get_non_filterable_descriptors/0, read_config/1]).
 
 -record(state, {global,
