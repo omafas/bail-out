@@ -77,8 +77,8 @@ upgrade_loop(UpgradeTxn, FinalVersion, Config) ->
         FinalVersion ->
             UpgradeTxn;
         _ ->
-            ?log_debug("Upgading chronicle from ~p. Final version = ~p",
-                       [CurrentVersion, FinalVersion]),
+            ?log_info("Upgading chronicle from ~p. Final version = ~p",
+                      [CurrentVersion, FinalVersion]),
             {NewVersion, NewTxn} = upgrade_to(CurrentVersion, UpgradeTxn,
                                               Config),
             upgrade_loop(set_key(cluster_compat_version, NewVersion, NewTxn),
