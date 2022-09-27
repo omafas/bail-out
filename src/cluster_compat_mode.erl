@@ -203,8 +203,8 @@ do_upgrades([], _, _, _, _) ->
 do_upgrades([{Version, Name, Module, Fun} | Rest],
             CurrentVersion, NewVersion, Config, NodesWanted)
   when CurrentVersion < Version andalso NewVersion >= Version ->
-    ?log_debug("Initiating ~p upgrade due to version change from ~p to ~p",
-               [Name, CurrentVersion, NewVersion]),
+    ?log_info("Initiating ~p upgrade due to version change from ~p to ~p",
+              [Name, CurrentVersion, NewVersion]),
     case Module:Fun(Version, Config, NodesWanted) of
         ok ->
             do_upgrades(Rest, CurrentVersion, NewVersion, Config, NodesWanted);

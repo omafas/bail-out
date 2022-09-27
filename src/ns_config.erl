@@ -725,8 +725,8 @@ upgrade_vclock(V, _, UUID) ->
 
 do_upgrade_config(Config, [], _Upgrader) -> Config;
 do_upgrade_config(#config{uuid = UUID} = Config, Changes, Upgrader) ->
-    ?log_debug("Upgrading config by changes:~n~p~n",
-               [ns_config_log:sanitize(Changes)]),
+    ?log_info("Upgrading config by changes:~n~p~n",
+              [ns_config_log:sanitize(Changes)]),
     ConfigList = config_dynamic(Config),
     NewList =
         lists:foldl(
