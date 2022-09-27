@@ -72,7 +72,7 @@ upgrade_compat_version(NewVersion) ->
     [{set, cluster_compat_version, NewVersion}].
 
 maybe_final_upgrade(?LATEST_VERSION_NUM) ->
-    ns_audit_cfg:upgrade_descriptors();
+    ns_audit_cfg:upgrade_descriptors() ++ menelaus_users:config_upgrade();
 maybe_final_upgrade(_) ->
     [].
 
@@ -85,19 +85,15 @@ maybe_upgrade_to_chronicle(_, _) ->
 %% configuration which are already present.
 
 upgrade(?VERSION_65, Config) ->
-    {?VERSION_66,
-     menelaus_users:config_upgrade() ++
-         ns_bucket:config_upgrade_to_66(Config)};
+    {?VERSION_66, ns_bucket:config_upgrade_to_66(Config)};
 
 upgrade(?VERSION_66, Config) ->
     {?VERSION_70,
-     menelaus_users:config_upgrade() ++
-         menelaus_web_alerts_srv:config_upgrade_to_70(Config) ++
+     menelaus_web_alerts_srv:config_upgrade_to_70(Config) ++
          index_settings_manager:config_upgrade_to_70(Config) ++
          query_settings_manager:config_upgrade_to_70(Config)};
 
 upgrade(?VERSION_70, Config) ->
     {?VERSION_71,
-     menelaus_users:config_upgrade() ++
-        index_settings_manager:config_upgrade_to_71(Config) ++
-        menelaus_web_alerts_srv:config_upgrade_to_71(Config)}.
+     index_settings_manager:config_upgrade_to_71(Config) ++
+         menelaus_web_alerts_srv:config_upgrade_to_71(Config)}.
