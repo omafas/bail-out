@@ -674,14 +674,22 @@ get_definitions(Config, public) ->
     get_public_definitions(cluster_compat_mode:get_compat_version(Config)).
 
 -spec get_public_definitions(list()) -> [rbac_role_def(), ...].
-get_public_definitions(Version) when Version < ?VERSION_66 ->
-    menelaus_old_roles:roles_pre_66();
-get_public_definitions(Version) when Version < ?VERSION_70 ->
-    menelaus_old_roles:roles_pre_70();
-get_public_definitions(Version) when Version < ?VERSION_71 ->
-    menelaus_old_roles:roles_pre_71();
-get_public_definitions(_) ->
-    roles() ++ maybe_add_developer_preview_roles().
+get_public_definitions(Version) ->
+    [{_, Fun} | _] = public_definitions(Version),
+    Fun().
+
+public_definitions(Version) ->
+    lists:dropwhile(fun ({undefined, _}) ->
+                            false;
+                        ({V, _}) ->
+                            Version >= V
+                    end, public_definitions()).
+
+public_definitions() ->
+    [{?VERSION_66, fun menelaus_old_roles:roles_pre_66/0},
+     {?VERSION_70, fun menelaus_old_roles:roles_pre_70/0},
+     {?VERSION_71, fun menelaus_old_roles:roles_pre_71/0},
+     {undefined, ?cut(roles() ++ maybe_add_developer_preview_roles())}].
 
 -spec object_match(
         rbac_permission_object(), rbac_permission_pattern_object()) ->
@@ -896,7 +904,57 @@ compile_role(Name, CompileRole, Definitions, Snapshot) when is_atom(Name) ->
     compile_role({Name, []}, CompileRole, Definitions, Snapshot).
 
 compile_roles(CompileRole, Roles, Definitions, Snapshot) ->
-    lists:filtermap(compile_role(_, CompileRole, Definitions, Snapshot), Roles).
+    case do_compile_roles(CompileRole, Roles, Definitions, Snapshot) of
+        try_another_version ->
+            [_ | OtherDefinitions] =
+                public_definitions(cluster_compat_mode:get_compat_version()),
+            compile_roles_with_other_definitions(
+              CompileRole, Roles, OtherDefinitions, Snapshot);
+        Other ->
+            Other
+    end.
+
+compile_roles_with_other_definitions(_CompileRole, _Roles, [], _Snapshot) ->
+    exit(roles_impossible_to_compile);
+compile_roles_with_other_definitions(
+  CompileRole, Roles, [{Ver, GetDefinitions} | Rest], Snapshot) ->
+    case Ver of
+        undefined ->
+            ?log_debug("Compile roles with latest definitions");
+        _ ->
+            ?log_debug(
+               "Compile roles with definitions for version greater than  ~p",
+               [Ver])
+    end,
+    case do_compile_roles(CompileRole, Roles,
+                          GetDefinitions() ++ internal_roles(), Snapshot) of
+        try_another_version ->
+            compile_roles_with_other_definitions(
+              CompileRole, Roles, Rest, Snapshot);
+        Other ->
+            Other
+    end.
+
+do_compile_roles(CompileRole, Roles, Definitions, Snapshot) ->
+    try
+        lists:filtermap(compile_role(_, CompileRole, Definitions, Snapshot),
+                        Roles)
+    catch
+        T:E:S ->
+            ?log_debug("Error compiling roles~n~p", [{T, E, S}]),
+            case menelaus_users:upgrade_in_progress() of
+                true ->
+                    %% compilation crashed during unfinished upgrade
+                    %% it could happen that the users database is already
+                    %% upgraded, but we are still using old definitions
+                    %% because cluster compat version is not yet updated
+                    %% let's try to compile with newer definitions
+                    try_another_version;
+                false ->
+                    error(E)
+            end
+    end.
+
 
 -spec compile_roles([rbac_role()], [rbac_role_def()] | undefined, map()) ->
                            [rbac_compiled_role()].
