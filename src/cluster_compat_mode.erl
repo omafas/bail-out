@@ -293,12 +293,13 @@ do_consider_switching_compat_mode(Config, CompatVersion, NsConfigVersion) ->
 
 do_switch_compat_mode(NewVersion, NodesWanted) ->
     functools:sequence_(
-      [?cut(upgrade_ns_config(min(NewVersion, ?VERSION_70), NodesWanted)),
+      [?cut(upgrade_ns_config(min(NewVersion, ?VERSION_70), NewVersion,
+                              NodesWanted)),
        ?cut(chronicle_upgrade:upgrade(NewVersion, NodesWanted)),
-       ?cut(upgrade_ns_config(NewVersion, NodesWanted))]).
+       ?cut(upgrade_ns_config(NewVersion, NewVersion, NodesWanted))]).
 
-upgrade_ns_config(NewVersion, NodesWanted) ->
-    case ns_online_config_upgrader:upgrade_config(NewVersion) of
+upgrade_ns_config(NewVersion, FinalVersion, NodesWanted) ->
+    case ns_online_config_upgrader:upgrade_config(NewVersion, FinalVersion) of
         ok ->
             complete_ns_config_upgrade(NodesWanted);
         already_upgraded ->

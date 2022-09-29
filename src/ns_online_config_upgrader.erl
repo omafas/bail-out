@@ -31,23 +31,24 @@
 -include("cut.hrl").
 -include("ns_common.hrl").
 
--export([upgrade_config/1]).
+-export([upgrade_config/2]).
 
-upgrade_config(NewVersion) ->
+upgrade_config(NewVersion, FinalVersion) ->
     true = (NewVersion =< ?LATEST_VERSION_NUM),
+    true = (FinalVersion =< ?LATEST_VERSION_NUM),
 
     case NewVersion > cluster_compat_mode:get_ns_config_compat_version() of
         true ->
             ok = ns_config:upgrade_config_explicitly(
-                   do_upgrade_config(_, NewVersion));
+                   do_upgrade_config(_, NewVersion, FinalVersion));
         false ->
             ?log_warning("ns_config is already upgraded to ~p", [NewVersion]),
             already_upgraded
     end.
 
-do_upgrade_config(Config, FinalVersion) ->
+do_upgrade_config(Config, VersionNeeded, FinalVersion) ->
     case ns_config:search(Config, cluster_compat_version) of
-        {value, FinalVersion} ->
+        {value, VersionNeeded} ->
             [];
         %% The following two cases don't actually correspond to upgrade from
         %% pre-2.0 clusters, we don't support those anymore. Instead, it's an
@@ -65,15 +66,18 @@ do_upgrade_config(Config, FinalVersion) ->
 
             ?log_info("Performing online config upgrade to ~p", [NewVersion]),
             upgrade_compat_version(NewVersion) ++
-                maybe_final_upgrade(NewVersion) ++ Upgrade ++ ChronicleUpgrade
+                maybe_final_upgrade(NewVersion, FinalVersion) ++ Upgrade ++
+                ChronicleUpgrade
     end.
 
 upgrade_compat_version(NewVersion) ->
     [{set, cluster_compat_version, NewVersion}].
 
-maybe_final_upgrade(?LATEST_VERSION_NUM) ->
+maybe_final_upgrade(?LATEST_VERSION_NUM, ?LATEST_VERSION_NUM) ->
     ns_audit_cfg:upgrade_descriptors() ++ menelaus_users:config_upgrade();
-maybe_final_upgrade(_) ->
+maybe_final_upgrade(FinalVersion, FinalVersion) ->
+    menelaus_users:config_upgrade();
+maybe_final_upgrade(_, _) ->
     [].
 
 maybe_upgrade_to_chronicle(?VERSION_70, Config) ->
