@@ -471,7 +471,8 @@ conf(security) ->
       fun get_cluster_encryption/1},
      {allow_non_local_ca_upload, allowNonLocalCACertUpload, false,
       fun get_bool/1},
-     {allowed_hosts, allowedHosts, [<<"*">>], fun get_allowed_hosts/1}] ++
+     {allowed_hosts, allowedHosts, [<<"*">>], fun get_allowed_hosts/1},
+     {validate_node_cert_san, validateNodeCertSan, true, fun get_bool/1}] ++
     [{{security_settings, S}, ns_cluster_membership:json_service_name(S),
       [{cipher_suites, cipherSuites, undefined, fun get_cipher_suites/1},
        {ssl_minimum_protocol, tlsMinVersion, undefined, get_tls_version(_)},
