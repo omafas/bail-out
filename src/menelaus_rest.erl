@@ -18,12 +18,14 @@
 -module(menelaus_rest).
 -author('Northscale <info@northscale.com>').
 
+-include("ns_common.hrl").
+
 %% API
 
 -export([rest_url/3,
          rest_url/4,
          json_request_hilevel/4,
-         basic_auth_header/2,
+         basic_auth_header/1,
          special_auth_header/0,
          is_auth_header/1,
          on_behalf_header/1]).
@@ -39,13 +41,14 @@ rest_url(Host, Port, Path, Scheme) ->
 rest_url(Host, Port, Path) ->
     rest_url(Host, Port, Path, "http").
 
-basic_auth_header(User, Password) ->
+basic_auth_header(HiddenAuth) ->
+    {User, Password} = ?UNHIDE(HiddenAuth),
     UserPassword = base64:encode_to_string(User ++ ":" ++ Password),
     {"Authorization", "Basic " ++ UserPassword}.
 
 special_auth_header() ->
-    basic_auth_header(ns_config_auth:get_user(special),
-                      ns_config_auth:get_password(special)).
+    basic_auth_header(?HIDE({ns_config_auth:get_user(special),
+                             ns_config_auth:get_password(special)})).
 
 on_behalf_header({User, Domain}) ->
     {"cb-on-behalf-of",
@@ -67,8 +70,9 @@ is_auth_header_lc("ns-server-ui") ->
 is_auth_header_lc(_) ->
     false.
 
-rest_add_auth(Headers, {User, Password}) ->
-    [basic_auth_header(User, Password) | Headers];
+
+rest_add_auth(Headers, HiddenAuth) when is_function(HiddenAuth) ->
+    [basic_auth_header(HiddenAuth) | Headers];
 rest_add_auth(Headers, undefined) ->
     Headers.
 
@@ -77,8 +81,8 @@ rest_add_mime_type(Headers, undefined) ->
 rest_add_mime_type(Headers, MimeType) ->
     [{"Content-Type", MimeType} | Headers].
 
-rest_request(Method, URL, Headers, MimeType, Body, Auth, HTTPOptions) ->
-    NewHeaders0 = rest_add_auth(Headers, Auth),
+rest_request(Method, URL, Headers, MimeType, Body, HiddenAuth, HTTPOptions) ->
+    NewHeaders0 = rest_add_auth(Headers, HiddenAuth),
     NewHeaders = rest_add_mime_type(NewHeaders0, MimeType),
     Timeout = proplists:get_value(timeout, HTTPOptions, 30000),
     HTTPOptions1 = lists:keydelete(timeout, 1, HTTPOptions),
@@ -129,20 +133,19 @@ decode_json_response_ext(Response, Method, Request) ->
                                   %% english error message and nested error
                                   {error, rest_error, binary(), {error, term()} | {bad_status, integer(), string()}}.
 json_request_hilevel(Method, {Scheme, Host, Port, Path, MimeType, Payload} = R,
-                     Auth, HTTPOptions) ->
+                     HiddenAuth, HTTPOptions) ->
     RealPayload = binary_to_list(iolist_to_binary(Payload)),
     URL = rest_url(Host, Port, Path, Scheme),
     HTTPOptions1 = set_default_request_opts(HTTPOptions),
-    RV = rest_request(Method, URL, [], MimeType, RealPayload, Auth,
+    RV = rest_request(Method, URL, [], MimeType, RealPayload, HiddenAuth,
                       HTTPOptions1),
     decode_json_response_ext(RV, Method, setelement(6, R, RealPayload));
-json_request_hilevel(Method, {Scheme, Host, Port, Path}, Auth, HTTPOptions) ->
+json_request_hilevel(Method, {Scheme, Host, Port, Path}, HiddenAuth, HTTPOptions) ->
     URL = rest_url(Host, Port, Path, Scheme),
     HTTPOptions1 = set_default_request_opts(HTTPOptions),
-    RV = rest_request(Method, URL, [], undefined, [], Auth, HTTPOptions1),
+    RV = rest_request(Method, URL, [], undefined, [], HiddenAuth, HTTPOptions1),
 
     decode_json_response_ext(RV, Method, {Scheme, Host, Port, Path, [], []}).
 
 set_default_request_opts(Opts) ->
     misc:update_proplist([{connect_timeout, 30000}], Opts).
-
