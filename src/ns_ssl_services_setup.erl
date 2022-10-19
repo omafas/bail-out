@@ -433,7 +433,9 @@ sync() ->
     ok = gen_server:call(?MODULE, ping, infinity).
 
 set_node_certificate_chain(Props, CAChain, Cert, PKey) ->
-    gen_server:call(?MODULE, {set_node_certificate_chain, Props, CAChain, Cert, PKey}, infinity).
+    gen_server:call(
+      ?MODULE, {set_node_certificate_chain, Props, CAChain, Cert,
+                fun () -> PKey end}, infinity).
 
 build_hash(Data) ->
     crypto:hash(sha256, term_to_binary(Data)).
@@ -501,7 +503,8 @@ config_change_detector_loop({{security_settings, ns_server}, _}, Parent) ->
 config_change_detector_loop(_OtherEvent, Parent) ->
     Parent.
 
-handle_call({set_node_certificate_chain, Props, CAChain, Cert, PKey}, _From, State) ->
+handle_call({set_node_certificate_chain, Props, CAChain, Cert, PKeyFun},
+            _From, State) ->
     CAChainFile = user_set_ca_chain_path(),
     CanUpdateChain =
         case file:read_file(CAChainFile) of
@@ -515,7 +518,7 @@ handle_call({set_node_certificate_chain, Props, CAChain, Cert, PKey}, _From, Sta
 
             ok = misc:atomic_write_file(CAChainFile, CAChain),
             ok = misc:atomic_write_file(user_set_cert_path(), Cert),
-            ok = misc:atomic_write_file(user_set_key_path(), PKey),
+            ok = misc:atomic_write_file(user_set_key_path(), PKeyFun()),
 
             ns_config:set({node, node(), cert}, Props),
             self() ! cert_and_pkey_changed,
