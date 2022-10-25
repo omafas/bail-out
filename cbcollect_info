@@ -747,15 +747,17 @@ def get_diag_password(guts):
     return ""
 
 
-def make_query_task(statement, user, password, port):
+def make_query_statement_task(statement, user, password, port,
+                              logfile="couchbase.log", **kwargs):
     url = "http://%s:%s/query/service?statement=%s" % (
         local_url_addr, port, urllib.parse.quote(statement))
 
     return make_curl_task(name="Result of query statement \'%s\'" % statement,
-                          user=user, password=password, url=url)
+                          user=user, password=password, url=url,
+                          log_file=logfile, **kwargs)
 
 
-def make_cbas_task(statement, user, password, port):
+def make_cbas_statement_task(statement, user, password, port):
     url = "http://%s:%s/analytics/service/diagnostics?statement=%s" % (
         local_url_addr, port, urllib.parse.quote(statement))
 
@@ -764,9 +766,41 @@ def make_cbas_task(statement, user, password, port):
 
 
 def make_index_task(name, api, passwd, index_port, logfile="couchbase.log", **kwargs):
-    index_url = 'http://%s:%s/%s' % (local_url_addr, index_port, api)
-
+    index_url = f'http://{local_url_addr}:{index_port}/{api}'
     return make_curl_task(name, "@", passwd, index_url, log_file=logfile, **kwargs)
+
+
+def make_golang_profile_tasks(service_name, passwd, port, log_prefix, no_header=True, **kwargs):
+    """
+    Helper function to create the various tasks needed to collect profiling
+    information from Golang components
+    :param service_name:    The service name, for example 'Query'
+    :param passwd:          The password used to auth against the API
+    :param port:            The port used to connect to the API on
+    :param log_prefix:      String to append to the start of each log file
+    :param no_header:       Whether to append the usual command header to the
+                            log file, defaults to True
+    :returns:               A list of tasks to run
+    """
+
+    # A list of tuples containing the APIs that we are going to hit.
+    # The tuple is in the format (Description, Log Postfix, API URL).
+    # If new profiling is ever needed, can add a new item to this list.
+    apis = [('Go Routine Dump', '_pprof', 'debug/pprof/goroutine?debug=1'),
+            ('CPU Profile', '_cprof', 'debug/pprof/profile?seconds=30'),
+            ('Memory Profile', '_mprof', 'debug/pprof/heap?debug=1')]
+
+    # Iterate through each API, create the full URL, and then append the
+    # resulting cURL task to the list of tasks
+    base_url = f'http://{local_url_addr}:{port}'
+    tasks = []
+    for descr, postfix, api in apis:
+        api_url = f'{base_url}/{api}'
+        name = f'{service_name} {descr}: '
+        logfile = f'{log_prefix}{postfix}.log'
+        tasks.append(make_curl_task(name, '@', passwd, api_url, log_file=logfile,
+                                    no_header=no_header, **kwargs))
+    return tasks
 
 
 def make_redaction_task():
@@ -1065,15 +1099,34 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
     query_tasks = []
     query_port = read_guts(guts, "query_port")
     if query_port:
-        def make(statement):
-            return make_query_task(statement, user="@",
-                                   password=memcached_pass,
-                                   port=query_port)
+        def make(statement, logfile="couchbase.log", **kwargs):
+            return make_query_statement_task(statement, user="@",
+                                             password=memcached_pass,
+                                             port=query_port,
+                                             logfile=logfile,
+                                             **kwargs)
 
-        query_tasks = [make("SELECT * FROM system:datastores"),
-                       make("SELECT * FROM system:namespaces"),
-                       make("SELECT * FROM system:keyspaces"),
-                       make("SELECT * FROM system:indexes")]
+        query_tasks = [
+            make("SELECT * FROM system:datastores"),
+            make("SELECT * FROM system:namespaces"),
+            make("SELECT * FROM system:keyspaces"),
+            make("SELECT * FROM system:indexes"),
+            make('SELECT * FROM system:functions'),
+            make('SELECT requests.*, '
+                 '"<ud>"||requests.statement||"</ud>" AS statement, '
+                 '"<ud>"||requests.preparedText||"</ud>" AS preparedText, '
+                 '"<ud>"||requests.namedArgs||"</ud>" AS namedArgs, '
+                 '"<ud>"||requests.positionalArgs||"</ud>" AS positionalArgs, '
+                 '"<ud>"||requests.users||"</ud>" AS users '
+                 'FROM system:completed_requests AS requests;',
+                 logfile="completed_requests.json", no_header=True),
+            make('SELECT prepareds.*, '
+                 '"<ud>"||prepareds.statement||"</ud>" AS statement '
+                 'FROM system:prepareds AS prepareds;',
+                 logfile="prepareds.json", no_header=True),
+            *make_golang_profile_tasks('Query', memcached_pass, query_port,
+                                       'query')
+        ]
 
     index_tasks = []
     index_port = read_guts(guts, "indexer_http_port")
@@ -1105,12 +1158,6 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
                 memcached_pass,
                 index_port),
             make_index_task(
-                "Indexer Go routine dump: ",
-                "debug/pprof/goroutine?debug=1",
-                memcached_pass,
-                index_port,
-                logfile="indexer_pprof.log"),
-            make_index_task(
                 "Indexer Rebalance Tokens: ",
                 "listRebalanceTokens",
                 memcached_pass,
@@ -1120,47 +1167,25 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
                 "listMetadataTokens",
                 memcached_pass,
                 index_port),
-            make_index_task(
-                "Indexer CPU Profile: ",
-                "debug/pprof/profile",
-                memcached_pass,
-                index_port,
-                logfile="indexer_cprof.log",
-                no_header=True),
-            make_index_task(
-                "Indexer Memory Profile: ",
-                "debug/pprof/heap?debug=1",
-                memcached_pass,
-                index_port,
-                logfile="indexer_mprof.log",
-                no_header=True),
+            *make_golang_profile_tasks('Indexer', memcached_pass, index_port,
+                                       'indexer')
         ]
 
     projector_tasks = []
     proj_port = read_guts(guts, "projector_port")
     if proj_port:
-        proj_url = 'http://%s:%s/debug/pprof/goroutine?debug=1' % (
-            local_url_addr, proj_port)
         projector_tasks = [
-            make_curl_task(
-                name="Projector Go routine dump ",
-                user="@",
-                password=memcached_pass,
-                url=proj_url,
-                log_file="projector_pprof.log")]
+            *make_golang_profile_tasks('Projector', memcached_pass, proj_port,
+                                       'projector')
+        ]
 
     goxdcr_tasks = []
     goxdcr_port = read_guts(guts, "xdcr_rest_port")
     if goxdcr_port:
-        goxdcr_url = 'http://%s:%s/debug/pprof/goroutine?debug=1' % (
-            local_url_addr, goxdcr_port)
         goxdcr_tasks = [
-            make_curl_task(
-                name="GoXDCR Go routine dump ",
-                user="@",
-                password=memcached_pass,
-                url=goxdcr_url,
-                log_file="goxdcr_pprof.log")]
+            *make_golang_profile_tasks('GoXDCR', memcached_pass, goxdcr_port,
+                                       'goxdcr')
+        ]
 
     fts_tasks = []
     fts_port = read_guts(guts, "fts_http_port")
@@ -1177,13 +1202,11 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
         cbas_diag_url = 'http://%s:%s/analytics/node/diagnostics' % (
             local_url_addr, cbas_port)
         cbas_parent_port = read_guts(guts, "cbas_parent_port")
-        cbas_pprof_url = 'http://%s:%s/debug/pprof/goroutine?debug=1' % (
-            local_url_addr, cbas_parent_port)
 
         def make_cbas(statement):
-            return make_cbas_task(statement, user="@",
-                                   password=memcached_pass,
-                                   port=cbas_port)
+            return make_cbas_statement_task(statement, user="@",
+                                            password=memcached_pass,
+                                            port=cbas_port)
 
         cbas_tasks = [
             make_curl_task(
@@ -1193,25 +1216,19 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
                 url=cbas_diag_url,
                 log_file="analytics_diag.json",
                 no_header=True),
-            make_curl_task(
-                name="Analytics Go routine dump: ",
-                user="@",
-                password=memcached_pass,
-                url=cbas_pprof_url,
-                log_file="analytics_pprof.log",
-                no_header=True),
             make_cbas("select * from `Metadata`.`Dataverse`"),
             make_cbas("select * from `Metadata`.`Dataset`"),
             make_cbas("select * from `Metadata`.`Index`"),
             make_cbas("select * from `Metadata`.`Bucket`"),
-            make_cbas("select * from `Metadata`.`Link`")]
+            make_cbas("select * from `Metadata`.`Link`"),
+            *make_golang_profile_tasks('Analytics', memcached_pass,
+                                       cbas_parent_port, 'analytics')
+        ]
 
     eventing_tasks = []
     eventing_port = read_guts(guts, "eventing_http_port")
     if eventing_port:
         stats_url = 'http://%s:%s/api/v1/stats?type=full' % (
-            local_url_addr, eventing_port)
-        eventing_pprof_url = 'http://%s:%s/debug/pprof/goroutine?debug=1' % (
             local_url_addr, eventing_port)
         eventing_insight_url = 'http://%s:%s/getInsight?udmark=true&aggregate=false' % (
             local_url_addr, eventing_port)
@@ -1224,19 +1241,29 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
                 log_file="eventing_stats.json",
                 no_header=True),
             make_curl_task(
-                name="Eventing Go routine dump: ",
-                user="@",
-                password=memcached_pass,
-                url=eventing_pprof_url,
-                log_file="eventing_pprof.log",
-                no_header=True),
-            make_curl_task(
                 name="Eventing code insights: ",
                 user="@",
                 password=memcached_pass,
                 url=eventing_insight_url,
                 log_file="eventing_insights.log",
-                no_header=True)]
+                no_header=True),
+            *make_golang_profile_tasks('Eventing', memcached_pass,
+                                       eventing_port, 'eventing')
+        ]
+
+    backup_tasks = []
+    backup_port = read_guts(guts, "backup_http_port")
+    if backup_port:
+        backup_tasks = [
+            make_curl_task(
+                name="Backup service information: ",
+                user="@",
+                password=memcached_pass,
+                url=f"http://{local_url_addr}:{backup_port}/internal/v1/serviceInfo",
+            ),
+            *make_golang_profile_tasks('Backup', memcached_pass, backup_port,
+                                       'backup')
+        ]
 
     _tasks = [
         UnixTask("Directory structure",
