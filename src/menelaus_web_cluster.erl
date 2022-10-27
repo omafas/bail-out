@@ -763,7 +763,7 @@ do_handle_add_node(Req, GroupUUID) ->
               fun () ->
                   case ns_cluster:add_node_to_group(
                          Scheme, Hostname, Port,
-                         {User, Password},
+                         ?HIDE({User, Password}),
                          GroupUUID,
                          Services) of
                       {ok, OtpNode} ->

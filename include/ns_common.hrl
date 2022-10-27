@@ -281,4 +281,11 @@
 -define(ALLOWED_CERT_CHAIN_LENGTH, 10).
 
 -define(CPU_COUNT_VAR, "COUCHBASE_CPU_COUNT").
+%% Hide/Unhide macros to make it easier to hide secrets from stack-traces and
+%% error reports. It is generally good practice to rename the variable(s) in
+%% between hide/unhide points so that it's obvious that the value has been
+%% wrapped and cannot be used directly.
+-define(HIDE(__V), fun () -> __V end).
+-define(UNHIDE(__V), __V()).
+
 -endif.
