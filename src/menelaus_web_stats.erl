@@ -930,7 +930,7 @@ construct_promql_query(Labels, Functions, Window, PermFilters) ->
            _ -> lists:map(fun (Ast) -> range_vector(Ast, Window) end, _)
        end,
        lists:map(fun (Ast) -> apply_functions(Ast, RangeVFunctions) end, _),
-       {'or', _},
+       {union, _},
        apply_functions(_, InstantVFunctions),
        promQL:format_promql(_)]).
 
@@ -967,7 +967,7 @@ derived_metric_query(Labels, Functions, Window, AuthorizationLabelsList) ->
                || {N, AST} <- maps:to_list(ParamAsts)]
           end, AuthorizationLabelsList),
 
-    promQL:format_promql({'or', Subqueries}).
+    promQL:format_promql({union, Subqueries}).
 
 
 -ifdef(TEST).
@@ -1143,7 +1143,7 @@ promql_filters_for_roles_test() ->
 
     Filters = fun (Roles) ->
                   AST = promql_filters_for_roles(Roles, CompiledRoles(Roles)),
-                  promQL:format_promql({'or', AST})
+                  promQL:format_promql({union, AST})
               end,
 
     meck:new(cluster_compat_mode, [passthrough]),

@@ -43,7 +43,7 @@ pre_70_stats_to_prom_query("@system-processes" = Section, OrGroupSize, all,
         [{[{eq, <<"category">>, <<"system-processes">>}]}] ++
         [Ast || M <- SpecialMetrics,
                 {ok, Ast} <- [pre_70_stat_to_prom_query(Section, M, Opts)]],
-    [promQL:format_promql({'or', SubGroup})
+    [promQL:format_promql({union, SubGroup})
         || SubGroup <- misc:split(OrGroupSize, AstList)];
 pre_70_stats_to_prom_query("@global", _, all, _Opts) ->
     [<<"{category=`audit`}">>];
@@ -59,7 +59,7 @@ pre_70_stats_to_prom_query(StatSection, OrGroupSize, List, Opts) ->
                     end
                 end, [bin(S) || S <- List]),
 
-    [promQL:format_promql({'or', SubGroup})
+    [promQL:format_promql({union, SubGroup})
         || SubGroup <- misc:split(OrGroupSize, AstList)].
 
 pre_70_stat_to_prom_query("@system", <<"rest_requests">>, Opts) ->
@@ -292,24 +292,24 @@ pre_70_stat_to_prom_query("@eventing", <<"eventing/", Stat/binary>>, _Opts) ->
             Metrics = [eventing_metric(bin(M), <<"*">>)
                           || M <- eventing_failures()],
             {ok, promQL:named(<<"eventing_failed_count">>,
-                              promQL:sum({'or', Metrics}))};
+                              promQL:sum({union, Metrics}))};
         [FunctionName, <<"failed_count">>] ->
             Metrics = [eventing_metric(bin(M), FunctionName)
                            || M <- eventing_failures()],
             {ok, promQL:named(<<"eventing_failed_count">>,
                               promQL:sum_by([<<"functionName">>],
-                                            {'or', Metrics}))};
+                                            {union, Metrics}))};
         [<<"processed_count">>] ->
             Metrics = [eventing_metric(bin(M), <<"*">>)
                            || M <- eventing_successes()],
             {ok, promQL:named(<<"eventing_processed_count">>,
-                              promQL:sum({'or', Metrics}))};
+                              promQL:sum({union, Metrics}))};
         [FunctionName, <<"processed_count">>] ->
             Metrics = [eventing_metric(bin(M), FunctionName)
                            || M <- eventing_successes()],
             {ok, promQL:named(<<"eventing_processed_count">>,
                               promQL:sum_by([<<"functionName">>],
-                                            {'or', Metrics}))};
+                                            {union, Metrics}))};
         [N] ->
             {ok, promQL:sum_by([<<"name">>], eventing_metric(N, <<"*">>))};
         [FunctionName, N] ->
@@ -375,8 +375,8 @@ pre_70_stat_to_prom_query(Bucket, <<"couch_docs_data_size">>, _Opts) ->
     M = promQL:bucket_metric(<<"kv_ep_db_data_size_bytes">>, Bucket),
     {ok, promQL:named(<<"couch_docs_data_size">>, promQL:sum(M))};
 pre_70_stat_to_prom_query(Bucket, <<"disk_write_queue">>, _Opts) ->
-    M = {'or', [promQL:bucket_metric(<<"kv_ep_queue_size">>, Bucket),
-                promQL:bucket_metric(<<"kv_ep_flusher_todo">>, Bucket)]},
+    M = {union, [promQL:bucket_metric(<<"kv_ep_queue_size">>, Bucket),
+                 promQL:bucket_metric(<<"kv_ep_flusher_todo">>, Bucket)]},
     {ok, promQL:named(<<"kv_disk_write_queue">>, promQL:sum(M))};
 pre_70_stat_to_prom_query(Bucket, <<"ep_ops_create">>, Opts) ->
     M = promQL:rate(promQL:bucket_metric(<<"kv_vb_ops_create">>, Bucket), Opts),
@@ -399,7 +399,7 @@ pre_70_stat_to_prom_query(Bucket, <<"ops">>, Opts) ->
                                <<"del_meta">>, <<"get_meta">>,<<"set_meta">>,
                                <<"set_ret_meta">>,<<"del_ret_meta">>]}]},
                            Opts)],
-    {ok, promQL:named(<<"kv_old_ops">>, promQL:sum({'or', Metrics}))};
+    {ok, promQL:named(<<"kv_old_ops">>, promQL:sum({union, Metrics}))};
 pre_70_stat_to_prom_query(Bucket, <<"vb_total_queue_age">>, _Opts) ->
     M = promQL:bucket_metric(<<"kv_vb_queue_age_seconds">>,
                              list_to_binary(Bucket)),

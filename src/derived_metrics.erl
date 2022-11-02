@@ -117,8 +117,8 @@ get_metric(<<"xdcr_percent_completeness">>) ->
     percent(_(<<"xdcr_docs_processed_total">>),
             fun (M) ->
                 promQL:sum_without([<<"name">>],
-                                   {'or', [M(<<"xdcr_docs_processed_total">>),
-                                           M(<<"xdcr_changes_left_total">>)]})
+                                   {union, [M(<<"xdcr_docs_processed_total">>),
+                                            M(<<"xdcr_changes_left_total">>)]})
             end, 100);
 get_metric(<<"eventing_processed_count">>) ->
     sum([<<"eventing_timer_callback_success">>,
