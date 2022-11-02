@@ -371,9 +371,23 @@ pre_70_stat_to_prom_query(Bucket, <<"cmd_get">>, Opts) ->
 pre_70_stat_to_prom_query(Bucket, <<"couch_docs_disk_size">>, _Opts) ->
     M = promQL:bucket_metric(<<"kv_ep_db_file_size_bytes">>, Bucket),
     {ok, promQL:named(<<"couch_docs_disk_size">>, promQL:sum(M))};
+
 pre_70_stat_to_prom_query(Bucket, <<"couch_docs_data_size">>, _Opts) ->
-    M = promQL:bucket_metric(<<"kv_ep_db_data_size_bytes">>, Bucket),
-    {ok, promQL:named(<<"couch_docs_data_size">>, promQL:sum(M))};
+    Config = ns_config:latest(),
+    MinFileSize0 = ns_config:search_node_prop(Config, compaction_daemon,
+                                              min_file_size, 131072),
+    {ok, BucketConfig} = ns_bucket:get_bucket(Bucket),
+    MinFileSize =
+        MinFileSize0 * length(ns_bucket:all_node_vbuckets(BucketConfig)),
+
+    FileSize = promQL:bucket_metric(<<"kv_ep_db_file_size_bytes">>, Bucket),
+    DataSize = promQL:bucket_metric(<<"kv_ep_db_data_size_bytes">>, Bucket),
+
+    {ok, promQL:named(
+           <<"couch_docs_data_size">>,
+           promQL:max(promQL:op('or', [{'<', [FileSize, MinFileSize]},
+                                       DataSize])))};
+
 pre_70_stat_to_prom_query(Bucket, <<"disk_write_queue">>, _Opts) ->
     M = {union, [promQL:bucket_metric(<<"kv_ep_queue_size">>, Bucket),
                  promQL:bucket_metric(<<"kv_ep_flusher_todo">>, Bucket)]},
