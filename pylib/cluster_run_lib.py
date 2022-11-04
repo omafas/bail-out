@@ -45,9 +45,9 @@ default_idx_storage_mode_ce = "forestdb"
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 ns_server_dir = os.path.dirname(script_dir)
+configpath = os.path.join(ns_server_dir, "build", "cluster_run.configuration")
 
 def read_configuration():
-    configpath = os.path.join(ns_server_dir, "build", "cluster_run.configuration")
     with open(configpath) as f:
         def fn(line):
             k, v = line.strip().split('=')
@@ -140,11 +140,19 @@ def setup_path(ns_server_app_path):
         path.remove(ns_server_app_path)
         path.append(ns_server_app_path)
 
-    couchpath = ebin_search("{0}/lib/couchdb/erlang/lib".format(PREFIX))
+    couchdb_lib_path = "{0}/lib/couchdb/erlang/lib".format(PREFIX)
+    couchpath = ebin_search(couchdb_lib_path)
     couch_plugins = ebin_search("{0}/lib/couchdb/plugins".format(PREFIX))
 
     if len(couchpath) == 0:
-        sys.exit("Couch libs wasn't found.\nCan't handle it")
+        msg = ("⛔️ Fatal error: Unable to locate CouchDB libs ('ebin' subdir) "
+               f"under path '{couchdb_lib_path}'.\n"
+               f"Searched using config file '{configpath}':\n"
+               f"\n    {config}\n\n"
+               "💡 Check the 'prefix' key points to the correct "
+               "server installation prefix - typically "
+               "'<REPO_CHECKOUT>/install'.")
+        sys.exit(msg)
 
     # Note the paths are passed via "-pa" to the erl process where their
     # ordering is reversed.
