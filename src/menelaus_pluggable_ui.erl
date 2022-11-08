@@ -317,13 +317,32 @@ proxy_req(RestPrefix, Path, PluginsConfig, Req) ->
                         fun (H) ->
                             filter_headers(H, ?DEF_RESP_HEADERS_FILTER)
                         end,
+                    ExtraConnectOpts = connect_options_for_mb54428(HostPort,
+                                                                   Service),
                     menelaus_util:proxy_req(HostPort, Path, Headers, Timeout,
-                                            RespHeaderFilter, Req);
+                                            RespHeaderFilter, ExtraConnectOpts,
+                                            Req);
                 {error, Error} ->
                     server_error(Req, Error)
             end;
         false ->
             server_error(Req, service_not_found)
+    end.
+
+connect_options_for_mb54428({http, _, _, _}, _Service) -> [];
+connect_options_for_mb54428({https, _, _, _}, Service) ->
+    ServicesToApplyFix = ns_config:read_key_fast(
+                           set_tls_version_for_services_mb54428, [cbas]),
+    case lists:member(Service, ServicesToApplyFix) of
+        true ->
+            Vsn =
+                case cluster_compat_mode:is_cluster_70() of
+                    true -> 'tlsv1.3';
+                    false -> 'tlsv1.2'
+                end,
+            [{versions, [Vsn]}];
+        false ->
+            []
     end.
 
 find_prefix_info(RestPrefix, #config{plugins = Plugins, prefixes = Prefixes}) ->
