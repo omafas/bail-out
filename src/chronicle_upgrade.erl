@@ -91,4 +91,6 @@ upgrade_to(?VERSION_70, UpgradeTxn, Config) ->
        UpgradeTxn,
        [ns_ssl_services_setup:chronicle_upgrade_to_71(_, Config),
         ns_bucket:chronicle_upgrade_to_71(_),
-        compaction_daemon:chronicle_upgrade_to_71(_, Config)])}.
+        compaction_daemon:chronicle_upgrade_to_71(_, Config)])};
+upgrade_to(?VERSION_71, UpgradeTxn, _Config) ->
+    {?VERSION_72, UpgradeTxn}.
