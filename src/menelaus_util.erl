@@ -76,7 +76,7 @@
          require_permission/2,
          server_error_report/4,
          write_chunk/3,
-         proxy_req/6,
+         proxy_req/7,
          respond/2,
          survive_web_server_restart/1]).
 
@@ -698,12 +698,12 @@ choose_node_consistently(Req, Nodes) ->
     lists:nth(N, Nodes).
 
 proxy_req({Scheme, Host, Port, AFamily}, Path, Headers, Timeout,
-          RespHeaderFilterFun, Req) ->
+          RespHeaderFilterFun, ExtraConnectOpts, Req) ->
     Method = mochiweb_request:get(method, Req),
     Body = get_body(Req),
     Options = [{partial_download, [{window_size, ?WINDOW_SIZE},
                                    {part_size, ?PART_SIZE}]},
-               {connect_options, [AFamily]}],
+               {connect_options, [AFamily | ExtraConnectOpts]}],
     Resp = lhttpc:request(Host, Port, Scheme =:= https, Path, Method, Headers,
                           Body, Timeout, Options),
     handle_resp(Resp, RespHeaderFilterFun, Req).
