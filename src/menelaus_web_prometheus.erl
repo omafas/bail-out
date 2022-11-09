@@ -147,7 +147,7 @@ proxy_prometheus_api(RawPath, Req) ->
     %% with prometheus over loopback only (to comply with the strict TLS policy)
     true = lists:member(Addr, ["::1", "127.0.0.1"]),
     menelaus_util:proxy_req({http, Addr, Port, AFamily}, RawPath, Headers,
-                            ?METRICS_TIMEOUT, fun (Hs) -> Hs end, Req).
+                            ?METRICS_TIMEOUT, fun (Hs) -> Hs end, [], Req).
 
 %%%===================================================================
 %%% Internal functions
