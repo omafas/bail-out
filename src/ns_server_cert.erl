@@ -13,7 +13,6 @@
 -include("cut.hrl").
 
 -include_lib("public_key/include/public_key.hrl").
--include_lib("public_key/asn1/PKCS-FRAME.hrl").
 
 -export([decode_cert_chain/1,
          decode_single_certificate/1,
