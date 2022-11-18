@@ -2182,25 +2182,27 @@ multi_call_test_setup_server() ->
 
 multi_call_test_setup() ->
     NodeNames = [a, b, c, d, e],
-    {TestNode, Host0} = misc:node_name_host(node()),
-    Host = list_to_atom(Host0),
+    {TestNode, Host} = misc:node_name_host(node()),
 
     CodePath = code:get_path(),
     Nodes = lists:map(
               fun (N) ->
                       FullName = list_to_atom(atom_to_list(N) ++ "-" ++ TestNode),
-                      {ok, Node} = slave:start(Host, FullName),
+                      {ok, Pid, Node} =
+                          peer:start(#{name => FullName,
+                                       host => Host,
+                                       wait_boot => 30000}),
                       true = rpc:call(Node, code, set_path, [CodePath]),
                       ok = rpc:call(Node, misc, multi_call_test_setup_server, []),
-                      Node
+                      Pid
               end, NodeNames),
     erlang:put(nodes, Nodes).
 
 multi_call_test_teardown(_) ->
     Nodes = erlang:get(nodes),
     lists:foreach(
-      fun (Node) ->
-              ok = slave:stop(Node)
+      fun (Pid) ->
+              ok = peer:stop(Pid)
       end, Nodes).
 
 multi_call_test_assert_bad_nodes(Bad, Expected) ->
