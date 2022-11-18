@@ -16,9 +16,6 @@
 -include("ns_common.hrl").
 -include("menelaus_web.hrl").
 
-%% Remove by OTP25
--compile([{nowarn_deprecated_function, [{ http_uri,parse,2 }]}]).
-
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
@@ -701,22 +698,21 @@ do_parse_hostname(Hostname, DefaultScheme) ->
                      0 -> atom_to_list(DefaultScheme) ++ "://" ++ Hostname;
                      _ -> Hostname
                  end,
-    SchemeVer = fun (S) ->
-                        case string:to_lower(S) of
-                            "http" -> valid;
-                            "https" -> valid;
-                            _ -> {error, {invalid_scheme, S}}
-                        end
+    SchemeVer = fun (<<"http">>) -> valid;
+                    (<<"https">>) -> valid;
+                    (S) -> {error, {invalid_scheme, S}}
                 end,
-    case http_uri:parse(WithScheme, [{scheme_validation_fun, SchemeVer},
+    case misc:parse_url(WithScheme, [{scheme_validation_fun, SchemeVer},
                                      {ipv6_host_with_brackets, false},
-                                     {scheme_defaults, [{http, 8091},
-                                                        {https, 18091}]}]) of
-        {ok, {Scheme, "", Host, Port, "/", ""}} ->
+                                     {scheme_defaults, [{<<"http">>, 8091},
+                                                        {<<"https">>, 18091}]},
+                                     {return, string}]) of
+        {ok, #{scheme := SchemeStr, host := Host, port := Port, path := "/"}} ->
+            Scheme = list_to_atom(SchemeStr),
             {Scheme, Host, parse_validate_port_number(integer_to_list(Port))};
         {error, {invalid_scheme, S}} ->
             throw({error, [list_to_binary("Unsupported protocol " ++ S)]});
-        _ ->
+        {error, _} ->
             throw({error, [malformed_url_message(Hostname)]})
     end.
 

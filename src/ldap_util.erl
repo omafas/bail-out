@@ -12,9 +12,6 @@
 -include_lib("eldap/include/eldap.hrl").
 -include("cut.hrl").
 
-%% Remove by OTP25
--compile([{nowarn_deprecated_function, [{ http_uri,parse,2 }]}]).
-
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
@@ -290,20 +287,19 @@ parse_url(Template) ->
 parse_url(Bin, ReplacePairs) when is_binary(Bin) ->
     parse_url(binary_to_list(Bin), ReplacePairs);
 parse_url(Str, ReplacePairs) ->
-    SchemeValidator = fun (S) ->
-                              case string:to_lower(S) of
-                                  "ldap" -> valid;
-                                  _ -> {error, {invalid_scheme, S}}
-                              end
+    SchemeValidator = fun (<<"ldap">>) -> valid;
+                          (S) -> {error, {invalid_scheme, S}}
                       end,
     try
-        {Scheme, _UserInfo, Host, Port, "/" ++ EncodedDN, Query} =
-            case http_uri:parse(Str, [{scheme_defaults, [{ldap, 389}]},
-                                 {scheme_validation_fun, SchemeValidator}]) of
-                {ok, R} -> R;
+        #{scheme := Scheme, host := Host, port := Port,
+          path := "/" ++ EncodedDN, 'query' := Query} =
+            case misc:parse_url(Str, [{scheme_defaults, [{<<"ldap">>, 389}]},
+                                      {scheme_validation_fun, SchemeValidator},
+                                      {return, string}]) of
+                {ok, ParseRes} -> maps:merge(#{'query' => ""}, ParseRes);
                 {error, _} -> throw({error, malformed_url})
             end,
-        [[], AttrsStr, Scope, FilterEncoded, Extensions | _] =
+        [AttrsStr, Scope, FilterEncoded, Extensions | _] =
             string:split(Query ++ "?????", "?", all),
 
         [EncodedDN2, AttrsStr2, Scope2, FilterEncoded2, Extensions2] =
@@ -335,7 +331,7 @@ parse_url(Str, ReplacePairs) ->
         end,
 
         {ok,
-         [{scheme, Scheme}] ++
+         [{scheme, list_to_atom(Scheme)}] ++
          [{host, Host} || Host =/= ""] ++
          [{port, Port}] ++
          [{dn, DN} || DN =/= ""] ++

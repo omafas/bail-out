@@ -3258,3 +3258,180 @@ read_cpu_count_env() ->
                     exit({invalid_cpu_count, CoresStr})
             end
     end.
+
+parse_url(URL) -> parse_url(URL, []).
+
+-spec parse_url(URL :: string() | binary(), Opts) ->
+        {ok, #{scheme   => string() | binary(),
+               host     => string() | binary(),
+               port     => non_neg_integer(),
+               path     => string() | binary(),
+               userinfo := string() | binary(),
+               'query'  := string() | binary()}} | {error, term()}
+        when Opts :: [{scheme_defaults,
+                       [{Scheme :: binary(), Port :: pos_integer()}]} |
+                      {scheme_validation_fun,
+                       fun ((Scheme :: binary()) -> valid | {error, term()})} |
+                      {ipv6_host_with_brackets, boolean()} |
+                      {return, string | binary}].
+
+parse_url(URL, Options) when is_list(URL) ->
+    parse_url(list_to_binary(URL), Options);
+parse_url(URL, Options) ->
+    SchemeDefaults =
+        case proplists:get_value(scheme_defaults, Options) of
+            undefined ->
+                [{<<"http">>, 80}, {<<"https">>, 443}, {<<"ssh">>, 22},
+                 {<<"ftp">>, 21}, {<<"sftp">>, 22}, {<<"tftp">>, 69}];
+            L when is_list(L) -> L
+        end,
+    MaybeDefaultPort =
+        fun (#{port := _} = Map) -> Map;
+            (#{scheme := Scheme} = Map) ->
+                case proplists:get_value(Scheme, SchemeDefaults) of
+                    undefined -> throw({error, no_default_port});
+                    P when is_integer(P) -> Map#{port => P}
+                end
+        end,
+    ValidateScheme =
+        fun (#{scheme := S} = Map) ->
+            LowerCaseScheme = string:lowercase(S),
+            case proplists:get_value(scheme_validation_fun, Options) of
+                undefined -> Map#{scheme => LowerCaseScheme};
+                F when is_function(F, 1) ->
+                    case F(LowerCaseScheme) of
+                        valid -> Map#{scheme => LowerCaseScheme};
+                        {error, Reason} -> throw({error, Reason})
+                    end
+            end
+        end,
+    MaybeWrapIpv6 =
+        fun (#{host := IP} = Map) ->
+            case proplists:get_value(ipv6_host_with_brackets, Options) of
+                true ->
+                    NewIP = case is_raw_ipv6(binary_to_list(IP)) of
+                                true ->
+                                    <<"[", IP/binary, "]">>;
+                                false ->
+                                    IP
+                            end,
+                    Map#{host => NewIP};
+                _ ->
+                    Map
+            end
+        end,
+    MaybeDefaultPath =
+        fun (Map) ->
+            case maps:get(path, Map, <<"">>) of
+                <<"">> -> Map#{path => <<"/">>};
+                _ -> Map
+            end
+        end,
+    MaybeConvert =
+        fun (M) ->
+            case proplists:get_value(return, Options) of
+                binary -> M;
+                undefined -> M;
+                string ->
+                    maps:map(fun (port, P) -> P;
+                                 (_, V) -> binary_to_list(V)
+                             end, M)
+            end
+        end,
+    try
+        Map =
+            case uri_string:parse(URL) of
+                #{port := undefined} ->
+                    throw({error, missing_port});
+                #{scheme := <<>>} ->
+                    throw({error, missing_scheme});
+                #{scheme := _, host := _} = M ->
+                    M;
+                #{scheme := _} ->
+                    throw({error, missing_host});
+                #{} ->
+                    throw({error, missing_scheme});
+                {error, Reason, _} ->
+                    throw({error, Reason})
+            end,
+        {ok, functools:chain(Map, [ValidateScheme, MaybeDefaultPort,
+                                   MaybeWrapIpv6, MaybeDefaultPath,
+                                   MaybeConvert])}
+    catch
+        throw:{error, _} = Error -> Error
+    end.
+
+-ifdef(TEST).
+
+parse_url_test() ->
+    SchemeValidation = fun (<<"ldaps">>) -> valid;
+                           (_) -> {error, bad_scheme}
+                       end,
+    ?assertEqual({error, missing_scheme}, parse_url("")),
+    ?assertEqual({error, missing_scheme}, parse_url("http")),
+    ?assertEqual({error, missing_scheme}, parse_url("http")),
+    ?assertEqual({ok, #{scheme => <<"http">>, host => <<"">>, port => 80,
+                        path => <<"/">>}},
+                 parse_url("http://")),
+    ?assertEqual({error, missing_host}, parse_url("http:/test")),
+    ?assertEqual({error, missing_host}, parse_url("http:test")),
+    ?assertEqual({error, no_default_port}, parse_url("test://test")),
+    ?assertEqual({ok, #{scheme => <<"http">>, host => <<"test">>, port => 80,
+                        path => <<"/">>}},
+                 parse_url("http://test")),
+    ?assertEqual({ok, #{scheme => <<"http">>, host => <<"test">>, port => 80,
+                        path => <<"/">>}},
+                 parse_url("http://test/")),
+    ?assertEqual({ok, #{scheme => <<"ldaps">>, host => <<"test">>, port => 636,
+                        path => <<"/">>}},
+                 parse_url("ldaps://test:636")),
+    ?assertEqual({ok, #{scheme => <<"ldaps">>, host => <<"test">>, port => 636,
+                        path => <<"/">>}},
+                 parse_url("ldaps://test:636/")),
+    ?assertEqual({ok, #{scheme => <<"ldaps">>, host => <<"test">>, port => 636,
+                        path => <<"/path/a/b/c">>, 'query' => <<"a=b&c=d">>}},
+                 parse_url("ldaps://test:636/path/a/b/c?a=b&c=d")),
+    ?assertEqual({ok, #{scheme => <<"ldaps">>, host => <<"test">>, port => 636,
+                        path => <<"/path/a/b/c">>, 'query' => <<"a=b&c=d">>}},
+                 parse_url("ldaps://test:636/path/a/b/c?a=b&c=d",
+                           [{scheme_validation_fun, SchemeValidation}])),
+    ?assertEqual({error, bad_scheme},
+                 parse_url("ldap://test:636/path/a/b/c?a=b&c=d",
+                           [{scheme_validation_fun, SchemeValidation}])),
+    ?assertEqual({ok, #{scheme => <<"ldap">>, host => <<"test">>, port => 389,
+                        path => <<"/path/a/b/c">>, 'query' => <<"a=b&c=d">>}},
+                 parse_url("ldap://test/path/a/b/c?a=b&c=d",
+                           [{scheme_defaults, [{<<"ldap">>, 389}]}])),
+    ?assertEqual({error, no_default_port},
+                 parse_url("http://test/path/a/b/c?a=b&c=d",
+                           [{scheme_defaults, [{<<"ldap">>, 389}]}])),
+    ?assertEqual({ok, #{scheme => <<"http">>, host => <<"::1">>, port => 123,
+                        path => <<"/">>}},
+                 parse_url("http://[::1]:123")),
+    ?assertEqual({ok, #{scheme => <<"http">>, host => <<"127.0.0.1">>,
+                        port => 123, path => <<"/">>}},
+                 parse_url("http://127.0.0.1:123")),
+    ?assertEqual({ok, #{scheme => <<"http">>, host => <<"[::1]">>, port => 123,
+                        path => <<"/">>}},
+                 parse_url("http://[::1]:123",
+                           [{ipv6_host_with_brackets, true}])),
+    ?assertEqual({ok, #{scheme => <<"http">>, host => <<"127.0.0.1">>, port => 123,
+                        path => <<"/">>}},
+                 parse_url("http://127.0.0.1:123",
+                           [{ipv6_host_with_brackets, true}])),
+    ?assertEqual({ok, #{scheme => <<"http">>, host => <<"test">>, port => 123,
+                        path => <<"/">>}},
+                 parse_url("http://test:123",
+                           [{ipv6_host_with_brackets, true}])),
+    ?assertEqual({ok, #{scheme => "ldap", host => "test", port => 389,
+                        path => "/path/a/b/c", 'query' => "a=b&c=d"}},
+                 parse_url("ldap://test/path/a/b/c?a=b&c=d",
+                           [{scheme_defaults, [{<<"ldap">>, 389}]},
+                            {return, string}])),
+    ?assertEqual({ok, #{scheme => "ldaps", host => "teSt", port => 636,
+                        path => "/path/A/b/c", 'query' => "a=B&c=d"}},
+                 parse_url("ldAPs://teSt/path/A/b/c?a=B&c=d",
+                           [{scheme_defaults, [{<<"ldaps">>, 636}]},
+                            {scheme_validation_fun, SchemeValidation},
+                            {return, string}])).
+-endif.

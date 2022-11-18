@@ -11,9 +11,6 @@
 
 -include("ns_common.hrl").
 
-%% Remove by OTP25
--compile([{nowarn_deprecated_function, [{ http_uri,parse,1 }]}]).
-
 -export([start_link/3, start_link_ets_holder/0]).
 
 -export([maybe_build_cluster_logs_task/0]).
@@ -355,9 +352,8 @@ preflight_lhttpc_request(Type, URL, Options) ->
 preflight_base_url(false, false) ->
     ok;
 preflight_base_url(BaseURL, {upload_proxy, URL}) ->
-    case http_uri:parse(BaseURL) of
-        {ok, Result} ->
-            {_, _, Host, _, _, _} = Result,
+    case misc:parse_url(BaseURL, [{return, string}]) of
+        {ok, #{host := Host}} ->
             %% The server_name_indication is needed to let the destination
             %% server know which hostname is being connected to.
             %% This allows multiple websites to be served by the same IP
@@ -370,7 +366,7 @@ preflight_base_url(BaseURL, {upload_proxy, URL}) ->
                                      [{proxy, URL},
                                       {proxy_ssl_options,
                                        [{server_name_indication, Host}]}]);
-        Error ->
+        {error, _} = Error ->
             Error
     end;
 preflight_base_url(BaseURL, false) ->
