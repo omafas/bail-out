@@ -99,6 +99,7 @@
          past_vbucket_maps/1,
          config_to_map_options/1,
          can_have_views/1,
+         is_magma/1,
          get_view_nodes/1,
          get_num_vbuckets/0,
          get_max_buckets/0,
@@ -1352,6 +1353,9 @@ num_replicas_changed(NumReplicas, Map) ->
 
 can_have_views(BucketConfig) ->
     storage_mode(BucketConfig) =:= couchstore.
+
+is_magma(BucketConfig) ->
+    storage_mode(BucketConfig) =:= magma.
 
 get_view_nodes(BucketConfig) ->
     case can_have_views(BucketConfig) of

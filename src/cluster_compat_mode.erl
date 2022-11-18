@@ -33,6 +33,8 @@
          is_cluster_71/0,
          is_cluster_71/1,
          is_version_71/1,
+         is_cluster_72/0,
+         is_cluster_72/1,
          is_enterprise/0,
          is_enterprise/1,
          should_enforce_limits/0,
@@ -151,6 +153,12 @@ is_cluster_71() ->
 
 is_cluster_71(Config) ->
     is_enabled(Config, ?VERSION_71).
+
+is_cluster_72() ->
+    is_cluster_72(ns_config:latest()).
+
+is_cluster_72(Config) ->
+    is_enabled(Config, ?VERSION_72).
 
 should_enforce_limits(Snapshot) ->
     case maps:find(cluster_compat_version, Snapshot) of

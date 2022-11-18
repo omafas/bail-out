@@ -14,6 +14,10 @@
 -include("ns_common.hrl").
 -include("cut.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -export([start_link/0,
          terse_bucket_info/1]).
 
@@ -283,7 +287,11 @@ build_bucket_capabilities(BucketConfig) ->
                      {'subdoc.DocumentMacroSupport',
                       cluster_compat_mode:is_cluster_70()},
                      {'subdoc.ReviveDocument',
-                      cluster_compat_mode:is_cluster_71()}],
+                      cluster_compat_mode:is_cluster_71()},
+                     {'nonDedupedHistory',
+                      cluster_compat_mode:is_cluster_72() and
+                      cluster_compat_mode:is_enterprise() and
+                      ns_bucket:is_magma(BucketConfig)}],
 
                 [C || {C, true} <- Conditional] ++
                     [dcp, cbhello, touch, cccp, xdcrCheckpointing, nodesExt,
@@ -443,3 +451,103 @@ do_build_node_services() ->
     J = {[{rev, Rev},
           {nodesExt, NEIs}] ++ Caps ++ RevEpochJSON},
     {Rev, RevEpoch, ejson:encode(J), NodesExtHash}.
+
+-ifdef(TEST).
+
+setup_compat_mode_for(Version, IsEnterprise) ->
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:expect(cluster_compat_mode, get_compat_version, fun(_) -> Version end),
+    meck:expect(cluster_compat_mode, is_enterprise, fun() -> IsEnterprise end),
+
+    meck:new(ns_config, [passthrough]),
+    meck:expect(ns_config, search,
+        fun(_, cluster_compat_version, undefined) -> Version end),
+
+    meck:new(chronicle_compat, [passthrough]),
+    meck:expect(chronicle_compat, get,
+        fun(_, cluster_compat_version, _) -> Version end).
+
+teardown_compat_mode() ->
+    meck:unload(cluster_compat_mode),
+    meck:unload(ns_config),
+    meck:unload(chronicle_compat).
+
+setup_membase_bucket(IsMagma) ->
+    meck:new(ns_bucket, [passthrough]),
+    meck:expect(ns_bucket, bucket_type, fun(_) -> membase end),
+    meck:expect(ns_bucket, can_have_views, fun(_) -> not IsMagma end),
+    meck:expect(ns_bucket, is_magma, fun(_) -> IsMagma end).
+
+teardown_membase_bucket_with_views() ->
+    meck:unload(ns_bucket).
+
+membase_bucket_capabilities_test_setup(Version, IsEnterprise, IsMagma) ->
+    setup_compat_mode_for(Version, IsEnterprise),
+    setup_membase_bucket(IsMagma).
+
+membase_bucket_capabilities_test_teardown() ->
+    teardown_compat_mode(),
+    teardown_membase_bucket_with_views().
+
+get_bucket_capabilities_for_version(?LATEST_VERSION_NUM,
+                                    true = _IsEnterprise,
+                                    true = _IsMagma) ->
+    %% 7.2+
+    [{bucketCapabilitiesVer,''},
+        {bucketCapabilities,
+            [collections, durableWrite, tombstonedUserXAttrs,
+             'subdoc.ReplaceBodyWithXattr', 'subdoc.DocumentMacroSupport',
+             'subdoc.ReviveDocument', nonDedupedHistory, dcp, cbhello, touch,
+             cccp, xdcrCheckpointing, nodesExt, xattr]}];
+get_bucket_capabilities_for_version(?LATEST_VERSION_NUM, IsEnterprise,
+                                    IsMagma) ->
+    %% Same as 7.1 if not enterprise and magma
+    get_bucket_capabilities_for_version(?VERSION_71, IsEnterprise, IsMagma);
+get_bucket_capabilities_for_version(?VERSION_71, _IsEnterprise,
+                                    false = _IsMagma) ->
+    [{bucketCapabilitiesVer,''},
+        {bucketCapabilities,
+            [collections, durableWrite, tombstonedUserXAttrs, couchapi,
+             'subdoc.ReplaceBodyWithXattr', 'subdoc.DocumentMacroSupport',
+             'subdoc.ReviveDocument', dcp, cbhello, touch, cccp,
+             xdcrCheckpointing, nodesExt, xattr]}];
+get_bucket_capabilities_for_version(?VERSION_71, _IsEnterprise,
+                                    true = _IsMagma) ->
+    [{bucketCapabilitiesVer,''},
+        {bucketCapabilities,
+            [collections, durableWrite, tombstonedUserXAttrs,
+             'subdoc.ReplaceBodyWithXattr', 'subdoc.DocumentMacroSupport',
+             'subdoc.ReviveDocument', dcp, cbhello, touch, cccp,
+             xdcrCheckpointing, nodesExt, xattr]}].
+
+membase_bucket_capabilities_test_() ->
+    Tests = [{?VERSION_71, false, false},
+             {?VERSION_71, true, false},
+             {?VERSION_71, false, true},
+             {?VERSION_71, true, true},
+             {?LATEST_VERSION_NUM, false, false},
+             {?LATEST_VERSION_NUM, true, false},
+             {?LATEST_VERSION_NUM, false, true},
+             {?LATEST_VERSION_NUM, true, true}],
+
+    TestFun = fun ({Version, IsEnterprise, IsMagma}, _R) ->
+                  fun() ->
+                      ?assertEqual(
+                          get_bucket_capabilities_for_version(Version,
+                                                              IsEnterprise,
+                                                              IsMagma),
+                          build_bucket_capabilities([]))
+                    end
+              end,
+
+    {foreachx,
+        fun ({Version, IsEnterprise, IsMagma}) ->
+            membase_bucket_capabilities_test_setup(Version, IsEnterprise,
+                                                   IsMagma)
+        end,
+        fun (_X, _R) ->
+            membase_bucket_capabilities_test_teardown()
+        end,
+        [{Test, TestFun} || Test <- Tests]}.
+
+-endif.
