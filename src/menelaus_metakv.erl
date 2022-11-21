@@ -10,9 +10,6 @@
 
 -module(menelaus_metakv).
 
-%% Remove by OTP25
--compile([{nowarn_deprecated_function, [{ http_uri,decode,1 }]}]).
-
 -export([handle_get/2, handle_put/2, handle_delete/2]).
 
 -include("ns_common.hrl").
@@ -21,7 +18,7 @@
 
 get_key(Path) ->
     "_metakv" ++ Key = Path,
-    list_to_binary(http_uri:decode(Key)).
+    list_to_binary(uri_string:unquote(Key)).
 
 is_directory(Key) ->
     $/ =:= binary:last(Key).
