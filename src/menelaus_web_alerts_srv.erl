@@ -523,17 +523,19 @@ check(oom, Opaque, _History, Stats) ->
 
 %% @doc check for any CAS drift threshold exceeded errors on any bucket
 check(cas_drift_threshold, Opaque, _History, Stats) ->
-    FilterLWW = fun(Bucket) ->
-                        case ns_bucket:get_bucket(Bucket) of
-                            {ok, BCfg} ->
-                                ns_bucket:conflict_resolution_type(BCfg) =:= lww;
-                            not_present ->
-                                false
-                        end
-                end,
+    Filter =
+        fun(Bucket) ->
+                case ns_bucket:get_bucket(Bucket) of
+                    {ok, BCfg} ->
+                        ns_bucket:conflict_resolution_type(BCfg) =:= lww orelse
+                            ns_bucket:history_retention_seconds(BCfg) =/= 0;
+                    not_present ->
+                        false
+                end
+        end,
 
     NewStats = [Item || {Bucket, _OrdDict} = Item <- Stats,
-                        Bucket =/= "@global" andalso FilterLWW(Bucket)],
+                        Bucket =/= "@global" andalso Filter(Bucket)],
     Formatter = fun(Bucket, _, Host) ->
                         Threshold =
                             case ns_bucket:get_bucket(Bucket) of
