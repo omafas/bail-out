@@ -977,7 +977,9 @@ validate_membase_bucket_params(CommonParams, Params,
          parse_validate_compression_mode(Params, BucketConfig, IsNew,
                                          IsEnterprise),
          parse_validate_history_retention_seconds(Params, BucketConfig,
-                                                  IsNew, Version, IsEnterprise)
+                                                  IsNew, Version, IsEnterprise),
+         parse_validate_history_retention_bytes(Params, BucketConfig,
+                                                IsNew, Version, IsEnterprise)
          | validate_bucket_auto_compaction_settings(Params)],
 
     validate_bucket_purge_interval(Params, BucketConfig, IsNew) ++
@@ -1682,6 +1684,14 @@ parse_validate_history_retention_seconds(Params, BucketConfig, IsNew, Version,
                                  HistoryRetentionValue, Params, BucketConfig,
                                  IsNew, Version, IsEnterprise).
 
+parse_validate_history_retention_bytes(Params, BucketConfig, IsNew,
+                                       Version, IsEnterprise) ->
+    HistoryRetentionValue =
+        proplists:get_value("historyRetentionBytes", Params),
+    parse_validate_history_param(history_retention_bytes,
+                                 HistoryRetentionValue, Params, BucketConfig,
+                                 IsNew, Version, IsEnterprise).
+
 parse_validate_history_param(Key, Value, Params, BucketConfig, IsNew, Version,
                                      IsEnterprise) ->
     IsCompat = cluster_compat_mode:is_version_72(Version),
@@ -2375,7 +2385,8 @@ basic_bucket_params_screening_test() ->
                      [{"bucketType", "membase"},
                       {"ramQuota", "1024"},
                       {"storageBackend", "magma"},
-                      {"historyRetentionSeconds", "10"}],
+                      {"historyRetentionSeconds", "10"},
+                      {"historyRetentionBytes", "10"}],
                      AllBuckets,
                      [node1],
                      false),
@@ -2383,7 +2394,10 @@ basic_bucket_params_screening_test() ->
                    <<"Magma is supported in enterprise edition only">>},
                   {history_retention_seconds,
                    <<"History Retention is supported in enterprise edition "
-                     "only">>}],
+                     "only">>},
+                  {history_retention_bytes,
+                   <<"History Retention is supported in enterprise edition "
+                      "only">>}],
                  E20),
 
     {_OK21, E21} = basic_bucket_params_screening(
@@ -2391,10 +2405,13 @@ basic_bucket_params_screening_test() ->
                      "HistoryEnterpriseNotMagma",
                      [{"bucketType", "membase"},
                       {"ramQuota", "400"},
-                      {"historyRetentionSeconds", "10"}],
+                      {"historyRetentionSeconds", "10"},
+                      {"historyRetentionBytes", "10"}],
                      AllBuckets,
                      [node1]),
     ?assertEqual([{history_retention_seconds,
+                   <<"History Retention can only used with Magma">>},
+                  {history_retention_bytes,
                    <<"History Retention can only used with Magma">>}],
                  E21),
 
@@ -2410,10 +2427,14 @@ basic_bucket_params_screening_test() ->
                      [{"bucketType", "membase"},
                       {"ramQuota", "1024"},
                       {"storageBackend", "magma"},
-                      {"historyRetentionSeconds", "10"}],
+                      {"historyRetentionSeconds", "10"},
+                      {"historyRetentionBytes", "10"}],
                      AllBuckets,
                      [node1]),
     ?assertEqual([{history_retention_seconds,
+                    <<"History Retention cannot be set until the cluster is "
+                       "fully 7.2">>},
+                  {history_retention_bytes,
                     <<"History Retention cannot be set until the cluster is "
                       "fully 7.2">>}],
                  E22),
@@ -2426,11 +2447,14 @@ basic_bucket_params_screening_test() ->
         [{"bucketType", "membase"},
             {"ramQuota", "1024"},
             {"storageBackend", "magma"},
-            {"historyRetentionSeconds", "-1"}],
+            {"historyRetentionSeconds", "-1"},
+            {"historyRetentionBytes", "-1"}],
         AllBuckets,
         [node1]),
     ?assertEqual([{history_retention_seconds,
-        <<"Value must be greater than or equal to 0">>}],
+                   <<"Value must be greater than or equal to 0">>},
+                  {history_retention_bytes,
+                   <<"Value must be greater than or equal to 0">>}],
         E23),
 
     {OK24, E24} = basic_bucket_params_screening(
@@ -2439,12 +2463,16 @@ basic_bucket_params_screening_test() ->
                      [{"bucketType", "membase"},
                       {"ramQuota", "1024"},
                       {"storageBackend", "magma"},
-                      {"historyRetentionSeconds", "10"}],
+                      {"historyRetentionSeconds", "10"},
+                      {"historyRetentionBytes", "10"}],
                      AllBuckets,
                      [node1]),
     ?assertEqual([], E24),
     ?assert(lists:any(fun (Elem) ->
                           Elem =:= {history_retention_seconds, 10}
+                      end, OK24)),
+    ?assert(lists:any(fun (Elem) ->
+                          Elem =:= {history_retention_bytes, 10}
                       end, OK24)),
 
     meck:unload(ns_config),
