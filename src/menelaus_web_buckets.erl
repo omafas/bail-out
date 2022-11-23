@@ -975,7 +975,9 @@ validate_membase_bucket_params(CommonParams, Params,
                                                  IsEnterprise),
          parse_validate_max_ttl(Params, BucketConfig, IsNew, IsEnterprise),
          parse_validate_compression_mode(Params, BucketConfig, IsNew,
-                                         IsEnterprise)
+                                         IsEnterprise),
+         parse_validate_history_retention_seconds(Params, BucketConfig,
+                                                  IsNew, Version, IsEnterprise)
          | validate_bucket_auto_compaction_settings(Params)],
 
     validate_bucket_purge_interval(Params, BucketConfig, IsNew) ++
@@ -1672,6 +1674,55 @@ do_parse_validate_storage_quota_percentage(Val) ->
             {error, storageQuotaPercentage, iolist_to_binary(Msg)}
     end.
 
+parse_validate_history_retention_seconds(Params, BucketConfig, IsNew, Version,
+                                         IsEnterprise) ->
+    HistoryRetentionValue =
+        proplists:get_value("historyRetentionSeconds", Params),
+    parse_validate_history_param(history_retention_seconds,
+                                 HistoryRetentionValue, Params, BucketConfig,
+                                 IsNew, Version, IsEnterprise).
+
+parse_validate_history_param(Key, Value, Params, BucketConfig, IsNew, Version,
+                                     IsEnterprise) ->
+    IsCompat = cluster_compat_mode:is_version_72(Version),
+    IsMagma = is_magma(Params, BucketConfig, IsNew),
+    parse_validate_history_param_inner(Key, Value, IsEnterprise, IsCompat,
+                                       IsNew, IsMagma).
+
+parse_validate_history_param_inner(_Key, undefined = _Value, _IsEnterprise,
+                                   _IsCompat, _IsNew, _IsMagma) ->
+    %% Value wasn't specified
+    ignore;
+parse_validate_history_param_inner(Key, _Value, false = _IsEnterprise,
+                                   _IsCompat, _IsNew, _IsMagma) ->
+    {error, Key,
+        <<"History Retention is supported in enterprise edition only">>};
+parse_validate_history_param_inner(Key, _Value, _IsEnterprise,
+                                   false = _IsCompat, _IsNew, _IsMagma) ->
+    {error, Key,
+        <<"History Retention cannot be set until the cluster is fully 7.2">>};
+parse_validate_history_param_inner(Key, _Value, true = _IsEnterprise,
+                                   true = _IsCompat, _IsNew, false = _IsMagma) ->
+    {error, Key,
+        <<"History Retention can only used with Magma">>};
+parse_validate_history_param_inner(Key, Value, true = _IsEnterprise,
+                                   true = _IsCompat, IsNew, true = _IsMagma) ->
+    %% Default to undefined (to avoid setting the parameter and defer to
+    %% default memcached has set.
+    DefaultVal = undefined,
+    validate_with_missing(Value, DefaultVal, IsNew,
+        fun (V) ->
+            do_parse_validate_history_retention_seconds(Key, V)
+        end).
+
+do_parse_validate_history_retention_seconds(Key, Val) ->
+    case menelaus_util:parse_validate_number(Val, 0, undefined) of
+        {ok, X} ->
+            {ok, Key, X};
+        _Error ->
+            {error, Key, <<"Value must be greater than or equal to 0">>}
+    end.
+
 parse_validate_threads_number(Params, IsNew) ->
     validate_with_missing(proplists:get_value("threadsNumber", Params),
                           "3", IsNew, fun parse_validate_threads_number/1).
@@ -2053,6 +2104,11 @@ basic_bucket_params_screening(IsNew, Name, Params, AllBuckets) ->
                                   [node1, node2]).
 
 basic_bucket_params_screening(IsNew, Name, Params, AllBuckets, KvNodes) ->
+    basic_bucket_params_screening(IsNew, Name, Params, AllBuckets, KvNodes,
+                                  true).
+
+basic_bucket_params_screening(IsNew, Name, Params, AllBuckets,
+                              KvNodes, IsEnterprise) ->
     Version = cluster_compat_mode:supported_compat_version(),
     Groups = [[{uuid, N},
                {name, N},
@@ -2060,7 +2116,7 @@ basic_bucket_params_screening(IsNew, Name, Params, AllBuckets, KvNodes) ->
     Ctx = init_bucket_validation_context(IsNew, Name, AllBuckets,
                                          KvNodes, Groups, [],
                                          false, false,
-                                         Version, true,
+                                         Version, IsEnterprise,
                                          %% Change when developer_preview
                                          %% defaults to false
                                          true),
@@ -2312,6 +2368,84 @@ basic_bucket_params_screening_test() ->
                                [node1, node2]),
               [] = E19
       end, MajorityDurabilityLevelReplicas),
+
+    {_OK20, E20} = basic_bucket_params_screening(
+                     true,
+                     "HistoryNotEnterpriseMagma",
+                     [{"bucketType", "membase"},
+                      {"ramQuota", "1024"},
+                      {"storageBackend", "magma"},
+                      {"historyRetentionSeconds", "10"}],
+                     AllBuckets,
+                     [node1],
+                     false),
+    ?assertEqual([{storageBackend,
+                   <<"Magma is supported in enterprise edition only">>},
+                  {history_retention_seconds,
+                   <<"History Retention is supported in enterprise edition "
+                     "only">>}],
+                 E20),
+
+    {_OK21, E21} = basic_bucket_params_screening(
+                     true,
+                     "HistoryEnterpriseNotMagma",
+                     [{"bucketType", "membase"},
+                      {"ramQuota", "400"},
+                      {"historyRetentionSeconds", "10"}],
+                     AllBuckets,
+                     [node1]),
+    ?assertEqual([{history_retention_seconds,
+                   <<"History Retention can only used with Magma">>}],
+                 E21),
+
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:expect(cluster_compat_mode, supported_compat_version,
+        fun() ->
+            ?VERSION_71
+        end),
+
+    {_OK22, E22} = basic_bucket_params_screening(
+                     true,
+                     "HistoryEnterpriseMagma7.1",
+                     [{"bucketType", "membase"},
+                      {"ramQuota", "1024"},
+                      {"storageBackend", "magma"},
+                      {"historyRetentionSeconds", "10"}],
+                     AllBuckets,
+                     [node1]),
+    ?assertEqual([{history_retention_seconds,
+                    <<"History Retention cannot be set until the cluster is "
+                      "fully 7.2">>}],
+                 E22),
+
+    meck:unload(cluster_compat_mode),
+
+    {_OK23, E23} = basic_bucket_params_screening(
+        true,
+        "HistoryEnterpriseMagma7.1",
+        [{"bucketType", "membase"},
+            {"ramQuota", "1024"},
+            {"storageBackend", "magma"},
+            {"historyRetentionSeconds", "-1"}],
+        AllBuckets,
+        [node1]),
+    ?assertEqual([{history_retention_seconds,
+        <<"Value must be greater than or equal to 0">>}],
+        E23),
+
+    {OK24, E24} = basic_bucket_params_screening(
+                     true,
+                     "HistoryEnterpriseMagma",
+                     [{"bucketType", "membase"},
+                      {"ramQuota", "1024"},
+                      {"storageBackend", "magma"},
+                      {"historyRetentionSeconds", "10"}],
+                     AllBuckets,
+                     [node1]),
+    ?assertEqual([], E24),
+    ?assert(lists:any(fun (Elem) ->
+                          Elem =:= {history_retention_seconds, 10}
+                      end, OK24)),
 
     meck:unload(ns_config),
 
