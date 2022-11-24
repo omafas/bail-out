@@ -40,7 +40,8 @@ supported_setting_names() ->
      {dedupe_nmvb_maps, bool},
      {tracing_enabled, bool},
      {datatype_snappy, bool},
-     {connection_limit_mode, {one_of, ["disconnect", "recycle"]}}].
+     {connection_limit_mode, {one_of, ["disconnect", "recycle"]}},
+     {free_connection_pool_size, {int, 0, ?MC_MAXINT}}].
 
 supported_extra_setting_names() ->
     [{default_reqs_per_event, {int, 0, ?MC_MAXINT}},

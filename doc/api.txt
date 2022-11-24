@@ -419,6 +419,7 @@ GET /pools/default/serverGroups =>
   (connection_idle_time: <number>)?
   (privilege_debug: <bool>)?
   (connection_limit_mode: "disconnect" | "recycle")?
+  (free_connection_pool_size: <number>)?
 }
 
 

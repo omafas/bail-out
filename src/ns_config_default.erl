@@ -191,7 +191,8 @@ default() ->
        {num_auxio_threads, <<"default">>},
        {num_nonio_threads, <<"default">>},
        {num_storage_threads, <<"default">>},
-       {connection_limit_mode, <<"disconnect">>}]},
+       {connection_limit_mode, <<"disconnect">>},
+       {free_connection_pool_size, 0}]},
 
      %% Memcached config
      {{node, node(), memcached},
@@ -270,7 +271,8 @@ default() ->
         {active_external_users_push_interval,
             {memcached_config_mgr, get_external_users_push_interval, []}},
         {prometheus, {memcached_config_mgr, prometheus_cfg, []}},
-        {connection_limit_mode, connection_limit_mode}
+        {connection_limit_mode, connection_limit_mode},
+        {free_connection_pool_size, free_connection_pool_size}
        ]}},
 
      {memory_quota, KvQuota},
