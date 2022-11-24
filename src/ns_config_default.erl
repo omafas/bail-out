@@ -32,7 +32,7 @@ get_current_version() ->
     %% changed in 6.0.4 after 6.5.0 had shipped.  As 6.5.0 had no knowledge
     %% of the 6.0.4 version (as it didn't exist when 6.5.0 shipped) it
     %% was unable to perform an upgrade.
-    list_to_tuple(?VERSION_71).
+    list_to_tuple(?VERSION_72).
 
 get_data_dir() ->
     RawDir = path_config:component_path(data),
@@ -190,7 +190,8 @@ default() ->
        {num_writer_threads, <<"default">>},
        {num_auxio_threads, <<"default">>},
        {num_nonio_threads, <<"default">>},
-       {num_storage_threads, <<"default">>}]},
+       {num_storage_threads, <<"default">>},
+       {connection_limit_mode, <<"disconnect">>}]},
 
      %% Memcached config
      {{node, node(), memcached},
@@ -268,7 +269,8 @@ default() ->
             {memcached_config_mgr, get_external_auth_service, []}},
         {active_external_users_push_interval,
             {memcached_config_mgr, get_external_users_push_interval, []}},
-        {prometheus, {memcached_config_mgr, prometheus_cfg, []}}
+        {prometheus, {memcached_config_mgr, prometheus_cfg, []}},
+        {connection_limit_mode, connection_limit_mode}
        ]}},
 
      {memory_quota, KvQuota},
@@ -356,11 +358,14 @@ upgrade_config(Config) ->
                 [{set, {node, node(), config_version}, {7,0}} |
                  upgrade_config_from_6_5_1_to_7_0(Config)];
         {7,0} ->
+                [{set, {node, node(), config_version}, {7,1}} |
+                 upgrade_config_from_7_0_to_7_1(Config)];
+        {7,1} ->
             %% When upgrading to the latest config_version always upgrade
             %% service_ports.
             service_ports:offline_upgrade(Config) ++
                 [{set, {node, node(), config_version}, CurrentVersion} |
-                 upgrade_config_from_7_0_to_7_1(Config)];
+                 upgrade_config_from_7_1_to_7_2(Config)];
         OldVersion ->
             ?log_error("Detected an attempt to offline upgrade from "
                        "unsupported version ~p. Terminating.", [OldVersion]),
@@ -427,6 +432,14 @@ do_upgrade_config_from_7_0_to_7_1(Config, DefaultConfig) ->
      %% any custom changes that may have been made.
      upgrade_sub_keys(memcached, [{delete, log_sleeptime}],
                       Config, DefaultConfig)].
+
+upgrade_config_from_7_1_to_7_2(Config) ->
+    DefaultConfig = default(),
+    do_upgrade_config_from_7_1_to_7_2(Config, DefaultConfig).
+
+do_upgrade_config_from_7_1_to_7_2(_Config, DefaultConfig) ->
+    [upgrade_key(memcached_config, DefaultConfig),
+     upgrade_key(memcached_defaults, DefaultConfig)].
 
 encrypt_config_val(Val) ->
     {ok, Encrypted} = encryption_service:encrypt(term_to_binary(Val)),
