@@ -48,6 +48,7 @@
          required/2,
          prohibited/2,
          changeable_in_enterprise_only/3,
+         changeable_in_72_only/3,
          string_array/2,
          return_value/3,
          return_error/3,
@@ -600,21 +601,34 @@ prohibited(Name, #state{kv = Props} = State) ->
             return_error(Name, "The value must not be supplied", State)
     end.
 
+is_changeable(Name, Default, Pred, State) ->
+    PredValue = Pred(),
+    validate(
+        fun (_) when PredValue -> ok;
+            (Value) when Value =:= Default -> ok;
+            (_) ->
+                {error, PredValue}
+        end,
+        Name, State).
+
 %% Validate a parameter that may only be set to a non-default value in
 %% enterprise edition.
 changeable_in_enterprise_only(Name, Default, State) ->
     IsEnterprise = cluster_compat_mode:is_enterprise(),
-    validate(
-      fun (Value) ->
-              case {IsEnterprise, Value =:= Default} of
-                  {true, _} ->
-                      {value, Value};
-                  {false, true} ->
-                      {value, Value};
-                  {false, false} ->
-                      {error, "Supported in enterprise edition only"}
-              end
-      end, Name, State).
+    Pred = fun () when IsEnterprise -> true;
+               () -> "Supported in enterprise edition only"
+           end,
+    is_changeable(Name, Default, Pred, State).
+
+%% Validate a parameter that may only be set to a non-default value when the
+%% cluster is version 7.2.0+.
+changeable_in_72_only(Name, Default, State) ->
+    Is72 = cluster_compat_mode:is_cluster_72(),
+    Pred = fun () when Is72 -> true;
+               () -> "Supported only when entire cluster is running Couchbase "
+                     "Server Version 7.2.0+"
+           end,
+    is_changeable(Name, Default, Pred, State).
 
 string_array(Name, State) ->
     validate(
@@ -786,4 +800,21 @@ handle_multi_value_string_trim_invalid_test() ->
     #state{errors = RErrors2} = RState3,
     ?assertEqual([{"key2",{error,"Value must be json string"}},
                   {"key1",{error,"Value must be json string"}}], RErrors2).
+
+changeable_in_72_test() ->
+    meck:new(cluster_compat_mode),
+    meck:expect(cluster_compat_mode, is_cluster_72, fun() -> false end),
+
+    Args = [{"test", ok}],
+    Validators = [validator:changeable_in_72_only(test, false, _)],
+
+    {error, [{"test", "Supported only when entire cluster is running Couchbase "
+                      "Server Version 7.2.0+"}]} =
+        handle_proplist(Args, Validators),
+
+    meck:expect(cluster_compat_mode, is_cluster_72, fun() -> true end),
+    {ok, _} = handle_proplist(Args, Validators),
+
+    meck:unload(cluster_compat_mode),
+    ok.
 -endif.
