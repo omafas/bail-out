@@ -826,7 +826,7 @@ post_json(Target, HiddenAuth, Options, Stuff) ->
     Post = list_to_tuple(Target ++
                              ["application/json", mochijson2:encode(Stuff)]),
     RV = menelaus_rest:json_request_hilevel(post, Post,
-                                            ?UNHIDE(HiddenAuth),
+                                            HiddenAuth,
                                             Options),
     ?cluster_debug("Reply from ~p:~n~p", [Target, sanitize_node_info(RV)]),
 

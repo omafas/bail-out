@@ -2822,11 +2822,16 @@ get_indexes(Service, BucketId) ->
 
 do_get_indexes(Service, BucketId0, Nodes) ->
     WantedHosts0 =
-        [begin
-             {_, Host} = misc:node_name_host(N),
-             Port = service_ports:get_port(rest_port, ns_config:latest(), N),
-             list_to_binary(misc:join_host_port(Host, Port))
-         end || N <- Nodes],
+        lists:flatmap(
+          fun (N) ->
+                  {_, Host} = misc:node_name_host(N),
+                  Port = service_ports:get_port(rest_port, ns_config:latest(),
+                                                N),
+                  SslPort = service_ports:get_port(ssl_rest_port,
+                                                   ns_config:latest(), N),
+                  [list_to_binary(misc:join_host_port(Host, Port)),
+                   list_to_binary(misc:join_host_port(Host, SslPort))]
+          end, Nodes),
     WantedHosts = lists:usort(WantedHosts0),
 
     BucketId = list_to_binary(BucketId0),

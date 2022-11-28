@@ -54,8 +54,8 @@ handle_get_metrics(Req) ->
     AuthHeader =
         fun (kv) ->
                 menelaus_rest:basic_auth_header(
-                  ns_config:search_node_prop(Config, memcached, admin_user),
-                  ns_config:search_node_prop(Config, memcached, admin_pass));
+                  ?HIDE({ns_config:search_node_prop(Config, memcached, admin_user),
+                         ns_config:search_node_prop(Config, memcached, admin_pass)}));
             (_) ->
                 menelaus_rest:special_auth_header()
         end,
@@ -127,7 +127,7 @@ proxy_prometheus_api(RawPath, Req) ->
     Settings = prometheus_cfg:settings(),
     {Username, Password} = proplists:get_value(prometheus_creds, Settings),
     Method = mochiweb_request:get(method, Req),
-    Headers = [menelaus_rest:basic_auth_header(Username, Password)] ++
+    Headers = [menelaus_rest:basic_auth_header(?HIDE({Username, Password}))] ++
               [{"Content-Type", "application/x-www-form-urlencoded"} ||
                 Method /= 'GET'],
     {Addr, PortStr} = misc:split_host_port(proplists:get_value(addr, Settings),
