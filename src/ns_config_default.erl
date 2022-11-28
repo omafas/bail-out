@@ -192,7 +192,10 @@ default() ->
        {num_nonio_threads, <<"default">>},
        {num_storage_threads, <<"default">>},
        {connection_limit_mode, <<"disconnect">>},
-       {free_connection_pool_size, 0}]},
+       {free_connection_pool_size, 0},
+       {tcp_keepalive_idle, 360},
+       {tcp_keepalive_interval, 10},
+       {tcp_keepalive_probes, 3}]},
 
      %% Memcached config
      {{node, node(), memcached},
@@ -272,7 +275,10 @@ default() ->
             {memcached_config_mgr, get_external_users_push_interval, []}},
         {prometheus, {memcached_config_mgr, prometheus_cfg, []}},
         {connection_limit_mode, connection_limit_mode},
-        {free_connection_pool_size, free_connection_pool_size}
+        {free_connection_pool_size, free_connection_pool_size},
+        {tcp_keepalive_idle, tcp_keepalive_idle},
+        {tcp_keepalive_interval, tcp_keepalive_interval},
+        {tcp_keepalive_probes, tcp_keepalive_probes}
        ]}},
 
      {memory_quota, KvQuota},

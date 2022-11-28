@@ -412,11 +412,11 @@ GET /pools/default/serverGroups =>
 {
   ((maxconn | dedicated_port_maxconn | verbosity | default_reqs_per_event
      | reqs_per_event_high_priority | reqs_per_event_med_priority | reqs_per_event_low_priority
-     | threads): <number>)*
+     | threads | connection_idle_time | tcp_keepalive_idle | tcp_keepalive_interval
+     | tcp_keepalive_probes): <number>)*
   (breakpad_enabled: <bool>)?
   (breakpad_minidump_dir_path: <string>)?
   (ssl_cipher_list: <string>)?
-  (connection_idle_time: <number>)?
   (privilege_debug: <bool>)?
   (connection_limit_mode: "disconnect" | "recycle")?
   (free_connection_pool_size: <number>)?
