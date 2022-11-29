@@ -27,7 +27,8 @@
          terminate/2, code_change/3, handle_settings_alerts_limits_post/1,
          handle_settings_alerts_limits_get/1]).
 
--export([alert_keys/0, config_upgrade_to_70/1, config_upgrade_to_71/1]).
+-export([alert_keys/0, config_upgrade_to_70/1, config_upgrade_to_71/1,
+         config_upgrade_to_72/1]).
 
 %% @doc Hold client state for any alerts that need to be shown in
 %% the browser, is used by menelaus_web to piggy back for a transport
@@ -67,6 +68,9 @@
 -define(MEM_WARN_PERC, 85).
 -define(MEM_CRIT_PERC, 90).
 
+%% Default history size threshold
+-define(HIST_WARN_PERC, 90).
+
 -export([start_link/0, stop/0, local_alert/2, global_alert/2,
          fetch_alerts/0, consume_alerts/1]).
 
@@ -96,6 +100,8 @@ short_description(disk_usage_analyzer_stuck) ->
     "disks usage worker is stuck and unresponsive";
 short_description(memory_threshold) ->
     "system memory usage threshold exceeded";
+short_description(history_size_warning) ->
+    "history size approaching limit";
 short_description(Other) ->
     %% this case is needed for tests to work
     couch_util:to_list(Other).
@@ -136,7 +142,12 @@ errors(memory_warning) ->
     "memory, above the warning threshold of ~b%.";
 errors(memory_notice) ->
     "Notice: On node ~s ~p memory use is ~.2f% of total available "
-    "memory, above the notice threshold of ~b%.".
+    "memory, above the notice threshold of ~b%.";
+errors(history_size_warning) ->
+    "Warning: On bucket \"~s\" mutation history is greater than ~b% of history "
+    "retention size for at least ~b/~b vbuckets. Please ensure that the "
+    "history retention size is sufficiently large, in order for the mutation "
+    "history to be retained for the history retention time.".
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -287,22 +298,26 @@ alert_keys() ->
      audit_dropped_events, indexer_ram_max_usage,
      ep_clock_cas_drift_threshold_exceeded,
      communication_issue, time_out_of_sync, disk_usage_analyzer_stuck,
-     memory_threshold].
+     memory_threshold, history_size_warning].
 
 config_upgrade_to_70(Config) ->
-    case ns_config:search(Config, email_alerts) of
-        false ->
-            [];
-        {value, EmailAlerts} ->
-            config_email_alerts_upgrade_to_70(EmailAlerts)
-    end.
+    config_email_alerts_upgrade(
+      Config, fun config_email_alerts_upgrade_to_70/1).
 
 config_upgrade_to_71(Config) ->
+    config_email_alerts_upgrade(
+      Config, fun config_email_alerts_upgrade_to_71/1).
+
+config_upgrade_to_72(Config) ->
+    config_email_alerts_upgrade(
+      Config, fun config_email_alerts_upgrade_to_72/1).
+
+config_email_alerts_upgrade(Config, Upgrade) ->
     case ns_config:search(Config, email_alerts) of
         false ->
             [];
         {value, EmailAlerts} ->
-            config_email_alerts_upgrade_to_71(EmailAlerts)
+            Upgrade(EmailAlerts)
     end.
 
 %% ------------------------------------------------------------------
@@ -388,7 +403,8 @@ start_timer() ->
 global_checks() ->
     [oom, ip, write_fail, overhead, disk, audit_write_fail,
      indexer_ram_max_usage, cas_drift_threshold, communication_issue,
-     time_out_of_sync, disk_usage_analyzer_stuck, memory_threshold].
+     time_out_of_sync, disk_usage_analyzer_stuck, memory_threshold,
+     history_size_warning].
 
 %% @doc fires off various checks
 check_alerts(Opaque, Hist, Stats) ->
@@ -606,6 +622,32 @@ check(time_out_of_sync, Opaque, _History, _Stats) ->
     end,
     Opaque;
 
+%% @doc check if the mutation history size is over the alert threshold for at
+%% least one vbucket of a bucket
+check(history_size_warning, Opaque, History, _Stats) ->
+    case cluster_compat_mode:is_cluster_72() of
+        true ->
+            {value, Config} = ns_config:search(alert_limits),
+            Threshold = proplists:get_value(history_warning_threshold, Config,
+                                            ?HIST_WARN_PERC),
+            lists:foreach(
+              fun (Bucket) ->
+                      Key = {history_size_warning, Bucket},
+                      case other_node_already_alerted(Key, History) of
+                          false ->
+                              case get_history_size_alert(Bucket, Threshold) of
+                                  ok -> ok;
+                                  Err -> global_alert(Key, Err)
+                              end;
+                          true ->
+                              ok
+                      end
+              end, ns_bucket:get_bucket_names());
+        false ->
+            ok
+    end,
+    Opaque;
+
 check(memory_threshold, Opaque, _History, Stats) ->
     case proplists:get_value("@system", Stats) of
         undefined ->
@@ -678,6 +720,60 @@ alert_if_time_out_of_sync({time_offset_status, true}) ->
 alert_if_time_out_of_sync({time_offset_status, false}) ->
     ok.
 
+get_history_size_alert(Bucket, Threshold) ->
+    CheckVBucket = fun (MaxSize, {VB, Size}) ->
+                           case (Size * 100) / MaxSize > Threshold of
+                               true -> {true, VB};
+                               false -> false
+                           end
+                   end,
+    StatsParser = fun (Key, V, DiskUsages) ->
+                          case string:split(binary_to_list(Key), ":") of
+                              [VB, "history_disk_size"] ->
+                                  [{VB, binary_to_integer(V)} | DiskUsages];
+                              _ ->
+                                  %% We are not interested in other disk stats
+                                  DiskUsages
+                          end
+                  end,
+    GetStats = fun () ->
+                       case ns_memcached:raw_stats(
+                              node(), Bucket, <<"diskinfo detail">>,
+                              StatsParser(_, _, _), []) of
+                           {ok, V} -> V;
+                           Error -> Error
+                       end
+               end,
+    GetVBsOverThreshold =
+        fun (MaxPerVBucket) ->
+                lists:filtermap(CheckVBucket(MaxPerVBucket, _),
+                                GetStats())
+        end,
+    case ns_bucket:get_bucket(Bucket) of
+        {ok, BCfg} ->
+            MaxSize = ns_bucket:history_retention_bytes(BCfg),
+            MaxTime = ns_bucket:history_retention_seconds(BCfg),
+            TotalVBs = ns_bucket:get_num_vbuckets(BCfg),
+            case MaxSize > 0 andalso MaxTime > 0 andalso TotalVBs > 0 of
+                true ->
+                    case GetVBsOverThreshold(MaxSize / TotalVBs) of
+                        [] -> ok;
+                        BadVBs ->
+                            ale:warn(?USER_LOGGER,
+                                     "The following vbuckets have mutation "
+                                     "history size above the warning threshold:"
+                                     " ~p", [BadVBs]),
+                            fmt_to_bin(errors(history_size_warning),
+                                       [Bucket, Threshold, length(BadVBs),
+                                        TotalVBs])
+                    end;
+                false ->
+                    ok
+            end;
+        not_present ->
+            ok
+    end.
+
 %% @doc only check for disk usage if there has been no previous
 %% errors or last error was over the timeout ago
 -spec hit_rate_limit(atom(), dict:dict()) -> true | false.
@@ -692,6 +788,20 @@ hit_rate_limit(Key, Dict) ->
 
             TimePassed < ?DISK_USAGE_TIMEOUT
     end.
+
+%% @doc check if any other nodes have recently fired an alert for this alert key
+-spec other_node_already_alerted(any(), any()) -> true | false.
+other_node_already_alerted(Key, Hist) ->
+    AlertMatches =
+        fun ({OldKey, _, _, _}) ->
+                case OldKey of
+                    {Key, _} ->
+                        true;
+                    _ ->
+                        false
+                end
+        end,
+    lists:any(AlertMatches, Hist).
 
 %% @doc calculate percentage of overhead and if it is over threshold
 -spec over_threshold(integer(), integer()) -> false | {true, float()}.
@@ -904,6 +1014,20 @@ config_email_alerts_upgrade_to_71(EmailAlerts) ->
             [{set, email_alerts, Result}]
     end.
 
+config_email_alerts_upgrade_to_72(EmailAlerts) ->
+    Result =
+        functools:chain(
+          EmailAlerts,
+          [add_proplist_list_elem(alerts,history_size_warning, _),
+           add_proplist_list_elem(pop_up_alerts, history_size_warning, _)]),
+    case misc:sort_kv_list(Result) =:= misc:sort_kv_list(EmailAlerts) of
+        true ->
+            %% No change due to upgrade
+            [];
+        false ->
+            [{set, email_alerts, Result}]
+    end.
+
 type_spec(undefined) ->
     undefined.
 
@@ -922,7 +1046,10 @@ params() ->
                                   default => ?MEM_WARN_PERC}},
      {"memoryCriticalThreshold", #{type => {int, -1, 100},
                                    cfg_key => memory_critical_threshold,
-                                   default => ?MEM_CRIT_PERC}}].
+                                   default => ?MEM_CRIT_PERC}},
+     {"historyWarningThreshold", #{type => {int, 0, 100},
+                                   cfg_key => history_warning_threshold,
+                                   default => ?HIST_WARN_PERC}}].
 
 build_alert_limits() ->
     case ns_config:search(alert_limits) of
@@ -1163,4 +1290,20 @@ upgrade_70_to_705_test() ->
           fun (K, V, Acc) -> [{K, V} | Acc] end),
     meck:unload(ns_config).
 
+config_upgrade_to_72_test() ->
+    Config = [[{email_alerts,
+                [{pop_up_alerts, [ip, disk]},
+                 {enabled, false},
+                 {alerts, [ip, communication_issue]}]
+               },
+               {alert_limits,
+                [{max_disk_used, 90},
+                 {max_indexer_ram, 75}]}]],
+    ExpectedAlerts = [{pop_up_alerts,
+                       [disk, ip, history_size_warning]},
+                      {alerts,
+                       [communication_issue, ip, history_size_warning]},
+                      {enabled, false}],
+    [{set, email_alerts, Alerts}] = config_upgrade_to_72(Config),
+    ?assertEqual(misc:sort_kv_list(ExpectedAlerts), misc:sort_kv_list(Alerts)).
 -endif.

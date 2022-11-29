@@ -109,6 +109,7 @@
          is_magma/1,
          get_view_nodes/1,
          get_num_vbuckets/0,
+         get_num_vbuckets/1,
          get_max_buckets/0,
          uuid_key/1,
          uuid/2,
@@ -852,6 +853,9 @@ get_num_vbuckets() ->
         {value, X} ->
             X
     end.
+
+get_num_vbuckets(BucketConfig) ->
+    proplists:get_value(num_vbuckets, BucketConfig, get_num_vbuckets()).
 
 new_bucket_default_params(membase) ->
     [{type, membase},
