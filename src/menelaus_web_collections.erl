@@ -24,6 +24,7 @@
          handle_post_collection/3,
          handle_delete_scope/3,
          handle_delete_collection/4,
+         handle_patch_collection/4,
          handle_set_manifest/2,
          assert_api_available/1,
          get_formatted_err_msg/1,
@@ -182,15 +183,18 @@ bucket_has_config_validator(Name, BucketConfig, BucketKey, BucketValue, State) -
             end
         end, Name, State).
 
-collection_validators(DefaultAllowed, BucketConfig) ->
-    [validator:integer(maxTTL, 0, ?MC_MAXINT, _),
-     validator:changeable_in_enterprise_only(maxTTL, 0, _),
-     validator:boolean(history, _),
+collection_modifiable_validators(BucketConfig) ->
+    [validator:boolean(history, _),
      validator:valid_in_enterprise_only(history, _),
      validator:changeable_in_72_only(history, false, _),
      bucket_has_config_validator(history, BucketConfig, storage_mode, magma,
-                                 _) |
-     scope_validators(DefaultAllowed)].
+                                 _)].
+
+collection_validators(DefaultAllowed, BucketConfig) ->
+    [validator:integer(maxTTL, 0, ?MC_MAXINT, _),
+     validator:changeable_in_enterprise_only(maxTTL, 0, _)] ++
+     collection_modifiable_validators(BucketConfig) ++
+     scope_validators(DefaultAllowed).
 
 handle_post_collection(Bucket, Scope, Req) ->
     assert_api_available(Bucket),
@@ -200,7 +204,7 @@ handle_post_collection(Bucket, Scope, Req) ->
             validator:handle(
                 fun (Values) ->
                     Name = proplists:get_value(name, Values),
-                    RV =  collections:create_collection(
+                    RV = collections:create_collection(
                         Bucket, Scope, Name, proplists:delete(name, Values)),
                     maybe_audit(RV, Req,
                         ns_audit:create_collection(_, Bucket, Scope, Name,
@@ -209,6 +213,25 @@ handle_post_collection(Bucket, Scope, Req) ->
                     handle_rv(RV, Req, Bucket)
                 end, Req, form,
                 collection_validators(default_not_allowed, BucketConf));
+        not_present ->
+            handle_rv({bucket_not_found, Bucket}, Req, Bucket)
+    end.
+
+handle_patch_collection(Bucket, Scope, Name, Req) ->
+    assert_api_available(Bucket),
+    case ns_bucket:get_bucket(Bucket) of
+        {ok, BucketConf} ->
+            validator:handle(
+                fun (Values) ->
+                    RV =  collections:modify_collection(
+                        Bucket, Scope, Name, proplists:delete(name, Values)),
+                    %% @TODO MB-54708: Auditing
+                    maybe_add_event_log(RV, Bucket, []),
+                    handle_rv(RV, Req, Bucket)
+                end, Req, form,
+                collection_modifiable_validators(BucketConf) ++
+                % Don't allow any other params
+                [validator:unsupported(_)]);
         not_present ->
             handle_rv({bucket_not_found, Bucket}, Req, Bucket)
     end.

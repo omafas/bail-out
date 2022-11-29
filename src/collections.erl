@@ -32,6 +32,7 @@
          create_scope/3,
          update_limits/3,
          create_collection/4,
+         modify_collection/4,
          drop_scope/2,
          drop_collection/3,
          bump_epoch/1,
@@ -269,6 +270,10 @@ create_scope(Bucket, Name, Limits) ->
 create_collection(Bucket, Scope, Name, Props) ->
     update(Bucket, {create_collection, Scope, Name,
                     remove_defaults(Props)}).
+
+modify_collection(Bucket, Scope, Name, Props) ->
+    % Can't remove defaults here as we might be setting a value to the default
+    update(Bucket, {modify_collection, Scope, Name, Props}).
 
 drop_scope(Bucket, Name) ->
     update(Bucket, {drop_scope, Name}).
@@ -603,8 +608,8 @@ verify_oper({create_collection, ScopeName, Name, _}, Manifest, Snapshot) ->
       end, ScopeName, Manifest);
 verify_oper({drop_collection, ScopeName, Name}, Manifest, _Snapshot) ->
     with_collection(fun (_) -> ok end, ScopeName, Name, Manifest);
-verify_oper({modify_collection, ScopeName, Name}, _Manifest, _Snapshot) ->
-    {cannot_modify_collection, ScopeName, Name};
+verify_oper({modify_collection, ScopeName, Name, _Props}, Manifest, _Snapshot) ->
+    with_collection(fun (_) -> ok end, ScopeName, Name, Manifest);
 verify_oper(bump_epoch, _Manifest, _Snapshot) ->
     ok.
 
@@ -631,6 +636,8 @@ handle_oper({create_collection, Scope, Name, Props}, Manifest) ->
       [add_collection(_, Name, Scope, Props),
        bump_id(_, next_coll_uid),
        update_counter(_, num_collections, 1)]);
+handle_oper({modify_collection, Scope, Name, Props}, Manifest) ->
+    modify_collection_props(Manifest, Name, Scope, Props);
 handle_oper({drop_collection, Scope, Name}, Manifest) ->
     NumCollections = case Name of
                          "_default" -> 0;
@@ -750,6 +757,18 @@ find_collection(Name, Collections) ->
 add_collection(Manifest, Name, ScopeName, Props) ->
     Uid = proplists:get_value(next_coll_uid, Manifest),
     on_collections([{Name, [{uid, Uid} | Props]} | _], ScopeName, Manifest).
+
+modify_collection_props(Manifest, Name, ScopeName, DesiredProps) ->
+    on_collections(
+        fun (Collections) ->
+            % Merge DesiredProps into CurrentProps, and remove any defaults to
+            % sanitize the manifest as we can't remove them earlier in case we
+            % are setting a value to the default.
+            {Name, CurrentProps} = lists:keyfind(Name, 1, Collections),
+            NewProps = remove_defaults(misc:update_proplist(CurrentProps,
+                                                            DesiredProps)),
+            lists:keyreplace(Name, 1, Collections, {Name, NewProps})
+        end, ScopeName, Manifest).
 
 delete_collection(Manifest, Name, ScopeName) ->
     on_collections(lists:keydelete(Name, 1, _), ScopeName, Manifest).
@@ -1057,6 +1076,9 @@ update_with_manifest(Manifest, Operation) ->
 update_manifest_test_create_collection(Manifest, Scope, Name, Props) ->
     update_with_manifest(Manifest, {create_collection, Scope, Name, Props}).
 
+update_manifest_test_update_collection(Manifest, Scope, Name, Props) ->
+    update_with_manifest(Manifest, {modify_collection, Scope, Name, Props}).
+
 update_manifest_test_drop_collection(Manifest, Scope, Name) ->
     update_with_manifest(Manifest, {drop_collection, Scope, Name}).
 
@@ -1140,12 +1162,17 @@ manifest_uid_t() ->
     ?assertEqual(2, proplists:get_value(uid, Manifest2)),
 
     {commit, [{_, _, Manifest3}], _} =
-        update_manifest_test_drop_collection(Manifest2, "s1", "c1"),
+        update_manifest_test_update_collection(Manifest2, "s1", "c1",
+                                               [{history, true}]),
     ?assertEqual(3, proplists:get_value(uid, Manifest3)),
 
     {commit, [{_, _, Manifest4}], _} =
-        update_manifest_test_drop_scope(Manifest3, "s1"),
-    ?assertEqual(4, proplists:get_value(uid, Manifest4)).
+        update_manifest_test_drop_collection(Manifest3, "s1", "c1"),
+    ?assertEqual(4, proplists:get_value(uid, Manifest4)),
+
+    {commit, [{_, _, Manifest5}], _} =
+        update_manifest_test_drop_scope(Manifest4, "s1"),
+    ?assertEqual(5, proplists:get_value(uid, Manifest5)).
 
 scope_uid_t() ->
     {commit, [{_, _, Manifest1}], _} =
@@ -1195,6 +1222,31 @@ collection_uid_t() ->
                  get_uid(get_collection("s1c1",
                                          get_scope("s1", Manifest6)))).
 
+modify_collection_t() ->
+    Manifest = default_manifest(),
+    ?assertEqual(undefined,
+                 proplists:get_value(history,
+                                     get_collection("_default",
+                                                    get_scope("_default",
+                                                              Manifest)))),
+
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_update_collection(Manifest, "_default", "_default",
+                                               [{history, true}]),
+    ?assert(proplists:get_value(history,
+                                get_collection("_default",
+                                               get_scope("_default",
+                                                         Manifest1)))),
+
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_update_collection(Manifest1, "_default",
+                                               "_default", [{history, false}]),
+    ?assertEqual(undefined,
+                 proplists:get_value(history,
+                                     get_collection("_default",
+                                                    get_scope("_default",
+                                                              Manifest2)))).
+
 % Bunch of fairly simple collections tests that update the manifest and expect
 % various results.
 basic_collections_manifest_test_() ->
@@ -1213,6 +1265,7 @@ basic_collections_manifest_test_() ->
          {"drop scope test", fun() -> drop_scope_t() end},
          {"manifest uid test", fun() -> manifest_uid_t() end},
          {"scope uid test", fun() -> scope_uid_t() end},
-         {"collection uid test", fun() -> collection_uid_t() end}]}.
+         {"collection uid test", fun() -> collection_uid_t() end},
+         {"modify collection test", fun() -> modify_collection_t() end}]}.
 
 -endif.
