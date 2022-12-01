@@ -103,6 +103,26 @@ EOF
     fi
 }
 
+_config_curl_env() {
+    # Search for the distro-provided certificate bundle. Uses the
+    # same hunt algorithm as Golang:
+    # https://golang.org/src/crypto/x509/root_linux.go
+    cert_files=(
+        "/etc/ssl/certs/ca-certificates.crt"                # Debian/Ubuntu/Gentoo etc.
+        "/etc/pki/tls/certs/ca-bundle.crt"                  # Fedora/RHEL 6
+        "/etc/ssl/ca-bundle.pem"                            # OpenSUSE
+        "/etc/pki/tls/cacert.pem"                           # OpenELEC
+        "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem" # CentOS/RHEL 7
+        "/etc/ssl/cert.pem"                                 # Alpine Linux
+    )
+    for cert_file in ${cert_files[@]}; do
+        if [ -e "${cert_file}" ]; then
+            export CURL_CA_BUNDLE=${cert_file}
+            break
+        fi
+    done
+}
+
 _prepare_datadir () {
     test -d "$CB_DATA_DIR" || mkdir -p "$CB_DATA_DIR"
     cd "$CB_DATA_DIR"
@@ -159,6 +179,10 @@ _start() {
     _check_ulimit -n 70000 "maximum number of open files" "nofile"
 
     _prepare_datadir
+
+    # Detect curl cabundle and set environment.
+    _config_curl_env
+
     _maybe_start_epmd
     _load_config
 
