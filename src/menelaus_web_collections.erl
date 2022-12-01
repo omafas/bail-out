@@ -225,7 +225,9 @@ handle_patch_collection(Bucket, Scope, Name, Req) ->
                 fun (Values) ->
                     RV =  collections:modify_collection(
                         Bucket, Scope, Name, proplists:delete(name, Values)),
-                    %% @TODO MB-54708: Auditing
+                    maybe_audit(RV, Req,
+                                ns_audit:modify_collection(_, Bucket, Scope,
+                                                           Name, _)),
                     maybe_add_event_log(RV, Bucket, []),
                     handle_rv(RV, Req, Bucket)
                 end, Req, form,

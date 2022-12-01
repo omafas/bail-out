@@ -1381,6 +1381,27 @@
           "optional_fields" : {
               "sessionid" : ""
           }
+      },
+      {
+        "id" : 8270,
+        "name" : "modify collection",
+        "description" : "Collection was modified",
+        "sync" : false,
+        "enabled" : true,
+        "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "local" : {"ip" : "", "port" : 1},
+              "bucket_name" : "",
+              "scope_name" : "",
+              "collection_name" : "",
+              "new_manifest_uid" : ""
+          },
+          "optional_fields" : {
+              "sessionid" : ""
+          }
       }
     ]
 }
