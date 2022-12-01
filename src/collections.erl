@@ -1013,4 +1013,191 @@ get_operations_test_() ->
                      {"s3", [{collections, [{"ic1", [{maxTTL, 0}]},
                                             {"ic2", [{maxTTL, 0}]}]}]}]))
        end}]}.
+
+update_manifest_test_setup() ->
+    meck:new(ns_config, [passthrough]),
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:expect(cluster_compat_mode, should_enforce_limits, fun(_) -> false end),
+
+    % Return some scope/collection values high enough for us to not worry about
+    % it while testing.
+    meck:expect(ns_config,
+                read_key_fast,
+                fun (max_scopes_count, _) -> 1000;
+                    (max_collections_count, _) -> 1000
+                end).
+
+update_manifest_test_teardown() ->
+    meck:unload(ns_config),
+    meck:unload(cluster_compat_mode).
+
+update_with_manifest(Manifest, Operation) ->
+    Bucket = [],
+    OtherBucketCounts = {0,0},
+    LastSeenIds = [{check, [0,0,0]}],
+    Snapshot = [],
+    do_update_with_manifest(Bucket, Manifest, Operation, OtherBucketCounts,
+                            LastSeenIds, Snapshot).
+
+update_manifest_test_create_collection(Manifest, Scope, Name, Props) ->
+    update_with_manifest(Manifest, {create_collection, Scope, Name, Props}).
+
+update_manifest_test_drop_collection(Manifest, Scope, Name) ->
+    update_with_manifest(Manifest, {drop_collection, Scope, Name}).
+
+update_manifest_test_create_scope(Manifest, Name, Props) ->
+    update_with_manifest(Manifest, {create_scope, Name, Props}).
+
+update_manifest_test_drop_scope(Manifest, Name) ->
+    update_with_manifest(Manifest, {drop_scope, Name}).
+
+create_collection_t() ->
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_collection(default_manifest(), "_default",
+                                               "c1", []),
+    ?assertEqual([{uid, 8}],
+                 get_collection("c1", get_scope("_default", Manifest1))),
+
+    % Can't create collection with same name
+    ?assertEqual(
+        {abort, {error, {collection_already_exists, "_default", "c1"}}},
+        update_manifest_test_create_collection(Manifest1, "_default", "c1", [])),
+
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_create_collection(Manifest1, "_default", "c2", []),
+    ?assertEqual([{uid, 9}],
+                 get_collection("c2", get_scope("_default", Manifest2))).
+
+drop_collection_t() ->
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_collection(default_manifest(), "_default",
+                                               "c1", []),
+    ?assertEqual([{uid, 8}],
+                 get_collection("c1", get_scope("_default", Manifest1))),
+
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_drop_collection(Manifest1, "_default", "c1"),
+    ?assertEqual(undefined,
+                 get_collection("c1", get_scope("_default", Manifest2))),
+
+    % Can't drop collection that does not exist
+    ?assertEqual(
+        {abort, {error, {collection_not_found, "_default","c1"}}},
+        update_manifest_test_drop_collection(Manifest2, "_default", "c1")).
+
+create_scope_t() ->
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_scope(default_manifest(), "s1", []),
+    ?assertEqual([{uid, 8}, {collections, []}, {limits, []}],
+                 proplists:get_value("s1", get_scopes(Manifest1))),
+
+    % Can't create scope with same name
+    ?assertEqual({abort, {error, {scope_already_exists, "s1"}}},
+                  update_manifest_test_create_scope(Manifest1, "s1", [])),
+
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_create_scope(Manifest1, "s2", []),
+    ?assertEqual([{uid, 9}, {collections, []}, {limits, []}],
+                 proplists:get_value("s2", get_scopes(Manifest2))).
+
+drop_scope_t() ->
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_scope(default_manifest(), "s1", []),
+    ?assertEqual([{uid, 8}, {collections, []}, {limits, []}],
+                 proplists:get_value("s1", get_scopes(Manifest1))),
+
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_drop_scope(Manifest1, "s1"),
+    ?assertEqual(undefined,
+                 proplists:get_value("s1", get_scopes(Manifest2))),
+
+    % Can't drop scope that does not exist
+    ?assertEqual({abort, {error, {scope_not_found, "s1"}}},
+                  update_manifest_test_drop_scope(Manifest2, "s1")).
+
+manifest_uid_t() ->
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_scope(default_manifest(), "s1", []),
+    ?assertEqual(1, proplists:get_value(uid, Manifest1)),
+
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_create_collection(Manifest1, "s1", "c1", []),
+    ?assertEqual(2, proplists:get_value(uid, Manifest2)),
+
+    {commit, [{_, _, Manifest3}], _} =
+        update_manifest_test_drop_collection(Manifest2, "s1", "c1"),
+    ?assertEqual(3, proplists:get_value(uid, Manifest3)),
+
+    {commit, [{_, _, Manifest4}], _} =
+        update_manifest_test_drop_scope(Manifest3, "s1"),
+    ?assertEqual(4, proplists:get_value(uid, Manifest4)).
+
+scope_uid_t() ->
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_scope(default_manifest(), "s1", []),
+    ?assertEqual(8, get_uid(get_scope("s1", Manifest1))),
+
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_create_scope(Manifest1, "s2", []),
+    ?assertEqual(9, get_uid(get_scope("s2", Manifest2))),
+
+    % Recreate of same scope should use new id
+    {commit, [{_, _, Manifest3}], _} =
+        update_manifest_test_drop_scope(Manifest2, "s1"),
+    {commit, [{_, _, Manifest4}], _} =
+        update_manifest_test_create_scope(Manifest3, "s1", []),
+    ?assertEqual(10, get_uid(get_scope("s1", Manifest4))).
+
+collection_uid_t() ->
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_collection(default_manifest(), "_default",
+                                               "c1", []),
+    ?assertEqual(8,
+                 get_uid(get_collection("c1",
+                                        get_scope("_default", Manifest1)))),
+
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_create_collection(Manifest1, "_default", "c2", []),
+    ?assertEqual(9,
+                 get_uid(get_collection("c2",
+                                        get_scope("_default", Manifest2)))),
+
+    % Recreate of same collection should use new id
+    {commit, [{_, _, Manifest3}], _} =
+        update_manifest_test_drop_collection(Manifest2, "_default", "c1"),
+    {commit, [{_, _, Manifest4}], _} =
+        update_manifest_test_create_collection(Manifest3, "_default", "c1", []),
+    ?assertEqual(10,
+                 get_uid(get_collection("c1",
+                                        get_scope("_default", Manifest4)))),
+
+    % Collections in other scopes should not share ids
+    {commit, [{_, _, Manifest5}], _} =
+        update_manifest_test_create_scope(Manifest4, "s1", []),
+    {commit, [{_, _, Manifest6}], _} =
+        update_manifest_test_create_collection(Manifest5, "s1", "s1c1", []),
+    ?assertEqual(11,
+                 get_uid(get_collection("s1c1",
+                                         get_scope("s1", Manifest6)))).
+
+% Bunch of fairly simple collections tests that update the manifest and expect
+% various results.
+basic_collections_manifest_test_() ->
+    % We can re-use (setup) the test environment that we setup/teardown here
+    % for each test rather than create a new one (foreach) to save time.
+    {setup,
+        fun() ->
+            update_manifest_test_setup()
+        end,
+        fun(_) ->
+            update_manifest_test_teardown()
+        end,
+        [{"create collection test", fun () -> create_collection_t() end},
+         {"drop collection test", fun () -> drop_collection_t() end},
+         {"create scope test", fun () -> create_scope_t() end},
+         {"drop scope test", fun() -> drop_scope_t() end},
+         {"manifest uid test", fun() -> manifest_uid_t() end},
+         {"scope uid test", fun() -> scope_uid_t() end},
+         {"collection uid test", fun() -> collection_uid_t() end}]}.
+
 -endif.
