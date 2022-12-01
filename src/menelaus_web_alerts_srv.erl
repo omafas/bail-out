@@ -46,7 +46,7 @@
          }).
 
 %% Amount of time to wait between state checks (ms)
--define(SAMPLE_RATE, 3000).
+-define(SAMPLE_RATE, 60000).
 
 %% Amount of time between sending users the same alert (s)
 -define(ALERT_TIMEOUT, 60 * 10).
