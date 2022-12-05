@@ -44,7 +44,8 @@ supported_setting_names() ->
      {free_connection_pool_size, {int, 0, ?MC_MAXINT}},
      {tcp_keepalive_idle, {int, 0, ?MC_MAXINT}},
      {tcp_keepalive_interval, {int, 0, ?MC_MAXINT}},
-     {tcp_keepalive_probes, {int, 0, ?MC_MAXINT}}].
+     {tcp_keepalive_probes, {int, 0, ?MC_MAXINT}},
+     {max_client_connection_details, {int, 0, ?MC_MAXINT}}].
 
 supported_extra_setting_names() ->
     [{default_reqs_per_event, {int, 0, ?MC_MAXINT}},

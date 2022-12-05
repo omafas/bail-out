@@ -195,7 +195,8 @@ default() ->
        {free_connection_pool_size, 0},
        {tcp_keepalive_idle, 360},
        {tcp_keepalive_interval, 10},
-       {tcp_keepalive_probes, 3}]},
+       {tcp_keepalive_probes, 3},
+       {max_client_connection_details, 0}]},
 
      %% Memcached config
      {{node, node(), memcached},
@@ -278,7 +279,8 @@ default() ->
         {free_connection_pool_size, free_connection_pool_size},
         {tcp_keepalive_idle, tcp_keepalive_idle},
         {tcp_keepalive_interval, tcp_keepalive_interval},
-        {tcp_keepalive_probes, tcp_keepalive_probes}
+        {tcp_keepalive_probes, tcp_keepalive_probes},
+        {max_client_connection_details, max_client_connection_details}
        ]}},
 
      {memory_quota, KvQuota},
