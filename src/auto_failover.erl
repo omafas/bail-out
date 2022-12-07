@@ -974,14 +974,14 @@ restart_on_compat_mode_change() ->
 send_tick_msg() ->
     erlang:send_after(get_tick_period(), self(), tick).
 
-validate_kv(Nodes, DownNodes) ->
-    case ns_cluster_membership:service_nodes(Nodes, kv) of
+validate_kv(FailoverNodes, DownNodes) ->
+    case ns_cluster_membership:service_nodes(FailoverNodes, kv) of
         [] ->
             ok;
-        KVNodes ->
-            case validate_kv_safety(KVNodes) of
+        FailoverKVNodes ->
+            case validate_kv_safety(FailoverKVNodes) of
                 ok ->
-                    validate_durability_failover(KVNodes, DownNodes);
+                    validate_durability_failover(FailoverKVNodes, DownNodes);
                 Error ->
                     Error
             end
