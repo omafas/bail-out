@@ -9,6 +9,7 @@
 %%
 -module(ns_bucket).
 
+-include("ns_bucket.hrl").
 -include("ns_common.hrl").
 -include("ns_config.hrl").
 -include("cut.hrl").
@@ -75,6 +76,7 @@
          conflict_resolution_type/1,
          drift_thresholds/1,
          history_retention_seconds/1,
+         history_retention_collection_default/1,
          eviction_policy/1,
          storage_mode/1,
          storage_backend/1,
@@ -361,6 +363,11 @@ drift_thresholds(BucketConfig) ->
 -spec history_retention_seconds([{_,_}]) -> number().
 history_retention_seconds(BucketConfig) ->
     proplists:get_value(history_retention_seconds, BucketConfig, 0).
+
+-spec history_retention_collection_default([{_,_}]) -> boolean().
+history_retention_collection_default(BucketConfig) ->
+    proplists:get_value(history_retention_collection_default, BucketConfig,
+                        ?HISTORY_RETENTION_COLLECTION_DEFAULT_DEFAULT).
 
 eviction_policy(BucketConfig) ->
     Default = case storage_mode(BucketConfig) of

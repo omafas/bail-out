@@ -180,6 +180,12 @@ collection_prop_to_memcached(uid, V) ->
 collection_prop_to_memcached(_, V) ->
     V.
 
+%% The default collection properties. These properties may not be specified but
+%% can be inferred from the collections manifest if not specified. This has two
+%% benefits:
+%%
+%% 1) Reduces the size of the manifest
+%% 2) Improves readability of the manifest
 default_collection_props() ->
     [{maxTTL, 0}, {history, false}].
 
@@ -268,8 +274,7 @@ create_scope(Bucket, Name, Limits) ->
     update(Bucket, {create_scope, Name, Limits}).
 
 create_collection(Bucket, Scope, Name, Props) ->
-    update(Bucket, {create_collection, Scope, Name,
-                    remove_defaults(Props)}).
+    update(Bucket, {create_collection, Scope, Name, Props}).
 
 modify_collection(Bucket, Scope, Name, Props) ->
     % Can't remove defaults here as we might be setting a value to the default
@@ -348,26 +353,35 @@ do_update_with_manifest(Bucket, Manifest, Operation, OtherBucketCounts,
     ?log_debug("Perform operation ~p on manifest ~p of bucket ~p",
                [Operation, get_uid(Manifest), Bucket]),
     CompiledOperation = compile_operation(Operation, Bucket, Manifest),
-    case perform_operations(Manifest, CompiledOperation, Snapshot) of
-        {ok, Manifest} ->
-            {abort, {not_changed, uid(Manifest)}};
-        {ok, NewManifest} ->
-            case check_cluster_limits(NewManifest, OtherBucketCounts) of
-                ok ->
-                    FinalManifest = advance_manifest_id(Operation, NewManifest),
-                    case check_ids_limit(FinalManifest, LastSeenIds) of
-                        [] ->
-                            {commit, [{set, key(Bucket), FinalManifest}],
-                             {uid(FinalManifest), CompiledOperation}};
-                        BehindNodes ->
-                            {abort, {error, {nodes_are_behind,
-                                             [N || {N, _} <- BehindNodes]}}}
+    case ns_bucket:get_bucket(Bucket) of
+        {ok, BucketConf} ->
+            case perform_operations(Manifest, CompiledOperation, Snapshot,
+                                    BucketConf) of
+                {ok, Manifest} ->
+                    {abort, {not_changed, uid(Manifest)}};
+                {ok, NewManifest} ->
+                    case check_cluster_limits(NewManifest, OtherBucketCounts) of
+                        ok ->
+                            FinalManifest = advance_manifest_id(Operation,
+                                                                NewManifest),
+                            case check_ids_limit(FinalManifest, LastSeenIds) of
+                                [] ->
+                                    {commit,
+                                        [{set, key(Bucket), FinalManifest}],
+                                         {uid(FinalManifest),
+                                          CompiledOperation}};
+                                BehindNodes ->
+                                    {abort, {error, {nodes_are_behind,
+                                        [N || {N, _} <- BehindNodes]}}}
+                            end;
+                        Error ->
+                            {abort, {error, Error}}
                     end;
                 Error ->
                     {abort, {error, Error}}
             end;
-        Error ->
-            {abort, {error, Error}}
+        not_present ->
+            {abort, {error, bucket_not_found, Bucket}}
     end.
 
 advance_manifest_id(bump_epoch, Manifest) ->
@@ -377,15 +391,15 @@ advance_manifest_id(_Operation, Manifest) ->
                              {uid, proplists:get_value(next_uid, Manifest)}),
             next_uid).
 
-perform_operations(_Manifest, {error, Error}, _Snapshot) ->
+perform_operations(_Manifest, {error, Error}, _Snapshot, _BucketConf) ->
     Error;
-perform_operations(Manifest, [], _Snapshot) ->
+perform_operations(Manifest, [], _Snapshot, _BucketConf) ->
     {ok, Manifest};
-perform_operations(Manifest, [Operation | Rest], Snapshot) ->
+perform_operations(Manifest, [Operation | Rest], Snapshot, BucketConf) ->
     case verify_oper(Operation, Manifest, Snapshot) of
         ok ->
-            perform_operations(handle_oper(Operation, Manifest), Rest,
-                               Snapshot);
+            perform_operations(handle_oper(Operation, Manifest, BucketConf),
+                               Rest, Snapshot, BucketConf);
         Error ->
             ?log_debug("Operation ~p failed with error ~p", [Operation, Error]),
             Error
@@ -613,32 +627,32 @@ verify_oper({modify_collection, ScopeName, Name, _Props}, Manifest, _Snapshot) -
 verify_oper(bump_epoch, _Manifest, _Snapshot) ->
     ok.
 
-handle_oper({update_limits, Name, Limits}, Manifest) ->
+handle_oper({update_limits, Name, Limits}, Manifest, _BucketConf) ->
     do_update_limits(Manifest, Name, Limits);
-handle_oper({check_uid, _CheckUid}, Manifest) ->
+handle_oper({check_uid, _CheckUid}, Manifest, _BucketConf) ->
     Manifest;
-handle_oper({create_scope, Name, Limits}, Manifest) ->
+handle_oper({create_scope, Name, Limits}, Manifest, _BucketConf) ->
     functools:chain(
       Manifest,
       [add_scope(_, Name, Limits),
        bump_id(_, next_scope_uid),
        update_counter(_, num_scopes, 1)]);
-handle_oper({drop_scope, Name}, Manifest) ->
+handle_oper({drop_scope, Name}, Manifest, _BucketConf) ->
     NumCollections = length(get_collections(get_scope(Name, Manifest))),
     functools:chain(
       Manifest,
       [delete_scope(_, Name),
        update_counter(_, num_scopes, -1),
        update_counter(_, num_collections, -NumCollections)]);
-handle_oper({create_collection, Scope, Name, Props}, Manifest) ->
+handle_oper({create_collection, Scope, Name, Props}, Manifest, BucketConf) ->
     functools:chain(
       Manifest,
-      [add_collection(_, Name, Scope, Props),
+      [add_collection(_, Name, Scope, Props, BucketConf),
        bump_id(_, next_coll_uid),
        update_counter(_, num_collections, 1)]);
-handle_oper({modify_collection, Scope, Name, Props}, Manifest) ->
+handle_oper({modify_collection, Scope, Name, Props}, Manifest, _BucketConf) ->
     modify_collection_props(Manifest, Name, Scope, Props);
-handle_oper({drop_collection, Scope, Name}, Manifest) ->
+handle_oper({drop_collection, Scope, Name}, Manifest, _BucketConf) ->
     NumCollections = case Name of
                          "_default" -> 0;
                          _ -> 1
@@ -647,7 +661,7 @@ handle_oper({drop_collection, Scope, Name}, Manifest) ->
       Manifest,
       [delete_collection(_, Name, Scope),
        update_counter(_, num_collections, -NumCollections)]);
-handle_oper(bump_epoch, Manifest) ->
+handle_oper(bump_epoch, Manifest, _BucketConf) ->
     functools:chain(
       Manifest,
       [bump_id(_, next_scope_uid, ?EPOCH),
@@ -754,9 +768,21 @@ get_collection(Name, Scope) ->
 find_collection(Name, Collections) ->
     proplists:get_value(Name, Collections).
 
-add_collection(Manifest, Name, ScopeName, Props) ->
+add_collection(Manifest, Name, ScopeName, SuppliedProps, BucketConf) ->
     Uid = proplists:get_value(next_coll_uid, Manifest),
-    on_collections([{Name, [{uid, Uid} | Props]} | _], ScopeName, Manifest).
+    Props = case proplists:get_value(history, SuppliedProps) of
+        undefined ->
+            % History defined by our default value
+            SuppliedProps ++
+                [{history,
+                  ns_bucket:history_retention_collection_default(BucketConf)}];
+        _ ->
+            % History defined by the user
+            SuppliedProps
+    end,
+    SanitizedProps = remove_defaults(Props),
+    on_collections([{Name, [{uid, Uid} | SanitizedProps]} | _], ScopeName,
+                   Manifest).
 
 modify_collection_props(Manifest, Name, ScopeName, DesiredProps) ->
     on_collections(
@@ -1048,10 +1074,22 @@ get_operations_test_() ->
                                             {"ic6", [{history, false}]}]}]}]))
        end}]}.
 
+manifest_test_set_history_default(Val) ->
+    meck:expect(ns_bucket,
+                get_bucket,
+                fun(_) ->
+                    {ok, [{history_retention_collection_default, Val},
+                          {history_retention_seconds, 1}]}
+                end).
+
 update_manifest_test_setup() ->
     meck:new(ns_config, [passthrough]),
     meck:new(cluster_compat_mode, [passthrough]),
-    meck:expect(cluster_compat_mode, should_enforce_limits, fun(_) -> false end),
+    meck:new(ns_bucket, [passthrough]),
+
+    meck:expect(cluster_compat_mode, should_enforce_limits,
+                fun(_) -> false end),
+    meck:expect(cluster_compat_mode, is_cluster_70, fun () -> true end),
 
     % Return some scope/collection values high enough for us to not worry about
     % it while testing.
@@ -1059,14 +1097,17 @@ update_manifest_test_setup() ->
                 read_key_fast,
                 fun (max_scopes_count, _) -> 1000;
                     (max_collections_count, _) -> 1000
-                end).
+                end),
+
+    manifest_test_set_history_default(true).
 
 update_manifest_test_teardown() ->
     meck:unload(ns_config),
-    meck:unload(cluster_compat_mode).
+    meck:unload(cluster_compat_mode),
+    meck:unload(ns_bucket).
 
 update_with_manifest(Manifest, Operation) ->
-    Bucket = [],
+    Bucket = "default",
     OtherBucketCounts = {0,0},
     LastSeenIds = [{check, [0,0,0]}],
     Snapshot = [],
@@ -1092,7 +1133,7 @@ create_collection_t() ->
     {commit, [{_, _, Manifest1}], _} =
         update_manifest_test_create_collection(default_manifest(), "_default",
                                                "c1", []),
-    ?assertEqual([{uid, 8}],
+    ?assertEqual([{uid, 8}, {history, true}],
                  get_collection("c1", get_scope("_default", Manifest1))),
 
     % Can't create collection with same name
@@ -1102,14 +1143,14 @@ create_collection_t() ->
 
     {commit, [{_, _, Manifest2}], _} =
         update_manifest_test_create_collection(Manifest1, "_default", "c2", []),
-    ?assertEqual([{uid, 9}],
+    ?assertEqual([{uid, 9}, {history, true}],
                  get_collection("c2", get_scope("_default", Manifest2))).
 
 drop_collection_t() ->
     {commit, [{_, _, Manifest1}], _} =
         update_manifest_test_create_collection(default_manifest(), "_default",
                                                "c1", []),
-    ?assertEqual([{uid, 8}],
+    ?assertEqual([{uid, 8}, {history, true}],
                  get_collection("c1", get_scope("_default", Manifest1))),
 
     {commit, [{_, _, Manifest2}], _} =
@@ -1231,21 +1272,62 @@ modify_collection_t() ->
                                                               Manifest)))),
 
     {commit, [{_, _, Manifest1}], _} =
-        update_manifest_test_update_collection(Manifest, "_default", "_default",
-                                               [{history, true}]),
+        update_manifest_test_create_collection(Manifest, "_default", "c1", []),
     ?assert(proplists:get_value(history,
-                                get_collection("_default",
+                                get_collection("c1",
                                                get_scope("_default",
                                                          Manifest1)))),
 
     {commit, [{_, _, Manifest2}], _} =
-        update_manifest_test_update_collection(Manifest1, "_default",
-                                               "_default", [{history, false}]),
+        update_manifest_test_update_collection(Manifest1, "_default", "c1",
+                                               [{history, false}]),
     ?assertEqual(undefined,
                  proplists:get_value(history,
-                                     get_collection("_default",
+                                     get_collection("c1",
                                                     get_scope("_default",
-                                                              Manifest2)))).
+                                                              Manifest2)))),
+
+    {commit, [{_, _, Manifest3}], _} =
+        update_manifest_test_update_collection(Manifest2, "_default", "c1",
+                                               [{history, true}]),
+    ?assert(proplists:get_value(history,
+                                get_collection("c1",
+                                               get_scope("_default",
+                                                         Manifest3)))).
+
+history_default_t() ->
+    % history_default is true, it should set history for the collection
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_collection(default_manifest(), "_default",
+                                               "c1", []),
+    ?assertEqual(undefined,
+                 proplists:get_value(history_default, Manifest1)),
+    ?assert(proplists:get_value(history,
+                                get_collection("c1",
+                                               get_scope("_default",
+                                                         Manifest1)))),
+
+    % Set history_default to false and a new collection should not have history
+    manifest_test_set_history_default(false),
+
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_create_collection(Manifest1, "_default", "c3", []),
+    ?assertEqual(undefined,
+                 proplists:get_value(history,
+                                     get_collection("c3",
+                                                    get_scope("_default",
+                                                              Manifest2)))),
+
+    % And set history_default back to true and test again
+    manifest_test_set_history_default(true),
+
+    % History should be true now
+    {commit, [{_, _, Manifest3}], _} =
+        update_manifest_test_create_collection(Manifest2, "_default", "c2", []),
+    ?assert(proplists:get_value(history,
+                                get_collection("c2",
+                                               get_scope("_default",
+                                                         Manifest3)))).
 
 % Bunch of fairly simple collections tests that update the manifest and expect
 % various results.
@@ -1266,6 +1348,7 @@ basic_collections_manifest_test_() ->
          {"manifest uid test", fun() -> manifest_uid_t() end},
          {"scope uid test", fun() -> scope_uid_t() end},
          {"collection uid test", fun() -> collection_uid_t() end},
-         {"modify collection test", fun() -> modify_collection_t() end}]}.
+         {"modify collection test", fun() -> modify_collection_t() end},
+         {"history default test", fun() -> history_default_t() end}]}.
 
 -endif.
