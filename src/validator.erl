@@ -48,6 +48,7 @@
          required/2,
          prohibited/2,
          changeable_in_enterprise_only/3,
+         valid_in_enterprise_only/2,
          changeable_in_72_only/3,
          string_array/2,
          return_value/3,
@@ -601,24 +602,31 @@ prohibited(Name, #state{kv = Props} = State) ->
             return_error(Name, "The value must not be supplied", State)
     end.
 
-is_changeable(Name, Default, Pred, State) ->
+is_changeable(Name, Default, AllowDefault, Pred, State) ->
     PredValue = Pred(),
     validate(
         fun (_) when PredValue -> ok;
-            (Value) when Value =:= Default -> ok;
+            (Value) when AllowDefault andalso Value =:= Default -> ok;
             (_) ->
                 {error, PredValue}
         end,
         Name, State).
 
+%% Validate a parameter that may only be set in enterprise edition.
+valid_in_enterprise_only(Name, State) ->
+    changeable_in_enterprise_only(Name, undefined, false, State).
+
 %% Validate a parameter that may only be set to a non-default value in
 %% enterprise edition.
 changeable_in_enterprise_only(Name, Default, State) ->
+    changeable_in_enterprise_only(Name, Default, true, State).
+
+changeable_in_enterprise_only(Name, Default, AllowDefault, State) ->
     IsEnterprise = cluster_compat_mode:is_enterprise(),
     Pred = fun () when IsEnterprise -> true;
                () -> "Supported in enterprise edition only"
            end,
-    is_changeable(Name, Default, Pred, State).
+    is_changeable(Name, Default, AllowDefault, Pred, State).
 
 %% Validate a parameter that may only be set to a non-default value when the
 %% cluster is version 7.2.0+.
@@ -628,7 +636,7 @@ changeable_in_72_only(Name, Default, State) ->
                () -> "Supported only when entire cluster is running Couchbase "
                      "Server Version 7.2.0+"
            end,
-    is_changeable(Name, Default, Pred, State).
+    is_changeable(Name, Default, true, Pred, State).
 
 string_array(Name, State) ->
     validate(

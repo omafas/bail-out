@@ -15,6 +15,10 @@
 -include("ns_common.hrl").
 -include("cut.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -export([handle_get/2,
          handle_post_scope/2,
          handle_post_collection/3,
@@ -161,25 +165,53 @@ scope_validators(Exceptions) ->
      name_first_char_validator(_, Exceptions),
      validator:unsupported(_)].
 
-collection_validators(DefaultAllowed) ->
+bucket_has_config_validator(Name, BucketConfig, BucketKey, BucketValue, State) ->
+    validator:validate(
+        fun (Value) ->
+            ConfiguredValue = proplists:get_value(BucketKey, BucketConfig),
+            case ConfiguredValue of
+                undefined ->
+                    {error, io_lib:format("Bucket does not have ~s configured",
+                                          [BucketKey])};
+                ConfiguredValue when ConfiguredValue =:= BucketValue ->
+                    {value, Value};
+                ConfiguredValue ->
+                    {error, io_lib:format("Bucket must have ~s=~s, not ~s",
+                                          [BucketKey, BucketValue,
+                                           ConfiguredValue])}
+            end
+        end, Name, State).
+
+collection_validators(DefaultAllowed, BucketConfig) ->
     [validator:integer(maxTTL, 0, ?MC_MAXINT, _),
-     validator:changeable_in_enterprise_only(maxTTL, 0, _) |
+     validator:changeable_in_enterprise_only(maxTTL, 0, _),
+     validator:boolean(history, _),
+     validator:valid_in_enterprise_only(history, _),
+     validator:changeable_in_72_only(history, false, _),
+     bucket_has_config_validator(history, BucketConfig, storage_mode, magma,
+                                 _) |
      scope_validators(DefaultAllowed)].
 
 handle_post_collection(Bucket, Scope, Req) ->
     assert_api_available(Bucket),
 
-    validator:handle(
-      fun (Values) ->
-              Name = proplists:get_value(name, Values),
-              RV =  collections:create_collection(
-                  Bucket, Scope, Name, proplists:delete(name, Values)),
-              maybe_audit(RV, Req,
-                          ns_audit:create_collection(_, Bucket, Scope, Name,
-                                                     _)),
-              maybe_add_event_log(RV, Bucket, []),
-              handle_rv(RV, Req, Bucket)
-      end, Req, form, collection_validators(default_not_allowed)).
+    case ns_bucket:get_bucket(Bucket) of
+        {ok, BucketConf} ->
+            validator:handle(
+                fun (Values) ->
+                    Name = proplists:get_value(name, Values),
+                    RV =  collections:create_collection(
+                        Bucket, Scope, Name, proplists:delete(name, Values)),
+                    maybe_audit(RV, Req,
+                        ns_audit:create_collection(_, Bucket, Scope, Name,
+                            _)),
+                    maybe_add_event_log(RV, Bucket, []),
+                    handle_rv(RV, Req, Bucket)
+                end, Req, form,
+                collection_validators(default_not_allowed, BucketConf));
+        not_present ->
+            handle_rv({bucket_not_found, Bucket}, Req, Bucket)
+    end.
 
 handle_delete_scope(Bucket, Name, Req) ->
     assert_api_available(Bucket),
@@ -200,24 +232,32 @@ handle_set_manifest(Bucket, Req) ->
 
     ValidOnUid = proplists:get_value("validOnUid",
                                      mochiweb_request:parse_qs(Req)),
-    validator:handle(
-      fun (KVList) ->
-              Scopes = proplists:get_value(scopes, KVList),
-              Identity = menelaus_auth:get_identity(Req),
-              RV = collections:set_manifest(Bucket, Identity, Scopes,
-                                            ValidOnUid),
-              InputManifest = mochiweb_request:recv_body(Req),
-              maybe_audit(RV, Req,
-                          ns_audit:set_manifest(_, Bucket, InputManifest,
-                                                ValidOnUid, _)),
-              %% Add event logs for each of the specific operation performed.
-              maybe_add_event_log(RV, Bucket, []),
-              handle_rv(RV, Req, Bucket)
-      end, Req, json,
-      [validator:required(scopes, _),
-       validate_scopes(scopes, _),
-       check_duplicates(scopes, _),
-       validator:unsupported(_)]).
+    case ns_bucket:get_bucket(Bucket) of
+        {ok, BucketConf} ->
+            validator:handle(
+                fun (KVList) ->
+                    Scopes = proplists:get_value(scopes, KVList),
+                    Identity = menelaus_auth:get_identity(Req),
+                    RV = collections:set_manifest(Bucket, Identity, Scopes,
+                                                  ValidOnUid),
+                    InputManifest = mochiweb_request:recv_body(Req),
+                    maybe_audit(RV, Req,
+                                ns_audit:set_manifest(_, Bucket, InputManifest,
+                                                      ValidOnUid, _)),
+                    %% Add event logs for each of the specific operation performed.
+                    maybe_add_event_log(RV, Bucket, []),
+                    handle_rv(RV, Req, Bucket)
+                end, Req, json,
+                [validator:required(scopes, _),
+                 validate_scopes(scopes, BucketConf, _),
+                 check_duplicates(scopes, _),
+                 validator:unsupported(_)]);
+        _ ->
+            handle_rv({error,
+                      io_lib:format("Could not get config for Bucket ~p",
+                                    [Bucket])},
+                      Req, Bucket)
+    end.
 
 check_duplicates(Name, State) ->
     validator:validate(
@@ -232,17 +272,19 @@ check_duplicates(Name, State) ->
               end
       end, Name, State).
 
-validate_scopes(Name, State) ->
+validate_scopes(Name, BucketConfig, State) ->
     validator:json_array(
       Name,
       scope_limit_validators(decoded) ++
-          [validate_collections(collections, _),
+          [validate_collections(collections, BucketConfig, _),
            check_duplicates(collections, _) |
            scope_validators(default_allowed)],
       State).
 
-validate_collections(Name, State) ->
-    validator:json_array(Name, collection_validators(default_allowed), State).
+validate_collections(Name, BucketConfig, State) ->
+    validator:json_array(Name,
+                         collection_validators(default_allowed, BucketConfig),
+                         State).
 
 handle_ensure_manifest(Bucket, Uid, Req) ->
     assert_api_available(Bucket),
@@ -414,6 +456,8 @@ get_err_code_msg({nodes_are_behind, Nodes}) ->
      "~p.", [Nodes], 503};
 get_err_code_msg(unfinished_failover) ->
     {"Operation is not possible during unfinished failover.", 503};
+get_err_code_msg({bucket_not_found, Bucket}) ->
+    {"Bucket with name ~p not found", [Bucket], 404};
 get_err_code_msg(Error) ->
     {"Unknown error ~p", [Error], 400}.
 
@@ -447,3 +491,66 @@ handle_rv(Error, Req, Bucket) ->
 reply_global_error(Req, Gkey, Msg, Code) ->
     menelaus_util:reply_json(
       Req, {[{errors, {[{Gkey, iolist_to_binary(Msg)}]}}]}, Code).
+
+-ifdef(TEST).
+bucket_has_config_validator_test() ->
+    Args = [{"test", ok}],
+
+    {error, [{"test", ErrorEmpty}]} =
+        validator:handle_proplist(Args,
+                                  [bucket_has_config_validator(test,
+                                                               [],
+                                                               storage_mode,
+                                                               magma,
+                                                               _)]),
+    ?assertEqual("Bucket does not have storage_mode configured", ErrorEmpty),
+
+    BucketConfCouchstore = [{storage_mode, couchstore}],
+    {error, [{"test", ErrorIncorrect}]} =
+        validator:handle_proplist(
+            Args,
+            [bucket_has_config_validator(test, BucketConfCouchstore,
+                                         storage_mode, magma, _)]),
+    ?assertEqual("Bucket must have storage_mode=magma, not couchstore",
+                 ErrorIncorrect),
+
+    BucketConfMagma = [{storage_mode, magma}],
+    {ok, _} =
+        validator:handle_proplist(Args,
+                                  [bucket_has_config_validator(test,
+                                                               BucketConfMagma,
+                                                               storage_mode,
+                                                               magma,
+                                                               _)]).
+
+bucket_config_not_found_when_posting_collections_test() ->
+    meck:new(collections, [passthrough]),
+    meck:expect(collections, enabled, fun() -> true end),
+    meck:expect(collections, enabled, fun(_) -> true end),
+
+    % We need to pass the first get_bucket call and fail the second, we can use
+    % meck:seq to specify a sequence of return values
+    meck:new(ns_bucket),
+    meck:expect(ns_bucket, get_bucket, 1, meck:seq([{ok, []}, not_present])),
+
+    meck:new(menelaus_auth),
+    meck:expect(menelaus_auth, get_identity, fun (_) -> ok end),
+
+    % Matching the function clause in the expect here is the test
+    meck:new(menelaus_util),
+    meck:expect(menelaus_util,
+                reply_json,
+                fun (_,
+                     {[{errors, {[{<<"_">>,
+                                   <<"Bucket with name [] not found">>}]}}]},
+                     404) -> ok
+                end),
+
+    % Values passed in here don't matter, we're mocking everything we need
+    handle_post_collection([],[],[]),
+
+    meck:unload(menelaus_util),
+    meck:unload(menelaus_auth),
+    meck:unload(ns_bucket),
+    meck:unload(collections).
+-endif.

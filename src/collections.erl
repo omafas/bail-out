@@ -180,7 +180,7 @@ collection_prop_to_memcached(_, V) ->
     V.
 
 default_collection_props() ->
-    [{maxTTL, 0}].
+    [{maxTTL, 0}, {history, false}].
 
 collection_to_memcached(Name, Props, WithDefaults) ->
     AdjustedProps =
@@ -957,11 +957,15 @@ get_operations_test_() ->
                ?assertEqual(
                   [{create_scope, "s1", []},
                    {create_collection, "s1", "c1", []},
-                   {create_collection, "s1", "c2", [{maxTTL, 8}]}],
+                   {create_collection, "s1", "c2", [{maxTTL, 8}]},
+                   {create_collection, "s1", "c3", []},
+                   {create_collection, "s1", "c4", [{history, true}]}],
                   get_operations(
                     [],
                     [{"s1", [{collections, [{"c1", []},
-                                            {"c2", [{maxTTL, 8}]}]}]}]))
+                                            {"c2", [{maxTTL, 8}]},
+                                            {"c3", [{history, false}]},
+                                            {"c4", [{history, true}]}]}]}]))
        end},
       {"Drop/create collections",
        fun () ->
@@ -1001,17 +1005,28 @@ get_operations_test_() ->
                   [{update_limits, "s3", []},
                    {update_limits, "s1", [{"l1", 1}, {"l2", 2}]},
                    {modify_collection, "s3", "ic2"},
+                   {modify_collection, "s3", "ic4"},
+                   {modify_collection, "s3", "ic5"},
+                   {modify_collection, "s3", "ic6"},
                    {create_collection, "s1", "c2", []},
                    {drop_scope, "s2"}],
                   get_operations(
                     [{"s1", [{collections, [{"c1", []}]}]},
                      {"s2", [{collections, [{"c1", []}, {"c2", []}]}]},
                      {"s3", [{collections, [{"ic1", []},
-                                            {"ic2", [{maxTTL, 10}]}]}]}],
+                                            {"ic2", [{maxTTL, 10}]},
+                                            {"ic3", []},
+                                            {"ic4", []},
+                                            {"ic5", [{history, false}]},
+                                            {"ic6", [{history, true}]}]}]}],
                     [{"s1", [{limits, [{"l1", 1}, {"l2", 2}]},
                              {collections, [{"c1", []}, {"c2", []}]}]},
                      {"s3", [{collections, [{"ic1", [{maxTTL, 0}]},
-                                            {"ic2", [{maxTTL, 0}]}]}]}]))
+                                            {"ic2", [{maxTTL, 0}]},
+                                            {"ic3", [{history, false}]},
+                                            {"ic4", [{history, true}]},
+                                            {"ic5", [{history, true}]},
+                                            {"ic6", [{history, false}]}]}]}]))
        end}]}.
 
 update_manifest_test_setup() ->
