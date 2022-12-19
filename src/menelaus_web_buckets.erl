@@ -957,6 +957,8 @@ validate_membase_bucket_params(CommonParams, Params,
                                IsNew, BucketConfig, Version, IsEnterprise,
                                IsDeveloperPreview) ->
     ReplicasNumResult = validate_replicas_number(Params, IsNew),
+    HistRetSecs = parse_validate_history_retention_seconds(
+        Params, BucketConfig, IsNew, Version, IsEnterprise),
     BucketParams =
         [{ok, bucketType, membase},
          ReplicasNumResult,
@@ -976,14 +978,14 @@ validate_membase_bucket_params(CommonParams, Params,
          parse_validate_max_ttl(Params, BucketConfig, IsNew, IsEnterprise),
          parse_validate_compression_mode(Params, BucketConfig, IsNew,
                                          IsEnterprise),
-         parse_validate_history_retention_seconds(Params, BucketConfig,
-                                                  IsNew, Version, IsEnterprise),
+         HistRetSecs,
          parse_validate_history_retention_bytes(Params, BucketConfig,
                                                 IsNew, Version, IsEnterprise)
          | validate_bucket_auto_compaction_settings(Params)],
 
     validate_bucket_purge_interval(Params, BucketConfig, IsNew) ++
-        get_conflict_resolution_type_and_thresholds(Params, BucketConfig, IsNew) ++
+        get_conflict_resolution_type_and_thresholds(Params, HistRetSecs,
+                                                    BucketConfig, IsNew) ++
         BucketParams.
 
 validate_unknown_bucket_params(Params) ->
@@ -1354,36 +1356,71 @@ do_get_storage_mode_based_on_storage_backend(StorageBackend, _IsEnterprise,
              <<"storage backend must be couchstore or magma">>}
     end.
 
-get_conflict_resolution_type_and_thresholds(Params, _BucketConfig, true = IsNew) ->
+get_conflict_resolution_type_and_thresholds(Params, HistRetSecs, BucketConfig,
+                                            true = IsNew) ->
+    ConResType = case proplists:get_value("conflictResolutionType", Params) of
+                     undefined ->
+                         {ok, conflict_resolution_type, seqno};
+                     Value ->
+                         parse_validate_conflict_resolution_type(Value)
+                 end,
+    [ConResType |
+     get_drift_thresholds(ConResType, Params, HistRetSecs, BucketConfig,
+                          IsNew)];
+get_conflict_resolution_type_and_thresholds(Params, HistRetSecs, BCfg,
+                                            false = IsNew) ->
     case proplists:get_value("conflictResolutionType", Params) of
         undefined ->
-            [{ok, conflict_resolution_type, seqno}];
-        Value ->
-            ConResType = parse_validate_conflict_resolution_type(Value),
-            case ConResType of
-                {ok, _, lww} ->
-                    [ConResType,
-                     get_drift_ahead_threshold(Params, IsNew),
-                     get_drift_behind_threshold(Params, IsNew)];
-                _ ->
-                    [ConResType]
-            end
-    end;
-get_conflict_resolution_type_and_thresholds(Params, BucketConfig, false = IsNew) ->
-    case proplists:get_value("conflictResolutionType", Params) of
-        undefined ->
-            case ns_bucket:conflict_resolution_type(BucketConfig) of
-                lww ->
-                    [get_drift_ahead_threshold(Params, IsNew),
-                     get_drift_behind_threshold(Params, IsNew)];
-                seqno ->
-                    [];
-                custom ->
-                    []
-            end;
+            get_drift_thresholds(ns_bucket:conflict_resolution_type(BCfg),
+                                 Params, HistRetSecs, BCfg, IsNew);
         _Any ->
             [{error, conflictResolutionType,
               <<"Conflict resolution type not allowed in update bucket">>}]
+    end.
+
+get_drift_thresholds(ConResType, Params, HistRetSecs, BCfg, IsNew) ->
+    case drift_thresholds_needed(ConResType, HistRetSecs, BCfg, IsNew) of
+        true ->
+            %% Only assign default values when drift thresholds are first
+            %% needed, either on bucket create with conflict_resolution_type lww
+            %% or when retention_history_seconds is set non-zero
+            IsDriftThresholdNew = BCfg == false orelse
+                not proplists:is_defined(drift_ahead_threshold_ms, BCfg),
+            [get_drift_ahead_threshold(Params, IsDriftThresholdNew),
+             get_drift_behind_threshold(Params, IsDriftThresholdNew)];
+        false -> []
+    end.
+
+drift_thresholds_needed(ConResType, HistRetSecs, _BCfg, true) ->
+    case {ConResType, HistRetSecs} of
+        {{ok, _, lww}, _} ->
+            true;
+        {_, {ok, _, undefined}} ->
+            false;
+        {_, {ok, _, Value}} when Value > 0 ->
+            true;
+        {{ok, _, seqno}, _} ->
+            false;
+        {{ok, _, custom}, _} ->
+            false;
+        {{error, _, _}, _} ->
+            false
+    end;
+drift_thresholds_needed(ConResType, HistRetSecs, BCfg, false) ->
+    case ConResType of
+        lww -> true;
+        _ ->
+            HistRetSecsValue =
+                case HistRetSecs of
+                    {ok, _, Num} -> Num;
+                    ignore -> ns_bucket:history_retention_seconds(BCfg);
+                    {error, _, _} -> ns_bucket:history_retention_seconds(BCfg)
+                end,
+            case HistRetSecsValue of
+                undefined -> false;
+                V when V > 0 -> true;
+                _ -> false
+            end
     end.
 
 assert_candidates(Candidates) ->
@@ -2660,4 +2697,157 @@ parse_validate_pitr_max_history_age_test() ->
                  IsNewFalse),
     Expected10 = ignore,
     ?assertEqual(Expected10, Result10).
+
+get_conflict_resolution_type_and_thresholds_test() ->
+    meck:new(cluster_compat_mode),
+    meck:expect(cluster_compat_mode, is_enterprise,
+                fun () -> false end),
+
+    %% When not specified, conflict_resolution_type gets defaulted to seqno
+    ParamsNoOp = [],
+    ParsedNoOp = get_conflict_resolution_type_and_thresholds(
+                   ParamsNoOp, ignore, false, true),
+    ?assertEqual([{ok, conflict_resolution_type, seqno}], ParsedNoOp),
+
+    %% Can't set to lww if not enterprise
+    ParamsNotEnterprise = [{"conflictResolutionType", "lww"}],
+    ParsedNotEnterprise = get_conflict_resolution_type_and_thresholds(
+                            ParamsNotEnterprise, ignore, false, true),
+    ?assertEqual([{error, conflictResolutionType,
+                   <<"Conflict resolution type 'lww' is supported only in "
+                     "enterprise edition">>}], ParsedNotEnterprise),
+
+    meck:expect(cluster_compat_mode, is_enterprise,
+                fun () -> true end),
+
+    %% Can set to lww when enterprise and drift thresholds get default values
+    ParamsEnterprise = [{"conflictResolutionType", "lww"}],
+    ParsedEnterprise = get_conflict_resolution_type_and_thresholds(
+                         ParamsEnterprise, ignore, false, true),
+    ?assertEqual([{ok, conflict_resolution_type, lww},
+                  {ok, drift_ahead_threshold_ms, 5000},
+                  {ok, drift_behind_threshold_ms, 5000}], ParsedEnterprise),
+
+    %% Drift behind still gets default value when drift ahead specified for lww
+    ParamsWithDriftAhead = [{"conflictResolutionType", "lww"},
+                            {"driftAheadThresholdMs", "1000"}],
+    ParsedWithDriftAhead = get_conflict_resolution_type_and_thresholds(
+                             ParamsWithDriftAhead, ignore, false, true),
+    ?assertEqual([{ok, conflict_resolution_type, lww},
+                  {ok, drift_ahead_threshold_ms, 1000},
+                  {ok, drift_behind_threshold_ms, 5000}], ParsedWithDriftAhead),
+
+    %% Both drift thresholds are parsed when lww
+    ParamsWithBoth = [{"conflictResolutionType", "lww"},
+                      {"driftAheadThresholdMs", "1000"},
+                      {"driftBehindThresholdMs", "1000"}],
+    ParsedWithBoth = get_conflict_resolution_type_and_thresholds(
+                       ParamsWithBoth, ignore, false, true),
+    ?assertEqual([{ok, conflict_resolution_type, lww},
+                  {ok, drift_ahead_threshold_ms, 1000},
+                  {ok, drift_behind_threshold_ms, 1000}], ParsedWithBoth),
+
+    %% Drift thresholds are parsed when updating an lww bucket
+    ParamsUpdateDriftLWW = [{"driftAheadThresholdMs", "1000"},
+                            {"driftBehindThresholdMs", "1000"}],
+    BucketConfigUpdateDriftLWW = [{conflict_resolution_type, lww}],
+    ParsedUpdateDriftLWW = get_conflict_resolution_type_and_thresholds(
+                             ParamsUpdateDriftLWW, ignore,
+                             BucketConfigUpdateDriftLWW, false),
+    ?assertEqual([{ok, drift_ahead_threshold_ms, 1000},
+                  {ok, drift_behind_threshold_ms, 1000}], ParsedUpdateDriftLWW),
+
+    %% Drift thresholds get default values when history_retention_seconds > 0
+    ParamsCreateWithHRS = [],
+    HRSCreateWithHRS = {ok, history_retention_seconds, 10},
+    ParsedCreateWithHRS = get_conflict_resolution_type_and_thresholds(
+                            ParamsCreateWithHRS, HRSCreateWithHRS, false, true),
+    ?assertEqual([{ok, conflict_resolution_type, seqno},
+                  {ok, drift_ahead_threshold_ms, 5000},
+                  {ok, drift_behind_threshold_ms, 5000}],
+                 ParsedCreateWithHRS),
+
+    %% Drift thresholds get parsed when HRS (history_retention_seconds) > 0
+    ParamsCreateWithHRSAndDrift = [{"driftAheadThresholdMs", "1000"},
+                                   {"driftBehindThresholdMs", "1000"}],
+    HRSCreateWithHrsAndDrift = {ok, history_retention_seconds, 10},
+    ParsedCreateWithHRSAndDrift = get_conflict_resolution_type_and_thresholds(
+                                    ParamsCreateWithHRSAndDrift,
+                                    HRSCreateWithHrsAndDrift,
+                                    false, true),
+    ?assertEqual([{ok, conflict_resolution_type, seqno},
+                  {ok, drift_ahead_threshold_ms, 1000},
+                  {ok, drift_behind_threshold_ms, 1000}],
+                 ParsedCreateWithHRSAndDrift),
+
+    %% Drift thresholds get default values when HRS is updated to > 0
+    ParamsUpdateHRS = [],
+    HRSUpdateHRS = {ok, history_retention_seconds, 10},
+    ParsedUpdateHRS = get_conflict_resolution_type_and_thresholds(
+                        ParamsUpdateHRS, HRSUpdateHRS, [], false),
+    ?assertEqual([{ok, drift_ahead_threshold_ms, 5000},
+                  {ok, drift_behind_threshold_ms, 5000}],
+                 ParsedUpdateHRS),
+
+    %% Drift thresholds get parsed when HRS is updated from undefined to > 0
+    ParamsUpdateHRSAndDrift = [{"driftAheadThresholdMs", "1000"},
+                               {"driftBehindThresholdMs", "1000"}],
+    HRSUpdateHRSAndDrift = {ok, history_retention_seconds, 10},
+    ParsedUpdateHRSAndDrift = get_conflict_resolution_type_and_thresholds(
+                                ParamsUpdateHRSAndDrift, HRSUpdateHRSAndDrift,
+                                [], false),
+    ?assertEqual([{ok, drift_ahead_threshold_ms, 1000},
+                  {ok, drift_behind_threshold_ms, 1000}],
+                 ParsedUpdateHRSAndDrift),
+
+    %% Drift thresholds get parsed when HRS is updated from 0 to > 0
+    ParamsEnableDrift = [{"driftAheadThresholdMs", "1000"},
+                         {"driftBehindThresholdMs", "1000"}],
+    HRSEnableDrift = {ok, history_retention_seconds, 10},
+    BucketConfigEnableDrift = [{history_retention_seconds, 0}],
+    ParsedEnableDrift = get_conflict_resolution_type_and_thresholds(
+                          ParamsEnableDrift, HRSEnableDrift,
+                          BucketConfigEnableDrift, false),
+    ?assertEqual([{ok, drift_ahead_threshold_ms, 1000},
+                  {ok, drift_behind_threshold_ms, 1000}], ParsedEnableDrift),
+
+    %% Drift thresholds don't get reset when HRS is updated back to > 0
+    BucketConfigDontResetDrift = [{drift_ahead_threshold_ms, 1000},
+                                  {drift_behind_threshold_ms, 1000}],
+    ParsedDontResetDrift = get_conflict_resolution_type_and_thresholds(
+                             [], {ok, history_retention_seconds, 10},
+                             BucketConfigDontResetDrift, false),
+    ?assertEqual([ignore, ignore],
+                 ParsedDontResetDrift),
+
+    %% Drift thresholds get parsed when HRS is already > 0
+    ParamsUpdateDriftHRS = [{"driftAheadThresholdMs", "1000"},
+                            {"driftBehindThresholdMs", "1000"}],
+    BucketConfigUpdateDriftHRS = [{history_retention_seconds, 10}],
+    ParsedUpdateDriftHRS = get_conflict_resolution_type_and_thresholds(
+                             ParamsUpdateDriftHRS, ignore,
+                             BucketConfigUpdateDriftHRS, false),
+    ?assertEqual([{ok, drift_ahead_threshold_ms, 1000},
+                  {ok, drift_behind_threshold_ms, 1000}], ParsedUpdateDriftHRS),
+
+    %% Drift thresholds don't get default values when HRS is set to 0
+    HRSDontEnableDrift1 = {ok, history_retention_seconds, 0},
+    ParsedDontEnableDrift1 = get_conflict_resolution_type_and_thresholds(
+                               [], HRSDontEnableDrift1, false, true),
+    ?assertEqual([{ok,conflict_resolution_type, seqno}],
+                 ParsedDontEnableDrift1),
+
+    %% Drift thresholds don't get default values when HRS is updated to 0
+    HRSDontEnableDrift2 = {ok, history_retention_seconds, 0},
+    ParsedDontEnableDrift2 = get_conflict_resolution_type_and_thresholds(
+                               [], HRSDontEnableDrift2, [], false),
+    ?assertEqual([], ParsedDontEnableDrift2),
+
+    %% Drift thresholds don't get default values when HRS is already 0
+    BucketConfigDontEnableDrift3 = [{history_retention_seconds, 0}],
+    ParsedDontEnableDrift3 = get_conflict_resolution_type_and_thresholds(
+                               [], ignore, BucketConfigDontEnableDrift3, false),
+    ?assertEqual([], ParsedDontEnableDrift3),
+
+    meck:unload(cluster_compat_mode).
 -endif.
