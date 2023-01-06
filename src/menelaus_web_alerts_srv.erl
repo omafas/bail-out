@@ -181,6 +181,7 @@ stop() ->
 
 init([]) ->
     start_timer(),
+    maybe_enable_auto_failover_popup_alerts(),
     {ok, #state{}}.
 
 
@@ -299,6 +300,75 @@ config_upgrade_to_71(Config) ->
 %% ------------------------------------------------------------------
 %% Internal Function Definitions
 %% ------------------------------------------------------------------
+
+%% This is a "hack". A bug existed in 7.0.0 and early patches (7.0.X) in
+%% which we would fail to setup email alerts for auto-failover due to
+%% missing the necessary config when we upgrade. We can fix upgrades from
+%% different major/minor versions (6.6.X etc.) by updating the config
+%% upgrade functions. We can't fix the bug in this way though when we
+%% upgrade from an earlier 7.0.X patch. To get around this, update the
+%% config on startup of the web alerts process manually if we already have
+%% a compat mode of 70. We set some extra config
+%% (popup_alerts_auto_failover_upgrade_70_fixed) to prevent us from
+%% re-enabling the auto failover popups multiple times.
+%%
+%% We can remove this code in merge forwards to newer major/minor versions
+%% which fix the bug in their upgrade paths, it's only necessary on the
+%% 7.0.X branch to fix the previously broken upgrade.
+maybe_enable_auto_failover_popup_alerts() ->
+    EnabledKey = popup_alerts_auto_failover_upgrade_70_fixed,
+    Enabled = ns_config:read_key_fast(EnabledKey, false),
+    case cluster_compat_mode:is_cluster_70() andalso not Enabled of
+        false ->
+            ok;
+        true ->
+            RV = ns_config:run_txn(
+                   fun(OldConfig, SetFn) ->
+                           maybe_enable_auto_failover_popup_alerts_txn(
+                             EnabledKey, OldConfig, SetFn)
+                   end),
+            case RV of
+                {abort, _} ->
+                    ok;
+                _ ->
+                    %% Since we can't log within a txn we log it here.
+                    ?log_info("Upgraded email_alerts to include pop_up_alerts "
+                              "for auto_failover")
+            end
+    end.
+
+maybe_enable_auto_failover_popup_alerts_txn(EnabledKey, OldConfig, SetFn) ->
+    case ns_config:search(OldConfig, EnabledKey) of
+        {value, _} ->
+            %% We have already upgraded config, nothing to do
+            {abort, OldConfig};
+        false ->
+            CommitEnabledKey = SetFn(EnabledKey, true, OldConfig),
+            case ns_config:search(OldConfig, email_alerts) of
+                false ->
+                    {commit, CommitEnabledKey};
+                {value, EmailAlerts} ->
+                    case proplists:get_value(pop_up_alerts, EmailAlerts) of
+                        undefined ->
+                            {commit, CommitEnabledKey};
+                        _ ->
+                            Res = functools:chain(
+                                    EmailAlerts,
+                                    [add_proplist_list_elem(pop_up_alerts, A, _)
+                                     || A <- auto_failover:alert_keys()]),
+                            case misc:sort_kv_list(Res) =:=
+                                 misc:sort_kv_list(EmailAlerts) of
+                                true ->
+                                    %% No change required, we have the
+                                    %% correct pop_up_alerts already
+                                    {commit, CommitEnabledKey};
+                                false ->
+                                    {commit, SetFn(email_alerts, Res,
+                                                   CommitEnabledKey)}
+                            end
+                    end
+            end
+    end.
 
 %% @doc Remind myself to check the alert status
 start_timer() ->
@@ -797,8 +867,9 @@ config_email_alerts_upgrade_to_70(EmailAlerts) ->
         functools:chain(
           EmailAlerts,
           [add_proplist_list_elem(alerts, time_out_of_sync, _),
-           add_proplist_kv(pop_up_alerts, alert_keys() --
-                                          [memory_threshold], _)]),
+              add_proplist_kv(pop_up_alerts, auto_failover:alert_keys() ++
+                                             (alert_keys() --
+                                             [memory_threshold]), _)]),
 
     case misc:sort_kv_list(Result) =:= misc:sort_kv_list(EmailAlerts) of
         true ->
@@ -891,6 +962,17 @@ run_basic_test_do() ->
                  ?MODULE:fetch_alerts()).
 
 basic_test() ->
+    %% init/1 runs an ns_config txn to upgrade some config if we are at 7.0
+    %% compat mode or newer. We'd have to do a bunch of work to make the txn
+    %% work so just mock the results of those functions. We can remove this with
+    %% the removal of the txn in the init function.
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:new(ns_config, [passthrough]),
+
+    meck:expect(cluster_compat_mode, is_cluster_70,
+        fun () -> true end),
+    meck:expect(ns_config, read_key_fast, fun(_, _) -> true end),
+
     {ok, Pid} = ?MODULE:start_link(),
 
     %% return empty alerts configuration so that no attempts to send anything
@@ -900,7 +982,9 @@ basic_test() ->
     try
         run_basic_test_do()
     after
-        misc:unlink_terminate_and_wait(Pid, shutdown)
+        misc:unlink_terminate_and_wait(Pid, shutdown),
+        meck:unload(cluster_compat_mode),
+        meck:unload(ns_config)
     end.
 
 config_update_to_70_test() ->
@@ -941,7 +1025,9 @@ config_update_to_70_test() ->
     Expected3 =
         [{alerts, [ip, communication_issue, time_out_of_sync]},
          {enabled, false},
-         {pop_up_alerts, alert_keys() -- [memory_threshold]}],
+         {pop_up_alerts, auto_failover:alert_keys() ++
+                         (alert_keys() --
+                         [memory_threshold])}],
     [{set, email_alerts, Actual3}] = config_upgrade_to_70(Config3),
     ?assertEqual(misc:sort_kv_list(Expected3), misc:sort_kv_list(Actual3)),
 
@@ -954,7 +1040,9 @@ config_update_to_70_test() ->
     Expected4 =
         [{alerts, [ip, communication_issue, time_out_of_sync]},
          {enabled, false},
-         {pop_up_alerts, alert_keys() -- [memory_threshold]}],
+         {pop_up_alerts, auto_failover:alert_keys() ++
+                         (alert_keys() --
+                         [memory_threshold])}],
     [{set, email_alerts, Actual4}] = config_upgrade_to_70(Config4),
     ?assertEqual(misc:sort_kv_list(Expected4), misc:sort_kv_list(Actual4)).
 
@@ -989,4 +1077,80 @@ add_proplist_list_elem_test() ->
                  {enabled, false}],
     Result2 = add_proplist_list_elem(alerts, time_out_of_sync, PL2),
     ?assertEqual(misc:sort_kv_list(Expected2), misc:sort_kv_list(Result2)).
+
+upgrade_70_to_705_test() ->
+    meck:new(ns_config, [passthrough]),
+    %% popup_alerts_auto_failover_upgrade_70_fixed key present
+    meck:expect(ns_config, search,
+                fun (_, popup_alerts_auto_failover_upgrade_70_fixed) ->
+                        {value, true}
+                end),
+    {abort, [old_config]} = maybe_enable_auto_failover_popup_alerts_txn(
+                              popup_alerts_auto_failover_upgrade_70_fixed,
+                              [old_config],
+                              fun (K, V, Acc) -> [{K, V} | Acc] end),
+
+    %% email_alerts key absent
+    meck:expect(ns_config, search,
+                fun (_, popup_alerts_auto_failover_upgrade_70_fixed) ->
+                        false;
+                    (_, email_alerts) ->
+                        false
+                end),
+    {commit, [{popup_alerts_auto_failover_upgrade_70_fixed, true},
+              old_config]} =
+        maybe_enable_auto_failover_popup_alerts_txn(
+          popup_alerts_auto_failover_upgrade_70_fixed,
+          [old_config],
+          fun (K, V, Acc) -> [{K, V} | Acc] end),
+
+    Val = {pop_up_alerts,
+           [auto_failover_cluster_too_small,auto_failover_disabled,
+            auto_failover_maximum_reached,auto_failover_node,
+            auto_failover_other_nodes_down]},
+
+    %% All auto-failover pop up alerts enabled
+    meck:expect(ns_config, search,
+                fun (_, popup_alerts_auto_failover_upgrade_70_fixed) ->
+                        false;
+                    (_, email_alerts) ->
+                        {value, [Val]}
+                end),
+    {commit, [{popup_alerts_auto_failover_upgrade_70_fixed, true},
+              old_config]} =
+        maybe_enable_auto_failover_popup_alerts_txn(
+          popup_alerts_auto_failover_upgrade_70_fixed,
+          [old_config],
+          fun (K, V, Acc) -> [{K, V} | Acc] end),
+
+    %% No pop_up_alerts in email_alerts
+    meck:expect(ns_config, search,
+                fun (_, popup_alerts_auto_failover_upgrade_70_fixed) ->
+                        false;
+                    (_, email_alerts) ->
+                        {value, []}
+                end),
+    {commit, [{popup_alerts_auto_failover_upgrade_70_fixed, true},
+              old_config]} =
+        maybe_enable_auto_failover_popup_alerts_txn(
+          popup_alerts_auto_failover_upgrade_70_fixed,
+          [old_config],
+          fun (K, V, Acc) -> [{K, V} | Acc] end),
+
+    %% auto-failover pop_up_alerts disabled
+    meck:expect(ns_config, search,
+                fun (_, popup_alerts_auto_failover_upgrade_70_fixed) ->
+                        false;
+                    (_, email_alerts) ->
+                        {value, [{pop_up_alerts, []}]}
+                end),
+    {commit, [{email_alerts, [Val]},
+              {popup_alerts_auto_failover_upgrade_70_fixed, true},
+              old_config]} =
+        maybe_enable_auto_failover_popup_alerts_txn(
+          popup_alerts_auto_failover_upgrade_70_fixed,
+          [old_config],
+          fun (K, V, Acc) -> [{K, V} | Acc] end),
+    meck:unload(ns_config).
+
 -endif.

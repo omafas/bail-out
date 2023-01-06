@@ -1126,7 +1126,7 @@ def make_os_tasks():
                   log_file="syslog.tar.gz", no_header=True),
         LinuxTask("Relevant proc data", "echo %(programs)s | "
                   "xargs -n1 pgrep | xargs -n1 -- sh -c 'echo $1; cat /proc/$1/status; cat /proc/$1/limits; "
-                  "cat /proc/$1/smaps; cat /proc/$1/numa_maps; cat /proc/$1/task/*/sched; echo' --" % locals()),
+                  "cat /proc/$1/task/*/sched; echo' --" % locals()),
         LinuxTask("Processes' environment", "echo %(programs)s | "
                   r"xargs -n1 pgrep | xargs -n1 -- sh -c 'echo $1; ( cat /proc/$1/environ | tr \\0 \\n | "
                   "egrep -v ^CB_MASTER_PASSWORD=\|^CBAUTH_REVRPC_URL=); echo' --" % locals()),
