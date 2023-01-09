@@ -160,6 +160,12 @@ is_enabled(Cfg) ->
 is_enabled() ->
     is_enabled(get_cfg()).
 
+should_preserve_durability_majority() ->
+    should_preserve_durability_majority(get_cfg()).
+
+should_preserve_durability_majority(Config) ->
+    proplists:get_bool(failover_preserve_durability_majority, Config).
+
 call(Call) ->
     misc:wait_for_global_name(?MODULE),
     gen_server:call(?SERVER, Call).
@@ -683,6 +689,16 @@ process_failover_error({nodes_down, NodesNeeded, Buckets}, Nodes, S) ->
             "Nodes ~p needed to preserve durability writes on buckets ~p "
             "are down", [NodesNeeded, Buckets])),
     report_failover_error(nodes_down, ErrMsg, Nodes, S);
+process_failover_error({cannot_preserve_durability_majority, Buckets},
+                       Nodes, S) ->
+    ErrMsg =
+        lists:flatten(
+            io_lib:format(
+                "Cannot preserve the durability majority, and hence cannot "
+                "guarantee the preservation of durable writes on buckets ~p",
+                [Buckets])),
+    report_failover_error(cannot_preserve_durability_majority, ErrMsg, Nodes,
+                          S);
 process_failover_error(retry_aborting_rebalance, Nodes, S) ->
     ?log_debug("Rebalance is being stopped by user, will retry auto-failover "
                "of nodes, ~p", [Nodes]),
@@ -1019,9 +1035,20 @@ validate_membase_buckets(ValidateFun) ->
       end, ns_bucket:get_buckets()).
 
 validate_durability_failover(FailoverNodes, DownNodes) ->
+    ShouldPreserveDurabilityMajority = should_preserve_durability_majority(),
     case validate_membase_buckets(
-           validate_durability_failover_for_bucket(_, _, FailoverNodes,
-                                                   DownNodes)) of
+        validate_nodes_up_for_durability_failover_for_bucket(_, _,
+                                                             FailoverNodes,
+                                                             DownNodes)) of
+        [] when ShouldPreserveDurabilityMajority ->
+            case validate_membase_buckets(
+                validate_durability_majority_preserved_for_bucket(
+                    _, _, FailoverNodes)) of
+                [] ->
+                    ok;
+                UnsafeBuckets ->
+                    {cannot_preserve_durability_majority, UnsafeBuckets}
+            end;
         [] ->
             ok;
         Errors ->
@@ -1030,8 +1057,11 @@ validate_durability_failover(FailoverNodes, DownNodes) ->
             {nodes_down, Nodes, Buckets}
     end.
 
-validate_durability_failover_for_bucket(BucketName, Map, FailoverNodes,
-                                        DownNodes) ->
+validate_nodes_up_for_durability_failover_for_bucket(BucketName, Map,
+                                                     FailoverNodes,
+                                                     DownNodes) ->
+    %% Check that we can get stats for the nodes that we might want to promote,
+    %% i.e. are the nodes that we may want to promote down?
     NodesNeeded =
         failover:nodes_needed_for_durability_failover(Map, FailoverNodes),
     case NodesNeeded -- DownNodes of
@@ -1039,6 +1069,16 @@ validate_durability_failover_for_bucket(BucketName, Map, FailoverNodes,
             false;
         AliveNodes ->
             {true, {BucketName, NodesNeeded -- AliveNodes}}
+    end.
+
+validate_durability_majority_preserved_for_bucket(BucketName, Map,
+                                                  FailoverNodes) ->
+    case failover:can_preserve_durability_majority(Map,
+                                                   FailoverNodes) of
+        true ->
+            false;
+        false ->
+            {true, BucketName}
     end.
 
 has_safe_check(index) ->
