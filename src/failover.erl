@@ -26,7 +26,8 @@
 -export([start/2, is_possible/2, orchestrate/2,
          get_failover_vbuckets/2, promote_max_replicas/4,
          clear_failover_vbuckets_sets/1,
-         nodes_needed_for_durability_failover/2]).
+         nodes_needed_for_durability_failover/2,
+         can_preserve_durability_majority/2]).
 
 -define(DATA_LOST, 1).
 -define(FAILOVER_OPS_TIMEOUT, ?get_timeout(failover_ops_timeout, 10000)).
@@ -492,6 +493,79 @@ fix_vbucket_map(FailoverNodes, Bucket, Map, Options) ->
             mb_map:promote_replicas(Map, FailoverNodes)
     end.
 
+%% Get the number of nodes required to prevent us from losing durable writes
+get_required_node_count_to_preserve_majority(Chain) when is_list(Chain) ->
+    %% Note that the node count required to preserve durable writes is not, in
+    %% fact, a majority.
+    %%
+    %% Consider the following chain [a,b]. In such a case a majority is both
+    %% nodes. That means that any durable writes need to be written to 2 nodes,
+    %% and keeping 1 is what we need to preserve durable writes.
+    %%
+    %% It's useful to enumerate other the example scenarios here so lets also
+    %% consider what happens when we have various replica counts:
+    %%
+    %% 0 replicas - [a]:
+    %%
+    %% We do not prevent durable writes from being used with 0 replicas,
+    %% regardless of how un-durable that is. Failing over any node with 0
+    %% replicas should trigger a safety check and either warn the user if they
+    %% are failing over via the UI or prevent auto fail over.
+    %%
+    %% 1 replica - [a,b]:
+    %%
+    %% A majority is 2 nodes (all of them) so we can lose either node without
+    %% losing durable writes. We cannot lose both, so we can only fail over 1
+    %% node.
+    %%
+    %% 2 replicas - [a, b, c]:
+    %%
+    %% A majority is 2 nodes. The active must be part of the majority, and we
+    %% must replicate a write to at least one of the replicas, b, or c. The
+    %% other replica could be arbitrarily behind. Let b be the replica that is
+    %% up to date, and c the replica that is arbitrarily behind. In such a case
+    %% we could fail over c regardless as it is behind the other nodes. We could
+    %% fail over a OR b without losing durable writes; were we to fail over
+    %% both nodes then we could lose durable writes as c is arbitrarily behind.
+    %% As we have a multi-node system which aims to evenly distribute
+    %% active/replica vBuckets, we should not take into consideration whether or
+    %% not a node is active or replica. As such, we can only fail over 1 node
+    %% without running the risk of losing durable writes when we have 2
+    %% replicas.
+    %%
+    %% 3 replicas - [a, b, c, d]:
+    %%
+    %% We don't currently support 3 replicas, but a more generic algorithm to
+    %% calculate the number of nodes that we require is a good thing, so lets
+    %% consider that here too.
+    %%
+    %% A majority is 3 nodes. The active, again, must be part of the majority,
+    %% so as with the 2 replica scenario the number of nodes that we can fail
+    %% over must be such that we can fail over any arbitrary node. As one node
+    %% could be arbitrarily behind, similarly to the case for 2 replicas, we
+    %% cannot fail over all nodes that make up our majority. As such, we can
+    %% only fail over 2 nodes to ensure that we do not lose durable writes.
+    ceil(length(Chain) / 2).
+
+check_for_majority(Chain, FailoverNodes) ->
+    %% Note here the check that N =/= undefined. This deals with the case in
+    %% which have previously failed over a node and have undefined replicas in
+    %% the chain. We filter them out of the list of nodes that we consider to be
+    %% capable of being part of the majority here as they cannot be part of a
+    %% majority if they do not exist.
+    Majority = get_required_node_count_to_preserve_majority(Chain),
+    length([N || N <- Chain,
+            not lists:member(N, FailoverNodes),
+            N =/= undefined]) >= Majority.
+
+%% Returns whether or not a majority (for durable writes) can be maintained if
+%% the given nodes are failed over
+-spec can_preserve_durability_majority([[node()]], [node()]) -> boolean().
+can_preserve_durability_majority(Map, FailoverNodes) ->
+    lists:all(fun (Chain) ->
+                  check_for_majority(Chain, FailoverNodes)
+              end, Map).
+
 should_promote_max_replica([Master | _] = Chain, FailoverNodes) ->
     lists:member(Master, FailoverNodes) andalso
         length([N || N <- Chain, not lists:member(N, FailoverNodes)]) > 1.
@@ -730,4 +804,51 @@ fix_vbucket_map_test_() ->
                                    #{durability_aware => true})),
                 ?assert(meck:validate(janitor_agent))
         end}]).
+
+can_preserve_durable_writes_test() ->
+    %% Not checking every combination here, there is no point
+    ?assert(can_preserve_durability_majority([[a]], [a])),
+
+    %% 1 replica. Active vs Replica should have no bearing.
+    ?assert(can_preserve_durability_majority([[a,b]], [a])),
+    ?assert(can_preserve_durability_majority([[a,b]], [b])),
+
+    ?assert(can_preserve_durability_majority([[a,b], [b,a]], [b])),
+    ?assertNot(can_preserve_durability_majority([[a,b], [b,a]], [a,b])),
+
+    ?assertNot(can_preserve_durability_majority([[a,b]], [a,b])),
+    ?assertNot(can_preserve_durability_majority([[a,b], [b,c]], [a,b])),
+
+    ?assertNot(can_preserve_durability_majority([[a,undefined]], [a])),
+    ?assert(can_preserve_durability_majority([[a,undefined]], [b])),
+
+    %% 2 replicas. Active vs Replica should have no bearing. We should be able to
+    %% fail over any one node.
+    ?assert(can_preserve_durability_majority([[a,b,c]], [a])),
+    ?assertNot(can_preserve_durability_majority([[a,b,c]], [a,b])),
+    ?assertNot(can_preserve_durability_majority([[a,b,c]], [b,c])),
+
+    ?assertNot(can_preserve_durability_majority([[a,b,c]], [a,b,c])),
+
+    ?assert(can_preserve_durability_majority([[a,b,c], [b,c,d]], [b])),
+    ?assertNot(can_preserve_durability_majority([[a,b,c], [b,c,d]], [a,b])),
+
+    ?assertNot(can_preserve_durability_majority([[a,b,undefined]], [a])),
+    ?assert(can_preserve_durability_majority([[a,b,undefined]], [c])),
+
+    %% 3 replicas. Not currently supported but we implemented the check
+    %% generically such that it does not need to be changed when we do support 3
+    %% replicas. Active vs replica should have no bearing. We should be able to
+    %% fail over any 2 nodes.
+    ?assert(can_preserve_durability_majority([[a,b,c,d]], [a])),
+    ?assert(can_preserve_durability_majority([[a,b,c,d]], [a,b])),
+    ?assert(can_preserve_durability_majority([[a,b,c,d]], [a,c])),
+    ?assert(can_preserve_durability_majority([[a,b,c,d]], [b,c])),
+    ?assert(can_preserve_durability_majority([[a,b,c,d]], [b,d])),
+    ?assert(can_preserve_durability_majority([[a,b,c,d]], [c,d])),
+
+    ?assertNot(can_preserve_durability_majority([[a,b,c,d]], [a,b,c])),
+    ?assertNot(can_preserve_durability_majority([[a,b,c,d]], [a,c,d])),
+    ?assertNot(can_preserve_durability_majority([[a,b,c,d]], [a,b,d])),
+    ?assertNot(can_preserve_durability_majority([[a,b,c,d]], [b,c,d])).
 -endif.
