@@ -590,7 +590,8 @@ do_handle_call({set_vbuckets, VBsToSet}, _From, #state{sock = Sock} = State) ->
                end,
         ?log_info("Changed vbucket state ~n~p", [Good]),
         [(catch master_activity_events:note_vbucket_state_change(
-                  State#state.bucket, node(), VBucket, VBState,
+                  State#state.bucket, dist_manager:this_node(),
+                  VBucket, VBState,
                   VBInfoJson)) || {VBucket, VBState, VBInfoJson} <- Good],
         {reply, Reply, State}
     catch
@@ -604,7 +605,8 @@ do_handle_call({set_vbucket, VBucket, VBState, Topology}, _From,
                #state{sock=Sock, bucket=BucketName} = State) ->
     VBInfoJson = construct_vbucket_info_json(Topology),
     (catch master_activity_events:note_vbucket_state_change(
-             BucketName, node(), VBucket, VBState, VBInfoJson)),
+             BucketName, dist_manager:this_node(), VBucket, VBState,
+             VBInfoJson)),
     Reply = mc_client_binary:set_vbucket(Sock, VBucket, VBState, VBInfoJson),
     case Reply of
         ok ->
@@ -674,7 +676,8 @@ do_handle_call(_, _From, State) ->
 handle_cast(start_completed, #state{start_time=Start,
                                     bucket=Bucket} = State) ->
     ale:info(?USER_LOGGER, "Bucket ~p loaded on node ~p in ~p seconds.",
-             [Bucket, node(), timer:now_diff(os:timestamp(), Start) div 1000000]),
+             [Bucket, dist_manager:this_node(),
+              timer:now_diff(os:timestamp(), Start) div 1000000]),
     gen_event:notify(buckets_events, {loaded, Bucket}),
     send_check_config_msg(State),
     BucketConfig = case ns_bucket:get_bucket(State#state.bucket) of
@@ -836,8 +839,12 @@ do_terminate(Reason, Bucket, Sock) ->
     Config = ns_config:get(),
     BucketConfigs = ns_bucket:get_buckets(),
     NoBucket = not lists:keymember(Bucket, 1, BucketConfigs),
+    ThisNode = dist_manager:this_node(),
     NodeDying = (ns_config:search(Config, i_am_a_dead_man) =/= false
-                 orelse not lists:member(Bucket, ns_bucket:node_bucket_names(node(), BucketConfigs))),
+                 orelse
+                 not lists:member(Bucket,
+                                  ns_bucket:node_bucket_names(ThisNode,
+                                                              BucketConfigs))),
 
     Deleting = NoBucket orelse NodeDying,
     Reconfig = (Reason =:= {shutdown, reconfig}),
@@ -845,10 +852,10 @@ do_terminate(Reason, Bucket, Sock) ->
     case Deleting orelse Reconfig of
         true ->
             ale:info(?USER_LOGGER, "Shutting down bucket ~p on ~p for ~s",
-                     [Bucket, node(), if
-                                          Reconfig -> "reconfiguration";
-                                          Deleting -> "deletion"
-                                      end]),
+                     [Bucket, ThisNode, if
+                                            Reconfig -> "reconfiguration";
+                                            Deleting -> "deletion"
+                                        end]),
 
             %% force = true means that that ep_engine will not try to flush
             %% outstanding mutations to disk before deleting the bucket. So we
@@ -869,7 +876,7 @@ do_terminate(Reason, Bucket, Sock) ->
             %% crash, we're fine too
             ale:info(?USER_LOGGER,
                      "Control connection to memcached on ~p disconnected. "
-                     "Check logs for details.", [node()])
+                     "Check logs for details.", [ThisNode])
     end.
 
 delete_bucket(Sock, Bucket, Force, DeleteData) ->
@@ -946,14 +953,16 @@ warmed_buckets() ->
 warmed_buckets(Timeout) ->
     RVs = misc:parallel_map(
             fun (Bucket) ->
-                    {Bucket, warmed(node(), Bucket, Timeout)}
+                    {Bucket, warmed(dist_manager:this_node(), Bucket,
+                                    Timeout)}
             end, active_buckets(), infinity),
     [Bucket || {Bucket, true} <- RVs].
 
 %% @doc Send flush command to specified bucket
 -spec flush(bucket_name()) -> ok.
 flush(Bucket) ->
-    do_call({server(Bucket), node()}, Bucket, flush, ?TIMEOUT_VERY_HEAVY).
+    do_call({server(Bucket), dist_manager:this_node()}, Bucket, flush,
+            ?TIMEOUT_VERY_HEAVY).
 
 
 %% @doc send an add command to memcached instance
@@ -1126,7 +1135,7 @@ host_ports(Node) ->
 -spec list_vbuckets(bucket_name()) ->
                            {ok, [{vbucket_id(), vbucket_state()}]} | mc_error().
 list_vbuckets(Bucket) ->
-    list_vbuckets(node(), Bucket).
+    list_vbuckets(dist_manager:this_node(), Bucket).
 
 
 -spec list_vbuckets(node(), bucket_name()) ->
