@@ -23,6 +23,7 @@
 
 -export([adjust_my_address/4, save_address_config/1,
          ip_config_path/0, using_user_supplied_address/0, reset_address/0,
+         this_node/0,
          wait_for_node/1, fixup_config/1, need_fixup/0, get_rename_txn_pid/0]).
 
 %% used by babysitter and ns_couchdb
@@ -155,7 +156,7 @@ save_address_config(#state{my_ip = MyIP,
     end.
 
 save_node(NodeName, Path) ->
-    ?log_info("saving node to ~p", [Path]),
+    ?log_info("saving node name '~p' to ~p", [NodeName, Path]),
     misc:atomic_write_file(Path, NodeName ++ "\n").
 
 save_node(NodeName) ->
@@ -248,6 +249,10 @@ bringup(MyIP, UserSupplied) ->
     Rv = decode_status(net_kernel:start([MyNodeName, longnames])),
     net_kernel:set_net_ticktime(misc:get_env_default(set_net_ticktime, 60)),
 
+    ThisNode = node(),
+    false = (ThisNode =:= 'nonode@nohost'),
+    persistent_term:put({?MODULE, node}, ThisNode),
+
     ok = configure_net_kernel(),
     ns_server:setup_node_names(),
 
@@ -283,6 +288,9 @@ wait_for_node(NodeFun, Time, Try) ->
             timer:sleep(Time),
             wait_for_node(NodeFun, Time, Try - 1)
     end.
+
+this_node() ->
+    persistent_term:get({?MODULE, node}, 'nonode@nohost').
 
 configure_net_kernel() ->
     Verbosity = misc:get_env_default(ns_server, net_kernel_verbosity, 0),
