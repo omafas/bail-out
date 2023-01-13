@@ -1529,7 +1529,8 @@ extract_bucket_props(Props) ->
                         drift_ahead_threshold_ms, drift_behind_threshold_ms,
                         storage_mode, max_ttl, compression_mode,
                         history_retention_seconds,
-                        history_retention_bytes]],
+                        history_retention_bytes,
+                        history_retention_collection_default]],
           X =/= false].
 
 build_threshold({Percentage, Size}) ->

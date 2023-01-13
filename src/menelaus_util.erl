@@ -46,6 +46,7 @@
          concat_url_path/2,
          bin_concat_path/1,
          bin_concat_path/2,
+         parse_validate_boolean/1,
          parse_validate_boolean_field/3,
          parse_validate_number/3,
          parse_validate_number/4,
@@ -401,6 +402,14 @@ parse_validate_boolean_field(JSONName, CfgName, Params) ->
         "false" -> [{ok, CfgName, false}];
         _ -> [{error, JSONName,
                iolist_to_binary(io_lib:format("~s is invalid", [JSONName]))}]
+    end.
+
+-spec parse_validate_boolean(string()) -> invalid | {ok, boolean()}.
+parse_validate_boolean(Value) ->
+    case Value of
+        "true" -> {ok, true};
+        "false" -> {ok, false};
+        _ -> invalid
     end.
 
 -spec parse_validate_number(string(), (integer() | undefined),
