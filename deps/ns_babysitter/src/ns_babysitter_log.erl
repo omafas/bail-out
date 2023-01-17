@@ -25,7 +25,8 @@
                 logs :: queue:queue(),
                 logs_len :: non_neg_integer(),
                 logs_saved :: queue:queue(),
-                consumer_from = undefined :: undefined | {pid(), reference()},
+                consumer_from = undefined :: undefined |
+                                             {pid(), gen_server:reply_tag()},
                 consumer_mref = undefined :: undefined | reference()
                }).
 

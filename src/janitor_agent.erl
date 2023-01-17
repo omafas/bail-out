@@ -746,6 +746,8 @@ do_handle_call(mark_warmed, _From, #state{bucket_name = Bucket} = State) ->
     ok = ns_bucket:activate_bucket_data_on_this_node(Bucket),
     {reply, RV, State}.
 
+-dialyzer({no_opaque, [handle_call_via_servant/4]}).
+
 handle_call_via_servant({FromPid, _Tag}, State, Req, Body) ->
     Tag = erlang:make_ref(),
     From = {FromPid, Tag},
