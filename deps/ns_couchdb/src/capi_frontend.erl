@@ -198,13 +198,13 @@ verify_bucket_auth(#httpd{method = Method,
     Type = get_oper_type(Path),
     Permission = get_required_permission(BucketName, Method, Type),
 
-    case ns_bucket:get_bucket(BucketName, Snapshot) of
-        not_present ->
-            {not_found, missing};
-        {ok, BucketConfig} ->
-            menelaus_auth:assert_no_meta_headers(MochiReq),
-            case menelaus_auth:verify_rest_auth(MochiReq, Permission) of
-                {allowed, Headers} ->
+    case menelaus_auth:verify_rest_auth(MochiReq, Permission) of
+        {allowed, Headers} ->
+            case ns_bucket:get_bucket(BucketName, Snapshot) of
+                not_present ->
+                    {not_found, missing};
+                {ok, BucketConfig} ->
+                    menelaus_auth:assert_no_meta_headers(MochiReq),
                     case verify_bucket_type_support(Type, BucketConfig) of
                         true ->
                             Req1 = Req#httpd{mochi_req=menelaus_auth:apply_headers(MochiReq, Headers)},
@@ -217,12 +217,12 @@ verify_bucket_auth(#httpd{method = Method,
                                 false ->
                                     {not_found, no_couchbase_bucket_exists}
                             end
-                    end;
-                {forbidden, _} ->
-                    {forbidden, Permission};
-                {Error, _} ->
-                    Error
-            end
+                    end
+            end;
+        {forbidden, _} ->
+            {forbidden, Permission};
+        {Error, _} ->
+            Error
     end.
 
 %% This is used by 2.x xdcr checkpointing. It's only supposed to work
