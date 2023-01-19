@@ -1763,7 +1763,7 @@ parse_validate_history_retention_collection_default(Params, BucketConfig, IsNew,
     HistoryRetentionValue = proplists:get_value(atom_to_list(UserKey), Params),
     Ret = parse_validate_history_param_bool(UserKey, HistoryRetentionValue,
                                             Params, BucketConfig, IsNew,
-                                            Version, IsEnterprise),
+                                            Version, IsEnterprise, "true"),
     remap_user_key_to_internal_key_if_valid(
         Ret, history_retention_collection_default).
 
@@ -1773,23 +1773,42 @@ parse_validate_history_param_numeric(Key, Value, Params, BucketConfig, IsNew,
     IsMagma = is_magma(Params, BucketConfig, IsNew),
     parse_validate_history_param_inner(
         Key, Value, IsEnterprise, IsCompat, IsNew, IsMagma,
-        fun (V) ->
-            do_parse_validate_history_retention_numeric(Key, V)
+        fun (Val, New) ->
+            validate_with_missing(
+                Val, "0", New,
+                fun (V) ->
+                    do_parse_validate_history_retention_numeric(Key, V)
+                end)
         end).
 
 parse_validate_history_param_bool(Key, Value, Params, BucketConfig, IsNew,
-                                  Version, IsEnterprise) ->
+                                  Version, IsEnterprise, DefaultVal) ->
     IsCompat = cluster_compat_mode:is_version_72(Version),
     IsMagma = is_magma(Params, BucketConfig, IsNew),
     parse_validate_history_param_inner(
         Key, Value, IsEnterprise, IsCompat, IsNew, IsMagma,
-        fun (V) ->
-            do_parse_validate_history_retention_bool(Key, V)
+        fun (Val, New) ->
+            validate_with_missing(
+                Val, DefaultVal, New,
+                fun (V) ->
+                    do_parse_validate_history_retention_bool(Key, V)
+                end)
         end).
 
+parse_validate_history_param_inner(_Key, undefined = _Value,
+                                   false = _IsEnterprise, _IsCompat, _IsNew,
+                                   _IsMagma, _ValidatorFn) ->
+    %% Value wasn't specified and not enterprise
+    ignore;
 parse_validate_history_param_inner(_Key, undefined = _Value, _IsEnterprise,
-                                   _IsCompat, _IsNew, _IsMagma, _ValidatorFn) ->
-    %% Value wasn't specified
+                                   false = _IsCompat, _IsNew, _IsMagma,
+                                   _ValidatorFn) ->
+    %% Value wasn't specified and not 7.2
+    ignore;
+parse_validate_history_param_inner(_Key, undefined = _Value, _IsEnterprise,
+                                   _IsCompat, _IsNew, false = _IsMagma,
+                                   _ValidatorFn) ->
+    %% Value wasn't specified and not magma
     ignore;
 parse_validate_history_param_inner(Key, _Value, false = _IsEnterprise,
                                    _IsCompat, _IsNew, _IsMagma, _ValidatorFn) ->
@@ -1808,10 +1827,7 @@ parse_validate_history_param_inner(Key, _Value, true = _IsEnterprise,
 parse_validate_history_param_inner(_Key, Value, true = _IsEnterprise,
                                    true = _IsCompat, IsNew, true = _IsMagma,
                                    ValidatorFn) ->
-    %% Default to undefined (to avoid setting the parameter and defer to
-    %% default memcached has set.
-    DefaultVal = undefined,
-    validate_with_missing(Value, DefaultVal, IsNew, ValidatorFn).
+    ValidatorFn(Value, IsNew).
 
 do_parse_validate_history_retention_numeric(Key, Val) ->
     case menelaus_util:parse_validate_number(Val, 0, undefined) of
@@ -2276,6 +2292,11 @@ basic_bucket_params_screening_test() ->
     true = proplists:is_defined(eviction_policy, OK1),
     true = proplists:is_defined(replica_index, OK1),
 
+    % Not enterprise/magma/7.2.0+ so history not set
+    ?assertNot(proplists:is_defined(history_retention_seconds, OK1)),
+    ?assertNot(proplists:is_defined(history_retention_bytes, OK1)),
+    ?assertNot(proplists:is_defined(history_retention_collection_default, OK1)),
+
     %% it is not possible to create bucket with duplicate name
     {_OK2, E2} = basic_bucket_params_screening(true, "mcd",
                                                [{"bucketType", "membase"},
@@ -2588,6 +2609,24 @@ basic_bucket_params_screening_test() ->
     ?assert(lists:any(fun (Elem) ->
         Elem =:= {history_retention_collection_default, true}
                       end, OK24)),
+
+    %% Test defaults for history when we are enterprise/magma/7.2.0+
+    {OK25, E25} = basic_bucket_params_screening(
+        true,
+        "mcd",
+        [{"bucketType", "membase"},
+         {"ramQuota", "1024"},
+         {"replicaNumber", "2"},
+         {"storageBackend", "magma"}],
+        tl(AllBuckets)),
+    ?assertEqual([], E25),
+
+    ?assertEqual({history_retention_seconds, 0},
+                  proplists:lookup(history_retention_seconds, OK25)),
+    ?assertEqual({history_retention_bytes, 0},
+                  proplists:lookup(history_retention_bytes, OK25)),
+    ?assertEqual({history_retention_collection_default, true},
+                  proplists:lookup(history_retention_collection_default, OK25)),
 
     meck:unload(ns_config),
 
