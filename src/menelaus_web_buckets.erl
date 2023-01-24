@@ -392,7 +392,11 @@ build_magma_bucket_info(BucketConfig) ->
                       ns_bucket:history_retention_bytes(BucketConfig)},
                      {historyRetentionCollectionDefault,
                       ns_bucket:history_retention_collection_default(
-                          BucketConfig)}]
+                        BucketConfig)},
+                     {magmaKeyTreeDataBlockSize,
+                      ns_bucket:magma_key_tree_data_blocksize(BucketConfig)},
+                     {magmaSeqTreeDataBlockSize,
+                      ns_bucket:magma_seq_tree_data_blocksize(BucketConfig)}]
             end;
         _ ->
             []
@@ -991,6 +995,12 @@ validate_membase_bucket_params(CommonParams, Params,
          parse_validate_compression_mode(Params, BucketConfig, IsNew,
                                          IsEnterprise),
          HistRetSecs,
+         parse_validate_magma_key_tree_data_blocksize(Params, BucketConfig,
+                                                      Version, IsNew,
+                                                      IsEnterprise),
+         parse_validate_magma_seq_tree_data_blocksize(Params, BucketConfig,
+                                                      Version, IsNew,
+                                                      IsEnterprise),
          parse_validate_history_retention_bytes(Params, BucketConfig,
                                                 IsNew, Version, IsEnterprise),
          parse_validate_history_retention_collection_default(Params,
@@ -1858,6 +1868,90 @@ do_parse_validate_history_retention_bool(Key, Val) ->
             {error, Key, <<"Value must be true or false">>}
     end.
 
+parse_validate_magma_key_tree_data_blocksize(Params, BucketConfig, Version,
+                                             IsNew, IsEnterprise) ->
+    UserKey = magmaKeyTreeDataBlockSize,
+    MagmaDataBlockSize = proplists:get_value(atom_to_list(UserKey), Params),
+    Ret = parse_validate_magma_data_blocksize(
+            UserKey, MagmaDataBlockSize, Params, BucketConfig, IsNew, Version,
+            IsEnterprise, integer_to_list(?MAGMA_KEY_TREE_DATA_BLOCKSIZE),
+            ?MIN_MAGMA_KEY_TREE_DATA_BLOCKSIZE,
+            ?MAX_MAGMA_KEY_TREE_DATA_BLOCKSIZE),
+    remap_user_key_to_internal_key_if_valid(Ret, magma_key_tree_data_blocksize).
+
+parse_validate_magma_seq_tree_data_blocksize(Params, BucketConfig, Version,
+                                             IsNew, IsEnterprise) ->
+    UserKey = magmaSeqTreeDataBlockSize,
+    MagmaDataBlockSize = proplists:get_value(atom_to_list(UserKey), Params),
+    Ret = parse_validate_magma_data_blocksize(
+            UserKey, MagmaDataBlockSize, Params, BucketConfig, IsNew, Version,
+            IsEnterprise, integer_to_list(?MAGMA_SEQ_TREE_DATA_BLOCKSIZE),
+            ?MIN_MAGMA_SEQ_TREE_DATA_BLOCKSIZE,
+            ?MAX_MAGMA_SEQ_TREE_DATA_BLOCKSIZE),
+    remap_user_key_to_internal_key_if_valid(Ret, magma_seq_tree_data_blocksize).
+
+parse_validate_magma_data_blocksize(Key, Value, Params, BucketConfig, IsNew,
+                                    Version, IsEnterprise, DefaultVal, MinVal,
+                                    MaxVal) ->
+    IsCompat = cluster_compat_mode:is_version_72(Version),
+    IsMagma = is_magma(Params, BucketConfig, IsNew),
+    parse_validate_magma_data_blocksize_inner(
+      Key, Value, IsEnterprise, IsCompat, IsNew, IsMagma,
+      fun (Val, New) ->
+              validate_with_missing(
+                Val, DefaultVal, New,
+                fun (V) ->
+                        do_parse_validate_magma_data_blocksize(Key, V, MinVal,
+                                                               MaxVal)
+                end)
+      end).
+
+do_parse_validate_magma_data_blocksize(Key, Val, Min, Max) ->
+    case menelaus_util:parse_validate_number(Val, Min, Max) of
+        {ok, X} ->
+            {ok, Key, X};
+        _Error ->
+            Msg = io_lib:format("Value must be an integer between ~p and ~p, "
+                                "inclusive", [Min, Max]),
+            {error, Key, iolist_to_binary(Msg)}
+    end.
+
+parse_validate_magma_data_blocksize_inner(_Key, undefined = _Value,
+                                          false = _IsEnterprise, _IsCompat,
+                                          _IsNew, _IsMagma, _ValidatorFn) ->
+    %% Value wasn't specified and not enterprise
+    ignore;
+parse_validate_magma_data_blocksize_inner(_Key, undefined = _Value,
+                                          _IsEnterprise, false = _IsCompat,
+                                          _IsNew, _IsMagma, _ValidatorFn) ->
+    %% Value wasn't specified and not 7.2
+    ignore;
+parse_validate_magma_data_blocksize_inner(_Key, undefined = _Value,
+                                          _IsEnterprise, _IsCompat, _IsNew,
+                                          false = _IsMagma, _ValidatorFn) ->
+    %% Value wasn't specified and not magma
+    ignore;
+parse_validate_magma_data_blocksize_inner(Key, _Value, false = _IsEnterprise,
+                                          _IsCompat, _IsNew, _IsMagma,
+                                          _ValidatorFn) ->
+    {error, Key,
+     <<"Magma data blocksize is supported in enterprise edition only">>};
+parse_validate_magma_data_blocksize_inner(Key, _Value, _IsEnterprise,
+                                          false = _IsCompat, _IsNew, _IsMagma,
+                                         _ValidatorFn) ->
+    {error, Key,
+     <<"Magma data blocksize cannot be set until the cluster is fully "
+       "running 7.2">>};
+parse_validate_magma_data_blocksize_inner(Key, _Value, true = _IsEnterprise,
+                                          true = _IsCompat, _IsNew,
+                                          false = _IsMagma, _ValidatorFn) ->
+    {error, Key,
+     <<"Magma data blocksize can only be used with Magma">>};
+parse_validate_magma_data_blocksize_inner(_Key, Value, true = _IsEnterprise,
+                                          true = _IsCompat, IsNew,
+                                          true = _IsMagma, ValidatorFn) ->
+    ValidatorFn(Value, IsNew).
+
 parse_validate_threads_number(Params, IsNew) ->
     validate_with_missing(proplists:get_value("threadsNumber", Params),
                           "3", IsNew, fun parse_validate_threads_number/1).
@@ -2517,7 +2611,9 @@ basic_bucket_params_screening_test() ->
                       {"storageBackend", "magma"},
                       {"historyRetentionSeconds", "10"},
                       {"historyRetentionBytes", "10"},
-                      {"historyRetentionCollectionDefault", "true"}],
+                      {"historyRetentionCollectionDefault", "true"},
+                      {"magmaKeyTreeDataBlockSize", "10"},
+                      {"magmaSeqTreeDataBlockSize", "10"}],
                      AllBuckets,
                      [node1],
                      false),
@@ -2525,6 +2621,12 @@ basic_bucket_params_screening_test() ->
                    <<"Magma is supported in enterprise edition only">>},
                   {historyRetentionSeconds,
                    <<"History Retention is supported in enterprise edition "
+                     "only">>},
+                  {magmaKeyTreeDataBlockSize,
+                   <<"Magma data blocksize is supported in enterprise edition "
+                     "only">>},
+                  {magmaSeqTreeDataBlockSize,
+                   <<"Magma data blocksize is supported in enterprise edition "
                      "only">>},
                   {historyRetentionBytes,
                    <<"History Retention is supported in enterprise edition "
@@ -2541,11 +2643,17 @@ basic_bucket_params_screening_test() ->
                       {"ramQuota", "400"},
                       {"historyRetentionSeconds", "10"},
                       {"historyRetentionBytes", "10"},
-                      {"historyRetentionCollectionDefault", "true"}],
+                      {"historyRetentionCollectionDefault", "true"},
+                      {"magmaKeyTreeDataBlockSize", "10"},
+                      {"magmaSeqTreeDataBlockSize", "10"}],
                      AllBuckets,
                      [node1]),
     ?assertEqual([{historyRetentionSeconds,
                    <<"History Retention can only used with Magma">>},
+                  {magmaKeyTreeDataBlockSize,
+                   <<"Magma data blocksize can only be used with Magma">>},
+                  {magmaSeqTreeDataBlockSize,
+                   <<"Magma data blocksize can only be used with Magma">>},
                   {historyRetentionBytes,
                    <<"History Retention can only used with Magma">>},
                   {historyRetentionCollectionDefault,
@@ -2566,12 +2674,20 @@ basic_bucket_params_screening_test() ->
                       {"storageBackend", "magma"},
                       {"historyRetentionSeconds", "10"},
                       {"historyRetentionBytes", "10"},
-                      {"historyRetentionCollectionDefault", "true"}],
+                      {"historyRetentionCollectionDefault", "true"},
+                      {"magmaKeyTreeDataBlockSize", "10"},
+                      {"magmaSeqTreeDataBlockSize", "10"}],
                      AllBuckets,
                      [node1]),
     ?assertEqual([{historyRetentionSeconds,
                     <<"History Retention cannot be set until the cluster is "
                        "fully 7.2">>},
+                  {magmaKeyTreeDataBlockSize,
+                   <<"Magma data blocksize cannot be set until the cluster is "
+                     "fully running 7.2">>},
+                  {magmaSeqTreeDataBlockSize,
+                   <<"Magma data blocksize cannot be set until the cluster is "
+                     "fully running 7.2">>},
                   {historyRetentionBytes,
                     <<"History Retention cannot be set until the cluster is "
                       "fully 7.2">>},
@@ -2590,11 +2706,19 @@ basic_bucket_params_screening_test() ->
             {"storageBackend", "magma"},
             {"historyRetentionSeconds", "-1"},
             {"historyRetentionBytes", "-1"},
-            {"historyRetentionCollectionDefault", "-1"}],
+            {"historyRetentionCollectionDefault", "-1"},
+            {"magmaKeyTreeDataBlockSize", "-1"},
+            {"magmaSeqTreeDataBlockSize", "-1"}],
         AllBuckets,
         [node1]),
     ?assertEqual([{historyRetentionSeconds,
                    <<"Value must be greater than or equal to 0">>},
+                  {magmaKeyTreeDataBlockSize,
+                   <<"Value must be an integer between 4096 and 131072, "
+                    "inclusive">>},
+                  {magmaSeqTreeDataBlockSize,
+                   <<"Value must be an integer between 4096 and 131072, "
+                    "inclusive">>},
                   {historyRetentionBytes,
                    <<"Value must be greater than or equal to 0">>},
                   {historyRetentionCollectionDefault,
@@ -2609,7 +2733,9 @@ basic_bucket_params_screening_test() ->
                       {"storageBackend", "magma"},
                       {"historyRetentionSeconds", "10"},
                       {"historyRetentionBytes", "10"},
-                      {"historyRetentionCollectionDefault", "true"}],
+                      {"historyRetentionCollectionDefault", "true"},
+                      {"magmaKeyTreeDataBlockSize", "4096"},
+                      {"magmaSeqTreeDataBlockSize", "4096"}],
                      AllBuckets,
                      [node1]),
     ?assertEqual([], E24),
@@ -2621,6 +2747,12 @@ basic_bucket_params_screening_test() ->
                       end, OK24)),
     ?assert(lists:any(fun (Elem) ->
         Elem =:= {history_retention_collection_default, true}
+                      end, OK24)),
+    ?assert(lists:any(fun (Elem) ->
+                          Elem =:= {magma_key_tree_data_blocksize, 4096}
+                      end, OK24)),
+    ?assert(lists:any(fun (Elem) ->
+                          Elem =:= {magma_seq_tree_data_blocksize, 4096}
                       end, OK24)),
 
     %% Test defaults for history when we are enterprise/magma/7.2.0+
@@ -2640,6 +2772,10 @@ basic_bucket_params_screening_test() ->
                   proplists:lookup(history_retention_bytes, OK25)),
     ?assertEqual({history_retention_collection_default, true},
                   proplists:lookup(history_retention_collection_default, OK25)),
+    ?assertEqual({magma_key_tree_data_blocksize, 4096},
+                 proplists:lookup(magma_key_tree_data_blocksize, OK25)),
+    ?assertEqual({magma_seq_tree_data_blocksize, 4096},
+                 proplists:lookup(magma_seq_tree_data_blocksize, OK25)),
 
     meck:unload(ns_config),
 
@@ -3063,7 +3199,11 @@ build_dynamic_bucket_info_test(Version, IsEnterprise, IsMagma) ->
                                ?VERSION_72 ->
                                    [{historyRetentionSeconds, 0},
                                     {historyRetentionBytes, 0},
-                                    {historyRetentionCollectionDefault, true}]
+                                    {historyRetentionCollectionDefault, true},
+                                    {magmaKeyTreeDataBlockSize,
+                                     ?MAGMA_KEY_TREE_DATA_BLOCKSIZE},
+                                    {magmaSeqTreeDataBlockSize,
+                                     ?MAGMA_SEQ_TREE_DATA_BLOCKSIZE}]
                            end,
 
             ?assertEqual(ExpectedConf, MagmaBucketConf)

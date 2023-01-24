@@ -83,6 +83,8 @@
          storage_backend/1,
          raw_ram_quota/1,
          magma_fragmentation_percentage/1,
+         magma_key_tree_data_blocksize/1,
+         magma_seq_tree_data_blocksize/1,
          update_maps/3,
          update_buckets/3,
          set_bucket_config/2,
@@ -515,6 +517,16 @@ magma_fragmentation_percentage(BucketConfig) ->
         Pct ->
             Pct
     end.
+
+-spec magma_key_tree_data_blocksize([{_,_}]) -> integer().
+magma_key_tree_data_blocksize(BucketConfig) ->
+    proplists:get_value(magma_key_tree_data_blocksize, BucketConfig,
+                        ?MAGMA_KEY_TREE_DATA_BLOCKSIZE).
+
+-spec magma_seq_tree_data_blocksize([{_,_}]) -> integer().
+magma_seq_tree_data_blocksize(BucketConfig) ->
+    proplists:get_value(magma_seq_tree_data_blocksize, BucketConfig,
+                        ?MAGMA_SEQ_TREE_DATA_BLOCKSIZE).
 
 -define(FS_HARD_NODES_NEEDED, 4).
 -define(FS_FAILOVER_NEEDED, 3).
@@ -1549,8 +1561,16 @@ chronicle_upgrade_to_72(ChronicleTxn) ->
                                        1, BCfg2,
                                        {history_retention_collection_default,
                                         true}),
+                    BCfg4 =
+                        lists:keystore(magma_key_tree_data_blocksize, 1, BCfg3,
+                                       {magma_key_tree_data_blocksize,
+                                        ?MAGMA_KEY_TREE_DATA_BLOCKSIZE}),
+                    BCfg5 =
+                        lists:keystore(magma_seq_tree_data_blocksize, 1, BCfg4,
+                                       {magma_seq_tree_data_blocksize,
+                                        ?MAGMA_SEQ_TREE_DATA_BLOCKSIZE}),
 
-                    chronicle_upgrade:set_key(PropsKey, BCfg3, Txn);
+                    chronicle_upgrade:set_key(PropsKey, BCfg5, Txn);
                 _ ->
                     Txn
             end
@@ -1569,6 +1589,8 @@ extract_bucket_props(Props) ->
                         eviction_policy, conflict_resolution_type,
                         drift_ahead_threshold_ms, drift_behind_threshold_ms,
                         storage_mode, max_ttl, compression_mode,
+                        magma_key_tree_data_blocksize,
+                        magma_seq_tree_data_blocksize,
                         history_retention_seconds,
                         history_retention_bytes,
                         history_retention_collection_default]],

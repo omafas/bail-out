@@ -333,5 +333,9 @@ get_magma_bucket_config(BucketConfig) ->
             [{"history_retention_seconds", [{reload, flush}],
                 ns_bucket:history_retention_seconds(BucketConfig)},
              {"history_retention_bytes", [{reload, flush}],
-                ns_bucket:history_retention_bytes(BucketConfig)}]
+                ns_bucket:history_retention_bytes(BucketConfig)},
+             {"magma_key_tree_data_block_size", [],
+              ns_bucket:magma_key_tree_data_blocksize(BucketConfig)},
+             {"magma_seq_tree_data_block_size", [],
+              ns_bucket:magma_seq_tree_data_blocksize(BucketConfig)}]
     end.
