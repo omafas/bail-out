@@ -17,7 +17,8 @@
          handle_settings_reset_count/1,
          get_failover_on_disk_issues/1,
          config_check_can_abort_rebalance/0,
-         default_config/1]).
+         default_config/1,
+         config_upgrade_to_72/1]).
 
 -import(menelaus_util,
         [reply/2,
@@ -37,13 +38,18 @@
 -define(MAX_DATA_DISK_ISSUES_TIMEPERIOD, 3600). %% seconds
 
 -define(FAILOVER_SERVER_GROUP_CONFIG_KEY, failover_server_group).
+-define(FAILOVER_PRESERVE_DURABILITY_MAJORITY_CONFIG_KEY,
+        failover_preserve_durability_majority).
+-define(FAILOVER_PRESERVE_DURABILITY_MAJORITY_DEFAULT, false).
+
+-define(ROOT_CONFIG_KEY, auto_failover_cfg).
 
 -define(MAX_EVENTS_CONFIG_KEY, max_count).
 -define(MIN_EVENTS_ALLOWED, 1).
 -define(DEFAULT_EVENTS_ALLOWED, 1).
 
 default_config(IsEnterprise) ->
-    [{auto_failover_cfg,
+    [{?ROOT_CONFIG_KEY,
       [{enabled, true},
        % timeout is the time (in seconds) a node needs to be
        % down before it is automatically faileovered
@@ -169,7 +175,28 @@ parse_validate_extras_inner(Args, CurrRV, Config) ->
         [parse_validate_max_count(Args, _, Config),
          parse_validate_failover_disk_issues(Args, _, Config),
          parse_validate_server_group_failover(Args, _),
-         parse_validate_can_abort_rebalance(Args, _)]).
+         parse_validate_can_abort_rebalance(Args, _),
+         parse_validate_preserve_durability_majority(Args, _)]).
+
+parse_validate_preserve_durability_majority(Args, CurrRV) ->
+    case cluster_compat_mode:is_cluster_72() of
+        false ->
+            CurrRV;
+        true ->
+            parse_validate_preserve_durability_majority_inner(Args, CurrRV)
+    end.
+
+parse_validate_preserve_durability_majority_inner(Args, CurrRV) ->
+    StrKey = "failoverPreserveDurabilityMajority",
+    case parse_validate_boolean_field(StrKey, '_', Args) of
+        [] ->
+            CurrRV;
+        [{ok, _, Value}] ->
+            add_extras([{?FAILOVER_PRESERVE_DURABILITY_MAJORITY_CONFIG_KEY,
+                         Value}], CurrRV);
+        [{error, _, _}] ->
+            {error, boolean_err_msg(StrKey)}
+    end.
 
 parse_validate_can_abort_rebalance(Args, CurrRV) ->
     StrKey = "canAbortRebalance",
@@ -284,7 +311,12 @@ get_extra_settings(Config) ->
                [{failoverServerGroup,
                  proplists:get_value(?FAILOVER_SERVER_GROUP_CONFIG_KEY,
                                      Config)} ||
-                   not cluster_compat_mode:is_cluster_71()]]);
+                   not cluster_compat_mode:is_cluster_71()],
+               [{failoverPreserveDurabilityMajority,
+                 proplists:get_value(
+                     ?FAILOVER_PRESERVE_DURABILITY_MAJORITY_CONFIG_KEY,
+                     Config)}
+                   || cluster_compat_mode:is_cluster_72()]]);
         false ->
             []
     end.
@@ -301,3 +333,9 @@ disable_extras(Config) ->
         false ->
             []
     end.
+
+config_upgrade_to_72(Config) ->
+    [{set, ?ROOT_CONFIG_KEY,
+      auto_failover:get_cfg(Config) ++
+            [{?FAILOVER_PRESERVE_DURABILITY_MAJORITY_CONFIG_KEY,
+              ?FAILOVER_PRESERVE_DURABILITY_MAJORITY_DEFAULT}]}].
