@@ -86,9 +86,9 @@ params(membase, BucketName, BucketConfig, MemQuota, UUID) ->
      {"compression_mode", [{reload, flush}],
       proplists:get_value(compression_mode, BucketConfig)},
      {"history_retention_seconds", [{reload, flush}],
-      proplists:get_value(history_retention_seconds, BucketConfig)},
+      ns_bucket:history_retention_seconds(BucketConfig)},
      {"history_retention_bytes", [{reload, flush}],
-      proplists:get_value(history_retention_bytes, BucketConfig)}];
+      ns_bucket:history_retention_bytes(BucketConfig)}];
 
 params(memcached, _BucketName, _BucketConfig, MemQuota, UUID) ->
     [{"cache_size", [], MemQuota},

@@ -76,6 +76,7 @@
          conflict_resolution_type/1,
          drift_thresholds/1,
          history_retention_seconds/1,
+         history_retention_bytes/1,
          history_retention_collection_default/1,
          eviction_policy/1,
          storage_mode/1,
@@ -361,9 +362,15 @@ drift_thresholds(BucketConfig) ->
         false -> undefined
     end.
 
--spec history_retention_seconds([{_,_}]) -> number().
+-spec history_retention_seconds([{_,_}]) -> integer().
 history_retention_seconds(BucketConfig) ->
-    proplists:get_value(history_retention_seconds, BucketConfig, 0).
+    proplists:get_value(history_retention_seconds, BucketConfig,
+                        ?HISTORY_RETENTION_SECONDS_DEFAULT).
+
+-spec history_retention_bytes([{_,_}]) -> integer().
+history_retention_bytes(BucketConfig) ->
+    proplists:get_value(history_retention_bytes, BucketConfig,
+                        ?HISTORY_RETENTION_BYTES_DEFAULT).
 
 -spec history_retention_collection_default([{_,_}]) -> boolean().
 history_retention_collection_default(BucketConfig) ->

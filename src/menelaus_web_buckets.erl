@@ -381,7 +381,19 @@ build_magma_bucket_info(BucketConfig) ->
         magma ->
             [{storageQuotaPercentage,
               proplists:get_value(storage_quota_percentage, BucketConfig,
-                                  ?MAGMA_STORAGE_QUOTA_PERCENTAGE)}];
+                                  ?MAGMA_STORAGE_QUOTA_PERCENTAGE)}]
+            ++
+            case cluster_compat_mode:is_cluster_72() of
+                false -> [];
+                true ->
+                    [{historyRetentionSeconds,
+                      ns_bucket:history_retention_seconds(BucketConfig)},
+                     {historyRetentionBytes,
+                      ns_bucket:history_retention_bytes(BucketConfig)},
+                     {historyRetentionCollectionDefault,
+                      ns_bucket:history_retention_collection_default(
+                          BucketConfig)}]
+            end;
         _ ->
             []
     end.
@@ -1743,39 +1755,40 @@ parse_validate_history_retention_seconds(Params, BucketConfig, IsNew, Version,
                                          IsEnterprise) ->
     UserKey = historyRetentionSeconds,
     HistoryRetentionValue = proplists:get_value(atom_to_list(UserKey), Params),
-    Ret = parse_validate_history_param_numeric(UserKey, HistoryRetentionValue,
-                                               Params, BucketConfig, IsNew,
-                                               Version, IsEnterprise),
+    Ret = parse_validate_history_param_numeric(
+        UserKey, HistoryRetentionValue, Params, BucketConfig, IsNew, Version,
+        IsEnterprise, integer_to_list(?HISTORY_RETENTION_SECONDS_DEFAULT)),
     remap_user_key_to_internal_key_if_valid(Ret, history_retention_seconds).
 
 parse_validate_history_retention_bytes(Params, BucketConfig, IsNew,
                                        Version, IsEnterprise) ->
     UserKey = historyRetentionBytes,
     HistoryRetentionValue = proplists:get_value(atom_to_list(UserKey), Params),
-    Ret = parse_validate_history_param_numeric(UserKey, HistoryRetentionValue,
-                                               Params, BucketConfig, IsNew,
-                                               Version, IsEnterprise),
+    Ret = parse_validate_history_param_numeric(
+        UserKey, HistoryRetentionValue, Params, BucketConfig, IsNew, Version,
+        IsEnterprise, integer_to_list(?HISTORY_RETENTION_BYTES_DEFAULT)),
     remap_user_key_to_internal_key_if_valid(Ret, history_retention_bytes).
 
 parse_validate_history_retention_collection_default(Params, BucketConfig, IsNew,
                                                     Version, IsEnterprise) ->
     UserKey = historyRetentionCollectionDefault,
     HistoryRetentionValue = proplists:get_value(atom_to_list(UserKey), Params),
-    Ret = parse_validate_history_param_bool(UserKey, HistoryRetentionValue,
-                                            Params, BucketConfig, IsNew,
-                                            Version, IsEnterprise, "true"),
+    Ret = parse_validate_history_param_bool(
+        UserKey, HistoryRetentionValue, Params, BucketConfig, IsNew, Version,
+        IsEnterprise,
+        atom_to_list(?HISTORY_RETENTION_COLLECTION_DEFAULT_DEFAULT)),
     remap_user_key_to_internal_key_if_valid(
         Ret, history_retention_collection_default).
 
 parse_validate_history_param_numeric(Key, Value, Params, BucketConfig, IsNew,
-                                     Version, IsEnterprise) ->
+                                     Version, IsEnterprise, DefaultVal) ->
     IsCompat = cluster_compat_mode:is_version_72(Version),
     IsMagma = is_magma(Params, BucketConfig, IsNew),
     parse_validate_history_param_inner(
         Key, Value, IsEnterprise, IsCompat, IsNew, IsMagma,
         fun (Val, New) ->
             validate_with_missing(
-                Val, "0", New,
+                Val, DefaultVal, New,
                 fun (V) ->
                     do_parse_validate_history_retention_numeric(Key, V)
                 end)
@@ -2966,4 +2979,118 @@ get_conflict_resolution_type_and_thresholds_test() ->
     ?assertEqual([], ParsedDontEnableDrift3),
 
     meck:unload(cluster_compat_mode).
+
+build_dynamic_bucket_info_test_setup(Version, IsEnterprise) ->
+    meck:new(ns_config, [passthrough]),
+    meck:expect(ns_config, search,
+        fun(_, cluster_compat_version, _) ->
+            Version
+        end),
+
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:expect(cluster_compat_mode, get_compat_version, fun(_) -> Version end),
+    meck:expect(cluster_compat_mode, is_enterprise, fun() -> IsEnterprise end),
+
+    meck:new(chronicle_compat, [passthrough]),
+    meck:expect(chronicle_compat, get,
+        fun(_, cluster_compat_version, _) ->
+            Version
+        end),
+
+    meck:new(ns_bucket, [passthrough]).
+
+build_dynamic_bucket_info_test_teardown() ->
+    meck:unload(ns_config),
+    meck:unload(cluster_compat_mode),
+    meck:unload(chronicle_compat),
+    meck:unload(ns_bucket).
+
+%% Test the output of build_dynamic_bucket_info. Aspirationally this would test
+%% the entire output of the function, but for now it just tests a subset of it.
+build_dynamic_bucket_info_test(Version, IsEnterprise, IsMagma) ->
+    ?log_debug("\n Version ~p, Enterprise ~p, Magma ~p",
+               [Version, IsEnterprise, IsMagma]),
+    BucketConfigBase = [{type, membase},
+                        {num_replicas, 1},
+                        {ram_quota, 1024},
+                        {servers, ["a"]},
+                        {num_thread, 3}],
+    BucketConfig = BucketConfigBase ++
+                   case IsMagma of
+                       true -> [{storage_mode, magma}];
+                       false -> [{storage_mode, couchstore}]
+                   end,
+
+    meck:expect(ns_bucket, get_bucket, fun("Bucket") -> {ok, BucketConfig} end),
+
+    BucketInfo = build_dynamic_bucket_info([], "Bucket", BucketConfig, []),
+    ?assertNotEqual([], BucketInfo),
+
+    case IsMagma of
+        false ->
+            % No couchstore specific bucket conf, nothing to check here
+            ok;
+        true ->
+            % The output from build_dynamic_bucket_info isn't particularly nice,
+            % various elements are lists that are unnamed, such as the magma
+            % bucket configuration that is output. We have to get a little
+            % creative in parsing the output to find the magma bucket config as
+            % a result.
+            MainBucketConf =
+                lists:last(
+                    lists:filter(
+                        fun (List) when is_list(List) ->
+                                proplists:is_defined(replicaNumber, List);
+                            (_) -> false
+                        end,
+                        BucketInfo)),
+
+            MagmaBucketConf =
+                lists:last(
+                    lists:filter(
+                        fun (List) when is_list(List) ->
+                                proplists:is_defined(storageQuotaPercentage,
+                                                     List);
+                            (_) -> false
+                        end,
+                        MainBucketConf)),
+
+            ExpectedConfBase = [{storageQuotaPercentage, 50}],
+            ExpectedConf = ExpectedConfBase ++
+                           case Version of
+                               ?VERSION_71 ->
+                                   [];
+                               ?VERSION_72 ->
+                                   [{historyRetentionSeconds, 0},
+                                    {historyRetentionBytes, 0},
+                                    {historyRetentionCollectionDefault, true}]
+                           end,
+
+            ?assertEqual(ExpectedConf, MagmaBucketConf)
+    end.
+
+build_dynamic_bucket_info_test_() ->
+    Tests = [{?VERSION_71, false, false},
+             {?VERSION_71, true, false},
+             {?VERSION_71, true, true},
+             {?VERSION_72, false, false},
+             {?VERSION_72, true, false},
+             {?VERSION_72, true, true}],
+
+    TestFun = fun({Version, IsEnterprise, IsMagma}, _R) ->
+                  fun() ->
+                      build_dynamic_bucket_info_test(Version, IsEnterprise,
+                                                     IsMagma)
+                  end
+              end,
+
+    {foreachx,
+        fun ({Version, IsEnterprise, _IsMagma}) ->
+            build_dynamic_bucket_info_test_setup(Version, IsEnterprise)
+        end,
+        fun (_X, _R) ->
+            build_dynamic_bucket_info_test_teardown()
+        end,
+        [{Test, TestFun} || Test <- Tests]}.
+
 -endif.
