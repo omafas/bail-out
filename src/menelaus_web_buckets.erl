@@ -1741,21 +1741,21 @@ remap_user_key_to_internal_key_if_valid(Result, InternalKey) ->
 
 parse_validate_history_retention_seconds(Params, BucketConfig, IsNew, Version,
                                          IsEnterprise) ->
-    HistoryRetentionValue =
-        proplists:get_value("historyRetentionSeconds", Params),
-    parse_validate_history_param_numeric(history_retention_seconds,
-                                         HistoryRetentionValue, Params,
-                                         BucketConfig, IsNew, Version,
-                                         IsEnterprise).
+    UserKey = historyRetentionSeconds,
+    HistoryRetentionValue = proplists:get_value(atom_to_list(UserKey), Params),
+    Ret = parse_validate_history_param_numeric(UserKey, HistoryRetentionValue,
+                                               Params, BucketConfig, IsNew,
+                                               Version, IsEnterprise),
+    remap_user_key_to_internal_key_if_valid(Ret, history_retention_seconds).
 
 parse_validate_history_retention_bytes(Params, BucketConfig, IsNew,
                                        Version, IsEnterprise) ->
-    HistoryRetentionValue =
-        proplists:get_value("historyRetentionBytes", Params),
-    parse_validate_history_param_numeric(history_retention_bytes,
-                                         HistoryRetentionValue, Params,
-                                         BucketConfig, IsNew, Version,
-                                         IsEnterprise).
+    UserKey = historyRetentionBytes,
+    HistoryRetentionValue = proplists:get_value(atom_to_list(UserKey), Params),
+    Ret = parse_validate_history_param_numeric(UserKey, HistoryRetentionValue,
+                                               Params, BucketConfig, IsNew,
+                                               Version, IsEnterprise),
+    remap_user_key_to_internal_key_if_valid(Ret, history_retention_bytes).
 
 parse_validate_history_retention_collection_default(Params, BucketConfig, IsNew,
                                                     Version, IsEnterprise) ->
@@ -2510,10 +2510,10 @@ basic_bucket_params_screening_test() ->
                      false),
     ?assertEqual([{storageBackend,
                    <<"Magma is supported in enterprise edition only">>},
-                  {history_retention_seconds,
+                  {historyRetentionSeconds,
                    <<"History Retention is supported in enterprise edition "
                      "only">>},
-                  {history_retention_bytes,
+                  {historyRetentionBytes,
                    <<"History Retention is supported in enterprise edition "
                       "only">>},
                   {historyRetentionCollectionDefault,
@@ -2531,9 +2531,9 @@ basic_bucket_params_screening_test() ->
                       {"historyRetentionCollectionDefault", "true"}],
                      AllBuckets,
                      [node1]),
-    ?assertEqual([{history_retention_seconds,
+    ?assertEqual([{historyRetentionSeconds,
                    <<"History Retention can only used with Magma">>},
-                  {history_retention_bytes,
+                  {historyRetentionBytes,
                    <<"History Retention can only used with Magma">>},
                   {historyRetentionCollectionDefault,
                    <<"History Retention can only used with Magma">>}],
@@ -2556,10 +2556,10 @@ basic_bucket_params_screening_test() ->
                       {"historyRetentionCollectionDefault", "true"}],
                      AllBuckets,
                      [node1]),
-    ?assertEqual([{history_retention_seconds,
+    ?assertEqual([{historyRetentionSeconds,
                     <<"History Retention cannot be set until the cluster is "
                        "fully 7.2">>},
-                  {history_retention_bytes,
+                  {historyRetentionBytes,
                     <<"History Retention cannot be set until the cluster is "
                       "fully 7.2">>},
                   {historyRetentionCollectionDefault,
@@ -2580,9 +2580,9 @@ basic_bucket_params_screening_test() ->
             {"historyRetentionCollectionDefault", "-1"}],
         AllBuckets,
         [node1]),
-    ?assertEqual([{history_retention_seconds,
+    ?assertEqual([{historyRetentionSeconds,
                    <<"Value must be greater than or equal to 0">>},
-                  {history_retention_bytes,
+                  {historyRetentionBytes,
                    <<"Value must be greater than or equal to 0">>},
                   {historyRetentionCollectionDefault,
                    <<"Value must be true or false">>}],
