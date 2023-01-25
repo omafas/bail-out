@@ -20,6 +20,7 @@
          rest_url/4,
          json_request_hilevel/4,
          basic_auth_header/1,
+         basic_auth_header/2,
          special_auth_header/0,
          special_auth_header/1,
          is_auth_header/1,
@@ -39,6 +40,9 @@ rest_url(Host, Port, Path) ->
 
 basic_auth_header(HiddenAuth) ->
     {User, Password} = ?UNHIDE(HiddenAuth),
+    basic_auth_header(User, Password).
+
+basic_auth_header(User, Password) ->
     UserPassword = base64:encode_to_string(User ++ ":" ++ Password),
     {"Authorization", "Basic " ++ UserPassword}.
 
