@@ -94,7 +94,7 @@ short_description(Other) ->
 
 %% Error constants
 errors(ip) ->
-    "IP address seems to have changed. Unable to listen on ~p. (POSIX error code: '~p')";
+    "Unable to listen on ~p. (POSIX error code: '~p')";
 errors(ep_oom_errors) ->
     "Hard out-of-memory error: Bucket \"~s\" on node ~s is full. No memory currently allocated to this bucket can be easily released.";
 errors(ep_item_commit_failed) ->
