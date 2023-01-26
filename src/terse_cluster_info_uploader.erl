@@ -11,17 +11,21 @@
 %% it to ep-engine
 -module(terse_cluster_info_uploader).
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
 -include("ns_common.hrl").
 
 -export([start_link/0]).
 
-%% gen_server2 callbacks
--export([init/1, handle_info/2]).
+-record(state, {
+          port_pid :: pid()
+         }).
+
+%% gen_server callbacks
+-export([init/1, handle_info/2, handle_call/3, handle_cast/2]).
 
 start_link() ->
-    gen_server2:start_link({local, ?MODULE}, ?MODULE, [], []).
+    proc_lib:start_link(?MODULE, init, [[]]).
 
 %% callbacks
 init([]) ->
@@ -32,8 +36,15 @@ init([]) ->
                                  (_) ->
                                      ok
                              end),
+    %% Free up our parent to continue on. This is needed as the rest of
+    %% this function might take some time to complete.
+    proc_lib:init_ack({ok, Self}),
+
+    Pid = memcached_config_mgr:memcached_port_pid(),
+    remote_monitors:monitor(Pid),
+
     Self ! refresh,
-    {ok, []}.
+    gen_server:enter_loop(?MODULE, [], #state{port_pid = Pid}).
 
 handle_info(refresh, State) ->
     misc:flush(refresh),
@@ -48,5 +59,17 @@ handle_info(refresh, State) ->
             erlang:raise(T, E, Stack)
     end,
     {noreply, State};
-handle_info(_Info, State) ->
+handle_info({remote_monitor_down, Pid, Reason},
+            #state{port_pid = Pid} = State) ->
+    ?log_debug("Got DOWN with reason: ~p from memcached port server: ~p. "
+               "Shutting down", [Reason, Pid]),
+    {stop, {shutdown, {memcached_port_server_down, Pid, Reason}}, State};
+handle_info(Info, State) ->
+    ?log_debug("Got unknown message: ~p", [Info]),
     {noreply, State}.
+
+handle_call(Msg, _From, _State) ->
+    erlang:error({unknown_msg, Msg}).
+
+handle_cast(Msg, _State) ->
+    erlang:error({unknown_msg, Msg}).
