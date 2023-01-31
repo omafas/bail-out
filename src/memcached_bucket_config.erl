@@ -84,11 +84,8 @@ params(membase, BucketName, BucketConfig, MemQuota, UUID) ->
       proplists:get_value(ht_size, BucketConfig,
                           misc:getenv_int("MEMBASE_HT_SIZE", undefined))},
      {"compression_mode", [{reload, flush}],
-      proplists:get_value(compression_mode, BucketConfig)},
-     {"history_retention_seconds", [{reload, flush}],
-      ns_bucket:history_retention_seconds(BucketConfig)},
-     {"history_retention_bytes", [{reload, flush}],
-      ns_bucket:history_retention_bytes(BucketConfig)}];
+      proplists:get_value(compression_mode, BucketConfig)}] ++
+     get_magma_bucket_config(BucketConfig);
 
 params(memcached, _BucketName, _BucketConfig, MemQuota, UUID) ->
     [{"cache_size", [], MemQuota},
@@ -328,3 +325,13 @@ start_params(#cfg{config = BucketConfig,
 
 get_bucket_config(#cfg{config = BucketConfig}) ->
     BucketConfig.
+
+get_magma_bucket_config(BucketConfig) ->
+    case ns_bucket:is_magma(BucketConfig) of
+        false -> [];
+        true ->
+            [{"history_retention_seconds", [{reload, flush}],
+                ns_bucket:history_retention_seconds(BucketConfig)},
+             {"history_retention_bytes", [{reload, flush}],
+                ns_bucket:history_retention_bytes(BucketConfig)}]
+    end.
