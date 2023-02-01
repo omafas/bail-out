@@ -9,6 +9,7 @@
 %%
 -module(menelaus_web_auto_failover).
 
+-include("cut.hrl").
 -include("ns_common.hrl").
 
 -export([handle_settings_get/1,
@@ -152,32 +153,23 @@ parse_validate_other_params(Args, Config) ->
 parse_validate_extras(Args, CurrRV, Config) ->
     case cluster_compat_mode:is_enterprise() of
         true ->
-            parse_validate_extras_inner(Args, CurrRV, Config);
+            try
+                parse_validate_extras_inner(Args, CurrRV, Config)
+            catch E ->
+                {error, E}
+            end;
         false ->
             %% TODO - Check for unsupported params
             CurrRV
     end.
 
 parse_validate_extras_inner(Args, CurrRV, Config) ->
-    NewRV0 = parse_validate_max_count(Args, CurrRV, Config),
-    case NewRV0 of
-        {error, _}  ->
-            NewRV0;
-        _ ->
-            NewRV1 = parse_validate_failover_disk_issues(Args, NewRV0, Config),
-            case NewRV1 of
-                {error, _} ->
-                    NewRV1;
-                _ ->
-                    NewRV2 = parse_validate_server_group_failover(Args, NewRV1),
-                    case NewRV2 of
-                        {error, _} ->
-                            NewRV2;
-                        _ ->
-                            parse_validate_can_abort_rebalance(Args, NewRV2)
-                    end
-            end
-    end.
+    functools:chain(
+        CurrRV,
+        [parse_validate_max_count(Args, _, Config),
+         parse_validate_failover_disk_issues(Args, _, Config),
+         parse_validate_server_group_failover(Args, _),
+         parse_validate_can_abort_rebalance(Args, _)]).
 
 parse_validate_can_abort_rebalance(Args, CurrRV) ->
     StrKey = "canAbortRebalance",
@@ -187,7 +179,7 @@ parse_validate_can_abort_rebalance(Args, CurrRV) ->
         [{ok, _, Value}] ->
             add_extras([{?CAN_ABORT_REBALANCE_CONFIG_KEY, Value}], CurrRV);
         [{error, _, _}] ->
-            {error, boolean_err_msg(StrKey)}
+            erlang:throw(boolean_err_msg(StrKey))
     end.
 
 parse_validate_max_count(Args, CurrRV, Config) ->
@@ -199,7 +191,7 @@ parse_validate_max_count(Args, CurrRV, Config) ->
         {ok, Val} ->
             [{maxCount, Val} | CurrRV];
         _->
-            {error, range_err_msg(maxCount, Min, Max)}
+            erlang:throw(range_err_msg(maxCount, Min, Max))
     end.
 
 parse_validate_failover_disk_issues(Args, CurrRV, Config) ->
@@ -219,7 +211,7 @@ parse_validate_failover_disk_issues(Args, CurrRV, Config) ->
                     Extra = set_failover_on_disk_issues(true, Val),
                     add_extras(Extra, CurrRV);
                 _ ->
-                    {error, range_err_msg(KeyTimePeriod, Min, Max)}
+                    erlang:throw(range_err_msg(KeyTimePeriod, Min, Max))
             end;
         [{ok, _, false}] ->
             {_, CurrTP} = get_failover_on_disk_issues(Config),
@@ -230,12 +222,12 @@ parse_validate_failover_disk_issues(Args, CurrRV, Config) ->
                 true ->
                     %% User has passed the timePeriod paramater
                     %% but enabled is missing.
-                    {error, boolean_err_msg(KeyEnabled)};
+                    erlang:throw(boolean_err_msg(KeyEnabled));
                 false ->
                     CurrRV
             end;
         _ ->
-            {error, boolean_err_msg(KeyEnabled)}
+            erlang:throw(boolean_err_msg(KeyEnabled))
     end.
 
 disable_failover_on_disk_issues(TP) ->
@@ -261,7 +253,7 @@ parse_validate_server_group_failover_inner(Args, CurrRV) ->
         [] ->
             CurrRV;
         _ ->
-            {error, boolean_err_msg(Key)}
+            erlang:throw(boolean_err_msg(Key))
     end.
 
 add_extras(Add, CurrRV) ->
