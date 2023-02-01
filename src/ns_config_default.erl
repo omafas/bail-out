@@ -338,7 +338,8 @@ default() ->
         service_ports:default_config(IsEnterprise) ++
         rebalance_quirks:default_config() ++
         auto_rebalance_settings:default_config() ++
-        menelaus_web_auto_failover:default_config(IsEnterprise).
+        menelaus_web_auto_failover:default_config(IsEnterprise) ++
+        ns_storage_conf:default_config().
 
 %% memory_threshold is excluded from alerts and pop_up_alerts here for
 %% backward compatibility reasons (because it was added in a minor
@@ -449,7 +450,9 @@ upgrade_config_from_7_1_to_7_2(Config) ->
 
 do_upgrade_config_from_7_1_to_7_2(_Config, DefaultConfig) ->
     [upgrade_key(memcached_config, DefaultConfig),
-     upgrade_key(memcached_defaults, DefaultConfig)].
+     upgrade_key(memcached_defaults, DefaultConfig),
+     upgrade_key(database_dir, DefaultConfig),
+     upgrade_key(index_dir, DefaultConfig)].
 
 encrypt_config_val(Val) ->
     {ok, Encrypted} = encryption_service:encrypt(term_to_binary(Val)),
@@ -530,17 +533,25 @@ upgrade_6_5_1_to_7_0_test() ->
 no_upgrade_on_current_version_test() ->
     ?assertEqual([], upgrade_config([[{{node, node(), config_version}, get_current_version()}]])).
 
+mock_ns_storage_conf_default_config() ->
+    [{{node, node(), database_dir}, "DbTestDir"},
+     {{node, node(), index_dir}, "IxTestDir"}].
+
 all_upgrades_test_() ->
     {setup,
      fun () ->
              ns_config:mock_tombstone_agent(),
              meck:new(sigar),
              meck:expect(sigar, get_cgroups_info,
-                         fun () ->  #{supported => false} end)
+                         fun () ->  #{supported => false} end),
+             meck:new(ns_storage_conf),
+             meck:expect(ns_storage_conf, default_config,
+                         fun () -> mock_ns_storage_conf_default_config() end)
      end,
      fun (_) ->
              meck:unload(sigar),
-             ns_config:unmock_tombstone_agent()
+             ns_config:unmock_tombstone_agent(),
+             meck:unload(ns_storage_conf)
      end,
      ?_test(test_all_upgrades())}.
 

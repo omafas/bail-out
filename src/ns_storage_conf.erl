@@ -15,6 +15,7 @@
 -include("ns_common.hrl").
 -include("ns_config.hrl").
 -include("cut.hrl").
+-include("couch_db.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -31,14 +32,40 @@
          setup_storage_paths/0,
          this_node_cbas_dirs/0,
          this_node_java_home/0,
-         update_java_home/1]).
+         update_java_home/1,
+         default_config/0,
+         get_ini_files/0]).
 
 -export([cluster_storage_info/2, nodes_storage_info/3]).
 
 -export([extract_disk_stats_for_path/2]).
 
+get_ini_files() ->
+    case init:get_argument(couch_ini) of
+        error ->
+            [];
+        {ok, [Values]} ->
+            Values
+    end.
+
+default_config() ->
+    IniFiles = get_ini_files(),
+    {DbDir, IxDir} = couch_config:get_db_and_ix_paths_from_ini_files(IniFiles),
+    [{{node, node(), database_dir}, DbDir},
+     {{node, node(), index_dir}, IxDir}].
+
 setup_storage_paths() ->
-    setup_db_and_ix_paths(ns_couchdb_api:get_db_and_ix_paths()),
+    {ok, CfgDbDir} = this_node_dbdir(),
+    {ok, CfgIxDir} = this_node_ixdir(),
+    IniFiles = get_ini_files(),
+    WriteFile = case IniFiles of
+                    [_|_] -> lists:last(IniFiles);
+                    _ -> undefined
+                end,
+    ok = couch_config_writer:save_to_file(
+           {{"couchdb", "database_dir"}, CfgDbDir}, WriteFile),
+    ok = couch_config_writer:save_to_file(
+           {{"couchdb", "view_index_dir"}, CfgIxDir}, WriteFile),
     case ns_config:search_node(node(), ns_config:latest(), cbas_dirs) of
         false ->
             {ok, Default} = this_node_ixdir(),
@@ -55,41 +82,16 @@ setup_storage_paths() ->
     end,
     ignore.
 
-setup_db_and_ix_paths(Dirs) ->
-    ?log_debug("Initialize db_and_ix_paths variable with ~p", [Dirs]),
-    application:set_env(ns_server, db_and_ix_paths, Dirs).
-
 get_db_and_ix_paths() ->
-    case application:get_env(ns_server, db_and_ix_paths) of
-        undefined ->
-            ns_couchdb_api:get_db_and_ix_paths();
-        {ok, Paths} ->
-            Paths
-    end.
-
-couch_storage_path(Field) ->
-    try get_db_and_ix_paths() of
-        PList ->
-            {Field, RV} = lists:keyfind(Field, 1, PList),
-            {ok, RV}
-    catch T:E ->
-            ?log_debug("Failed to get couch storage config field: ~p due to ~p:~p", [Field, T, E]),
-            {error, iolist_to_binary(io_lib:format("couch config access failed: ~p:~p", [T, E]))}
-    end.
-
--spec this_node_dbdir() -> {ok, string()} | {error, binary()}.
-this_node_dbdir() ->
-    couch_storage_path(db_path).
+    {ok, DBDir} = this_node_dbdir(),
+    {ok, IXDir} = this_node_ixdir(),
+    {filename:join([DBDir]), filename:join([IXDir])}.
 
 -spec this_node_bucket_dbdir(bucket_name()) -> {ok, string()}.
 this_node_bucket_dbdir(BucketName) ->
-    {ok, DBDir} = ns_storage_conf:this_node_dbdir(),
+    {ok, DBDir} = this_node_dbdir(),
     DBSubDir = filename:join(DBDir, BucketName),
     {ok, DBSubDir}.
-
--spec this_node_ixdir() -> {ok, string()} | {error, binary()}.
-this_node_ixdir() ->
-    couch_storage_path(index_path).
 
 -spec this_node_logdir() -> {ok, string()} | {error, any()}.
 this_node_logdir() ->
@@ -136,8 +138,7 @@ setup_disk_storage_conf(DbPath, IxPath, CBASDirs, EvPath) ->
                                       undefined
                               end
                       end, CBASDirs)),
-    [{db_path, CurrentDbDir},
-     {index_path, CurrentIxDir}] = lists:sort(ns_couchdb_api:get_db_and_ix_paths()),
+    {CurrentDbDir, CurrentIxDir} = get_db_and_ix_paths(),
     CurrentCBASDir = this_node_cbas_dirs(),
     {ok, CurrentEvDir} = this_node_evdir(),
 
@@ -197,8 +198,7 @@ do_setup_disk_storage_conf(NewDbDir, NewIxDir, CBASDirs, NewEvDir) ->
 
 
 prepare_db_ix_dirs(NewDbDir, NewIxDir) ->
-    [{db_path, CurrentDbDir},
-     {index_path, CurrentIxDir}] = lists:sort(ns_couchdb_api:get_db_and_ix_paths()),
+    {CurrentDbDir, CurrentIxDir} = get_db_and_ix_paths(),
 
     case NewDbDir =/= CurrentDbDir orelse NewIxDir =/= CurrentIxDir of
         true ->
@@ -230,13 +230,10 @@ prepare_db_ix_dirs(NewDbDir, NewIxDir) ->
 update_db_ix_dirs(not_changed, _NewDbDir, _NewIxDir) ->
     not_changed;
 update_db_ix_dirs(ok, NewDbDir, NewIxDir) ->
-    ale:info(?USER_LOGGER,
-             "Setting database directory path to ~s and index directory path to ~s",
-             [NewDbDir, NewIxDir]),
-
-    ns_couchdb_api:set_db_and_ix_paths(NewDbDir, NewIxDir),
-    setup_db_and_ix_paths([{db_path, NewDbDir},
-                           {index_path, NewIxDir}]),
+    ale:info(?USER_LOGGER, "Setting database directory path to ~s and index "
+    "directory path to ~s", [NewDbDir, NewIxDir]),
+    update_db_dir(filename:join([NewDbDir])),
+    update_ix_dir(filename:join([NewIxDir])),
     restart.
 
 prepare_cbas_dirs(CBASDirs) ->
@@ -320,13 +317,31 @@ prepare_ev_dir(NewEvDir) ->
             not_changed
     end.
 
+get_node_dir(TypeDir) ->
+    {value, Dir} = ns_config:search_node(TypeDir),
+    Dir.
+
+update_db_dir(DbDir) ->
+    ns_config:set({node, node(), database_dir}, DbDir).
+
+-spec this_node_dbdir() -> {ok, string()} | {error, binary()}.
+this_node_dbdir() ->
+    {ok, get_node_dir(database_dir)}.
+
+update_ix_dir(IxDir) ->
+    ns_config:set({node, node(), index_dir}, IxDir).
+
+-spec this_node_ixdir() -> {ok, string()} | {error, binary()}.
+this_node_ixdir() ->
+    {ok, get_node_dir(index_dir)}.
+
 update_ev_dir(not_changed) ->
     not_changed;
 update_ev_dir({ok, EvDir}) ->
     ns_config:set({node, node(), eventing_dir}, EvDir).
 
 this_node_evdir() ->
-    {ok, node_ev_dir(ns_config:latest(), node())}.
+    {ok, get_node_dir(eventing_dir)}.
 
 node_ev_dir(Config, Node) ->
     {value, Dir} = ns_config:search_node(Node, Config, eventing_dir),
@@ -367,7 +382,8 @@ storage_conf_from_node_status(Node, NodeStatus) ->
      {hdd, [HDDInfo]}].
 
 query_storage_conf() ->
-    StorageConf = get_db_and_ix_paths(),
+    {DbDir, IxDir} = get_db_and_ix_paths(),
+    StorageConf = [{db_path, DbDir}, {index_path, IxDir}],
     lists:map(
       fun ({Key, Path}) ->
               %% db_path and index_path are guaranteed to be absolute

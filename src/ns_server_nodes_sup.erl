@@ -71,6 +71,10 @@ child_specs() ->
       {users_sup, start_link, []},
       permanent, infinity, supervisor, []},
 
+     {setup_dirs,
+      {ns_storage_conf, setup_storage_paths, []},
+      transient, brutal_kill, worker, []},
+
      %% we cannot "kill" this guy anyways. Thus hefty shutdown timeout.
      {start_couchdb_node, {?MODULE, start_couchdb_node, []},
       {permanent, 5}, 86400000, worker, []},
@@ -78,23 +82,15 @@ child_specs() ->
      {wait_for_couchdb_node, {erlang, apply, [fun wait_link_to_couchdb_node/0, []]},
       permanent, 1000, worker, []},
 
-     {setup_dirs,
-      {ns_storage_conf, setup_storage_paths, []},
-      transient, brutal_kill, worker, []},
-
      {ns_server_sup, {ns_server_sup, start_link, []},
       permanent, infinity, supervisor, [ns_server_sup]},
 
      menelaus_sup:barrier_notify_spec(menelaus_barrier_notify)].
 
 create_ns_couchdb_spec() ->
-    CouchIni = case init:get_argument(couch_ini) of
-                   error ->
-                       [];
-                   {ok, [[]]} ->
-                       [];
-                   {ok, [Values]} ->
-                       ["-couch_ini" | Values]
+    CouchIni = case ns_storage_conf:get_ini_files() of
+                   [] -> [];
+                   Values -> ["-couch_ini" | Values]
                end,
 
     SSLDistOpts = case init:get_argument(ssl_dist_optfile) of

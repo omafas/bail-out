@@ -14,7 +14,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/0, set_db_and_ix_paths/2, get_db_and_ix_paths/0]).
+-export([start_link/0]).
 
 %% gen_event callbacks
 -export([init/1, handle_call/3, handle_cast/2,
@@ -31,21 +31,6 @@ init([]) ->
     ns_pubsub:subscribe_link(ns_config_events, fun handle_config_event/1),
     announce_notable_keys(),
     {ok, #state{}}.
-
--spec get_db_and_ix_paths() -> [{db_path | index_path, string()}].
-get_db_and_ix_paths() ->
-    DbPath = couch_config:get("couchdb", "database_dir"),
-    IxPath = couch_config:get("couchdb", "view_index_dir", DbPath),
-    [{db_path, filename:join([DbPath])},
-     {index_path, filename:join([IxPath])}].
-
--spec set_db_and_ix_paths(DbPath :: string(), IxPath :: string()) -> ok.
-set_db_and_ix_paths(DbPath0, IxPath0) ->
-    DbPath = filename:join([DbPath0]),
-    IxPath = filename:join([IxPath0]),
-
-    couch_config:set("couchdb", "database_dir", DbPath),
-    couch_config:set("couchdb", "view_index_dir", IxPath).
 
 terminate(_Reason, _State) ->
     ok.

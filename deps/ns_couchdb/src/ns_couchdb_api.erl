@@ -16,9 +16,7 @@
 -include("ns_common.hrl").
 -include("couch_db.hrl").
 
--export([set_db_and_ix_paths/2,
-         get_db_and_ix_paths/0,
-         get_tasks/0,
+-export([get_tasks/0,
          get_tasks/2,
          restart_capi_ssl_service/0,
          fetch_stats/0,
@@ -45,14 +43,6 @@
          get_pid/0]).
 
 -export([handle_rpc/1]).
-
--spec get_db_and_ix_paths() -> [{db_path | index_path, string()}].
-get_db_and_ix_paths() ->
-    maybe_rpc_couchdb_node(get_db_and_ix_paths).
-
--spec set_db_and_ix_paths(DbPath :: string(), IxPath :: string()) -> ok.
-set_db_and_ix_paths(DbPath0, IxPath0) ->
-    maybe_rpc_couchdb_node({set_db_and_ix_paths, DbPath0, IxPath0}).
 
 -spec get_tasks() -> [{atom(), any()}].
 get_tasks() ->
@@ -170,10 +160,6 @@ rpc_couchdb_node(Node, Request, RpcTimeout, Default) ->
             RV
     end.
 
-handle_rpc(get_db_and_ix_paths) ->
-    cb_config_couch_sync:get_db_and_ix_paths();
-handle_rpc({set_db_and_ix_paths, DbPath0, IxPath0}) ->
-    cb_config_couch_sync:set_db_and_ix_paths(DbPath0, IxPath0);
 handle_rpc(get_tasks) ->
     couch_task_status:all();
 handle_rpc(restart_capi_ssl_service) ->

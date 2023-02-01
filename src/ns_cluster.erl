@@ -1635,6 +1635,8 @@ perform_leave() ->
                      %% changed from their defaults and their handling
                      %% should be consistent with the way we retain the
                      %% index and data directories.
+                     {node, node(), database_dir},
+                     {node, node(), index_dir},
                      {node, node(), cbas_dirs},
                      {node, node(), eventing_dir},
                      %% we preserve rest settings, so if the server runs on a
