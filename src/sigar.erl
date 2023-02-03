@@ -35,7 +35,7 @@
          }).
 
 -define(SIGAR_CACHE_TIME_USEC, 1000000).
--define(CGROUPS_INFO_SIZE, 88).
+-define(CGROUPS_INFO_SIZE, 96).
 -define(GLOBAL_STATS_SIZE, 112).
 
 %%%===================================================================
@@ -165,13 +165,14 @@ unpack_global(Bin) ->
 
     StructSize = erlang:size(Bin),
 
-    {CGMemLimit, CGMemUsed} =
+    {CGMemLimit, CGMemUsed, CGMemActual} =
         case maps:get(supported, CgroupsInfo) of
             true ->
-                {maps:get(memory_max, CgroupsInfo),
-                 maps:get(memory_current, CgroupsInfo)};
+                Cur = maps:get(memory_current, CgroupsInfo),
+                Cache = maps:get(memory_cache, CgroupsInfo),
+                {maps:get(memory_max, CgroupsInfo), Cur, Cur - Cache};
             false ->
-                {undefined, undefined}
+                {undefined, undefined, undefined}
         end,
 
     CGroupMem = {maps:get(memory_max, CgroupsInfo, 0),
@@ -218,6 +219,7 @@ unpack_global(Bin) ->
          {mem_free, MemActualFree},
          {allocstall, AllocStall}] ++
         [{mem_cgroup_limit, CGMemLimit} || CGMemLimit /= undefined] ++
+        [{mem_cgroup_actual_used, CGMemActual} || CGMemActual /= undefined] ++
         [{mem_cgroup_used, CGMemUsed} || CGMemUsed /= undefined],
 
     {Counters, Gauges, CgroupsInfo}.
@@ -355,7 +357,7 @@ recv_data(Port) ->
 
 recv_data_loop(Port, <<Version:32/native,
                        StructSize:32/native, _/binary>> = Acc)
-  when Version =:= 6 ->
+  when Version =:= 7 ->
     recv_data_with_length(Port, Acc, StructSize - erlang:size(Acc));
 recv_data_loop(_, <<Version:32/native, _/binary>>) ->
     error({unsupported_portsigar_version, Version});
@@ -404,6 +406,7 @@ unpack_cgroups(<<_:8/native,
                  _Padding:32,
                  MemMax:64/native,
                  MemCurr:64/native,
+                 MemCache:64/native,
                  UsageUsec:64/native,
                  UserUsec:64/native,
                  SysUsec:64/native,
@@ -417,6 +420,7 @@ unpack_cgroups(<<_:8/native,
       num_cpu_prc => NumCpuPrc,
       memory_max => MemMax,
       memory_current => MemCurr,
+      memory_cache => MemCache,
       usage_usec => UsageUsec,
       user_usec => UserUsec,
       system_usec => SysUsec,
