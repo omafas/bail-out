@@ -618,7 +618,7 @@ check(memory_threshold, Opaque, _History, Stats) ->
             end,
 
             CGLimit = proplists:get_value(mem_cgroup_limit, SysStats),
-            CGUsed = proplists:get_value(mem_cgroup_used, SysStats),
+            CGUsed = proplists:get_value(mem_cgroup_actual_used, SysStats),
 
             case is_number(CGUsed) andalso is_number(CGLimit) andalso
                  CGLimit > 0 of
