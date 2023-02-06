@@ -54,10 +54,18 @@
 %% Amount of time to wait before reporting communication issues (s)
 -define(COMMUNICATION_ISSUE_TIMEOUT, 60 * 5).
 
+%% These numbers are heuristic, and are based on two facts:
+%%  - It is hard to make mem_actual_usage actually reach 100%, which is
+%%    connected to the fact that there is always some part of the cache that
+%%    is not reclaimable;
+%%  - In practice we see that when actual_usage reaches 95%, it might already
+%%    be the “car is driving off the cliff” situation, so we should react
+%%    earlier.
+%%
 %% Default memory thresholds (in percents)
 -define(MEM_NOTICE_PERC, -1).
--define(MEM_WARN_PERC, 90).
--define(MEM_CRIT_PERC, 95).
+-define(MEM_WARN_PERC, 85).
+-define(MEM_CRIT_PERC, 90).
 
 -export([start_link/0, stop/0, local_alert/2, global_alert/2,
          fetch_alerts/0, consume_alerts/1]).
