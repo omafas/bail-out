@@ -807,7 +807,9 @@ fix_vbucket_map_test_() ->
 
 can_preserve_durable_writes_test() ->
     %% Not checking every combination here, there is no point
-    ?assert(can_preserve_durability_majority([[a]], [a])),
+
+    %% 0 replica. Cannot failover but kv safety check should kick in first.
+    ?assertNot(can_preserve_durability_majority([[a]], [a])),
 
     %% 1 replica. Active vs Replica should have no bearing.
     ?assert(can_preserve_durability_majority([[a,b]], [a])),
