@@ -283,7 +283,9 @@ pre_70_stat_to_prom_query("@xdcr-" ++ Bucket,
             {ok, Metric(<<"xdcr_", N/binary, "_total">>)};
         N when N =:= <<"size_rep_queue">>;
                N =:= <<"data_replicated">> ->
-            {ok, Metric(<<"xdcr_", N/binary, "_bytes">>)}
+            {ok, Metric(<<"xdcr_", N/binary, "_bytes">>)};
+        _ ->
+            {error, not_found}
     end;
 
 pre_70_stat_to_prom_query("@eventing", <<"eventing/", Stat/binary>>, _Opts) ->
