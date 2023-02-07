@@ -484,7 +484,7 @@ get_operations(CurrentScopes, RequiredScopes) ->
               Limits = get_limits(ScopeProps),
               [{create_scope, ScopeName, Limits} |
                [{create_collection, ScopeName, CollectionName,
-                 remove_defaults(CollectionProps)} ||
+                 CollectionProps} ||
                    {CollectionName, CollectionProps}
                        <- get_collections(ScopeProps)]];
           ({modify, ScopeName, ScopeProps, CurrentScopeProps}) ->
@@ -495,10 +495,10 @@ get_operations(CurrentScopes, RequiredScopes) ->
                          {drop_collection, ScopeName, CollectionName};
                      ({add, CollectionName, CollectionProps}) ->
                          {create_collection, ScopeName, CollectionName,
-                          remove_defaults(CollectionProps)};
+                          CollectionProps};
                      ({modify, CollectionName, CollectionProps,
                        CurrentCollectionProps}) ->
-                         case lists:sort(remove_defaults(CollectionProps)) =:=
+                         case lists:sort(CollectionProps) =:=
                               lists:sort(lists:keydelete(
                                            uid, 1, CurrentCollectionProps)) of
                              false ->
@@ -1302,7 +1302,7 @@ set_manifest_t() ->
         [{"s1",
             [{uid,100},
              {collections, [{"c4", [{uid, 103}, {history, true}]},
-                            {"c3", [{uid, 102}, {history, true}]},
+                            {"c3", [{uid, 102}]},
                             {"c2", [{uid, 101}, {maxTTL, 8}, {history, true}]},
                             {"c1", [{uid, 100}, {history, true}]}]},
              {limits,[]}]}],
