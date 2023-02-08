@@ -623,8 +623,24 @@ verify_oper({create_collection, ScopeName, Name, _}, Manifest, Snapshot) ->
       end, ScopeName, Manifest);
 verify_oper({drop_collection, ScopeName, Name}, Manifest, _Snapshot) ->
     with_collection(fun (_) -> ok end, ScopeName, Name, Manifest);
-verify_oper({modify_collection, ScopeName, Name, _Props}, Manifest, _Snapshot) ->
-    with_collection(fun (_) -> ok end, ScopeName, Name, Manifest);
+verify_oper({modify_collection, ScopeName, Name, SuppliedProps},
+            Manifest, _Snapshot) ->
+    %% We are only allowed to change history for a collection at the moment.
+    AllowedCollectionPropChanges = [{history}],
+    with_collection(
+        fun (_) ->
+            InvalidProps =
+                lists:filter(
+                    fun({Prop, _}) ->
+                        not proplists:is_defined(Prop,
+                                                 AllowedCollectionPropChanges)
+                    end, SuppliedProps),
+            case InvalidProps of
+                [] -> ok;
+                _ ->
+                    {cannot_modify_properties, Name, InvalidProps}
+            end
+        end, ScopeName, Name, Manifest);
 verify_oper(bump_epoch, _Manifest, _Snapshot) ->
     ok.
 
@@ -1235,7 +1251,19 @@ modify_collection_t() ->
     ?assert(proplists:get_value(history,
                                 get_collection("c1",
                                                get_scope("_default",
-                                                         Manifest3)))).
+                                                         Manifest3)))),
+
+    %% Cannot modify maxTTL
+    ?assertEqual(
+        {abort, {error, {cannot_modify_properties, "c1", [{maxTTL, 9}]}}},
+        update_manifest_test_update_collection(Manifest2, "_default", "c1",
+                                               [{maxTTL, 9}])),
+
+    %% Cannot modify uid
+    ?assertEqual(
+        {abort, {error, {cannot_modify_properties, "c1", [{uid, 999}]}}},
+        update_manifest_test_update_collection(Manifest2, "_default", "c1",
+                                               [{uid, 999}])).
 
 history_default_t() ->
     % history_default is true, it should set history for the collection
@@ -1275,6 +1303,12 @@ set_manifest_t() ->
     %% Cannot drop default scope
     {abort, {error, cannot_drop_default_scope}} =
         update_manifest_test_set_manifest(default_manifest(), [{"s1", []}]),
+
+    %% Cannot modify default collection with invalid args
+    ?assertEqual(
+        {abort, {error, {cannot_modify_properties, "_default", [{maxTTL, 9}]}}},
+        update_manifest_test_set_manifest(default_manifest(),
+            [{"_default", [{collections, [{"_default", [{maxTTL, 9}]}]}]}])),
 
     %% We'll build some manifests to test that the bulk API can correctly modify
     %% collections. All of the manifests will use these counters
@@ -1361,7 +1395,7 @@ set_manifest_t() ->
              {"s3",
                  [{uid, 10},
                   {collections, [{"ic1", [{uid, 11}]},
-                                 {"ic2", [{uid, 12}, {maxTTL, 10}]},
+                                 {"ic2", [{uid, 12}, {maxTTL, 0}]},
                                  {"ic3", [{uid, 13}]},
                                  {"ic4", [{uid, 14}]},
                                  {"ic5", [{uid, 15}, {history, false}]},
@@ -1373,7 +1407,7 @@ set_manifest_t() ->
                 [{limits, [{"l1", [1]}, {"l2", [2]}]},
                  {collections, [{"c1", []},
                                 {"c2", []}]}]},
-             {"s3", [{collections, [{"ic1", [{maxTTL, 0}]},
+             {"s3", [{collections, [{"ic1", []},
                                     {"ic2", [{maxTTL, 0}]},
                                     {"ic3", [{history, false}]},
                                     {"ic4", [{history, true}]},
@@ -1388,7 +1422,7 @@ set_manifest_t() ->
          {"s3",
             [{uid, 10},
              {collections, [{"ic1", [{uid, 11}]},
-                            {"ic2", [{uid, 12}]},
+                            {"ic2", [{uid, 12}, {maxTTL, 0}]},
                             {"ic3", [{uid, 13}]},
                             {"ic4", [{history, true}, {uid, 14}]},
                             {"ic5", [{history, true}, {uid, 15}]},
