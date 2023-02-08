@@ -229,6 +229,11 @@
 %% common memcached settings are ints which is usually 32-bits wide
 -define(MC_MAXINT, 16#7FFFFFFF).
 
+%% Many memcached bucket parameters use size_t which will almost certainly be a
+%% 64 bit unsigned integer. We should prevent larger values than this being
+%% passed to memcached as it will likely throw an error.
+-define(MAX_64BIT_UNSIGNED_INT, 16#FFFFFFFFFFFFFFFF).
+
 -define(VERSION_65, [6, 5]).
 -define(VERSION_66, [6, 6]).
 -define(VERSION_70, [7, 0]).

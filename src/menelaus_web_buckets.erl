@@ -1800,7 +1800,8 @@ parse_validate_history_param_numeric(Key, Value, Params, BucketConfig, IsNew,
             validate_with_missing(
                 Val, DefaultVal, New,
                 fun (V) ->
-                    do_parse_validate_history_retention_numeric(Key, V)
+                    do_parse_validate_history_retention_numeric(
+                        Key, V, 0,?MAX_64BIT_UNSIGNED_INT)
                 end)
         end).
 
@@ -1852,12 +1853,15 @@ parse_validate_history_param_inner(_Key, Value, true = _IsEnterprise,
                                    ValidatorFn) ->
     ValidatorFn(Value, IsNew).
 
-do_parse_validate_history_retention_numeric(Key, Val) ->
-    case menelaus_util:parse_validate_number(Val, 0, undefined) of
+do_parse_validate_history_retention_numeric(Key, Val, Min, Max) ->
+    case menelaus_util:parse_validate_number(Val, Min, Max) of
         {ok, X} ->
             {ok, Key, X};
         _Error ->
-            {error, Key, <<"Value must be greater than or equal to 0">>}
+            Msg = io_lib:format("Value must be an integer between ~p and ~p,"
+                                " inclusive",
+                                [Min, Max]),
+            {error, Key, iolist_to_binary(Msg)}
     end.
 
 do_parse_validate_history_retention_bool(Key, Val) ->
@@ -2712,7 +2716,8 @@ basic_bucket_params_screening_test() ->
         AllBuckets,
         [node1]),
     ?assertEqual([{historyRetentionSeconds,
-                   <<"Value must be greater than or equal to 0">>},
+                   <<"Value must be an integer between 0 and "
+                    "18446744073709551615, inclusive">>},
                   {magmaKeyTreeDataBlockSize,
                    <<"Value must be an integer between 4096 and 131072, "
                     "inclusive">>},
@@ -2720,12 +2725,42 @@ basic_bucket_params_screening_test() ->
                    <<"Value must be an integer between 4096 and 131072, "
                     "inclusive">>},
                   {historyRetentionBytes,
-                   <<"Value must be greater than or equal to 0">>},
+                   <<"Value must be an integer between 0 and "
+                    "18446744073709551615, inclusive">>},
                   {historyRetentionCollectionDefault,
                    <<"Value must be true or false">>}],
         E23),
 
-    {OK24, E24} = basic_bucket_params_screening(
+    {_OK24, E24} = basic_bucket_params_screening(
+        true,
+        "HistoryEnterpriseMagma7.1",
+        [{"bucketType", "membase"},
+            {"ramQuota", "1024"},
+            {"storageBackend", "magma"},
+            {"historyRetentionSeconds", "18446744073709551616"},
+            {"historyRetentionBytes", "18446744073709551616"},
+            {"historyRetentionCollectionDefault", "-1"},
+            {"magmaKeyTreeDataBlockSize", "18446744073709551616"},
+            {"magmaSeqTreeDataBlockSize", "18446744073709551616"}],
+        AllBuckets,
+        [node1]),
+    ?assertEqual([{historyRetentionSeconds,
+        <<"Value must be an integer between 0 and "
+        "18446744073709551615, inclusive">>},
+        {magmaKeyTreeDataBlockSize,
+            <<"Value must be an integer between 4096 and 131072, "
+            "inclusive">>},
+        {magmaSeqTreeDataBlockSize,
+            <<"Value must be an integer between 4096 and 131072, "
+            "inclusive">>},
+        {historyRetentionBytes,
+            <<"Value must be an integer between 0 and "
+            "18446744073709551615, inclusive">>},
+        {historyRetentionCollectionDefault,
+            <<"Value must be true or false">>}],
+        E24),
+
+    {OK25, E25} = basic_bucket_params_screening(
                      true,
                      "HistoryEnterpriseMagma",
                      [{"bucketType", "membase"},
@@ -2738,25 +2773,25 @@ basic_bucket_params_screening_test() ->
                       {"magmaSeqTreeDataBlockSize", "4096"}],
                      AllBuckets,
                      [node1]),
-    ?assertEqual([], E24),
+    ?assertEqual([], E25),
     ?assert(lists:any(fun (Elem) ->
                           Elem =:= {history_retention_seconds, 10}
-                      end, OK24)),
+                      end, OK25)),
     ?assert(lists:any(fun (Elem) ->
                           Elem =:= {history_retention_bytes, 10}
-                      end, OK24)),
+                      end, OK25)),
     ?assert(lists:any(fun (Elem) ->
         Elem =:= {history_retention_collection_default, true}
-                      end, OK24)),
+                      end, OK25)),
     ?assert(lists:any(fun (Elem) ->
                           Elem =:= {magma_key_tree_data_blocksize, 4096}
-                      end, OK24)),
+                      end, OK25)),
     ?assert(lists:any(fun (Elem) ->
                           Elem =:= {magma_seq_tree_data_blocksize, 4096}
-                      end, OK24)),
+                      end, OK25)),
 
     %% Test defaults for history when we are enterprise/magma/7.2.0+
-    {OK25, E25} = basic_bucket_params_screening(
+    {OK26, E26} = basic_bucket_params_screening(
         true,
         "mcd",
         [{"bucketType", "membase"},
@@ -2764,18 +2799,18 @@ basic_bucket_params_screening_test() ->
          {"replicaNumber", "2"},
          {"storageBackend", "magma"}],
         tl(AllBuckets)),
-    ?assertEqual([], E25),
+    ?assertEqual([], E26),
 
     ?assertEqual({history_retention_seconds, 0},
-                  proplists:lookup(history_retention_seconds, OK25)),
+                  proplists:lookup(history_retention_seconds, OK26)),
     ?assertEqual({history_retention_bytes, 0},
-                  proplists:lookup(history_retention_bytes, OK25)),
+                  proplists:lookup(history_retention_bytes, OK26)),
     ?assertEqual({history_retention_collection_default, true},
-                  proplists:lookup(history_retention_collection_default, OK25)),
+                  proplists:lookup(history_retention_collection_default, OK26)),
     ?assertEqual({magma_key_tree_data_blocksize, 4096},
-                 proplists:lookup(magma_key_tree_data_blocksize, OK25)),
+                 proplists:lookup(magma_key_tree_data_blocksize, OK26)),
     ?assertEqual({magma_seq_tree_data_blocksize, 4096},
-                 proplists:lookup(magma_seq_tree_data_blocksize, OK25)),
+                 proplists:lookup(magma_seq_tree_data_blocksize, OK26)),
 
     meck:unload(ns_config),
 
