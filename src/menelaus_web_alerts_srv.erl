@@ -17,6 +17,16 @@
 
 -define(MAX_DISK_USAGE_MISSED_CHECKS, 2).
 
+%% Indexer resident memory percentage threshold below which an alert will
+%% be generated. This is changeable via /settings/alerts/limits
+-define(INDEXER_LOW_RESIDENT_PERCENTAGE, 10).
+
+%% Percentage of indexer memory to use in calculation for the above alert.
+%% This is needed during indexer restart where the resident percentage is low
+%% but in reality there is sufficient memory.
+-define(INDEXER_RESIDENT_MEMORY_PCT,
+        ?get_param(indexer_resident_memory_pct, 90)).
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
@@ -90,6 +100,8 @@ short_description(audit_dropped_events) ->
     "audit write failure";
 short_description(indexer_ram_max_usage) ->
     "indexer ram approaching threshold warning";
+short_description(indexer_low_resident_percentage) ->
+    "indexer resident percentage is too low";
 short_description(ep_clock_cas_drift_threshold_exceeded) ->
     "cas drift threshold exceeded error";
 short_description(communication_issue) ->
@@ -121,6 +133,9 @@ errors(audit_dropped_events) ->
     "Audit Write Failure. Attempt to write to audit log on node \"~s\" was unsuccessful";
 errors(indexer_ram_max_usage) ->
     "Warning: approaching max index RAM. Indexer RAM on node \"~s\" is ~p%, which is at or above the threshold of ~p%.";
+errors(indexer_low_resident_percentage) ->
+    "Warning: approaching low index resident percentage. Indexer RAM "
+    "percentage on node \"~s\" is ~p%, which is under the threshold of ~p%.";
 errors(ep_clock_cas_drift_threshold_exceeded) ->
     "Remote or replica mutation received for bucket ~p on node ~p with timestamp more "
     "than ~p milliseconds ahead of local clock. Please ensure that NTP is set up correctly "
@@ -296,6 +311,7 @@ code_change(_OldVsn, State, _Extra) ->
 alert_keys() ->
     [ip, disk, overhead, ep_oom_errors, ep_item_commit_failed,
      audit_dropped_events, indexer_ram_max_usage,
+     indexer_low_resident_percentage,
      ep_clock_cas_drift_threshold_exceeded,
      communication_issue, time_out_of_sync, disk_usage_analyzer_stuck,
      memory_threshold, history_size_warning].
@@ -404,7 +420,7 @@ global_checks() ->
     [oom, ip, write_fail, overhead, disk, audit_write_fail,
      indexer_ram_max_usage, cas_drift_threshold, communication_issue,
      time_out_of_sync, disk_usage_analyzer_stuck, memory_threshold,
-     history_size_warning].
+     history_size_warning, indexer_low_resident_percentage].
 
 %% @doc fires off various checks
 check_alerts(Opaque, Hist, Stats) ->
@@ -530,6 +546,52 @@ check(indexer_ram_max_usage, Opaque, _History, Stats) ->
             end;
         _ ->
             ok
+    end,
+    Opaque;
+
+%% @doc check for indexer low resident percentage
+check(indexer_low_resident_percentage, Opaque, _History, Stats) ->
+    case proplists:get_value("@index", Stats) of
+        undefined ->
+            ok;
+        Val ->
+            AvgPct = proplists:get_value(index_avg_resident_percent, Val),
+            MemoryRss = proplists:get_value(index_memory_rss, Val),
+            MemoryQuota = proplists:get_value(index_memory_quota, Val),
+            NumIndexes = proplists:get_value(index_num_indexes, Val),
+            case AvgPct =/= undefined andalso MemoryRss =/= undefined andalso
+                 MemoryQuota =/= undefined andalso NumIndexes =/= undefined of
+                false ->
+                    ok;
+                true ->
+                    {value, Config} = ns_config:search(alert_limits),
+                    Threshold =
+                        proplists:get_value(low_indexer_resident_percentage,
+                                            Config,
+                                            ?INDEXER_LOW_RESIDENT_PERCENTAGE),
+                    %% If there's a threshold specified for the low resident
+                    %% percentage we check to see if has been reached. We do
+                    %% so only if there are indexes (otherwise the Avg
+                    %% Resident Percent will be zero). The memory check is
+                    %% done to handle the case where Avg Resident Percent is
+                    %% low due to indexer restart but there is sufficient
+                    %% memory.
+                    case Threshold =/= undefined andalso
+                         (NumIndexes > 0) andalso
+                         (AvgPct < Threshold) andalso
+                         (MemoryQuota > 0) andalso
+                         (MemoryRss / MemoryQuota >
+                          (?INDEXER_RESIDENT_MEMORY_PCT / 100)) of
+                        true ->
+                            Host = misc:extract_node_address(node()),
+                            Err = fmt_to_bin(
+                                    errors(indexer_low_resident_percentage),
+                                    [Host, erlang:trunc(AvgPct), Threshold]),
+                            global_alert(indexer_low_resident_percentage, Err);
+                        false ->
+                            ok
+                    end
+            end
     end,
     Opaque;
 
@@ -990,14 +1052,7 @@ config_email_alerts_upgrade_to_70(EmailAlerts) ->
               add_proplist_kv(pop_up_alerts, auto_failover:alert_keys() ++
                                              (alert_keys() --
                                              [memory_threshold]), _)]),
-
-    case misc:sort_kv_list(Result) =:= misc:sort_kv_list(EmailAlerts) of
-        true ->
-            %% No change due to upgrade
-            [];
-        false ->
-            [{set, email_alerts, Result}]
-    end.
+    maybe_upgrade_email_alerts(EmailAlerts, Result).
 
 config_email_alerts_upgrade_to_71(EmailAlerts) ->
     Result =
@@ -1005,27 +1060,26 @@ config_email_alerts_upgrade_to_71(EmailAlerts) ->
           EmailAlerts,
           [add_proplist_list_elem(pop_up_alerts, A, _)
            || A <- auto_failover:alert_keys()]),
-
-    case misc:sort_kv_list(Result) =:= misc:sort_kv_list(EmailAlerts) of
-        true ->
-            %% No change due to upgrade
-            [];
-        false ->
-            [{set, email_alerts, Result}]
-    end.
+    maybe_upgrade_email_alerts(EmailAlerts, Result).
 
 config_email_alerts_upgrade_to_72(EmailAlerts) ->
     Result =
         functools:chain(
           EmailAlerts,
           [add_proplist_list_elem(alerts,history_size_warning, _),
-           add_proplist_list_elem(pop_up_alerts, history_size_warning, _)]),
-    case misc:sort_kv_list(Result) =:= misc:sort_kv_list(EmailAlerts) of
+           add_proplist_list_elem(alerts,indexer_low_resident_percentage, _),
+           add_proplist_list_elem(pop_up_alerts, history_size_warning, _),
+           add_proplist_list_elem(pop_up_alerts,
+                                  indexer_low_resident_percentage, _)]),
+    maybe_upgrade_email_alerts(EmailAlerts, Result).
+
+maybe_upgrade_email_alerts(Old, New) ->
+    case misc:sort_kv_list(New) =:= misc:sort_kv_list(Old) of
         true ->
             %% No change due to upgrade
             [];
         false ->
-            [{set, email_alerts, Result}]
+            [{set, email_alerts, New}]
     end.
 
 type_spec(undefined) ->
@@ -1038,6 +1092,9 @@ params() ->
                            cfg_key => max_disk_used}},
      {"maxIndexerRamPerc", #{type => {int, 0, 100},
                              cfg_key => max_indexer_ram}},
+     {"lowIndexerResidentPerc", #{type => {int, 0, 100},
+                                  cfg_key => low_indexer_resident_percentage,
+                                  default => ?INDEXER_LOW_RESIDENT_PERCENTAGE}},
      {"memoryNoticeThreshold", #{type => {int, -1, 100},
                                  cfg_key => memory_notice_threshold,
                                  default => ?MEM_NOTICE_PERC}},
@@ -1300,9 +1357,11 @@ config_upgrade_to_72_test() ->
                 [{max_disk_used, 90},
                  {max_indexer_ram, 75}]}]],
     ExpectedAlerts = [{pop_up_alerts,
-                       [disk, ip, history_size_warning]},
+                       [disk, ip, history_size_warning,
+                        indexer_low_resident_percentage]},
                       {alerts,
-                       [communication_issue, ip, history_size_warning]},
+                       [communication_issue, ip, history_size_warning,
+                        indexer_low_resident_percentage]},
                       {enabled, false}],
     [{set, email_alerts, Alerts}] = config_upgrade_to_72(Config),
     ?assertEqual(misc:sort_kv_list(ExpectedAlerts), misc:sort_kv_list(Alerts)).

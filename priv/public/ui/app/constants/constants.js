@@ -36,7 +36,8 @@ let knownAlerts = [
   'time_out_of_sync',
   'disk_usage_analyzer_stuck',
   'memory_threshold',
-  'history_size_warning'
+  'history_size_warning',
+  'indexer_low_resident_percentage'
 ];
 
 let timeUnitToSeconds = {

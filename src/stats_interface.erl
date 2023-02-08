@@ -145,6 +145,10 @@ for_alerts() ->
           "label_replace(({name=`index_memory_used_total`} / ignoring(name) "
                          "{name=`index_memory_quota`}) * 100,"
                         "`name`,`index_ram_percent`,``,``) or "
+          "{name=~`index_avg_resident_percent|"
+                  "index_num_indexes|"
+                  "index_memory_rss|"
+                  "index_memory_quota`} or "
          "{name=~`sys_mem_actual_free|sys_mem_actual_used|"
                  "sys_mem_cgroup_limit|sys_mem_cgroup_actual_used`}">>,
 

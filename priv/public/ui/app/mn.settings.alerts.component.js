@@ -198,6 +198,7 @@ class MnSettingsAlertsComponent extends MnLifeCycleHooksToStream {
       case knownAlerts[15]: return 'Disk usage analyzer is stuck; cannot fetch disk usage data';
       case knownAlerts[16]: return 'Memory usage threshold exceeded';
       case knownAlerts[17]: return 'History size threshold exceeded';
+      case knownAlerts[18]: return 'Approaching Indexer low resident percentage';
     }
   }
 }
