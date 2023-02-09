@@ -1281,8 +1281,9 @@ do_merge_kv_pairs(RemoteKVList, LocalKVList, UUID) ->
                      LP;
                  ({_, RV} = RP, {{node, Node, Key} = K, LV} = LP) when Node =:= node() ->
                      %% we want to make sure that that no one is able to
-                     %% modify our own UUID
-                     Bounce = (Key =:= uuid),
+                     %% modify our own UUID, database_dir or index_dir
+                     Bounce = (Key =:= uuid) orelse (Key =:= database_dir)
+                         orelse (Key =:= index_dir),
 
                      case Bounce of
                          true ->
