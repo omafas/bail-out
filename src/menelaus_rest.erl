@@ -97,7 +97,7 @@ add_tls_options("https://" ++ _, Options) ->
     TLSOptions =
         case ns_server_cert:this_node_uses_self_generated_certs() of
             true -> [];
-            false -> ns_ssl_services_setup:ssl_client_opts()
+            false -> ns_ssl_services_setup:tls_client_opts()
         end,
     NewConnectOptions = misc:update_proplist(TLSOptions, ConnectOptions),
     misc:update_proplist(Options, [{connect_options, NewConnectOptions}]);

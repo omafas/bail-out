@@ -40,6 +40,7 @@
          honor_cipher_order/1,
          honor_cipher_order/2,
          set_certs/4,
+         tls_client_opts/0,
          chronicle_upgrade_to_71/2,
          remove_node_certs/0,
          update_node_cert_epoch/0]).
@@ -360,6 +361,28 @@ ssl_auth_options() ->
              {verify, verify_peer}, {depth, ?ALLOWED_CERT_CHAIN_LENGTH}]
     end.
 
+cleanup_options(Opts) ->
+    %% ssl.erl fails if some option dependencies are not satisfied, but since
+    %% we build options dynamically and since they come from different sources
+    %% it may happen that some opts contradict each other. In most cases
+    %% it is safe to just drop one of the option as it doesn't make any sense
+    %% when another option is present. For example, there is no need in
+    %% in the reuse_sessions opt when tls version is strictly 1.3, so it's ok to
+    %% just drop it.
+    %% This is not a comprehensive cleaning, for a full list of dependencies see
+    %% assert_option_dependency in ssl.erl.
+    SupportedVersions = proplists:get_value(supported, ssl:versions()),
+    VersionsSet = sets:from_list(
+                    proplists:get_value(versions, Opts, SupportedVersions),
+                    [{version, 2}]),
+    CheckVsn = fun (all) -> true;
+                   (NeededVersions) ->
+                       not sets:is_disjoint(sets:from_list(NeededVersions,
+                                                           [{version, 2}]),
+                                            VersionsSet)
+               end,
+    lists:filter(fun ({K, _}) -> CheckVsn(tls_option_versions(K)) end, Opts).
+
 ssl_server_opts() ->
     PassphraseFun =
         case ns_node_disco:couchdb_node() == node() of
@@ -400,8 +423,23 @@ ssl_server_opts() ->
            {client_renegotiation, ClientReneg},
            {password, PassphraseFun()}]).
 
-tls_option_versions(secure_renegotiate) -> [tlsv1, 'tlsv1.1', 'tlsv1.2'];
-tls_option_versions(client_renegotiation) -> [tlsv1, 'tlsv1.1', 'tlsv1.2'];
+tls_option_versions(anti_replay) -> ['tlsv1.3'];
+tls_option_versions(beast_mitigation) -> ['tlsv1'];
+tls_option_versions(client_renegotiation) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(early_data) -> ['tlsv1.3'];
+tls_option_versions(cookie) -> ['tlsv1.3'];
+tls_option_versions(key_update_at) -> ['tlsv1.3'];
+tls_option_versions(next_protocols_advertised) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(padding_check) -> ['tlsv1'];
+tls_option_versions(psk_identity) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(secure_renegotiate) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(reuse_session) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(reuse_sessions) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(session_tickets) -> ['tlsv1.3'];
+tls_option_versions(srp_identity) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(supported_groups) -> ['tlsv1.3'];
+tls_option_versions(use_ticket) -> ['tlsv1.3'];
+tls_option_versions(user_lookup_fun) -> ['tlsv1','tlsv1.1','tlsv1.2'];
 tls_option_versions(_) -> all.
 
 read_ca_certs(File) ->
@@ -412,6 +450,16 @@ read_ca_certs(File) ->
         {error, enoent} ->
             []
     end.
+
+tls_client_opts() ->
+    cleanup_options(case cluster_compat_mode:is_cluster_72() of
+                        true ->
+                            IntVsn = internal_ssl_minimum_protocol(),
+                            IntVsns = lists:reverse(supported_versions(IntVsn)),
+                            [{versions, IntVsns} | ssl_client_opts()];
+                        false ->
+                            ssl_client_opts()
+                    end).
 
 ssl_client_opts() ->
     [{cacertfile, ca_file_path()},

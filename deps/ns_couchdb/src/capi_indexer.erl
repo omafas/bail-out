@@ -180,7 +180,7 @@ build_remote_set_specs(Mod, Node, BucketName, DDocId, ViewName, VBuckets) ->
     {Node1, SSLOptions} = case misc:should_cluster_data_be_encrypted() of
                               true ->
                                   {{ssl, Node},
-                                   ns_ssl_services_setup:ssl_client_opts()};
+                                   ns_ssl_services_setup:tls_client_opts()};
                               false ->
                                   {Node, []}
                           end,
