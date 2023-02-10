@@ -66,6 +66,7 @@ open_port_args() ->
                   "+e102400",
                   "-setcookie", "nocookie",
                   "-kernel", "logger", "[{handler, default, undefined}]",
+                  "-kernel", "prevent_overlapping_partitions", "false",
                   "-user", "user_io",
                   "-run", "child_erlang", "child_start", "ns_bootstrap"]
         ++ get_ns_server_vm_extra_args() ++ ["--"],

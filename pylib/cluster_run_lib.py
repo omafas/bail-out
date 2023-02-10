@@ -282,6 +282,7 @@ def erlang_args_for_node(i, ebin_path, extra_args, args_prefix, root_dir):
         "-ns_babysitter", "cookiefile", quote_string_for_erl(
             babysittercookiefile),
         "-ns_babysitter", "nodefile", quote_string_for_erl(babysitternodefile),
+        "-kernel", "prevent_overlapping_partitions", "false",
         "-ns_server", "config_path", f'"{static_config}"',
         "error_logger_mf_dir", quote_string_for_erl(logdir),
         "path_config_etcdir", f'"{os.path.join(ns_server_dir, "priv")}"',

@@ -121,6 +121,7 @@ create_ns_couchdb_spec() ->
          "+P", "327680",
          "+K", "true",
          "-kernel", "logger", "[{handler, default, undefined}]",
+         "-kernel", "prevent_overlapping_partitions", "false",
          "-nouser",
          "-hidden",
          "-proto_dist", "cb",
