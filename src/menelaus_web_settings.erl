@@ -447,6 +447,7 @@ localhost_only_settings([allowed_hosts]) -> true;
 localhost_only_settings(_) -> false.
 
 ee_only_settings([ssl_minimum_protocol]) -> true;
+ee_only_settings([internal_ssl_minimum_protocol]) -> true;
 ee_only_settings([cipher_suites]) -> true;
 ee_only_settings([honor_cipher_order]) -> true;
 ee_only_settings([magma_min_memory_quota]) -> true;
@@ -489,6 +490,8 @@ conf(internal) ->
       fun get_bool/1},
      {rebalance_ignore_view_compactions, rebalanceIgnoreViewCompactions, false,
       fun get_bool/1},
+     {internal_ssl_minimum_protocol, internalTlsMinVersion,
+      ns_ssl_services_setup:internal_ssl_minimum_protocol(), get_tls_version(_)},
      {rebalance_moves_per_node, rebalanceMovesPerNode, 4, get_number(1, 1024)},
      {rebalance_moves_before_compaction, rebalanceMovesBeforeCompaction, 64,
       get_number(1, 1024)},

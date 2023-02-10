@@ -28,6 +28,7 @@
          ca_file_path/0,
          sync/0,
          ssl_minimum_protocol/1,
+         internal_ssl_minimum_protocol/0,
          ssl_minimum_protocol/2,
          client_cert_auth/0,
          client_cert_auth_state/0,
@@ -212,6 +213,11 @@ ssl_minimum_protocol(Service) ->
 ssl_minimum_protocol(Service, Config) ->
     get_sec_setting(Service, ssl_minimum_protocol, Config, 'tlsv1.2').
 
+internal_ssl_minimum_protocol() ->
+    internal_ssl_minimum_protocol(ns_config:latest()).
+
+internal_ssl_minimum_protocol(Config) ->
+    ns_config:search(Config, internal_ssl_minimum_protocol, 'tlsv1.3').
 
 get_sec_setting(Service, Setting, Config, Default) ->
     case ns_config:search_prop(Config, {security_settings, Service}, Setting) of
