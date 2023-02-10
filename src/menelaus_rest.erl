@@ -52,7 +52,7 @@ special_auth_header() ->
     special_auth_header(node()).
 special_auth_header(Node) when is_atom(Node) ->
     basic_auth_header(?HIDE({ns_config_auth:get_user(special),
-                             ns_config_auth:get_password(special)})).
+                             ns_config_auth:get_password(Node, special)})).
 
 on_behalf_header({User, Domain}) ->
     {"cb-on-behalf-of",
