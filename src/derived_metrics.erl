@@ -65,8 +65,14 @@ get_metric(<<"couch_total_disk_size">>) ->
     sum([<<"couch_docs_actual_disk_size">>,
          <<"couch_views_actual_disk_size">>]);
 get_metric(<<"couch_docs_fragmentation">>) ->
+    %% We subtract the history file size as this part of the file size will not
+    %% be compacted, so it is irrelevant to fragmentation
     opposite_percent(_(<<"kv_ep_db_data_size_bytes">>),
-                     _(<<"kv_ep_db_file_size_bytes">>));
+                     fun (M) -> promQL:op(
+                                  '-',
+                                  [M(<<"kv_ep_db_file_size_bytes">>),
+                                   M(<<"kv_ep_db_history_file_size_bytes">>)])
+                     end);
 get_metric(<<"couch_views_fragmentation">>) ->
     opposite_percent(_(<<"couch_views_data_size">>),
                      _(<<"couch_views_disk_size">>));
