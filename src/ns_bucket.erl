@@ -82,6 +82,7 @@
          update_maps/3,
          update_buckets/3,
          set_bucket_config/2,
+         set_bucket_config_failover/3,
          set_fast_forward_map/2,
          set_map/2,
          set_initial_map/3,
@@ -1126,6 +1127,26 @@ set_map_opts(Bucket, Opts) ->
 
 set_servers(Bucket, Servers) ->
     set_property(Bucket, servers, Servers).
+
+set_bucket_config_failover(Bucket, NewMap, NewServerList) ->
+    validate_map(NewMap),
+    ok = update_bucket_config(
+           Bucket,
+           fun (OldConfig) ->
+                   NewConfig = lists:foldl(
+                                 fun({Key, Value}, Cfg) ->
+                                         lists:keystore(Key, 1, Cfg,
+                                                        {Key, Value})
+                                 end, OldConfig, [{fastForwardMap, undefined},
+                                                  {map, NewMap},
+                                                  {servers, NewServerList}]),
+                   master_activity_events:note_set_ff_map(
+                     Bucket, undefined,
+                     proplists:get_value(fastForwardMap, OldConfig, [])),
+                   master_activity_events:note_set_map(
+                     Bucket, NewMap, proplists:get_value(map, OldConfig, [])),
+                   NewConfig
+           end).
 
 % Update the bucket config atomically.
 update_bucket_config(BucketName, Fun) ->
