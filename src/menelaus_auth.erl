@@ -311,8 +311,9 @@ authenticate({Username, Password}) ->
 authenticate_external(Username, Password) ->
     case ns_node_disco:couchdb_node() == node() of
         false ->
-            case saslauthd_auth:authenticate(Username, Password) orelse
-                 ldap_auth_cache:authenticate(Username, Password) of
+            case is_external_auth_allowed(Username) andalso
+                 (saslauthd_auth:authenticate(Username, Password) orelse
+                  ldap_auth_cache:authenticate(Username, Password)) of
                 true ->
                     {ok, {Username, external}};
                 false ->
@@ -322,6 +323,10 @@ authenticate_external(Username, Password) ->
             rpc:call(ns_node_disco:ns_server_node(), ?MODULE,
                      authenticate_external, [Username, Password])
     end.
+
+is_external_auth_allowed("@" ++ _) -> false;
+is_external_auth_allowed(Username) ->
+    ns_config_auth:get_user(admin) /= Username.
 
 verify_login_creds(Auth) ->
     case authenticate(Auth) of
