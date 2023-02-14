@@ -1017,7 +1017,9 @@ manifest_test_set_history_default(Val) ->
                 get_bucket,
                 fun(_) ->
                     {ok, [{history_retention_collection_default, Val},
-                          {history_retention_seconds, 1}]}
+                          {history_retention_seconds, 1},
+                          {storage_mode, magma},
+                          {type, membase}]}
                 end).
 
 update_manifest_test_setup() ->

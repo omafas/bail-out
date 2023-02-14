@@ -377,8 +377,10 @@ history_retention_bytes(BucketConfig) ->
 
 -spec history_retention_collection_default([{_,_}]) -> boolean().
 history_retention_collection_default(BucketConfig) ->
+    %% History can only be true for a magma bucket.
     proplists:get_value(history_retention_collection_default, BucketConfig,
-                        ?HISTORY_RETENTION_COLLECTION_DEFAULT_DEFAULT).
+                        ?HISTORY_RETENTION_COLLECTION_DEFAULT_DEFAULT)
+    andalso is_magma(BucketConfig).
 
 eviction_policy(BucketConfig) ->
     Default = case storage_mode(BucketConfig) of
