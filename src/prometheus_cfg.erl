@@ -350,7 +350,7 @@ generate_prometheus_args(Settings) ->
     AuthFile = proplists:get_value(prometheus_auth_filename, Settings),
     PromAuthArgs =
         case proplists:get_value(prometheus_auth_enabled, Settings) of
-            true -> ["--web.basicauth.config", AuthFile];
+            true -> ["--web.config.file", AuthFile];
             false -> []
         end,
     WalCompression = case proplists:get_bool(wal_compression, Settings) of
@@ -570,18 +570,11 @@ with_applied_defaults(Props) ->
 generate_ns_to_prometheus_auth_info() ->
     Password = menelaus_web_rbac:gen_password({32, [uppercase, lowercase,
                                                     digits]}),
-    {Salt0, Hash0, Iterations} = scram_sha:hash_password(sha512, Password),
-    Salt = base64:encode_to_string(Salt0),
-    Hash = base64:encode_to_string(Hash0),
-
-    AuthInfo= {[{username, list_to_binary(?NS_TO_PROMETHEUS_USERNAME)},
-                {salt, list_to_binary(Salt)},
-                {hash, list_to_binary(Hash)},
-                {iterations, Iterations}]},
-    AuthInfoJson = menelaus_util:encode_json(AuthInfo),
-
+    Hash = generate_hash(Password),
+    Content = io_lib:format("basic_auth_users:~n"
+                            "  ~p: ~p", [?NS_TO_PROMETHEUS_USERNAME, Hash]),
     AuthFile = ns_to_prometheus_filename(),
-    ok = misc:atomic_write_file(AuthFile, AuthInfoJson),
+    ok = misc:atomic_write_file(AuthFile, lists:flatten(Content)),
     fun () -> {?NS_TO_PROMETHEUS_USERNAME, Password} end.
 
 ns_to_prometheus_filename() ->
@@ -1446,6 +1439,18 @@ total_db_size_estimate(Info, Settings, Intervals) ->
     SampleSize = proplists:get_value(average_sample_size, Settings),
     TotalSize = TotalSamples * SampleSize,
     round(TotalSize).
+
+generate_hash(Password) ->
+    Env = [{"METADATA", Password}],
+    {Status, Output} = misc:run_external_tool(
+                       path_config:component_path(bin, "generate_hash"),
+                       [], Env),
+    case Status of
+        0 ->
+            binary_to_list(Output);
+        _ ->
+            erlang:exit({bad_generate_hash_exit, Status, Output})
+    end.
 
 -ifdef(TEST).
 
