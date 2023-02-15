@@ -628,12 +628,30 @@ verify_oper({modify_collection, ScopeName, Name, SuppliedProps},
     %% We are only allowed to change history for a collection at the moment.
     AllowedCollectionPropChanges = [{history}],
     with_collection(
-        fun (_) ->
+        fun (ExistingProps) ->
+            %% When we store collections we strip them of their properties of
+            %% default values for... reasons. To check whether or not we can
+            %% ignore the modification of a collection property we must put the
+            %% defaults back into the existing props
+            AllExistingProps =
+                lists:keymerge(1,
+                    lists:keysort(1, ExistingProps),
+                    lists:keysort(1, default_collection_props())),
             InvalidProps =
                 lists:filter(
-                    fun({Prop, _}) ->
+                    fun({Prop, Value}) ->
+                        %% We allow the "modification" of properties with the
+                        %% same value so that the set manifest path can specify
+                        %% properties even if they do not change
+                        ExistingPropValueEqual =
+                            case proplists:get_value(Prop, AllExistingProps) of
+                                Value -> true;
+                                _ -> false
+                            end,
+
                         not proplists:is_defined(Prop,
                                                  AllowedCollectionPropChanges)
+                            andalso not ExistingPropValueEqual
                     end, SuppliedProps),
             case InvalidProps of
                 [] -> ok;
@@ -1255,11 +1273,37 @@ modify_collection_t() ->
                                                get_scope("_default",
                                                          Manifest3)))),
 
-    %% Cannot modify maxTTL
+    %% Cannot set maxTTL from undefined
     ?assertEqual(
         {abort, {error, {cannot_modify_properties, "c1", [{maxTTL, 9}]}}},
-        update_manifest_test_update_collection(Manifest2, "_default", "c1",
+        update_manifest_test_update_collection(Manifest3, "_default", "c1",
                                                [{maxTTL, 9}])),
+
+    {commit, [{_, _, Manifest4}], _} =
+        update_manifest_test_create_collection(Manifest3, "_default", "c2",
+                                               [{maxTTL, 10}]),
+    ?assertEqual(10,
+                 proplists:get_value(maxTTL,
+                                     get_collection("c2",
+                                                    get_scope("_default",
+                                                              Manifest4)))),
+
+    %% Cannot change maxTTL value
+    ?assertEqual(
+        {abort, {error, {cannot_modify_properties, "c2", [{maxTTL, 11}]}}},
+        update_manifest_test_update_collection(Manifest4, "_default", "c2",
+                                               [{maxTTL, 11}])),
+
+    %% Allowed to specify collection props to the same value.
+    {commit, [{_,_, Manifest5}], _} =
+        update_manifest_test_update_collection(Manifest4, "_default", "c2",
+                                               [{maxTTL, 10}]),
+
+    %% No change as maxTTL was initially 10, can't check the whole manifest as
+    %% uid moves on.
+    ?assertEqual(
+        lists:sort(get_collection("c2", get_scope("_default", Manifest4))),
+        lists:sort(get_collection("c2", get_scope("_default", Manifest5)))),
 
     %% Cannot modify uid
     ?assertEqual(
@@ -1429,7 +1473,63 @@ set_manifest_t() ->
                             {"ic4", [{history, true}, {uid, 14}]},
                             {"ic5", [{history, true}, {uid, 15}]},
                             {"ic6", [{uid, 16}]}]}]}],
-        get_scopes(Manifest3)).
+        get_scopes(Manifest3)),
+
+    %% Cannot add maxTTL
+    ExistingManifest3 =
+        ManifestCounters ++
+        [{scopes,
+            [{"s1",
+                [{uid, 8},
+                 {collections, [{"c1", [{uid, 8}]}]}]}]}],
+    ?assertEqual(
+        {abort,{error,{cannot_modify_properties,"c1",[{maxTTL,10}]}}},
+        update_manifest_test_set_manifest(
+            ExistingManifest3,
+            [{"s1",
+                [{collections, [{"c1", [{maxTTL, 10}]}]}]}])),
+
+    %% maxTTL=undefined and maxTTL=0 are equivalent due to the default values,
+    %% we should not attempt to change anything here.
+    ?assertEqual(
+        {abort,{not_changed,<<"0">>}},
+        update_manifest_test_set_manifest(
+            ExistingManifest3,
+            [{"s1",
+                [{collections, [{"c1", [{maxTTL, 0}]}]}]}])),
+
+    %% Cannot modify TTL
+    ExistingManifest4 =
+        ManifestCounters ++
+        [{scopes,
+            [{"s1",
+                [{uid, 8},
+                    {collections, [{"c1", [{uid, 8}, {maxTTL, 8}]}]}]}]}],
+    ?assertEqual(
+        {abort,{error,{cannot_modify_properties,"c1",[{maxTTL,10}]}}},
+        update_manifest_test_set_manifest(
+            ExistingManifest4,
+            [{"s1",
+                [{collections, [{"c1", [{maxTTL, 10}]}]}]}])),
+
+    %% Setting to the same value is ignored if there are no other changes
+    ?assertEqual(
+        {abort,{not_changed,<<"0">>}},
+        update_manifest_test_set_manifest(
+            ExistingManifest4,
+            [{"s1",
+                [{collections, [{"c1", [{maxTTL, 8}]}]}]}])),
+
+    %% Allowed to set to same value when there are other changes
+
+    {commit, [{_, _, Manifest4}], _} =
+        update_manifest_test_set_manifest(
+        ExistingManifest4,
+        [{"s1",
+            [{collections, [{"c1", [{maxTTL, 8}]},
+                {"c2", []}]}]}]),
+    ?assertEqual([{uid, 8}, {maxTTL, 8}],
+        get_collection("c1", get_scope("s1", Manifest4))).
 
 % Bunch of fairly simple collections tests that update the manifest and expect
 % various results.
