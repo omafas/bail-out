@@ -957,8 +957,11 @@ computed_stats_lazy_proplist(_) ->
                             end
                     end,
 
-    DocsFragmentation = Z2(couch_docs_data_size, couch_docs_disk_size,
-                           Fragmentation),
+    DocsFragmentation = Z3(couch_docs_data_size, couch_docs_disk_size,
+                           ep_db_history_file_size,
+                           fun (Data, Disk, History) ->
+                                   Fragmentation(Data, Disk - History)
+                           end),
     ViewsFragmentation = Z2(couch_views_data_size, couch_views_disk_size,
                             Fragmentation),
 

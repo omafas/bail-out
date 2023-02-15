@@ -332,6 +332,7 @@ ep_rocksdb_scan_totalSeqnoHits count kv_ep_rocksdb_scan_totalSeqnoHits{} count
 ep_rocksdb_scan_oldSeqnoHits count kv_ep_rocksdb_scan_oldSeqnoHits{} count
 ep_db_data_size bytes kv_ep_db_data_size_bytes{} bytes
 ep_db_file_size bytes kv_ep_db_file_size_bytes{} bytes
+ep_db_history_file_size bytes kv_ep_db_history_file_size_bytes{} bytes
 ep_db_prepare_size bytes kv_ep_db_prepare_size_bytes{} bytes
 bg_wait microseconds kv_bg_wait_seconds{} seconds
 bg_load microseconds kv_bg_load_seconds{} seconds
