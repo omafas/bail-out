@@ -37,6 +37,9 @@
 
 -export([extract_disk_stats_for_path/2]).
 
+-define(ENSURE_DELETE_COMMAND_TIMEOUT,
+        ?get_timeout(ensure_delete_command, 60000)).
+
 setup_storage_paths() ->
     setup_db_and_ix_paths(ns_couchdb_api:get_db_and_ix_paths()),
     case ns_config:search_node(node(), ns_config:latest(), cbas_dirs) of
@@ -554,20 +557,6 @@ bucket_names_from_disk() ->
               end
       end, [], Files).
 
-delete_disk_buckets_databases(Pred) ->
-    Buckets = lists:filter(Pred, bucket_names_from_disk()),
-    delete_disk_buckets_databases_loop(Pred, Buckets).
-
-delete_disk_buckets_databases_loop(_Pred, []) ->
-    ok;
-delete_disk_buckets_databases_loop(Pred, [Bucket | Rest]) ->
-    case ns_couchdb_api:delete_databases_and_files(Bucket) of
-        ok ->
-            delete_disk_buckets_databases_loop(Pred, Rest);
-        Error ->
-            Error
-    end.
-
 buckets_in_use() ->
     Node = node(),
     Snapshot =
@@ -598,20 +587,56 @@ buckets_in_use() ->
 %% it's named a bit differently from other functions here; but this function
 %% is rpc called by older nodes; so we must keep this name unchanged
 delete_unused_buckets_db_files() ->
-    BucketsInUse = buckets_in_use(),
-    delete_disk_buckets_databases(
-      fun (Bucket) ->
-              RV = not(lists:member(Bucket, BucketsInUse)),
-              case RV of
-                  true ->
-                      ale:info(
-                        ?USER_LOGGER,
-                        "Deleting old data files of bucket ~p", [Bucket]);
-                  _ ->
-                      ok
-              end,
-              RV
-      end).
+    BucketsToDelete = bucket_names_from_disk() -- buckets_in_use(),
+    functools:sequence_([?cut(delete_unused_db_files(Bucket)) ||
+                            Bucket <- BucketsToDelete]).
+
+ensure_delete_command_sent(Bucket, Timeout) ->
+    case async:run_with_timeout(?cut(ensure_delete_command_sent(Bucket)),
+                                Timeout) of
+        {ok, Res} ->
+            Res;
+        {error, timeout} ->
+            %% bucket deletion can take arbitrary amount of time, but we
+            %% don't want to block delete_unused_buckets_db_files() infinitely
+            %% so we just wait some time to make sure that memcached got the
+            %% bucket_delete command and then race with it deleting the actual
+            %% files. I hope this race is going to be benign.
+            ?log_warning("Failed to wait for memcached to delete bucket ~p",
+                         [Bucket]),
+            ok
+    end.
+
+ensure_delete_command_sent(Bucket) ->
+    case (catch ns_memcached:delete_bucket(Bucket, [{force, true}])) of
+        ok ->
+            ?log_info("Bucket ~p was deleted from memcached", [Bucket]),
+            ok;
+        {memcached_error, key_enoent, undefined} ->
+            ok;
+        Error ->
+            ?log_error("Failed to delete bucket ~p from memcached. Error = ~p",
+                       [Bucket, Error]),
+            Error
+    end.
+
+delete_unused_db_files(Bucket) ->
+    ?log_debug("Delete old data files for bucket ~p", [Bucket]),
+    case ensure_delete_command_sent(Bucket, ?ENSURE_DELETE_COMMAND_TIMEOUT) of
+        ok ->
+            ale:info(?USER_LOGGER, "Deleting old data files of bucket ~p",
+                     [Bucket]),
+            case ns_couchdb_api:delete_databases_and_files(Bucket) of
+                ok ->
+                    ok;
+                Other ->
+                    ?log_error("Failed to delete old data files for bucket ~p. "
+                               "Error = ~p", [Bucket, Other]),
+                    Other
+            end;
+        Error ->
+            Error
+    end.
 
 %% deletes @2i subdirectory in index directory of this node.
 %%
