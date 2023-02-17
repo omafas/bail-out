@@ -1,0 +1,648 @@
+{
+    "audit_queue_length": {
+        "type": "gauge",
+        "help": "Current number of entries in the audit queue",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "audit_unsuccessful_retries": {
+        "type": "counter",
+        "help": "Failed attempts to audit",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "cm_rest_request_enters_total": {
+        "type": "counter",
+        "help": "Number of REST requests to enter ns_server",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "cm_rest_request_leaves_total": {
+        "type": "counter",
+        "help": "Number of REST requests to exit ns_server",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "couch_docs_actual_disk_size": {
+        "type": "gauge",
+        "help": "Amount of disk space used by couchdb docs",
+        "added": "7.0.0",
+        "unit": "bytes",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "bucket",
+                "help": "Name of the bucket associated with the stat"
+            }
+        ]
+    },
+    "couch_views_actual_disk_size": {
+        "type": "gauge",
+        "help": "Amount of disk space used by couchdb views",
+        "added": "7.0.0",
+        "unit": "bytes",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "bucket",
+                "help": "Name of the bucket associated with the stat"
+            }
+        ]
+    },
+    "sys_allocstall": {
+        "type": "counter",
+        "help": "Number of alloc stalls",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "sys_cpu_cores_available": {
+        "type": "gauge",
+        "help": "Number of available cores",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "sys_cpu_host_cores_available": {
+        "type": "gauge",
+        "help": "Number of available cores in the host",
+        "added": "7.1.1",
+        "stability": "committed"
+    },
+    "sys_cpu_host_sys_rate": {
+        "type": "gauge",
+        "help": "System cpu utilization rate",
+        "added": "7.1.1",
+        "stability": "committed"
+    },
+    "sys_cpu_host_user_rate": {
+        "type": "gauge",
+        "help": "User cpu utilization rate",
+        "added": "7.1.1",
+        "stability": "committed"
+    },
+    "sys_cpu_host_utilization_rate": {
+        "type": "gauge",
+        "help": "cpu utilization rate",
+        "added": "7.1.1",
+        "stability": "committed"
+    },
+    "sys_cpu_irq_rate": {
+        "type": "gauge",
+        "help": "IRQ rate",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "sys_cpu_stolen_rate": {
+        "type": "gauge",
+        "help": "cpu stolen rate",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "sys_cpu_sys_rate": {
+        "type": "gauge",
+        "help": "User system utilization rate",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "sys_cpu_user_rate": {
+        "type": "gauge",
+        "help": "User utilization rate",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "sys_cpu_utilization_rate": {
+        "type": "gauge",
+        "help": "System utilization rate",
+        "added": "7.0.0",
+        "stability": "committed"
+    },
+    "sys_mem_actual_free": {
+        "type": "gauge",
+        "help": "Amount of free system memory",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sys_mem_actual_used": {
+        "type": "gauge",
+        "help": "Amount of used system memory",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sys_mem_free": {
+        "type": "gauge",
+        "help": "Amount of free memory",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sys_mem_limit": {
+        "type": "gauge",
+        "help": "System memory limit",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sys_mem_total": {
+        "type": "gauge",
+        "help": "System memory total",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sys_mem_used_sys": {
+        "type": "gauge",
+        "help": "System memory used",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sys_swap_total": {
+        "type": "gauge",
+        "help": "Total amount of swap",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sys_swap_used": {
+        "type": "gauge",
+        "help": "Amount of swap being used",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sysproc_cpu_utilization": {
+        "type": "gauge",
+        "help": "User cpu utilization rate",
+        "added": "7.0.0",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "proc",
+                "help": "Name of the process (e.g. babysitter, bash, etc.)"
+            }
+        ]
+    },
+    "sysproc_major_faults_raw": {
+        "type": "counter",
+        "help": "Number of major page faults for the process",
+        "added": "7.0.0",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "proc",
+                "help": "Name of the process (e.g. babysitter, bash, etc.)"
+            }
+        ]
+    },
+    "sysproc_mem_resident": {
+        "type": "gauge",
+        "help": "Amount of resident memory used by the process",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "proc",
+                "help": "Name of the process (e.g. babysitter, bash, etc.)"
+            }
+        ]
+    },
+    "sysproc_mem_share": {
+        "type": "gauge",
+        "help": "Amount of shared memory used by the process",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "proc",
+                "help": "Name of the process (e.g. babysitter, bash, etc.)"
+            }
+        ]
+    },
+    "sysproc_mem_size": {
+        "type": "gauge",
+        "help": "Amount of memory used by the process",
+        "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "proc",
+                "help": "Name of the process (e.g. babysitter, bash, etc.)"
+            }
+        ]
+    },
+    "sysproc_minor_faults_raw": {
+        "type": "gauge",
+        "help": "Number of minor page faults for the process",
+        "added": "7.0.0",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "proc",
+                "help": "Name of the process (e.g. babysitter, bash, etc.)"
+            }
+        ]
+    },
+    "sysproc_page_faults_raw": {
+        "type": "gauge",
+        "help": "Number of raw page faults for the process",
+        "added": "7.0.0",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "proc",
+                "help": "Name of the process (e.g. babysitter, bash, etc.)"
+            }
+        ]
+    },
+
+
+    "cm_build_streaming_info_total": {
+        "type": "counter",
+        "help": "Number of streaming requests processed",
+        "added": "7.0.0"
+    },
+    "cm_chronicle_append_batch_size_1m_max": {
+        "type": "gauge",
+        "help": "Maximum append batch size over a minute window",
+        "added": "7.0.0",
+        "stability": "internal"
+    },
+    "cm_chronicle_append_num_total": {
+        "type": "counter",
+        "help": "Total number of appends",
+        "added": "7.0.0",
+        "stability": "internal"
+    },
+    "cm_chronicle_disk_latency_seconds": {
+        "type": "histogram",
+        "help": "Disk latency",
+        "added": "7.0.0",
+        "stability": "internal",
+        "labels": [
+            {
+                "name": "op",
+                "help": "Operation (append/sync)"
+            }
+        ]
+    },
+    "cm_failover_safeness_level": {
+        "type": "gauge",
+        "help": "Failover safeness",
+        "added": "7.0.0",
+        "stability": "internal",
+        "labels": [
+            {
+                "name": "bucket",
+                "help": "Name of the bucket associated with the stat"
+            },
+            {
+                "name": "connection_type",
+                "help": "Type of connection"
+            }
+        ]
+    },
+    "cm_http_requests_seconds": {
+        "type": "histogram",
+        "help": "Number of bucket http requests",
+        "added": "7.0.0",
+        "labels": [
+            {
+                "name": "op",
+                "help": "Operation (append/sync)"
+            }
+        ]
+    },
+    "cm_http_requests_total": {
+        "type": "counter",
+        "help": "Total number of http requests categorized",
+        "added": "7.0.0",
+        "labels": [
+            {
+                "name": "code",
+                "help": "http status code"
+            },
+            {
+                "name": "method",
+                "help": "http method (GET/DELETE/POST/PUT/RPCCONNECT)"
+            },
+            {
+                "name": "path",
+                "help": "Trimmed URL path (e.g. path='/poolsStreaming/*')"
+            },
+            {
+                "name": "scheme",
+                "help": "URL scheme"
+            },
+            {
+                "name": "user",
+                "help": "Name of the user initiating the request if it's an internal user otherwise 'other'"
+            }
+        ]
+    },
+    "cm_index_pausing_runs_total": {
+        "type": "counter",
+        "help": "Number of times indexing was paused on old master node",
+        "added": "7.0.0",
+        "stability": "internal"
+    },
+    "cm_lease_aquirer_prev_acquire_estimate_in_future_total": {
+        "type": "counter",
+        "help": "Number of times lease period start time estimate is in the future",
+        "added": "7.0.0",
+        "stability": "internal",
+        "labels": [
+            {
+                "name": "node",
+                "help": "Node on which the stat occurred"
+            }
+        ]
+    },
+    "cm_lease_aquirer_prev_acquire_estimate_minus_start_time_seconds": {
+        "type": "histogram",
+        "help": "Histogram of lease acquirer estimates",
+        "added": "7.0.0",
+        "stability": "internal",
+        "labels": [
+            {
+                "name": "node",
+                "help": "Node on which the histogram was measured"
+            }
+        ]
+    },
+    "cm_lease_aquirer_start_time_minus_prev_acquire_estimate_seconds": {
+        "type": "histogram",
+        "help": "Histogram of lease acquirer estimates",
+        "added": "7.0.0",
+        "stability": "internal",
+        "labels": [
+            {
+                "name": "node",
+                "help": "Node on which the histogram was measured"
+            }
+        ]
+    },
+    "cm_lease_aquirer_time_inflight_seconds": {
+        "type": "histogram",
+        "help": "Histogram of lease inflight seconds",
+        "added": "7.0.0",
+        "stability": "internal",
+        "labels": [
+            {
+                "name": "node",
+                "help": "Node on which the histogram was measured"
+            }
+        ]
+    },
+    "cm_lease_aquirer_used_prev_acquire_estimate_total": {
+        "type": "counter",
+        "help": "Number of times previous estimate was used",
+        "added": "7.0.0",
+        "stability": "internal",
+        "labels": [
+            {
+                "name": "node",
+                "help": "Node on which the estimate was used"
+            }
+        ]
+    },
+    "cm_lease_aquirer_used_start_estimate_total": {
+        "type": "counter",
+        "help": "Number of times start estimate was used",
+        "added": "7.0.0",
+        "stability": "internal",
+        "labels": [
+            {
+                "name": "node",
+                "help": "Node on which the estimate was used"
+            }
+        ]
+    },
+    "cm_logs_total": {
+        "type": "counter",
+        "help": "Total number of logs logged",
+        "added": "7.5.0",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "severity",
+                "help": "Severity level of each log (debug/error/info/warn)"
+            }
+        ]
+    },
+    "cm_memcached_call_time_seconds": {
+        "type": "histogram",
+        "help": "Amount of time to call memcached",
+        "added": "7.0.0",
+        "labels": [
+            {
+                "name": "bucket",
+                "help": "Name of bucket associated with memcached calls"
+            }
+        ]
+    },
+    "cm_memcached_e2e_call_time_seconds": {
+        "type": "histogram",
+        "help": "End to end memcached call times",
+        "added": "7.0.0",
+        "labels": [
+            {
+                "name": "bucket",
+                "help": "Name of bucket associated with memcached calls"
+            }
+        ]
+    },
+    "cm_memcached_q_call_time_seconds": {
+        "type": "histogram",
+        "help": "Memcached queue call times",
+        "added": "7.0.0",
+        "units": "seconds",
+        "labels": [
+            {
+                "name": "bucket",
+                "help": "Name of bucket associated with memcached calls"
+            }
+        ]
+    },
+    "cm_mru_cache_add_time_seconds": {
+        "type": "histogram",
+        "help": "Time to add to MRU cache",
+        "added": "7.0.0",
+        "units": "seconds",
+        "labels": [
+            {
+                "name": "name",
+                "help": "Name of the MRU cache"
+            }
+        ]
+    },
+    "cm_mru_cache_flush_time_seconds": {
+        "type": "histogram",
+        "help": "Time to flush MRU cache",
+        "added": "7.0.0",
+        "units": "seconds",
+        "labels": [
+            {
+                "name": "name",
+                "help": "Name of the MRU cache"
+            }
+        ]
+    },
+    "cm_mru_cache_lock_time_seconds": {
+        "type": "histogram",
+        "help": "Time to lock MRU cache",
+        "added": "7.0.0",
+        "units": "seconds",
+        "labels": [
+            {
+                "name": "name",
+                "help": "Name of the MRU cache"
+            },
+            {
+                "name": "type",
+                "help": "Type of item in the MRU cache (housekeeping/item)"
+            }
+        ]
+    },
+    "cm_mru_cache_lookup_time_seconds": {
+        "type": "histogram",
+        "help": "Time to perform a lookup in the MRU cache",
+        "added": "7.0.0",
+        "units": "seconds",
+        "labels": [
+            {
+                "name": "name",
+                "help": "Name of the MRU cache"
+            }
+        ]
+    },
+    "cm_mru_cache_lookup_total": {
+        "type": "counter",
+        "help": "Total number of MRU cache lookups",
+        "added": "7.0.0",
+        "labels": [
+            {
+                "name": "name",
+                "help": "Name of the MRU cache"
+            },
+            {
+                "name": "type",
+                "help": "Outcome of the lookup (miss/recent)"
+            }
+        ]
+    },
+    "cm_mru_cache_take_lock_total": {
+        "type": "counter",
+        "help": "Total number of times MRU cache lock was obtained",
+        "added": "7.0.0",
+        "labels": [
+            {
+                "name": "name",
+                "help": "Name of the MRU cache"
+            },
+            {
+                "name": "type",
+                "help": "Type of lock (fast/slow)"
+            }
+        ]
+    },
+    "cm_ns_config_merger_queue_len_1m_max": {
+        "type": "gauge",
+        "help": "Length of the ns_config merger queue",
+        "added": "7.0.0",
+        "stability": "internal"
+    },
+    "cm_ns_config_merger_run_time_seconds": {
+        "type": "histogram",
+        "help": "Amount of time to run the ns_config merger",
+        "added": "7.0.0",
+        "stability": "internal",
+        "units": "seconds"
+    },
+    "cm_ns_config_merger_sleep_time_seconds": {
+        "type": "histogram",
+        "help": "Time ns_config merger was asleep",
+        "added": "7.0.0",
+        "stability": "internal",
+        "units": "seconds"
+    },
+    "cm_ns_config_rep_push_keys_retries_total": {
+        "type": "counter",
+        "help": "Number of total retries pushing keys",
+        "added": "7.0.0",
+        "stability": "internal"
+    },
+    "cm_odp_report_failed": {
+        "type": "counter",
+        "help": "Number of failures to send on-demand pricing report",
+        "added": "7.0.0"
+    },
+    "cm_outgoing_http_requests_seconds": {
+        "type": "histogram",
+        "help": "Time taken for outgoing http requests",
+        "added": "7.0.0",
+        "units": "seconds",
+        "labels": [
+            {
+                "name": "type",
+                "help": "Type of outgoing http request"
+            }
+        ]
+    },
+    "cm_outgoing_http_requests_total": {
+        "type": "counter",
+        "help": "Total number of outgoing http requests",
+        "added": "7.0.0",
+        "labels": [
+            {
+                "name": "code",
+                "help": "http status code (or 'error')"
+            },
+            {
+                "name": "type",
+                "help": "Type of outgoing http requests"
+            }
+        ]
+    },
+    "cm_request_hibernates_total": {
+        "type": "counter",
+        "help": "Number of times requests were hibernated",
+        "added": "7.0.0"
+    },
+    "cm_request_unhibernates_total": {
+        "type": "counter",
+        "help": "Number of times requests were unhibernated",
+        "added": "7.0.0"
+    },
+    "cm_status_latency_seconds": {
+        "type": "histogram",
+        "help": "Latency time for status",
+        "added": "7.0.0",
+        "units": "seconds"
+    },
+    "cm_timer_lag_seconds": {
+        "type": "histogram",
+        "help": "Number of lag seconds for the canary-in-the-mine",
+        "added": "7.0.0",
+        "stability": "internal",
+        "units": "seconds"
+    },
+    "cm_web_cache_hits_total": {
+        "type": "counter",
+        "help": "Total number of web cache hits",
+        "added": "7.0.0"
+    },
+    "cm_web_cache_inner_hits_total": {
+        "type": "counter",
+        "help": "Total number of inner web cache hits",
+        "added": "7.0.0"
+    },
+    "cm_web_cache_updates_total": {
+        "type": "counter",
+        "help": "Total number of web cache updates",
+        "added": "7.0.0"
+    }
+}
