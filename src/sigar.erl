@@ -12,6 +12,9 @@
 
 -include("ns_common.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
 %% API
 -export([start_link/0,
@@ -26,11 +29,11 @@
 
 -record(state, {
           port :: port() | undefined,
-          most_recent_data :: binary() | undefined,
+          most_recent_data :: map() | undefined,
           most_recent_data_ts_usec :: integer() | undefined,
-          most_recent_unpacked :: {#{atom() := number()},
+          most_recent_unpacked :: {#{bitstring() := number() | boolean()},
                                    [{atom(), number()}],
-                                   #{atom() := number() | boolean()}}
+                                   #{bitstring() := number() | boolean()}}
                                    | undefined
          }).
 
@@ -77,13 +80,13 @@ handle_call({get_all, {PrevTS, PrevCounters, PrevCGroups}, PidNames}, _From,
     HostCounters = compute_cpu_stats(PrevCounters, Counters),
     Cores = proplists:get_value(cpu_cores_available, Gauges),
     CGroupsCounters =
-        case maps:get(supported, CGroups, false) of
+        case maps:get(<<"supported">>, CGroups, false) of
             true -> compute_cgroups_counters(Cores, PrevTS, TS,
                                              PrevCGroups, CGroups);
             false when HostCounters == [] -> [];
             false -> default_cgroups_counters(HostCounters)
         end,
-    ProcStats = unpack_processes(NewState#state.most_recent_data, PidNames),
+    ProcStats = get_process_stats(NewState#state.most_recent_data, PidNames),
     {reply, {{HostCounters ++ CGroupsCounters, Gauges, ProcStats},
      {TS, Counters, CGroups}}, NewState};
 
@@ -144,262 +147,20 @@ spawn_sigar(Name, BabysitterPid) ->
                        "--config", path_config:default_sigar_port_config_path()]}]).
 
 grab_stats(Port) ->
-    port_command(Port, <<0:32/native>>),
-    recv_data(Port).
+    port_command(Port, <<"\n":8/native>>),
+    recv_data(Port, <<"">>).
 
-unpack_global(Bin) ->
-    <<_Version:32/native,
-      StructSize:32/native,
-      CPUTotalMS:64/native,
-      CPUIdleMS:64/native,
-      CPUUserMS:64/native,
-      CPUSysMS:64/native,
-      CPUIrqMS:64/native,
-      CPUStolenMS:64/native,
-      SwapTotal:64/native,
-      SwapUsed:64/native,
-      MemTotal:64/native,
-      MemUsed:64/native,
-      MemActualUsed:64/native,
-      MemActualFree:64/native,
-      AllocStall0:64/native,
-      _/binary>> = Bin,
-
-    CgroupsInfo = unpack_cgroups_info(Bin),
-
-    StructSize = erlang:size(Bin),
-
-    {CGMemLimit, CGMemUsed, CGMemActual} =
-        case maps:get(supported, CgroupsInfo) of
-            true ->
-                Cur = maps:get(memory_current, CgroupsInfo),
-                Cache = maps:get(memory_cache, CgroupsInfo),
-                {maps:get(memory_max, CgroupsInfo), Cur, Cur - Cache};
-            false ->
-                {undefined, undefined, undefined}
-        end,
-
-    CGroupMem = {maps:get(memory_max, CgroupsInfo, 0),
-                 maps:get(memory_current, CgroupsInfo, 0)},
-    {MemLimit, _} = memory_quota:choose_limit(MemTotal, MemUsed, CGroupMem),
-    %% Suppressing dialyzer warning here
-    %% Dialyzer thinks that system_info can't return 'unknown', while according
-    %% to doc it seems like it actually can. So, in order to avoid a warning
-    %% the value is compared with 0 insead of explicit match to 'unknown'
-    HostCoresAvailable = case erlang:system_info(logical_processors) of
-                             P when is_number(P), P > 0 -> P;
-                             _ -> 0
-                         end,
-    CoresAvailable = case maps:get(num_cpu_prc, CgroupsInfo, undefined) of
-                         undefined -> HostCoresAvailable;
-                         N -> N / 100 %% do not round it,
-                                      %% cpu utilization will break
-                     end,
-
-    Counters = #{cpu_total_ms => CPUTotalMS,
-                 cpu_idle_ms => CPUIdleMS,
-                 cpu_user_ms => CPUUserMS,
-                 cpu_sys_ms => CPUSysMS,
-                 cpu_irq_ms => CPUIrqMS,
-                 cpu_stolen_ms => CPUStolenMS},
-
-    %% In the extremely rare case where sigar is unable to obtain the
-    %% allocstall stat it returns -1.
-    AllocStall = case AllocStall0 =:= 16#ffffffffffffffff of
-                     true -> 0;
-                     false -> AllocStall0
-                 end,
-
-    Gauges =
-        [{cpu_cores_available, CoresAvailable},
-         {cpu_host_cores_available, HostCoresAvailable},
-         {swap_total, SwapTotal},
-         {swap_used, SwapUsed},
-         {mem_limit, MemLimit},
-         {mem_total, MemTotal},
-         {mem_used_sys, MemUsed},
-         {mem_actual_used, MemActualUsed},
-         {mem_actual_free, MemActualFree},
-         {mem_free, MemActualFree},
-         {allocstall, AllocStall}] ++
-        [{mem_cgroup_limit, CGMemLimit} || CGMemLimit /= undefined] ++
-        [{mem_cgroup_actual_used, CGMemActual} || CGMemActual /= undefined] ++
-        [{mem_cgroup_used, CGMemUsed} || CGMemUsed /= undefined],
-
-    {Counters, Gauges, CgroupsInfo}.
-
-unpack_processes(Bin, ProcNames) ->
-    ProcBinLength = byte_size(Bin) - ?GLOBAL_STATS_SIZE - ?CGROUPS_INFO_SIZE,
-    ProcessesBin = binary:part(Bin, ?GLOBAL_STATS_SIZE, ProcBinLength),
-    NewSample0 = do_unpack_processes(ProcessesBin, [], ProcNames),
-    collapse_duplicates(NewSample0).
-
-collapse_duplicates(Sample) ->
-    Sorted = lists:keysort(1, Sample),
-    lists:foldl(fun do_collapse_duplicates/2, [], Sorted).
-
-do_collapse_duplicates({K, V1}, [{K, V2} | Acc]) ->
-    [{K, V1 + V2} | Acc];
-do_collapse_duplicates(KV, Acc) ->
-    [KV | Acc].
-
-do_unpack_processes(Bin, Acc, _) when size(Bin) =:= 0 ->
-    Acc;
-do_unpack_processes(Bin, NewSampleAcc, ProcNames) ->
-    <<Name0:60/binary,
-      CpuUtilization:32/native,
-      Pid:64/native,
-      _PPid:64/native,
-      MemSize:64/native,
-      MemResident:64/native,
-      MemShare:64/native,
-      MinorFaults:64/native,
-      MajorFaults:64/native,
-      PageFaults:64/native,
-      Rest/binary>> = Bin,
-
-    RawName = extract_string(Name0),
-    case RawName of
-        <<>> ->
-            NewSampleAcc;
-        _ ->
-            Name = adjust_process_name(Pid, RawName, ProcNames),
-
-            NewSample =
-                [{proc_stat_name(Name, mem_size), MemSize},
-                 {proc_stat_name(Name, mem_resident), MemResident},
-                 {proc_stat_name(Name, mem_share), MemShare},
-                 {proc_stat_name(Name, cpu_utilization), CpuUtilization},
-                 {proc_stat_name(Name, minor_faults_raw), MinorFaults},
-                 {proc_stat_name(Name, major_faults_raw), MajorFaults},
-                 {proc_stat_name(Name, page_faults_raw), PageFaults}],
-
-            Acc1 = NewSample ++ NewSampleAcc,
-            do_unpack_processes(Rest, Acc1, ProcNames)
-    end.
-
-extract_string(Bin) ->
-    do_extract_string(Bin, size(Bin) - 1).
-
-do_extract_string(_Bin, 0) ->
-    <<>>;
-do_extract_string(Bin, Pos) ->
-    case binary:at(Bin, Pos) of
-        0 ->
-            do_extract_string(Bin, Pos - 1);
-        _ ->
-            binary:part(Bin, 0, Pos + 1)
-    end.
-
-proc_stat_name(Name, Stat) ->
-    <<Name/binary, $/, (atom_to_binary(Stat, latin1))/binary>>.
-
-adjust_process_name(Pid, Name, PidNames) ->
-    case lists:keyfind(Pid, 1, PidNames) of
-        false ->
-            Name;
-        {Pid, BetterName} ->
-            BetterName
-    end.
-
-compute_cpu_stats(undefined, _Counters) -> [];
-compute_cpu_stats(OldCounters, Counters) ->
-    Diffs = maps:map(fun (Key, Value) ->
-                             OldValue = maps:get(Key, OldCounters),
-                             Value - OldValue
-                     end, Counters),
-
-    %% The difference between the last measurement and the current
-    %% measurement is used as a gauge.
-    #{cpu_idle_ms := Idle,
-      cpu_user_ms := User,
-      cpu_sys_ms := Sys,
-      cpu_irq_ms := Irq,
-      cpu_stolen_ms := Stolen,
-      cpu_total_ms := Total} = Diffs,
-
-    RawCpuTotal = get_raw_counter(cpu_total_ms, Counters),
-    RawCpuIdle = get_raw_counter(cpu_idle_ms, Counters),
-    RawCpuUser = get_raw_counter(cpu_user_ms, Counters),
-    RawCpuSys = get_raw_counter(cpu_sys_ms, Counters),
-
-    [{cpu_host_utilization_rate, compute_utilization(Total - Idle, Total)},
-     {cpu_host_user_rate, compute_utilization(User, Total)},
-     {cpu_host_sys_rate, compute_utilization(Sys, Total)},
-     %% Raw counters so users can do their own computations using promql.
-     {cpu_host_seconds_total_idle, RawCpuIdle},
-     {cpu_host_seconds_total_user, RawCpuUser},
-     {cpu_host_seconds_total_sys, RawCpuSys}] ++
-    case misc:is_linux() of
-        false ->
-            Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle),
-            [{cpu_host_seconds_total_other, Other}];
-        true->
-            RawCpuIrq = get_raw_counter(cpu_irq_ms, Counters),
-            RawCpuStolen = get_raw_counter(cpu_stolen_ms, Counters),
-            Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle +
-                                   RawCpuIrq + RawCpuStolen),
-            [{cpu_irq_rate, compute_utilization(Irq, Total)},
-             {cpu_stolen_rate, compute_utilization(Stolen, Total)},
-             {cpu_host_seconds_total_irq, RawCpuIrq},
-             {cpu_host_seconds_total_stolen, RawCpuStolen},
-             {cpu_host_seconds_total_other, Other}]
-    end.
-
-%% The current measurement is returned as a raw counter in seconds.
-%% The user can then use prometheus functions to do computations.
-get_raw_counter(Stat, Counters) ->
-    Value = maps:get(Stat, Counters, 0),
-    Value / 1000.
-
-compute_cgroups_counters(Cores, PrevTS, TS,
-                         #{supported := true} = Old,
-                         #{supported := true} = New)
-                                        when is_number(PrevTS), is_number(TS),
-                                             is_number(Cores), Cores > 0 ->
-    TimeDelta = TS - PrevTS,
-    ComputeRate = fun (Key) ->
-                      OldV = maps:get(Key, Old),
-                      NewV = maps:get(Key, New),
-                      compute_utilization(NewV - OldV, TimeDelta * Cores)
-                  end,
-    [{cpu_utilization_rate, ComputeRate(usage_usec)},
-     {cpu_user_rate, ComputeRate(user_usec)},
-     {cpu_sys_rate, ComputeRate(system_usec)},
-     {cpu_throttled_rate, ComputeRate(throttled_usec)},
-     {cpu_burst_rate, ComputeRate(burst_usec)}];
-compute_cgroups_counters(_, _, _, _, _) ->
-    [].
-
-%% No cgroup counters so just use the host ones.
-default_cgroups_counters(HostCounters) ->
-    [{cpu_utilization_rate,
-      proplists:get_value(cpu_host_utilization_rate, HostCounters)},
-     {cpu_user_rate,
-      proplists:get_value(cpu_host_user_rate, HostCounters)},
-     {cpu_sys_rate,
-      proplists:get_value(cpu_host_sys_rate, HostCounters)}].
-
-compute_utilization(Used, Total) ->
-    try
-        100 * Used / Total
-    catch error:badarith ->
-            0
-    end.
-
-recv_data(Port) ->
-    recv_data_loop(Port, <<"">>).
-
-recv_data_loop(Port, <<Version:32/native,
-                       StructSize:32/native, _/binary>> = Acc)
-  when Version =:= 7 ->
-    recv_data_with_length(Port, Acc, StructSize - erlang:size(Acc));
-recv_data_loop(_, <<Version:32/native, _/binary>>) ->
-    error({unsupported_portsigar_version, Version});
-recv_data_loop(Port, Acc) ->
+%% The first line contains the size of the JSON output to follow.
+recv_data(Port, Acc) ->
     receive
-        {Port, {data, Data}} ->
-            recv_data_loop(Port, <<Data/binary, Acc/binary>>);
+        {Port, {data, Curr}} ->
+            Data = <<Curr/binary, Acc/binary>>,
+            case binary:split(Data, <<"\n">>) of
+                [Length, Rest] ->
+                    Remaining = binary_to_integer(Length) - erlang:size(Rest),
+                    recv_data_with_length(Port, Rest, Remaining);
+                _ -> recv_data(Port, Data)
+            end;
         {Port, {exit_status, Status}} ->
             ?log_error("Received exit_status ~p from sigar", [Status]),
             exit({sigar, Status});
@@ -409,7 +170,9 @@ recv_data_loop(Port, Acc) ->
     end.
 
 recv_data_with_length(_Port, Acc, _WantedLength = 0) ->
-    erlang:iolist_to_binary(Acc);
+    Bin = erlang:iolist_to_binary(Acc),
+    {Decoded} = parse_json_elem(ejson:decode(Bin)),
+    maps:from_list(Decoded);
 recv_data_with_length(Port, Acc, WantedLength) ->
     receive
         {Port, {data, Data}} ->
@@ -429,41 +192,255 @@ recv_data_with_length(Port, Acc, WantedLength) ->
             exit({sigar, eof})
     end.
 
-unpack_cgroups_info(Bin) ->
-    CGroupsBin = binary:part(Bin, byte_size(Bin), -?CGROUPS_INFO_SIZE),
-    unpack_cgroups(CGroupsBin).
+%% Every JSON element is currently an integer/boolean/string. Most are strings
+%% even if they represent numeric data. There is some contention on whether all
+%% JSON libraries can represent 64-bit integers (or are limited to 2^53). So
+%% they are transmitted as strings. Convert every bitstring to integer/float
+%% when possible.
+parse_json_elem({K, V}) -> {K, parse_json_elem(V)};
+parse_json_elem({Obj}) -> {parse_json_elem(Obj)};
+parse_json_elem(Data) when is_list(Data) ->
+    lists:map(fun parse_json_elem/1, Data);
+parse_json_elem(Data) when is_boolean(Data) -> Data;
+parse_json_elem(Data) when is_integer(Data) -> Data;
+parse_json_elem(Data) when is_float(Data) -> Data;
+parse_json_elem(Data) when is_binary(Data) ->
+    try binary_to_integer(Data) of
+        Y -> Y
+    catch _:_ ->
+            try binary_to_float(Data) of
+                X -> X
+            catch _:_ ->
+                    Data
+            end,
+            Data
+    end.
 
-unpack_cgroups(<<0:8/native, _/binary>>) ->
-    #{supported => false};
-unpack_cgroups(<<_:8/native,
-                 CgroupsVsn:8/native,
-                 NumCpuPrc:16/native,
-                 _Padding:32,
-                 MemMax:64/native,
-                 MemCurr:64/native,
-                 MemCache:64/native,
-                 UsageUsec:64/native,
-                 UserUsec:64/native,
-                 SysUsec:64/native,
-                 NrPeriods:64/native,
-                 NrThrottled:64/native,
-                 ThrottledUsec:64/native,
-                 NrBursts:64/native,
-                 BurstUsec:64/native>>) ->
-    #{supported => true,
-      cgroups_vsn => CgroupsVsn,
-      num_cpu_prc => NumCpuPrc,
-      memory_max => MemMax,
-      memory_current => MemCurr,
-      memory_cache => MemCache,
-      usage_usec => UsageUsec,
-      user_usec => UserUsec,
-      system_usec => SysUsec,
-      nr_periods => NrPeriods,
-      nr_throttled => NrThrottled,
-      throttled_usec => ThrottledUsec,
-      nr_bursts => NrBursts,
-      burst_usec => BurstUsec}.
+cpu_filter_counter(<<"cpu_", End/binary>>, Val) ->
+    case binary:split(End, <<"_ms">>) of
+        [_, <<>>] when is_number(Val) -> true;
+        _ -> false
+    end;
+cpu_filter_counter(_, _) ->
+     false.
+
+get_number(StatsMap, Field) ->
+    case maps:get(Field, StatsMap, undefined) of
+        X when is_number(X) -> X;
+        _ -> 0
+end.
+
+get_global_stats(StatsMap) ->
+    CgroupsInfo =
+        case maps:get(<<"control_group_info">>, StatsMap, undefined) of
+            undefined -> #{<<"supported">> => false};
+            {CgroupsStats} ->
+                Map1 = maps:from_list(CgroupsStats),
+                maps:put(<<"supported">>, true, Map1)
+        end,
+    {CGMemLimit, CGMemUsed, CGMemActual} =
+        case CgroupsInfo of
+            #{<<"supported">> := true, <<"memory_current">> := MCurr,
+               <<"memory_cache">> := MCache, <<"memory_max">> := MMax}
+              when is_number(MCurr), is_number(MCache), is_number(MMax) ->
+                {MMax, MCurr, MCurr - MCache};
+            _ -> {undefined, undefined, undefined}
+        end,
+    MemTotal = get_number(StatsMap, <<"mem_total">>),
+    MemUsed = get_number(StatsMap, <<"mem_used">>),
+    {MemLimit, _} = memory_quota:choose_limit(MemTotal, MemUsed,
+                                              {CGMemLimit, CGMemUsed}),
+    %% Suppressing dialyzer warning here
+    %% Dialyzer thinks that system_info can't return 'unknown', while according
+    %% to doc it seems like it actually can. So, in order to avoid a warning
+    %% the value is compared with 0 insead of explicit match to 'unknown'
+    HostCoresAvailable = case erlang:system_info(logical_processors) of
+                             P when is_number(P), P > 0 -> P;
+                             _ -> 0
+                         end,
+    CoresAvailable = case maps:get(<<"num_cpu_prc">>, CgroupsInfo, undefined) of
+                         N when is_number(N) ->
+                             %% do not round it, cpu utilization will break
+                             N / 100;
+                         _ -> HostCoresAvailable
+                     end,
+    Counters = case maps:get(<<"cpu_total_ms">>, StatsMap, undefined) of
+                   X when is_number(X) ->
+                       CMap = maps:filter(fun cpu_filter_counter/2, StatsMap),
+                       maps:put(<<"supported">>, true, CMap);
+                   _ -> #{<<"supported">> => false}
+               end,
+    Gauges =
+        [{cpu_cores_available, CoresAvailable},
+         {cpu_host_cores_available, HostCoresAvailable},
+         {swap_total, get_number(StatsMap, <<"swap_total">>)},
+         {swap_used, get_number(StatsMap, <<"swap_used">>)},
+         {mem_limit, MemLimit},
+         {mem_total, MemTotal},
+         {mem_used_sys, MemUsed},
+         {mem_actual_used, get_number(StatsMap, <<"mem_actual_used">>)},
+         {mem_actual_free, get_number(StatsMap, <<"mem_actual_free">>)},
+         {mem_free, get_number(StatsMap, <<"mem_actual_free">>)},
+         {allocstall, get_number(StatsMap, <<"allocstall">>)}] ++
+        [{mem_cgroup_limit, CGMemLimit} || CGMemLimit /= undefined] ++
+        [{mem_cgroup_actual_used, CGMemActual} || CGMemActual /= undefined] ++
+        [{mem_cgroup_used, CGMemUsed} || CGMemUsed /= undefined],
+
+    {Counters, Gauges, CgroupsInfo}.
+
+get_process_stats(StatsMap, ProcNames) ->
+    collapse_duplicates(populate_processes(StatsMap, ProcNames)).
+
+collapse_duplicates(Sample) ->
+    Sorted = lists:keysort(1, Sample),
+    lists:foldl(fun do_collapse_duplicates/2, [], Sorted).
+
+do_collapse_duplicates({K, V1}, [{K, V2} | Acc]) ->
+    [{K, V1 + V2} | Acc];
+do_collapse_duplicates(KV, Acc) ->
+    [KV | Acc].
+
+%% The "_faults" stats are reported with suffix _raw.
+fix_stat_name(Stat) ->
+    case Stat of
+        <<"minor_faults">> -> <<"minor_faults_raw">>;
+        <<"major_faults">> -> <<"major_faults_raw">>;
+        <<"page_faults">> -> <<"page_faults_raw">>;
+        _ -> Stat
+    end.
+
+populate_proc_stat(ProcName, Stat, Value) ->
+    case Stat of
+        <<"name">> -> false;
+        <<"pid">> -> false;
+        <<"ppid">> -> false;
+        _ ->
+            StatName = fix_stat_name(Stat),
+            case Value of
+                X when is_number(X) ->
+                    {true, {proc_stat_name(ProcName, StatName), X}};
+                _ -> false
+            end
+    end.
+
+populate_proc_stats(Stats, ProcNames) ->
+    {<<"pid">>, Pid} = lists:keyfind(<<"pid">>, 1, Stats),
+    {<<"name">>, Name} = lists:keyfind(<<"name">>, 1, Stats),
+    ProcName =
+        case lists:keyfind(Pid, 1, ProcNames) of
+            false -> Name;
+            {Pid, BetterName} -> BetterName
+        end,
+    lists:filtermap(fun({Stat, Value}) ->
+                            populate_proc_stat(ProcName, Stat, Value) end,
+                    Stats).
+
+populate_processes(StatsMap, ProcNames) ->
+    ProcStats = maps:get(<<"interesting_procs">>, StatsMap, undefined),
+    case ProcStats of
+        undefined -> [];
+        Val -> lists:flatten(
+                 lists:map(
+                   fun({Stats}) -> populate_proc_stats(Stats, ProcNames) end,
+                   Val))
+    end.
+
+proc_stat_name(ProcName, Stat) ->
+    <<ProcName/binary, $/, Stat/binary>>.
+
+compute_cpu_stats(undefined, _Counters) -> [];
+compute_cpu_stats(#{<<"supported">> := true} = OldCounters,
+                  #{<<"supported">> := true} = Counters) ->
+    Diffs = maps:map(fun (Key, Value) ->
+                             OldValue = maps:get(Key, OldCounters, undefined),
+                             case OldValue of
+                                 X when is_number(X), is_number(Value) ->
+                                     Value - X;
+                                 _ -> 0
+                             end
+                     end, Counters),
+    Idle = maps:get(<<"cpu_idle_ms">>, Diffs, 0),
+    User = maps:get(<<"cpu_user_ms">>, Diffs, 0),
+    Sys = maps:get(<<"cpu_sys_ms">>, Diffs, 0),
+    Irq = maps:get(<<"cpu_irq_ms">>, Diffs, 0),
+    Stolen = maps:get(<<"cpu_stolen_ms">>, Diffs, 0),
+    Total = maps:get(<<"cpu_total_ms">>, Diffs),
+
+    RawCpuTotal = get_raw_counter(<<"cpu_total_ms">>, Counters),
+    RawCpuIdle = get_raw_counter(<<"cpu_idle_ms">>, Counters),
+    RawCpuUser = get_raw_counter(<<"cpu_user_ms">>, Counters),
+    RawCpuSys = get_raw_counter(<<"cpu_sys_ms">>, Counters),
+
+    [{cpu_host_utilization_rate, compute_utilization(Total - Idle, Total)},
+     {cpu_host_user_rate, compute_utilization(User, Total)},
+     {cpu_host_sys_rate, compute_utilization(Sys, Total)},
+     %% Raw counters so users can do their own computations using promql.
+     {cpu_host_seconds_total_idle, RawCpuIdle},
+     {cpu_host_seconds_total_user, RawCpuUser},
+     {cpu_host_seconds_total_sys, RawCpuSys}] ++
+    case misc:is_linux() of
+        false ->
+            Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle),
+            [{cpu_host_seconds_total_other, Other}];
+        true ->
+            RawCpuIrq = get_raw_counter(cpu_irq_ms, Counters),
+            RawCpuStolen = get_raw_counter(cpu_stolen_ms, Counters),
+            Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle +
+                                   RawCpuIrq + RawCpuStolen),
+            [{cpu_irq_rate, compute_utilization(Irq, Total)},
+             {cpu_stolen_rate, compute_utilization(Stolen, Total)},
+             {cpu_host_seconds_total_irq, RawCpuIrq},
+             {cpu_host_seconds_total_stolen, RawCpuStolen},
+             {cpu_host_seconds_total_other, Other}]
+    end;
+compute_cpu_stats(_, _) -> [].
+
+%% The current measurement is returned as a raw counter in seconds.
+%% The user can then use prometheus functions to do computations.
+get_raw_counter(Stat, Counters) ->
+    Value = maps:get(Stat, Counters, 0),
+    Value / 1000.
+
+compute_cgroups_counters(Cores, PrevTS, TS,
+                         #{<<"supported">> := true} = Old,
+                         #{<<"supported">> := true} = New)
+                                        when is_number(PrevTS), is_number(TS),
+                                             is_number(Cores), Cores > 0 ->
+    TimeDelta = TS - PrevTS,
+    ComputeRate = fun (Key) ->
+                          OldV = maps:get(Key, Old, undefined),
+                          NewV = maps:get(Key, New, undefined),
+                          case {OldV =/= undefined, NewV =/= undefined} of
+                              {true, true}
+                                when is_number(OldV), is_number(NewV) ->
+                                  compute_utilization(NewV - OldV,
+                                                      TimeDelta * Cores);
+                              _  -> 0
+                          end
+                  end,
+    [{cpu_utilization_rate, ComputeRate(<<"usage_usec">>)},
+     {cpu_user_rate, ComputeRate(<<"user_usec">>)},
+     {cpu_sys_rate, ComputeRate(<<"system_usec">>)},
+     {cpu_throttled_rate, ComputeRate(<<"throttled_usec">>)},
+     {cpu_burst_rate, ComputeRate(<<"burst_usec">>)}];
+compute_cgroups_counters(_, _, _, _, _) ->
+    [].
+
+%% No cgroup counters so just use the host ones.
+default_cgroups_counters(HostCounters) ->
+    [{cpu_utilization_rate,
+      proplists:get_value(cpu_host_utilization_rate, HostCounters)},
+     {cpu_user_rate,
+      proplists:get_value(cpu_host_user_rate, HostCounters)},
+     {cpu_sys_rate,
+      proplists:get_value(cpu_host_sys_rate, HostCounters)}].
+
+compute_utilization(Used, Total) ->
+    try
+        100 * Used / Total
+    catch error:badarith ->
+            0
+    end.
 
 maybe_update_stats(#state{most_recent_data_ts_usec = TS} = State) ->
     case TS == undefined orelse timestamp() - TS >= ?SIGAR_CACHE_TIME_USEC of
@@ -474,7 +451,130 @@ maybe_update_stats(#state{most_recent_data_ts_usec = TS} = State) ->
 timestamp() -> erlang:monotonic_time(microsecond).
 
 update_sigar_data(#state{port = Port} = State) ->
-    Bin = grab_stats(Port),
-    State#state{most_recent_data = Bin,
+    StatsMap = grab_stats(Port),
+    State#state{most_recent_data = StatsMap,
                 most_recent_data_ts_usec = timestamp(),
-                most_recent_unpacked = unpack_global(Bin)}.
+                most_recent_unpacked = get_global_stats(StatsMap)}.
+
+-ifdef(TEST).
+validate_results(Json, CountersExpected, GaugesExpected, CGExpected, PExpect,
+                PNames) ->
+    StatsMap = recv_data_with_length(31, Json, 0),
+    {Counters, Gauges, CGroupsInfo} = get_global_stats(StatsMap),
+    ?assertEqual(CGroupsInfo, CGExpected),
+    ?assertEqual(Counters, CountersExpected),
+    Result = [{K1, V1} || {K1, V1} <- Gauges, {K2, V2} <- GaugesExpected,
+                          K1 =:= K2, V1 =/= V2],
+    ?assertEqual(Result, []),
+    OtherKeys = Gauges -- GaugesExpected,
+    NonNumeric = [{K, V} || {K, V} <- OtherKeys, not is_number(V)],
+    ?assertEqual(NonNumeric, []),
+    CgroupsKeys = [mem_cgroup_limit, mem_cgroup_actual_used, mem_cgroup_used],
+    CgroupList = [{K, V} || {K, V} <- OtherKeys, K1 <- CgroupsKeys, K =:= K1],
+    case maps:get(<<"supported">>, CGExpected) of
+        false -> ?assertEqual(CgroupList, []);
+        true -> ?assertEqual(length(CgroupList), length(CgroupsKeys))
+    end,
+    ProcStats = get_process_stats(StatsMap, PNames),
+    ?assertEqual(ProcStats, PExpect).
+
+sigar_json_test() ->
+    Acc0 = <<"{\n\"cpu_idle_ms\": \"655676420\",\n\"cpu_irq_ms\": \"0\",\n\""
+             "cpu_stolen_ms\": \"0\",\n\"cpu_sys_ms\": \"25792540\",\n\""
+             "cpu_total_ms\": \"732003090\",\n\"cpu_user_ms\":\"50534130\",\n\""
+             "interesting_procs\": [\n{\n\"cpu_utilization\": \"4\",\n\""
+             "major_faults\": \"3\",\n\"minor_faults\": \"19\",\n\"name\": \""
+             "beam.smp\",\n\"page_faults\": \"21835\",\n\"pid\": \"65595\",\n\""
+             "ppid\": \"65587\"\n},\n{\n\"cpu_utilization\": \"5\",\n\""
+             "major_faults\": \"1\",\n\"minor_faults\": \"2\",\n\"name\":\""
+             "sigar_port\",\n\"page_faults\": \"1298\",\n\"pid\":\"65618\",\n\""
+             "ppid\": \"65607\"\n}\n],\n\"mem_actual_free\":\"4063666176\",\n\""
+             "mem_actual_used\": \"30296072192\",\n\"mem_total\": \""
+             "34359738368\",\n\"mem_used\": \"33626083328\",\n\"swap_total\": "
+             "\"1\",\n\"swap_used\": \"2\"\n}">>,
+    CountersExpected0 = #{<<"supported">> => true,
+                          <<"cpu_idle_ms">> => 655676420,
+                          <<"cpu_irq_ms">> => 0,
+                          <<"cpu_stolen_ms">> => 0,
+                          <<"cpu_sys_ms">> => 25792540,
+                          <<"cpu_total_ms">> => 732003090,
+                          <<"cpu_user_ms">> => 50534130},
+    GaugesExpected0 = [{swap_total, 1},
+                       {swap_used, 2},
+                       {mem_total, 34359738368},
+                       {mem_used_sys, 33626083328},
+                       {mem_actual_used, 30296072192},
+                       {mem_actual_free, 4063666176},
+                       {mem_free, 4063666176},
+                       {allocstall, 0}],
+    Cgroups0 = #{<<"supported">> => false},
+    PNames0 = [{65595, <<"Process0">>}, {65618, <<"Process1">>}],
+    Proc0 = [{<<"Process1/page_faults_raw">>,1298},
+        {<<"Process1/minor_faults_raw">>,2},
+        {<<"Process1/major_faults_raw">>,1},
+        {<<"Process1/cpu_utilization">>,5},
+        {<<"Process0/page_faults_raw">>,21835},
+        {<<"Process0/minor_faults_raw">>,19},
+        {<<"Process0/major_faults_raw">>,3},
+        {<<"Process0/cpu_utilization">>,4}],
+    validate_results(Acc0, CountersExpected0, GaugesExpected0, Cgroups0, Proc0,
+                    PNames0),
+    Acc1 = <<"{\n\"allocstall\": \"1\",\n\"control_group_info\": {\n\""
+             "num_cpu_prc\": 8,\n\"memory_current\": \"324\","
+             "\n\"memory_cache\": \"123\"\n,\"memory_max\": \"491\"\n},\n\""
+             "cpu_idle_ms\": \"655676420\",\n\"cpu_irq_ms\": \"0\",\n\""
+             "cpu_stolen_ms\": \"0\",\n\"cpu_sys_ms\": \"25792540\",\n\""
+             "cpu_user_ms\": \"50534130\",\n\"interesting_procs\": [\n{\n\""
+             "cpu_utilization\": \"34\",\n\"major_faults\": \"10\",\n\""
+             "minor_faults\": \"3\",\n\"name\": \"beam.smp\",\n\"page_faults\""
+             ": \"23235\",\n\"pid\": \"35525\",\n\"ppid\": \"65587\"\n},\n{\n\""
+             "cpu_utilization\": \"1\",\n\"major_faults\": \"0\",\n\""
+             "minor_faults\": \"33\",\n\"name\": \"sigar_port\",\n\""
+             "page_faults\": \"13398\",\n\"pid\": \"20618\",\n\"ppid\": \""
+             "65607\"\n}\n],\n\"mem_actual_free\": \"4063666176\",\n\""
+             "mem_actual_used\": \"30296072192\",\n\"mem_total\": \""
+             "34359738368\",\n\"mem_used\": \"33626083328\",\n\"swap_total\": "
+             "\"1\",\n\"swap_used\": \"2\"\n}">>,
+    GaugesExpected1 = [{swap_total, 1},
+                       {swap_used, 2},
+                       {mem_total, 34359738368},
+                       {mem_used_sys, 33626083328},
+                       {mem_actual_used, 30296072192},
+                       {mem_actual_free, 4063666176},
+                       {mem_free, 4063666176},
+                       {allocstall, 1},
+                       {cores_available, 8}],
+    Cgroups1 = #{<<"supported">> => true,
+                 <<"num_cpu_prc">> => 8,
+                 <<"memory_current">> => 324,
+                 <<"memory_cache">> => 123,
+                 <<"memory_max">> => 491},
+    PNames1 = [{35525, <<"Process2">>}, {20618, <<"Process3">>}],
+    Proc1 = [{<<"Process3/page_faults_raw">>,13398},
+        {<<"Process3/minor_faults_raw">>,33},
+        {<<"Process3/major_faults_raw">>,0},
+        {<<"Process3/cpu_utilization">>,1},
+        {<<"Process2/page_faults_raw">>,23235},
+        {<<"Process2/minor_faults_raw">>,3},
+        {<<"Process2/major_faults_raw">>,10},
+        {<<"Process2/cpu_utilization">>,34}],
+    CountersExpected1 = #{<<"supported">> => false},
+    validate_results(Acc1, CountersExpected1, GaugesExpected1, Cgroups1, Proc1,
+                    PNames1),
+    CountersExpected2 = #{<<"supported">> => true,
+                          <<"cpu_idle_ms">> => 655676513,
+                          <<"cpu_irq_ms">> => 2,
+                          <<"cpu_stolen_ms">> => 1,
+                          <<"cpu_sys_ms">> => 232792540,
+                          <<"cpu_total_ms">> => 2332003090,
+                          <<"cpu_user_ms">> => 323534130},
+    ?assertEqual(compute_cpu_stats(CountersExpected1, CountersExpected2), []),
+    ?assertEqual(compute_cpu_stats(CountersExpected2, CountersExpected1), []),
+    Rates = compute_cpu_stats(CountersExpected0, CountersExpected2),
+    RateKeys = [cpu_host_utilization_rate, cpu_host_user_rate,
+                cpu_host_sys_rate, cpu_irq_rate, cpu_stolen_rate],
+    Expected = [{K, V} || K <- RateKeys, {K1, V} <- Rates, K =:= K1,
+                          is_number(V)],
+    ?assertEqual(length(Expected), length(RateKeys)).
+-endif.
+

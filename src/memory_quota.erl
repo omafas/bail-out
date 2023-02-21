@@ -42,8 +42,19 @@ this_node_memory_data() ->
 
 cgroup_memory_data() ->
     CGroupsInfo = sigar:get_cgroups_info(),
-    {maps:get(memory_max, CGroupsInfo, undefined),
-     maps:get(memory_current, CGroupsInfo, undefined)}.
+    MMax = case CGroupsInfo of
+               #{<<"supported">> := true, <<"memory_max">> := MemMax}
+                 when is_number(MemMax) ->
+                   MemMax;
+               _ -> undefined
+           end,
+    MCurr = case CGroupsInfo of
+                #{<<"supported">> := true, <<"memory_current">> := MemCurrent}
+                  when is_number(MemCurrent) ->
+                    MemCurrent;
+                _ -> undefined
+            end,
+    {MMax, MCurr}.
 
 choose_limit(Limit, Usage, {undefined, _}) -> {Limit, Usage};
 choose_limit(Limit, Usage, {_, undefined}) -> {Limit, Usage};

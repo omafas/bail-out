@@ -277,11 +277,12 @@ determine_cpu_num() ->
     CGroupsStats = sigar:get_cgroups_info(),
     sigar:stop(),
     case CGroupsStats of
-        #{supported := true, num_cpu_prc := CPUPercent} when CPUPercent > 0 ->
+        #{<<"supported">> := true, <<"num_cpu_prc">> := CPUPercent}
+          when is_number(CPUPercent), CPUPercent > 0 ->
             CPUCount = ceil(CPUPercent/100),
             ?log_info("CGroup CPU count is ~p (~b%)", [CPUCount, CPUPercent]),
             CPUCount;
-        #{supported := false} ->
+        #{<<"supported">> := false} ->
             ?log_info("CGroups not supported by host"),
             0;
         #{} ->
