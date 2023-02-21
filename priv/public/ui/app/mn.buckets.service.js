@@ -11,7 +11,7 @@ import {Injectable} from '@angular/core';
 import {NgbModal} from '@ng-bootstrap/ng-bootstrap';
 
 import {HttpClient, HttpParams} from '@angular/common/http';
-import {pluck, switchMap, shareReplay,
+import {pluck, switchMap, concatMap, shareReplay,
   distinctUntilChanged, map, withLatestFrom} from 'rxjs/operators';
 import {BehaviorSubject, timer, combineLatest} from 'rxjs';
 import {filter, anyPass, allPass, propEq} from 'ramda';
@@ -82,7 +82,7 @@ class MnBucketsService {
                     timer(0, 4000),
                     this.stream.updateBucketsPoller)
       .pipe(map(([url,]) => url),
-            switchMap(this.get.bind(this)),
+            concatMap(this.get.bind(this)),
             shareReplay({refCount: true, bufferSize: 1}));
 
     this.stream.defaultAutoCompactionData = mnSettingsAutoCompactionService.stream.settingsSource;
