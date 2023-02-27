@@ -55,7 +55,8 @@
          diff_manifests/2,
          jsonify_limits/1,
          last_seen_ids_key/2,
-         last_seen_ids_set/3]).
+         last_seen_ids_set/3,
+         chronicle_upgrade_to_72/2]).
 
 %% rpc from other nodes
 -export([wait_for_manifest_uid/4]).
@@ -1028,6 +1029,40 @@ update_last_seen_ids() ->
 
 last_seen_ids_set(Node, Bucket, Manifest) ->
     {set, last_seen_ids_key(Node, Bucket), get_next_uids(Manifest)}.
+
+chronicle_upgrade_to_72(Bucket, ChronicleTxn) ->
+    PropsKey = ns_bucket:sub_key(Bucket, props),
+    {ok, BucketConfig} = chronicle_upgrade:get_key(PropsKey, ChronicleTxn),
+    case ns_bucket:history_retention_collection_default(BucketConfig) of
+        %% Nothing to do
+        false -> ChronicleTxn;
+        %% Upgrade should add the history prop to each collection
+        true ->
+            %% We're going to generate a new manifest by modifying each
+            %% collection. When we modify a collection we need both the Scope
+            %% and the Collection name. We don't have that in a convenient
+            %% format, so we'll have to extract it from the manifest.
+            {ok, Manifest} = chronicle_upgrade:get_key(key(Bucket),
+                                                       ChronicleTxn),
+            AllCollections =
+                lists:flatmap(
+                  fun({ScopeName, ScopeProps}) ->
+                          Collections = get_collections(ScopeProps),
+                          [{ScopeName, CollectionName} ||
+                              {CollectionName, _} <- Collections]
+                  end, get_scopes(Manifest)),
+
+            NewManifest =
+                lists:foldl(
+                  fun({Scope, Collection}, Acc) ->
+                          modify_collection_props(Acc, Collection, Scope,
+                                                  [{history, true}])
+                  end,
+                  Manifest,
+                  AllCollections),
+
+            chronicle_upgrade:set_key(key(Bucket), NewManifest, ChronicleTxn)
+    end.
 
 -ifdef(TEST).
 manifest_test_set_history_default(Val) ->

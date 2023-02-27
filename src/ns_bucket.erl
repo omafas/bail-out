@@ -1603,7 +1603,8 @@ chronicle_upgrade_to_72(ChronicleTxn) ->
     {ok, BucketNames} = chronicle_upgrade:get_key(root(), ChronicleTxn),
     lists:foldl(
       fun (Name, Txn) ->
-              upgrade_bucket_config_to_72(Name, Txn)
+              Txn1 = upgrade_bucket_config_to_72(Name, Txn),
+              collections:chronicle_upgrade_to_72(Name, Txn1)
       end, ChronicleTxn, BucketNames).
 
 %% returns proplist with only props useful for ns_bucket
