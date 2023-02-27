@@ -953,7 +953,7 @@ collections_sets(Bucket, Config, Snapshot) ->
     case collections:enabled(Config) of
         true ->
             Nodes = ns_cluster_membership:nodes_wanted(Snapshot),
-            Manifest = collections:default_manifest(),
+            Manifest = collections:default_manifest(Config),
             [{set, collections:key(Bucket), Manifest} |
              [collections:last_seen_ids_set(Node, Bucket, Manifest) ||
                  Node <- Nodes]];

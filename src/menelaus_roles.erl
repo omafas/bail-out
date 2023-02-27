@@ -869,11 +869,17 @@ params_version() ->
 
 -spec params_version(map()) -> term().
 params_version(Snapshot) ->
-    [{Name, ns_bucket:uuid(Name, Snapshot),
-      collections:get_uid(
-        collections:get_manifest(Name, Snapshot,
-                                 collections:default_manifest()))} ||
-        Name <- ns_bucket:get_bucket_names(Snapshot)].
+    lists:map(
+      fun (Name) ->
+              UUID = ns_bucket:uuid(Name, Snapshot),
+              {ok, BucketConfig} = ns_bucket:get_bucket(Name),
+              DefaultManifest = collections:default_manifest(BucketConfig),
+              Manifest = collections:get_manifest(Name, Snapshot,
+                                                  DefaultManifest),
+              ManifestUid = collections:get_uid(Manifest),
+              {Name, UUID, ManifestUid}
+      end,
+      ns_bucket:get_bucket_names(Snapshot)).
 
 compile_params([], [], Acc, _) ->
     lists:reverse(Acc);
@@ -1777,6 +1783,13 @@ produce_roles_by_permission_test_() ->
             {[{bucket, "wrong"}, data, docs], insert})}]}.
 
 params_version_test() ->
+    meck:new(ns_bucket, [passthrough]),
+    meck:expect(ns_bucket,
+                get_bucket,
+                fun(_) ->
+                        {ok, [{type, membase}, {storage_mode, magma}]}
+                end),
+
     Test = ?cut(params_version(ns_bucket:toy_buckets(_))),
     Update = ?cut(lists:keyreplace("test", 1, toy_buckets_props(),
                                    {"test", _})),
