@@ -957,6 +957,8 @@ computed_stats_lazy_proplist(_) ->
                             end
                     end,
 
+    DocsFragmentation = Z2(couch_docs_data_size, couch_docs_disk_size,
+                           Fragmentation),
     ViewsFragmentation = Z2(couch_views_data_size, couch_views_disk_size,
                             Fragmentation),
 
@@ -1021,6 +1023,7 @@ computed_stats_lazy_proplist(_) ->
                   ep_dcp_views_backoff, ep_dcp_2i_backoff, ep_dcp_fts_backoff}]],
 
     [{<<"couch_total_disk_size">>, TotalDisk},
+     {<<"couch_docs_fragmentation">>, DocsFragmentation},
      {<<"couch_views_fragmentation">>, ViewsFragmentation},
      {<<"hit_ratio">>, HitRatio},
      {<<"ep_cache_miss_rate">>, EPCacheMissRatio},

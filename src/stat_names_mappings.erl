@@ -389,38 +389,6 @@ pre_70_stat_to_prom_query(Bucket, <<"couch_docs_data_size">>, _Opts) ->
            <<"couch_docs_data_size">>,
            promQL:max(promQL:op('or', [{'<', [FileSize, MinFileSize]},
                                        DataSize])))};
-pre_70_stat_to_prom_query(Bucket, <<"couch_docs_fragmentation">>, Opts) ->
-    {ok, {call, label_replace, none, [FileSize | _]}} =
-        pre_70_stat_to_prom_query(Bucket, <<"couch_docs_disk_size">>, Opts),
-    {ok, {call, label_replace, none, [DataSize | _]}} =
-        pre_70_stat_to_prom_query(Bucket, <<"couch_docs_data_size">>, Opts),
-    HistorySize = promQL:sum(promQL:bucket_metric(
-                               <<"kv_ep_db_history_file_size_bytes">>, Bucket)),
-    NonHistoryFileSize = promQL:op('-', [FileSize, HistorySize]),
-
-    Percent = fun (Numerator, Denominator) ->
-                      promQL:op(
-                        '/',
-                        [promQL:multiply_by_scalar(Numerator, 100),
-                         Denominator])
-              end,
-    %% To ensure that fragmentation is calculated as 0 when the denominator
-    %% is 0, we have to multiply by 0 or 1 when the denominator is zero or
-    %% non-zero respectively
-    SafePercent = fun (Numerator, Denominator) ->
-                          promQL:op('*', [promQL:op('!=', [bool],
-                                                    [Denominator, 0]),
-                                          Percent(Numerator, Denominator)])
-                  end,
-    OppositePercent = fun (Numerator, Denominator) ->
-                              SafePercent(promQL:op('-',
-                                                    [Denominator, Numerator]),
-                                          Denominator)
-                      end,
-    DocsFragmentation = OppositePercent(DataSize,
-                                        NonHistoryFileSize),
-    {ok, promQL:named(<<"couch_docs_fragmentation">>,
-                      DocsFragmentation)};
 
 pre_70_stat_to_prom_query(Bucket, <<"disk_write_queue">>, _Opts) ->
     M = {union, [promQL:bucket_metric(<<"kv_ep_queue_size">>, Bucket),
@@ -747,8 +715,6 @@ prom_name_to_pre_70_name(Bucket, {JSONProps}) ->
                 Filter = fun (L) -> not lists:member(L, DropLabels) end,
                 Labels = misc:proplist_keyfilter(Filter, JSONProps),
                 kv_stats_mappings:new_to_old({Name, lists:usort(Labels)});
-            <<"couch_docs_fragmentation">> ->
-                {ok, <<"couch_docs_fragmentation">>};
             <<"couch_", _/binary>> = Name ->
                 case proplists:get_value(<<"signature">>, JSONProps) of
                     undefined -> {ok, Name};
@@ -934,9 +900,9 @@ default_stat_list(_Bucket) ->
      disk_update_count, disk_update_total, couch_docs_disk_size,
      couch_docs_data_size, disk_write_queue, ep_ops_create, ep_ops_update,
      misses, evictions, ops, vb_total_queue_age, vb_total_queue_size, xdc_ops,
-     couch_docs_fragmentation, <<"spatial/*/accesses">>,
-     <<"spatial/*/data_size">>, <<"spatial/*/disk_size">>,
-     <<"views/*/accesses">>, <<"views/*/data_size">>, <<"views/*/disk_size">>].
+     <<"spatial/*/accesses">>, <<"spatial/*/data_size">>,
+     <<"spatial/*/disk_size">>, <<"views/*/accesses">>, <<"views/*/data_size">>,
+     <<"views/*/disk_size">>].
 
 is_system_stat(<<"cpu_", _/binary>>) -> true;
 is_system_stat(<<"swap_", _/binary>>) -> true;
