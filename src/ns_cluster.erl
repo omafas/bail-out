@@ -1470,12 +1470,12 @@ do_engage_cluster_validate_cert(NodeKVList, Services) ->
 maybe_validate_local_node_certificate_san(NodeKVList) ->
     ClusterCompat = expect_json_property_integer(
                       <<"clusterCompatibility">>, NodeKVList),
-    Version_7_0 = cluster_compat_mode:effective_cluster_compat_version_for(
-                    ?VERSION_70),
-    %% Pre-7.0 nodes don't send the private key and hence self generated certs
-    %% are not regenerated on rename of the node to be added at this point,
-    %% cause the SAN checks to fail.
-    case ClusterCompat < Version_7_0 andalso
+    Version_7_1 = cluster_compat_mode:effective_cluster_compat_version_for(
+                    ?VERSION_71),
+    %% Pre-7.1 nodes don't send the private key (unless encryption is on)
+    %% and hence self generated certs are not regenerated on rename event of
+    %% the node to be added, it causes the SAN check to fail.
+    case ClusterCompat < Version_7_1 andalso
          ns_server_cert:this_node_uses_self_generated_certs() of
         true ->
             %% skip SAN checks
