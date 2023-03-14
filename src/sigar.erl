@@ -212,8 +212,7 @@ parse_json_elem(Data) when is_binary(Data) ->
                 X -> X
             catch _:_ ->
                     Data
-            end,
-            Data
+            end
     end.
 
 cpu_filter_counter(<<"cpu_", End/binary>>, Val) ->
@@ -237,6 +236,12 @@ get_global_stats(StatsMap) ->
             {CgroupsStats} ->
                 Map1 = maps:from_list(CgroupsStats),
                 maps:put(<<"supported">>, true, Map1)
+        end,
+    CgroupsPressure =
+        case CgroupsInfo of
+            #{<<"supported">> := true, <<"pressure">> := CPressMap} ->
+                get_pressure_stats(<<"pressure/cgroup">>, CPressMap, []);
+            _ -> []
         end,
     {CGMemLimit, CGMemUsed, CGMemActual} =
         case CgroupsInfo of
@@ -270,6 +275,11 @@ get_global_stats(StatsMap) ->
                        maps:put(<<"supported">>, true, CMap);
                    _ -> #{<<"supported">> => false}
                end,
+    HostPressure = case maps:get(<<"pressure">>, StatsMap, undefined) of
+                       undefined -> [];
+                       PressMap ->
+                           get_pressure_stats(<<"pressure/host">>, PressMap, [])
+                   end,
     Gauges =
         [{cpu_cores_available, CoresAvailable},
          {cpu_host_cores_available, HostCoresAvailable},
@@ -284,9 +294,30 @@ get_global_stats(StatsMap) ->
          {allocstall, get_number(StatsMap, <<"allocstall">>)}] ++
         [{mem_cgroup_limit, CGMemLimit} || CGMemLimit /= undefined] ++
         [{mem_cgroup_actual_used, CGMemActual} || CGMemActual /= undefined] ++
-        [{mem_cgroup_used, CGMemUsed} || CGMemUsed /= undefined],
+        [{mem_cgroup_used, CGMemUsed} || CGMemUsed /= undefined] ++
+        HostPressure ++ CgroupsPressure,
 
     {Counters, Gauges, CgroupsInfo}.
+
+get_pressure_stats(<<Prefix/binary>>, Elem, Acc) ->
+    case Elem of
+        Val when is_number(Val) ->
+            [{Prefix, Val} | Acc];
+        {<<Key/binary>>, Y} ->
+            case binary:split(Key, <<"avg">>) of
+                [<<>>, Rest] ->
+                    get_pressure_stats(<<Prefix/binary, "/share_time_stalled/",
+                                         Rest/binary>>, Y, Acc);
+                _ ->
+                    get_pressure_stats(<<Prefix/binary, $/, Key/binary>>, Y,
+                                       Acc)
+            end;
+        {Obj} -> lists:foldl(
+                   fun(X, AccIn) ->
+                           get_pressure_stats(<<Prefix/binary>>, X, AccIn)
+                   end, Acc, Obj);
+        _ -> Acc
+    end.
 
 get_process_stats(StatsMap, ProcNames) ->
     collapse_duplicates(populate_processes(StatsMap, ProcNames)).
@@ -458,11 +489,14 @@ update_sigar_data(#state{port = Port} = State) ->
 
 -ifdef(TEST).
 validate_results(Json, CountersExpected, GaugesExpected, CGExpected, PExpect,
-                PNames) ->
+                 PNames) ->
     StatsMap = recv_data_with_length(31, Json, 0),
     {Counters, Gauges, CGroupsInfo} = get_global_stats(StatsMap),
     ?assertEqual(CGroupsInfo, CGExpected),
     ?assertEqual(Counters, CountersExpected),
+    Result1 = [K1 || {K1, _} <- Gauges, {K2, _} <- GaugesExpected,
+                     K1 =:= K2],
+    ?assertEqual(length(GaugesExpected), length(Result1)),
     Result = [{K1, V1} || {K1, V1} <- Gauges, {K2, V2} <- GaugesExpected,
                           K1 =:= K2, V1 =/= V2],
     ?assertEqual(Result, []),
@@ -491,7 +525,15 @@ sigar_json_test() ->
              "ppid\": \"65607\"\n}\n],\n\"mem_actual_free\":\"4063666176\",\n\""
              "mem_actual_used\": \"30296072192\",\n\"mem_total\": \""
              "34359738368\",\n\"mem_used\": \"33626083328\",\n\"swap_total\": "
-             "\"1\",\n\"swap_used\": \"2\"\n}">>,
+             "\"1\",\n\"swap_used\": \"2\",\n\"pressure\":\n{\n\"cpu\":\n{\n\""
+             "full\":\n{\n\"avg10\":\"0.00\",\n\"avg300\":\"0.00\",\n\"avg60\""
+             ":\"0.00\",\n\"total_stall_time_usec\":\"42142\"\n},\n\"some\""
+             ":\n{\n\"avg10\":\"0.00\",\"avg300\":\"0.00\",\"avg60\":\"0.00\""
+             ",\"total_stall_time_usec\":\"44472\"\n}\n\},\"io\":\n{\n\"full\""
+             ":\n{\"avg10\":\"1.86\",\"avg300\":\"0.59\",\"avg60\":\"2.13\","
+             "\"total_stall_time_usec\":\"1939155\"\n},\"some\":\n\{\n\""
+             "avg10\":\"1.86\",\"avg300\":\"0.59\",\"avg60\":\"2.13\","
+             "\"total_stall_time_usec\":\"1939178\"\n}\n}\n}\n}">>,
     CountersExpected0 = #{<<"supported">> => true,
                           <<"cpu_idle_ms">> => 655676420,
                           <<"cpu_irq_ms">> => 0,
@@ -506,22 +548,63 @@ sigar_json_test() ->
                        {mem_actual_used, 30296072192},
                        {mem_actual_free, 4063666176},
                        {mem_free, 4063666176},
-                       {allocstall, 0}],
+                       {allocstall, 0},
+                       {<<"pressure/host/cpu/full/share_time_stalled/10">>,
+                        0.00},
+                       {<<"pressure/host/cpu/full/share_time_stalled/300">>,
+                        0.00},
+                       {<<"pressure/host/cpu/full/share_time_stalled/60">>,
+                        0.00},
+                       {<<"pressure/host/cpu/full/total_stall_time_usec">>,
+                        42142},
+                       {<<"pressure/host/cpu/some/share_time_stalled/10">>,
+                        0.00},
+                       {<<"pressure/host/cpu/some/share_time_stalled/300">>,
+                        0.00},
+                       {<<"pressure/host/cpu/some/share_time_stalled/60">>,
+                        0.00},
+                       {<<"pressure/host/cpu/some/total_stall_time_usec">>,
+                        44472},
+                       {<<"pressure/host/io/full/share_time_stalled/10">>,
+                        1.86},
+                       {<<"pressure/host/io/full/share_time_stalled/300">>,
+                        0.59},
+                       {<<"pressure/host/io/full/share_time_stalled/60">>,
+                        2.13},
+                       {<<"pressure/host/io/full/total_stall_time_usec">>,
+                        1939155},
+                       {<<"pressure/host/io/some/share_time_stalled/10">>,
+                        1.86},
+                       {<<"pressure/host/io/some/share_time_stalled/300">>,
+                        0.59},
+                       {<<"pressure/host/io/some/share_time_stalled/60">>,
+                        2.13},
+                       {<<"pressure/host/io/some/total_stall_time_usec">>,
+                        1939178}],
     Cgroups0 = #{<<"supported">> => false},
     PNames0 = [{65595, <<"Process0">>}, {65618, <<"Process1">>}],
     Proc0 = [{<<"Process1/page_faults_raw">>,1298},
-        {<<"Process1/minor_faults_raw">>,2},
-        {<<"Process1/major_faults_raw">>,1},
-        {<<"Process1/cpu_utilization">>,5},
-        {<<"Process0/page_faults_raw">>,21835},
-        {<<"Process0/minor_faults_raw">>,19},
-        {<<"Process0/major_faults_raw">>,3},
-        {<<"Process0/cpu_utilization">>,4}],
+             {<<"Process1/minor_faults_raw">>,2},
+             {<<"Process1/major_faults_raw">>,1},
+             {<<"Process1/cpu_utilization">>,5},
+             {<<"Process0/page_faults_raw">>,21835},
+             {<<"Process0/minor_faults_raw">>,19},
+             {<<"Process0/major_faults_raw">>,3},
+             {<<"Process0/cpu_utilization">>,4}],
     validate_results(Acc0, CountersExpected0, GaugesExpected0, Cgroups0, Proc0,
-                    PNames0),
+                     PNames0),
     Acc1 = <<"{\n\"allocstall\": \"1\",\n\"control_group_info\": {\n\""
              "num_cpu_prc\": 8,\n\"memory_current\": \"324\","
-             "\n\"memory_cache\": \"123\"\n,\"memory_max\": \"491\"\n},\n\""
+             "\n\"memory_cache\": \"123\"\n,\"memory_max\": \"491\"\n,\n\""
+             "pressure\":\n{\n\"cpu\":\n{\n\"full\":\n{\n\"avg10\":\"0.00\""
+             ",\n\"avg300\":\"0.00\",\n\"avg60\":\"0.00\",\n\""
+             "total_stall_time_usec\":\"42142\"\n},\n\"some\":\n{\n\"avg10\""
+             ":\"0.00\",\"avg300\":\"0.00\",\"avg60\":\"0.00\",\""
+             "total_stall_time_usec\":\"44472\"\n}\n\},\"io\":\n{\n\"full\""
+             ":\n{\"avg10\":\"1.86\",\"avg300\":\"0.59\",\"avg60\":\"2.13\","
+             "\"total_stall_time_usec\":\"1939155\"\n},\"some\":\n\{\n\""
+             "avg10\":\"1.86\",\"avg300\":\"0.59\",\"avg60\":\"2.13\","
+             "\"total_stall_time_usec\":\"1939178\"\n}\n}\n}\n},\n\""
              "cpu_idle_ms\": \"655676420\",\n\"cpu_irq_ms\": \"0\",\n\""
              "cpu_stolen_ms\": \"0\",\n\"cpu_sys_ms\": \"25792540\",\n\""
              "cpu_user_ms\": \"50534130\",\n\"interesting_procs\": [\n{\n\""
@@ -543,24 +626,79 @@ sigar_json_test() ->
                        {mem_actual_free, 4063666176},
                        {mem_free, 4063666176},
                        {allocstall, 1},
-                       {cores_available, 8}],
+                       {<<"pressure/cgroup/cpu/full/share_time_stalled/10">>,
+                        0.00},
+                       {<<"pressure/cgroup/cpu/full/share_time_stalled/300">>,
+                        0.00},
+                       {<<"pressure/cgroup/cpu/full/share_time_stalled/60">>,
+                        0.00},
+                       {<<"pressure/cgroup/cpu/full/total_stall_time_usec">>,
+                        42142},
+                       {<<"pressure/cgroup/cpu/some/share_time_stalled/10">>,
+                        0.00},
+                       {<<"pressure/cgroup/cpu/some/share_time_stalled/300">>,
+                        0.00},
+                       {<<"pressure/cgroup/cpu/some/share_time_stalled/60">>,
+                        0.00},
+                       {<<"pressure/cgroup/cpu/some/total_stall_time_usec">>,
+                        44472},
+                       {<<"pressure/cgroup/io/full/share_time_stalled/10">>,
+                        1.86},
+                       {<<"pressure/cgroup/io/full/share_time_stalled/300">>,
+                        0.59},
+                       {<<"pressure/cgroup/io/full/share_time_stalled/60">>,
+                        2.13},
+                       {<<"pressure/cgroup/io/full/total_stall_time_usec">>,
+                        1939155},
+                       {<<"pressure/cgroup/io/some/share_time_stalled/10">>,
+                        1.86},
+                       {<<"pressure/cgroup/io/some/share_time_stalled/300">>,
+                        0.59},
+                       {<<"pressure/cgroup/io/some/share_time_stalled/60">>,
+                        2.13},
+                       {<<"pressure/cgroup/io/some/total_stall_time_usec">>,
+                        1939178}],
     Cgroups1 = #{<<"supported">> => true,
                  <<"num_cpu_prc">> => 8,
                  <<"memory_current">> => 324,
                  <<"memory_cache">> => 123,
-                 <<"memory_max">> => 491},
+                 <<"memory_max">> => 491,
+                 <<"pressure">> =>
+                     {[{<<"cpu">>,
+                        {[{<<"full">>,
+                           {[{<<"avg10">>, 0.00},
+                             {<<"avg300">>, 0.00},
+                             {<<"avg60">>, 0.00},
+                             {<<"total_stall_time_usec">>, 42142}]}},
+                          {<<"some">>,
+                           {[{<<"avg10">>, 0.00},
+                             {<<"avg300">>, 0.00},
+                             {<<"avg60">>, 0.00},
+                             {<<"total_stall_time_usec">>, 44472}]}}]}},
+                       {<<"io">>,
+                        {[{<<"full">>,
+                           {[{<<"avg10">>, 1.86},
+                             {<<"avg300">>, 0.59},
+                             {<<"avg60">>, 2.13},
+                             {<<"total_stall_time_usec">>, 1939155}]}},
+                          {<<"some">>,
+                           {[{<<"avg10">>, 1.86},
+                             {<<"avg300">>, 0.59},
+                             {<<"avg60">>, 2.13},
+                             {<<"total_stall_time_usec">>, 1939178}]}}]}}
+                      ]}},
     PNames1 = [{35525, <<"Process2">>}, {20618, <<"Process3">>}],
     Proc1 = [{<<"Process3/page_faults_raw">>,13398},
-        {<<"Process3/minor_faults_raw">>,33},
-        {<<"Process3/major_faults_raw">>,0},
-        {<<"Process3/cpu_utilization">>,1},
-        {<<"Process2/page_faults_raw">>,23235},
-        {<<"Process2/minor_faults_raw">>,3},
-        {<<"Process2/major_faults_raw">>,10},
-        {<<"Process2/cpu_utilization">>,34}],
+             {<<"Process3/minor_faults_raw">>,33},
+             {<<"Process3/major_faults_raw">>,0},
+             {<<"Process3/cpu_utilization">>,1},
+             {<<"Process2/page_faults_raw">>,23235},
+             {<<"Process2/minor_faults_raw">>,3},
+             {<<"Process2/major_faults_raw">>,10},
+             {<<"Process2/cpu_utilization">>,34}],
     CountersExpected1 = #{<<"supported">> => false},
     validate_results(Acc1, CountersExpected1, GaugesExpected1, Cgroups1, Proc1,
-                    PNames1),
+                     PNames1),
     CountersExpected2 = #{<<"supported">> => true,
                           <<"cpu_idle_ms">> => 655676513,
                           <<"cpu_irq_ms">> => 2,

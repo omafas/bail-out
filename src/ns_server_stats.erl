@@ -182,11 +182,47 @@ report_prom_stats(ReportFun, IsHighCard) ->
     end,
     ok.
 
+get_pressure_name_labels(PsiKey) ->
+    [Level, PsiKey0] = binary:split(PsiKey, <<"/">>),
+    [Resource, PsiKey1] = binary:split(PsiKey0, <<"/">>),
+    [SomeOrAll, PsiKey2] = binary:split(PsiKey1, <<"/">>),
+    PressureLabels = [{<<"level">>, Level}, {<<"resource">>, Resource},
+                      {<<"quantifier">>, SomeOrAll}],
+    {Name, Labels} =
+        case binary:split(PsiKey2, <<"/">>) of
+            [Key] ->
+                {Key, PressureLabels};
+            [Key, Interval] ->
+                {Key, [{<<"interval">>, Interval} | PressureLabels]}
+        end,
+    {<<"pressure_", Name/binary>>, Labels}.
+
+-ifdef(TEST).
+
+validate_psi(<<"pressure/", PsiKey/binary>>, {EName, ELabels}) ->
+    {RName, RLabels} = get_pressure_name_labels(PsiKey),
+    ?assertEqual(EName, RName),
+    ?assertEqual(lists:sort(ELabels), lists:sort(RLabels)).
+
+psi_test() ->
+    PsiKeyAvg = <<"pressure/cgroup/io/some/share_time_stalled/10">>,
+    PsiKeyStall = <<"pressure/host/cpu/full/total_stall_time_usec">>,
+    AvgExpect = {<<"pressure_share_time_stalled">>,
+                 [{<<"interval">>, <<"10">>}, {<<"level">>, <<"cgroup">>},
+                  {<<"resource">>, <<"io">>}, {<<"quantifier">>, <<"some">>}]},
+    StallExpect = {<<"pressure_total_stall_time_usec">>,
+                   [{<<"level">>, <<"host">>}, {<<"resource">>, <<"cpu">>},
+                    {<<"quantifier">>, <<"full">>}]},
+    validate_psi(PsiKeyAvg, AvgExpect),
+    validate_psi(PsiKeyStall, StallExpect).
+
+-endif.
+
 report_system_stats(ReportFun) ->
     Stats = gen_server:call(?MODULE, get_stats),
     SystemStats = proplists:get_value("@system", Stats, []),
     lists:foreach(
-      fun ({Key, Val}) ->
+      fun ({Key, Val}) when not is_binary(Key) ->
               KeyBin = atom_to_binary(Key),
               {StatName, Labels0} =
                 case KeyBin of
@@ -197,7 +233,11 @@ report_system_stats(ReportFun) ->
                         {KeyBin, []}
                 end,
               Labels = Labels0 ++ [{<<"category">>, <<"system">>}],
-              ReportFun({<<"sys">>, StatName, Labels, Val})
+              ReportFun({<<"sys">>, StatName, Labels, Val});
+          ({<<"pressure/", PsiKey/binary>>, Val}) ->
+              {Name, PLabels} = get_pressure_name_labels(PsiKey),
+              ReportFun({<<"sys">>, Name,
+                         [{<<"category">>, <<"system">>} | PLabels], Val})
       end, SystemStats),
 
     SysProcStats = proplists:get_value("@system-processes", Stats, []),

@@ -203,6 +203,51 @@
         "unit": "bytes",
         "stability": "committed"
     },
+    "sys_pressure_share_time_stalled": {
+        "type": "gauge",
+        "help": "Percentage of time that tasks were stalled on a given resource",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "level",
+                "help": "Level at which statistics are tracked (host|cgroup)"
+            },
+            {
+                "name": "resource",
+                "help": "Resource type (cpu|io|memory)"
+            },
+            {
+                "name": "quantifier",
+                "help": "Quantifies how many tasks were stalled (some|all)"
+            },
+            {
+                "name": "interval",
+                "help": "Time interval (in seconds) over which the stat was averaged (10|60|300)"
+            }
+        ]
+    },
+    "sys_pressure_total_stall_time_usec": {
+        "type": "counter",
+        "help": "Absolute stall time when tasks were stalled on a given resource",
+        "added": "7.2.4",
+        "units": "microseconds",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "level",
+                "help": "Level at which statistics are tracked (host|cgroup)"
+            },
+            {
+                "name": "resource",
+                "help": "Resource type (cpu|io|memory)"
+            },
+            {
+                "name": "quantifier",
+                "help": "Quantifies how many tasks were stalled (some|all)"
+            }
+        ]
+    },
     "sys_swap_total": {
         "type": "gauge",
         "help": "Total amount of swap space",
