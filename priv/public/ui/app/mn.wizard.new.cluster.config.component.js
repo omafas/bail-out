@@ -165,7 +165,6 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
     rv.dataPath = nodeStorage.get("storage.path").value;
     rv.indexPath = nodeStorage.get("storage.index_path").value;
     rv.eventingPath = nodeStorage.get("storage.eventing_path").value;
-    rv.javaHome = nodeStorage.get("storage.java_home").value;
     rv.sendStats = this.wizardForm.termsAndConditions.get("enableStats").value;
     let services = this.wizardForm.newClusterConfig.get("services.flag");
     rv.services = this.getServicesValues(services).join(",");
@@ -177,6 +176,7 @@ class MnWizardNewClusterConfigComponent extends MnLifeCycleHooksToStream {
 
     if (isEnterprise) {
       rv.analyticsPath = nodeStorage.get("storage.cbas_path").value;
+      rv.javaHome = this.wizardForm.newClusterConfig.get("javaPath").value;
       hostConfigRv = this.getHostConfig.bind(this)();
     }
 

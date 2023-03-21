@@ -103,6 +103,9 @@ class MnWizardComponent extends MnLifeCycleHooksToStream {
             });
         });
       }
+      if ((config === newClusterConfig) && isEnterprise) {
+        newClusterConfig.get('javaPath').setValue(initHdd.java_home)
+      }
       config.get("clusterStorage.storage").patchValue(initHdd);
     }
   }
