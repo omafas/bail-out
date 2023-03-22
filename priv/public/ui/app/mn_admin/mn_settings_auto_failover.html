@@ -103,6 +103,25 @@ licenses/APL2.txt.
           {{settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors['failoverOnDataDiskIssues[timePeriod]']}}
         </div>
       </div>
+      <div
+         ng-if="adminCtl.poolDefault.compat.atLeast72 && adminCtl.poolDefault.isEnterprise"
+         class="row flex-left text-medium flex-wrap">
+        <input
+           type="checkbox"
+           id="for-preserve-durability-enable"
+           ng-disabled="!settingsAutoFailoverCtl.autoFailoverSettings.enabled || !rbac.cluster.settings.write"
+           ng-model="settingsAutoFailoverCtl.autoFailoverSettings.failoverPreserveDurabilityMajority">
+        <label
+           for="for-preserve-durability-enable"
+           class="margin-right-zero line-height-1-5">
+            Preserve durable writes &nbsp;
+        </label>
+        <div
+           class="error"
+           ng-show="settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors['failoverPreserveDurabilityMajority']">
+            {{settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors['failoverPreserveDurabilityMajority']}}
+        </div>
+      </div>
     </div>
 
     <div class="margin-top2 margin-bottom-1">

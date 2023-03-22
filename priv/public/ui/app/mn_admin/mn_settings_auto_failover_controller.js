@@ -45,11 +45,18 @@ function mnSettingsAutoFailoverController($scope, $q, mnPromiseHelper, mnSetting
       enabled: vm.autoFailoverSettings.enabled,
       timeout: vm.autoFailoverSettings.timeout
     };
-    if (mnPoolDefault.export.compat.atLeast55 &&
-        mnPoolDefault.export.isEnterprise) {
-      settings.failoverOnDataDiskIssues = vm.autoFailoverSettings.failoverOnDataDiskIssues;
-      settings.maxCount = vm.autoFailoverSettings.maxCount;
+
+    if (mnPoolDefault.export.isEnterprise) {
+        if (mnPoolDefault.export.compat.atLeast55) {
+            settings.failoverOnDataDiskIssues = vm.autoFailoverSettings.failoverOnDataDiskIssues;
+            settings.maxCount = vm.autoFailoverSettings.maxCount;
+        }
+
+        if (mnPoolDefault.export.compat.atLeast72) {
+            settings.failoverPreserveDurabilityMajority = vm.autoFailoverSettings.failoverPreserveDurabilityMajority;
+        }
     }
+
     return settings;
   }
 
