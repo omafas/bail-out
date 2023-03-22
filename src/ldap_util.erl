@@ -12,9 +12,6 @@
 -include_lib("eldap/include/eldap.hrl").
 -include("cut.hrl").
 
-%% Remove by OTP25
--compile([{nowarn_deprecated_function, [{ http_uri,parse,2 }]}]).
-
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
@@ -298,8 +295,9 @@ parse_url(Str, ReplacePairs) ->
                       end,
     try
         {Scheme, _UserInfo, Host, Port, "/" ++ EncodedDN, Query} =
-            case http_uri:parse(Str, [{scheme_defaults, [{ldap, 389}]},
-                                 {scheme_validation_fun, SchemeValidator}]) of
+            case http_uri_deprecated:parse(
+                   Str, [{scheme_defaults, [{ldap, 389}]},
+                         {scheme_validation_fun, SchemeValidator}]) of
                 {ok, R} -> R;
                 {error, _} -> throw({error, malformed_url})
             end,
