@@ -55,6 +55,18 @@
         "added": "7.0.0",
         "stability": "committed"
     },
+    "sys_cpu_burst_rate": {
+        "type": "gauge",
+        "help": "Rate at which CPUs overran their quota",
+        "added": "7.2.0",
+        "stability": "committed"
+    },
+    "sys_cpu_throttled_rate": {
+        "type": "gauge",
+        "help": "Rate at which CPUs were throttled",
+        "added": "7.2.0",
+        "stability": "committed"
+    },
     "sys_cpu_cores_available": {
         "type": "gauge",
         "help": "Number of available cores",
@@ -154,6 +166,27 @@
         "type": "gauge",
         "help": "System memory used",
         "added": "7.0.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sys_mem_cgroup_limit": {
+        "type": "gauge",
+        "help": "cgroup memory limit",
+        "added": "7.2.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sys_mem_cgroup_actual_used": {
+        "type": "gauge",
+        "help": "Actual memory used by cgroup",
+        "added": "7.2.0",
+        "units": "bytes",
+        "stability": "committed"
+    },
+    "sys_mem_cgroup_used": {
+        "type": "gauge",
+        "help": "Memory used by cgroup",
+        "added": "7.2.0",
         "units": "bytes",
         "stability": "committed"
     },
