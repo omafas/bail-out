@@ -349,6 +349,103 @@
             }
         ]
     },
+    "sys_disk_queue": {
+        "type": "gauge",
+        "help": "Current disk queue length of the disk",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "disk",
+                "help": "Name of the disk"
+            }
+        ]
+    },
+    "sys_disk_queue_depth": {
+        "type": "gauge",
+        "help": "Maximum disk queue length of the disk",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "disk",
+                "help": "Name of the disk"
+            }
+        ]
+    },
+    "sys_disk_read_bytes": {
+        "type": "counter",
+        "help": "Number of bytes read by the disk",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "disk",
+                "help": "Name of the disk"
+            }
+        ]
+    },
+    "sys_disk_read_time_seconds": {
+        "type": "counter",
+        "help": "Amount of time that the disk spent reading",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "disk",
+                "help": "Name of the disk"
+            }
+        ]
+    },
+    "sys_disk_reads": {
+        "type": "counter",
+        "help": "Number of reads that the disk performed",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "disk",
+                "help": "Name of the disk"
+            }
+        ]
+    },
+    "sys_disk_write_bytes": {
+        "type": "counter",
+        "help": "Number of bytes written by the disk",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "disk",
+                "help": "Name of the disk"
+            }
+        ]
+    },
+    "sys_disk_write_time_seconds": {
+        "type": "counter",
+        "help": "Amount of time that the disk spent writing",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "disk",
+                "help": "Name of the disk"
+            }
+        ]
+    },
+    "sys_disk_writes": {
+        "type": "counter",
+        "help": "Number of writes that the disk performed",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "disk",
+                "help": "Name of the disk"
+            }
+        ]
+    },
+
     "cm_build_streaming_info_total": {
         "type": "counter",
         "help": "Number of streaming requests processed",

@@ -247,7 +247,23 @@ report_system_stats(ReportFun) ->
             ReportFun({<<"sysproc">>, Name,
                        [{<<"proc">>, Proc},
                         {<<"category">>, <<"system-processes">>}], Val})
-        end, SysProcStats).
+        end, SysProcStats),
+
+    DiskStats = proplists:get_value("@system-disks", Stats, []),
+    lists:foreach(
+      fun({Key, Val}) ->
+              [Disk, Name] = binary:split(Key, <<"/">>),
+              {MappedName, MappedValue} =
+                  case binary:split(Name, <<"_ms">>) of
+                      [Start, <<>>] ->
+                          {<<Start/binary, "_seconds">>,
+                           to_seconds_bin(Val, millisecond)};
+                      _ -> {Name, Val}
+                  end,
+              ReportFun({<<"sys_disk">>, MappedName, [{<<"disk">>, Disk}],
+                         MappedValue})
+      end,
+      DiskStats).
 
 report_audit_stats(ReportFun) ->
     {ok, Stats} = ns_audit:stats(),
@@ -421,9 +437,11 @@ log_system_stats(TS) ->
     log_stats(TS, "@system", lists:keymerge(1, NSServerStats, NSCouchDbStats)).
 
 process_stats(#state{sigar_opaque = Opaque, pid_names = PidNames} = State) ->
-    {{Counters, Gauges, ProcStats}, NewOpaque} = sigar:get_all(Opaque, PidNames),
+    {{Counters, Gauges, ProcStats, DiskStats}, NewOpaque} =
+        sigar:get_all(Opaque, PidNames),
     RetStats = [{"@system", Counters ++ Gauges},
-                {"@system-processes", ProcStats}],
+                {"@system-processes", ProcStats},
+                {"@system-disks", DiskStats}],
     {RetStats, State#state{sigar_opaque = NewOpaque}}.
 
 increment_counter(Name, By) ->

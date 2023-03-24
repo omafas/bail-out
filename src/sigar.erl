@@ -87,8 +87,9 @@ handle_call({get_all, {PrevTS, PrevCounters, PrevCGroups}, PidNames}, _From,
             false -> default_cgroups_counters(HostCounters)
         end,
     ProcStats = get_process_stats(NewState#state.most_recent_data, PidNames),
-    {reply, {{HostCounters ++ CGroupsCounters, Gauges, ProcStats},
-     {TS, Counters, CGroups}}, NewState};
+    DiskStats = get_disk_stats(NewState#state.most_recent_data),
+    {reply, {{HostCounters ++ CGroupsCounters, Gauges, ProcStats, DiskStats},
+             {TS, Counters, CGroups}}, NewState};
 
 handle_call({get_gauges, Items}, _From, State) ->
     NewState = maybe_update_stats(State),
@@ -322,6 +323,19 @@ get_pressure_stats(<<Prefix/binary>>, Elem, Acc) ->
 get_process_stats(StatsMap, ProcNames) ->
     collapse_duplicates(populate_processes(StatsMap, ProcNames)).
 
+get_disk_stats(StatsMap) ->
+    RawDiskStats = maps:get(<<"disks">>, StatsMap,
+                            undefined),
+    case RawDiskStats of
+        undefined -> [];
+        Val ->
+            lists:flatten(
+              lists:map(
+                fun({Stats}) ->
+                        populate_disk_stats(Stats)
+                end, Val))
+    end.
+
 collapse_duplicates(Sample) ->
     Sorted = lists:keysort(1, Sample),
     lists:foldl(fun do_collapse_duplicates/2, [], Sorted).
@@ -339,6 +353,20 @@ fix_stat_name(Stat) ->
         <<"page_faults">> -> <<"page_faults_raw">>;
         _ -> Stat
     end.
+
+populate_disk_stat(DiskName, StatName, Value) ->
+    case Value of
+        X when is_number(X) ->
+            {true, {proc_stat_name(DiskName, StatName), X}};
+        _ -> false
+    end.
+
+populate_disk_stats(Stats) ->
+    {<<"name">>, Name} = lists:keyfind(<<"name">>, 1, Stats),
+    lists:filtermap(
+      fun({Stat, Value}) ->
+              populate_disk_stat(Name, Stat, Value)
+      end, Stats).
 
 populate_proc_stat(ProcName, Stat, Value) ->
     case Stat of
@@ -489,7 +517,7 @@ update_sigar_data(#state{port = Port} = State) ->
 
 -ifdef(TEST).
 validate_results(Json, CountersExpected, GaugesExpected, CGExpected, PExpect,
-                 PNames) ->
+                 PNames, DiskExpected) ->
     StatsMap = recv_data_with_length(31, Json, 0),
     {Counters, Gauges, CGroupsInfo} = get_global_stats(StatsMap),
     ?assertEqual(CGroupsInfo, CGExpected),
@@ -510,7 +538,9 @@ validate_results(Json, CountersExpected, GaugesExpected, CGExpected, PExpect,
         true -> ?assertEqual(length(CgroupList), length(CgroupsKeys))
     end,
     ProcStats = get_process_stats(StatsMap, PNames),
-    ?assertEqual(ProcStats, PExpect).
+    ?assertEqual(ProcStats, PExpect),
+    DiskStats = get_disk_stats(StatsMap),
+    ?assertEqual(DiskExpected, DiskStats).
 
 sigar_json_test() ->
     Acc0 =
@@ -585,7 +615,22 @@ sigar_json_test() ->
                         \"total_stall_time_usec\":\"1939178\"
                       }
                   }
-              }
+              },
+            \"disks\":
+              [
+                {
+                  \"name\": \"sdb\",
+                  \"queue\": \"0\",
+                  \"queue_depth\": \"25\",
+                  \"read_bytes\": \"19476732416\",
+                  \"read_time_ms\": \"6911980\",
+                  \"reads\": \"1845269\",
+                  \"time_ms\": \"2807312\",
+                  \"write_bytes\": \"25794304000\",
+                  \"write_time_ms\": \"2672373\",
+                  \"writes\": \"356261\"
+                }
+              ]
            }">>,
     CountersExpected0 = #{<<"supported">> => true,
                           <<"cpu_idle_ms">> => 655676420,
@@ -644,8 +689,17 @@ sigar_json_test() ->
              {<<"Process0/minor_faults_raw">>,19},
              {<<"Process0/major_faults_raw">>,3},
              {<<"Process0/cpu_utilization">>,4}],
+    Disks0 = [{<<"sdb/queue">>,0},
+              {<<"sdb/queue_depth">>,25},
+              {<<"sdb/read_bytes">>,19476732416},
+              {<<"sdb/read_time_ms">>,6911980},
+              {<<"sdb/reads">>,1845269},
+              {<<"sdb/time_ms">>,2807312},
+              {<<"sdb/write_bytes">>,25794304000},
+              {<<"sdb/write_time_ms">>,2672373},
+              {<<"sdb/writes">>,356261}],
     validate_results(Acc0, CountersExpected0, GaugesExpected0, Cgroups0, Proc0,
-                     PNames0),
+                     PNames0, Disks0),
     Acc1 = <<"{\n\"allocstall\": \"1\",\n\"control_group_info\": {\n\""
              "num_cpu_prc\": 8,\n\"memory_current\": \"324\","
              "\n\"memory_cache\": \"123\"\n,\"memory_max\": \"491\"\n,\n\""
@@ -751,7 +805,7 @@ sigar_json_test() ->
              {<<"Process2/cpu_utilization">>,34}],
     CountersExpected1 = #{<<"supported">> => false},
     validate_results(Acc1, CountersExpected1, GaugesExpected1, Cgroups1, Proc1,
-                     PNames1),
+                     PNames1, []),
     CountersExpected2 = #{<<"supported">> => true,
                           <<"cpu_idle_ms">> => 655676513,
                           <<"cpu_irq_ms">> => 2,
