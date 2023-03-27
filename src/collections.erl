@@ -1068,7 +1068,7 @@ chronicle_upgrade_to_72(Bucket, ChronicleTxn) ->
                               {CollectionName, _} <- Collections]
                   end, get_scopes(Manifest)),
 
-            NewManifest =
+            NewManifest1 =
                 lists:foldl(
                   fun({Scope, Collection}, Acc) ->
                           modify_collection_props(Acc, Collection, Scope,
@@ -1077,7 +1077,11 @@ chronicle_upgrade_to_72(Bucket, ChronicleTxn) ->
                   Manifest,
                   AllCollections),
 
-            chronicle_upgrade:set_key(key(Bucket), NewManifest, ChronicleTxn)
+            %% We must bump the manifest uid too or KV won't treat this as a new
+            %% manifest.
+            NewManifest2 = advance_manifest_id(upgrade, NewManifest1),
+
+            chronicle_upgrade:set_key(key(Bucket), NewManifest2, ChronicleTxn)
     end.
 
 -ifdef(TEST).
@@ -1623,6 +1627,7 @@ upgrade_to_72_t() ->
                                      get_collection("_default",
                                                     get_scope("_default",
                                                               Manifest71)))),
+    ?assertEqual(0, proplists:get_value(uid, Manifest71)),
 
     %% collections:chronicle_upgrade_to_72/2 requires that we upgrade the
     %% BucketConfig /before/ we call it to perform the upgrade successfully,
@@ -1642,7 +1647,9 @@ upgrade_to_72_t() ->
     ?assert(proplists:get_value(history,
                                 get_collection("_default",
                                                get_scope("_default",
-                                                         Manifest72)))).
+                                                         Manifest72)))),
+
+    ?assertEqual(1, proplists:get_value(uid, Manifest72)).
 
 % Bunch of fairly simple collections tests that update the manifest and expect
 % various results.
