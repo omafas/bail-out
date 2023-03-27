@@ -1609,6 +1609,41 @@ set_manifest_t() ->
     ?assertEqual([{uid, 8}, {maxTTL, 8}],
         get_collection("c1", get_scope("s1", Manifest4))).
 
+upgrade_to_72_t() ->
+    CollectionsKey = key("bucket"),
+
+    %% To test the upgrade we need to create a 7.1 (or older) manifest. To do
+    %% do that we must set history_retention_collection_default to false in the
+    %% BucketConfig that we're using.
+    manifest_test_set_history_default(false),
+    {ok, BucketConf71} = ns_bucket:get_bucket("bucket"),
+    Manifest71 = default_manifest(BucketConf71),
+    ?assertEqual(undefined,
+                 proplists:get_value(history,
+                                     get_collection("_default",
+                                                    get_scope("_default",
+                                                              Manifest71)))),
+
+    %% collections:chronicle_upgrade_to_72/2 requires that we upgrade the
+    %% BucketConfig /before/ we call it to perform the upgrade successfully,
+    %% namely we must set history_retention_collection_default to true. We're
+    %% going to "upgrade" the BucketConfig that we pass into the Snapshot here
+    %% to accomplish that.
+    manifest_test_set_history_default(true),
+    {ok, BucketConf72} = ns_bucket:get_bucket("bucket"),
+    Snapshot1 = maps:put({bucket, "bucket", props}, BucketConf72, maps:new()),
+    Snapshot71 = maps:put(CollectionsKey, Manifest71, Snapshot1),
+    Txn = {Snapshot71, undefined},
+
+    {Snapshot72, _Txn} = chronicle_upgrade_to_72("bucket", Txn),
+
+    %% Time to test the result of the upgrade
+    Manifest72 = maps:get(CollectionsKey, Snapshot72),
+    ?assert(proplists:get_value(history,
+                                get_collection("_default",
+                                               get_scope("_default",
+                                                         Manifest72)))).
+
 % Bunch of fairly simple collections tests that update the manifest and expect
 % various results.
 basic_collections_manifest_test_() ->
@@ -1630,6 +1665,7 @@ basic_collections_manifest_test_() ->
          {"collection uid test", fun() -> collection_uid_t() end},
          {"modify collection test", fun() -> modify_collection_t() end},
          {"history default test", fun() -> history_default_t() end},
-         {"set manifest test", fun() -> set_manifest_t() end}]}.
+         {"set manifest test", fun() -> set_manifest_t() end},
+         {"upgrade to 72 test", fun() -> upgrade_to_72_t() end}]}.
 
 -endif.
