@@ -1010,7 +1010,7 @@ def make_os_tasks():
         SolarisTask("Disk activity", "zpool iostat 1 10"),
         SolarisTask("Disk activity", "iostat -E 1 10"),
         LinuxTask("Process list snapshot",
-                  "export TERM=''; top -Hb -n1 || top -H n1"),
+                  "unset TERM LD_LIBRARY_PATH; top -Hb -n1 || top -H n1"),
         LinuxTask(
             "Process list",
             "ps -AwwL -o user,pid,lwp,ppid,nlwp,pcpu,maj_flt,min_flt,pri,nice,vsize,rss,tty,stat,wchan:12,start,"
