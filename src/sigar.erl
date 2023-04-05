@@ -513,27 +513,80 @@ validate_results(Json, CountersExpected, GaugesExpected, CGExpected, PExpect,
     ?assertEqual(ProcStats, PExpect).
 
 sigar_json_test() ->
-    Acc0 = <<"{\n\"cpu_idle_ms\": \"655676420\",\n\"cpu_irq_ms\": \"0\",\n\""
-             "cpu_stolen_ms\": \"0\",\n\"cpu_sys_ms\": \"25792540\",\n\""
-             "cpu_total_ms\": \"732003090\",\n\"cpu_user_ms\":\"50534130\",\n\""
-             "interesting_procs\": [\n{\n\"cpu_utilization\": \"4\",\n\""
-             "major_faults\": \"3\",\n\"minor_faults\": \"19\",\n\"name\": \""
-             "beam.smp\",\n\"page_faults\": \"21835\",\n\"pid\": \"65595\",\n\""
-             "ppid\": \"65587\"\n},\n{\n\"cpu_utilization\": \"5\",\n\""
-             "major_faults\": \"1\",\n\"minor_faults\": \"2\",\n\"name\":\""
-             "sigar_port\",\n\"page_faults\": \"1298\",\n\"pid\":\"65618\",\n\""
-             "ppid\": \"65607\"\n}\n],\n\"mem_actual_free\":\"4063666176\",\n\""
-             "mem_actual_used\": \"30296072192\",\n\"mem_total\": \""
-             "34359738368\",\n\"mem_used\": \"33626083328\",\n\"swap_total\": "
-             "\"1\",\n\"swap_used\": \"2\",\n\"pressure\":\n{\n\"cpu\":\n{\n\""
-             "full\":\n{\n\"avg10\":\"0.00\",\n\"avg300\":\"0.00\",\n\"avg60\""
-             ":\"0.00\",\n\"total_stall_time_usec\":\"42142\"\n},\n\"some\""
-             ":\n{\n\"avg10\":\"0.00\",\"avg300\":\"0.00\",\"avg60\":\"0.00\""
-             ",\"total_stall_time_usec\":\"44472\"\n}\n\},\"io\":\n{\n\"full\""
-             ":\n{\"avg10\":\"1.86\",\"avg300\":\"0.59\",\"avg60\":\"2.13\","
-             "\"total_stall_time_usec\":\"1939155\"\n},\"some\":\n\{\n\""
-             "avg10\":\"1.86\",\"avg300\":\"0.59\",\"avg60\":\"2.13\","
-             "\"total_stall_time_usec\":\"1939178\"\n}\n}\n}\n}">>,
+    Acc0 =
+        <<"
+           {
+             \"cpu_idle_ms\": \"655676420\",
+             \"cpu_irq_ms\": \"0\",
+             \"cpu_stolen_ms\": \"0\",
+             \"cpu_sys_ms\": \"25792540\",
+             \"cpu_total_ms\": \"732003090\",
+             \"cpu_user_ms\":\"50534130\",
+             \"interesting_procs\":
+              [
+                 {
+                   \"cpu_utilization\": \"4\",
+                   \"major_faults\": \"3\",
+                   \"minor_faults\": \"19\",
+                   \"name\": \"beam.smp\",
+                   \"page_faults\": \"21835\",
+                   \"pid\": \"65595\",
+                   \"ppid\": \"65587\"
+                 },
+                 {
+                   \"cpu_utilization\": \"5\",
+                   \"major_faults\": \"1\",
+                   \"minor_faults\": \"2\",
+                   \"name\":\"sigar_port\",
+                   \"page_faults\": \"1298\",
+                   \"pid\":\"65618\",
+                   \"ppid\": \"65607\"
+                 }
+              ],
+             \"mem_actual_free\":\"4063666176\",
+             \"mem_actual_used\": \"30296072192\",
+             \"mem_total\": \"34359738368\",
+             \"mem_used\": \"33626083328\",
+             \"swap_total\": \"1\",
+             \"swap_used\": \"2\",
+             \"pressure\":
+              {
+                \"cpu\":
+                  {
+                    \"full\":
+                      {
+                        \"avg10\":\"0.00\",
+                        \"avg300\":\"0.00\",
+                        \"avg60\":\"0.00\",
+                        \"total_stall_time_usec\":\"42142\"
+                      },
+                    \"some\":
+                      {
+                        \"avg10\":\"0.00\",
+                        \"avg300\":\"0.00\",
+                        \"avg60\":\"0.00\",
+                        \"total_stall_time_usec\":\"44472\"
+                      }
+                  },
+                \"io\":
+                  {
+                    \"full\":
+                      {
+                        \"avg10\":\"1.86\",
+                        \"avg300\":\"0.59\",
+                        \"avg60\":\"2.13\",
+                        \"total_stall_time_usec\":\"1939155\"
+                      },
+                    \"some\":
+                      {
+                        \"avg10\":\"1.86\",
+                        \"avg300\":\"0.59\",
+                        \"avg60\":\"2.13\",
+                        \"total_stall_time_usec\":\"1939178\"
+                      }
+                  }
+              }
+           }">>,
     CountersExpected0 = #{<<"supported">> => true,
                           <<"cpu_idle_ms">> => 655676420,
                           <<"cpu_irq_ms">> => 0,
