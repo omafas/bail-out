@@ -131,13 +131,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 spawn_sigar(Name, BabysitterPid) ->
+    {ok, LogDir} = application:get_env(ns_server, error_logger_mf_dir),
+    LogFile = filename:join(LogDir, "sigar_port.log"),
     Path = path_config:component_path(bin, "sigar_port"),
-    ?log_info("Spawing sigar process '~s'(~p) with babysitter pid: ~p",
-              [Name, Path, BabysitterPid]),
+    ?log_info("Spawning sigar process '~s'(~p) with babysitter pid:"
+              " ~p and log file ~p", [Name, Path, BabysitterPid, LogFile]),
     open_port({spawn_executable, Path},
               [stream, use_stdio, exit_status, binary, eof,
                {arg0, Name},
-               {args, [integer_to_list(BabysitterPid)]}]).
+               {args, ["--babysitter_pid", integer_to_list(BabysitterPid),
+                       "--logfile", LogFile,
+                       "--config", path_config:default_sigar_port_config_path()]}]).
 
 grab_stats(Port) ->
     port_command(Port, <<0:32/native>>),

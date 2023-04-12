@@ -14,6 +14,7 @@
 
 %% used by ns_config_default
 -export([default_memcached_config_path/0]).
+-export([default_sigar_port_config_path/0]).
 
 component_path_key(tmp) -> path_config_tmpdir;
 component_path_key(data) -> path_config_datadir;
@@ -51,6 +52,9 @@ tempfile(Prefix, Suffix) ->
 
 default_memcached_config_path() ->
     filename:join(component_path(data, "config"), "memcached.json").
+
+default_sigar_port_config_path() ->
+    filename:join(component_path(data, "config"), "sigar_port.json").
 
 minidump_dir() ->
     path_config:component_path(data, "crash").
