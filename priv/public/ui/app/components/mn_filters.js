@@ -20,6 +20,7 @@ angular
   .filter('mnCount', mnCount)
   .filter('removeEmptyValue', removeEmptyValue)
   .filter('formatProgressMessage', formatProgressMessage)
+  .filter("formatRebalanceProgressMessage", formatRebalanceProgressMessage)
   .filter('mnCloneOnlyData', mnCloneOnlyData)
   .filter('$httpParamSerializerJQLike', ["$httpParamSerializerJQLike", httpParamSerializerJQLike])
   .filter('mnParseHttpDate', mnParseHttpDate)
@@ -299,6 +300,11 @@ function formatProgressMessage() {
     case "rebalance":
       return !!includeRebalance;
     }
+  };
+}
+function formatRebalanceProgressMessage() {
+  return function (service) {
+      return "rebalancing " + service.name + " service";
   };
 }
 function mnCloneOnlyData() {

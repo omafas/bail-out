@@ -212,6 +212,30 @@
                 </div>
               </div>
             </div>
+
+            <!-- service progress bar ************************************************** -->
+            <div
+               class="zero-content margin-top-1"
+               ng-show="service.completedTime == false &&
+                        service.totalProgress !== undefined &&
+                        !adminCtl.tasks.tasksRebalance.errorMessage">
+              <div class="text-small text-left break-word">
+                {{service | formatRebalanceProgressMessage}}
+                <span>{{(service.totalProgress | number:1) + '%'}}</span>
+              </div>
+              <div class="bar-wrapper">
+                <div
+                   class="bar positive"
+                   ng-style="{'width': service.totalProgress + '%'}">
+                  <div></div>
+                </div>
+                <div
+                   class="bar negative"
+                   ng-style="{'width': (100 - service.totalProgress) + '%'}">
+                  <div></div>
+                </div>
+              </div>
+            </div>
           </div>
           <div
              class="text-right margin-bottom-1 margin-top-half"
