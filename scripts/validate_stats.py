@@ -23,6 +23,7 @@
 import argparse
 import requests
 import json
+import sys
 
 
 class StatsValidator:
@@ -37,7 +38,37 @@ class StatsValidator:
         with open(self.descriptors, 'r') as file:
             self.json_data = json.load(file)
 
+        if not self.valid_descriptors():
+            sys.exit(1)
+
+    def valid_descriptors(self):
         print(f"Found {len(self.json_data)} items in {self.descriptors}")
+        valid = True
+
+        for item in self.json_data:
+            keys = self.json_data[item].keys()
+            for k in keys:
+                match k:
+                    case 'type':
+                        t = self.json_data[item][k]
+                        if t not in ['counter', 'gauge', 'histogram',
+                                     'summary', 'info']:
+                            print(f"Error: {item} contains invalid type: {t}")
+                            valid = False
+                    case 'stability':
+                        s = self.json_data[item][k]
+                        if s not in ['committed', 'volatile', 'internal']:
+                            print(f"Error: {item} contains invalid "
+                                  f"stability: {s}")
+                            valid = False
+                    case 'help' | 'added' | 'uiName' | 'unit' | 'labels' | \
+                         'deprecated' | 'notes':
+                        pass
+                    case _:
+                        print(f"Error: {item} contains invalid attribute: {k}")
+                        valid = False
+
+        return valid
 
     def finalize(self):
         # Print stats without entries in the description file. These need
