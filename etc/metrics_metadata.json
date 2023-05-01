@@ -79,6 +79,19 @@
         "added": "7.1.1",
         "stability": "committed"
     },
+    "sys_cpu_host_seconds_total": {
+        "type": "counter",
+        "help": "Number of cpu seconds utilized",
+        "added": "7.2.1",
+        "unit": "seconds",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "mode",
+                "help": "type of usage (busy, idle, user, sys, irq, stolen, other)"
+            }
+        ]
+    },
     "sys_cpu_host_sys_rate": {
         "type": "gauge",
         "help": "System cpu utilization rate",

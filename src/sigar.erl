@@ -309,6 +309,8 @@ compute_cpu_stats(OldCounters, Counters) ->
                              Value - OldValue
                      end, Counters),
 
+    %% The difference between the last measurement and the current
+    %% measurement is used as a gauge.
     #{cpu_idle_ms := Idle,
       cpu_user_ms := User,
       cpu_sys_ms := Sys,
@@ -316,11 +318,39 @@ compute_cpu_stats(OldCounters, Counters) ->
       cpu_stolen_ms := Stolen,
       cpu_total_ms := Total} = Diffs,
 
+    RawCpuTotal = get_raw_counter(cpu_total_ms, Counters),
+    RawCpuIdle = get_raw_counter(cpu_idle_ms, Counters),
+    RawCpuUser = get_raw_counter(cpu_user_ms, Counters),
+    RawCpuSys = get_raw_counter(cpu_sys_ms, Counters),
+
     [{cpu_host_utilization_rate, compute_utilization(Total - Idle, Total)},
      {cpu_host_user_rate, compute_utilization(User, Total)},
      {cpu_host_sys_rate, compute_utilization(Sys, Total)},
-     {cpu_irq_rate, compute_utilization(Irq, Total)},
-     {cpu_stolen_rate, compute_utilization(Stolen, Total)}].
+     %% Raw counters so users can do their own computations using promql.
+     {cpu_host_seconds_total_idle, RawCpuIdle},
+     {cpu_host_seconds_total_user, RawCpuUser},
+     {cpu_host_seconds_total_sys, RawCpuSys}] ++
+    case misc:is_linux() of
+        false ->
+            Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle),
+            [{cpu_host_seconds_total_other, Other}];
+        true->
+            RawCpuIrq = get_raw_counter(cpu_irq_ms, Counters),
+            RawCpuStolen = get_raw_counter(cpu_stolen_ms, Counters),
+            Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle +
+                                   RawCpuIrq + RawCpuStolen),
+            [{cpu_irq_rate, compute_utilization(Irq, Total)},
+             {cpu_stolen_rate, compute_utilization(Stolen, Total)},
+             {cpu_host_seconds_total_irq, RawCpuIrq},
+             {cpu_host_seconds_total_stolen, RawCpuStolen},
+             {cpu_host_seconds_total_other, Other}]
+    end.
+
+%% The current measurement is returned as a raw counter in seconds.
+%% The user can then use prometheus functions to do computations.
+get_raw_counter(Stat, Counters) ->
+    Value = maps:get(Stat, Counters, 0),
+    Value / 1000.
 
 compute_cgroups_counters(Cores, PrevTS, TS,
                          #{supported := true} = Old,
@@ -341,6 +371,7 @@ compute_cgroups_counters(Cores, PrevTS, TS,
 compute_cgroups_counters(_, _, _, _, _) ->
     [].
 
+%% No cgroup counters so just use the host ones.
 default_cgroups_counters(HostCounters) ->
     [{cpu_utilization_rate,
       proplists:get_value(cpu_host_utilization_rate, HostCounters)},

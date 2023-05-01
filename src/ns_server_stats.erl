@@ -187,7 +187,17 @@ report_system_stats(ReportFun) ->
     SystemStats = proplists:get_value("@system", Stats, []),
     lists:foreach(
       fun ({Key, Val}) ->
-          ReportFun({<<"sys">>, Key, [{<<"category">>, <<"system">>}], Val})
+              KeyBin = atom_to_binary(Key),
+              {StatName, Labels0} =
+                case KeyBin of
+                    <<"cpu_host_seconds_total_", Mode/binary>> ->
+                        {<<"cpu_host_seconds_total">>,
+                         [{<<"mode">>, Mode}]};
+                    _ ->
+                        {KeyBin, []}
+                end,
+              Labels = Labels0 ++ [{<<"category">>, <<"system">>}],
+              ReportFun({<<"sys">>, StatName, Labels, Val})
       end, SystemStats),
 
     SysProcStats = proplists:get_value("@system-processes", Stats, []),
