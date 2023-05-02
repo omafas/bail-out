@@ -107,6 +107,7 @@ is_interesting(cluster_encryption_level) -> true;
 is_interesting(enforce_limits) -> true;
 is_interesting({security_settings, _}) -> true;
 is_interesting({node, N, prometheus_auth_info}) when N =:= node() -> true;
+is_interesting({node, N, uuid}) when N =:= node() -> true;
 is_interesting(Key) -> collections:key_match(Key) =/= false.
 
 handle_call(_Msg, _From, State) ->
@@ -309,13 +310,15 @@ build_auth_info_ctx() ->
 build_auth_info(?VERSION_1, {AuthVersion, PermissionsVersion, CcaState, _Config,
                              _Snapshot},
                 #state{client_cert_auth_version = ClientCertAuthVersion}) ->
+    {value, NodeUuid} = ns_config:search_node(uuid),
     [{authCheckEndpoint, <<?AUTH_CHECK_ENDPOINT>>},
      {authVersion, AuthVersion},
      {permissionCheckEndpoint, <<?PERM_CHECK_ENDPOINT>>},
      {permissionsVersion, PermissionsVersion},
      {clientCertAuthVersion, ClientCertAuthVersion},
      {extractUserFromCertEndpoint, <<?EXTRACT_USER_ENDPOINT>>},
-     {clientCertAuthState, list_to_binary(CcaState)}];
+     {clientCertAuthState, list_to_binary(CcaState)},
+     {nodeUUID, NodeUuid}];
 
 %% we free to modify the output of this function as soon as the golang client
 %% code is modified accordingly
