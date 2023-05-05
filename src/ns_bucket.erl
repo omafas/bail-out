@@ -381,7 +381,8 @@ history_retention_collection_default(BucketConfig) ->
     %% History can only be true for a magma bucket.
     proplists:get_value(history_retention_collection_default, BucketConfig,
                         ?HISTORY_RETENTION_COLLECTION_DEFAULT_DEFAULT)
-    andalso is_magma(BucketConfig).
+    andalso is_magma(BucketConfig)
+    andalso cluster_compat_mode:is_cluster_72().
 
 eviction_policy(BucketConfig) ->
     Default = case storage_mode(BucketConfig) of

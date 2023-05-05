@@ -1103,6 +1103,7 @@ update_manifest_test_setup() ->
     meck:expect(cluster_compat_mode, should_enforce_limits,
                 fun(_) -> false end),
     meck:expect(cluster_compat_mode, is_cluster_70, fun () -> true end),
+    meck:expect(cluster_compat_mode, is_cluster_72, fun () -> true end),
 
     % Return some scope/collection values high enough for us to not worry about
     % it while testing.
@@ -1618,8 +1619,14 @@ upgrade_to_72_t() ->
 
     %% To test the upgrade we need to create a 7.1 (or older) manifest. To do
     %% do that we must set history_retention_collection_default to false in the
-    %% BucketConfig that we're using.
-    manifest_test_set_history_default(false),
+    %% BucketConfig that we're using. Whilst we can do that explicitly,
+    %% particularly in this test via calling
+    %% "manifest_test_set_history_default(false)", we can more idiomatically
+    %% just pretend this is a pre-7.2.0 cluster via cluster_compat_mode which we
+    %% must check to ensure that we don't create collections with history=true
+    %% in mixed mode clusters when using the default history value.
+    meck:expect(cluster_compat_mode, is_cluster_72, fun() -> false end),
+
     {ok, BucketConf71} = ns_bucket:get_bucket("bucket"),
     Manifest71 = default_manifest(BucketConf71),
     ?assertEqual(undefined,
@@ -1628,6 +1635,8 @@ upgrade_to_72_t() ->
                                                     get_scope("_default",
                                                               Manifest71)))),
     ?assertEqual(0, proplists:get_value(uid, Manifest71)),
+
+    meck:expect(cluster_compat_mode, is_cluster_72, fun() -> true end),
 
     %% collections:chronicle_upgrade_to_72/2 requires that we upgrade the
     %% BucketConfig /before/ we call it to perform the upgrade successfully,
