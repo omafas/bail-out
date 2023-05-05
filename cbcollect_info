@@ -991,6 +991,10 @@ def make_os_tasks():
                  "ntpdate -q pool.ntp.org || "
                  "nc time.nist.gov 13 || "
                  "netcat time.nist.gov 13", timeout=60),
+        UnixTask("chrony time",
+                 "chronyc tracking ; chronyc sources ; chronyc sourcestats ; "
+                 "chronyc activity",
+                 timeout=60),
         UnixTask("ntp peers", "ntpq -p"),
         UnixTask("raw /etc/sysconfig/clock", "cat /etc/sysconfig/clock"),
         UnixTask("raw /etc/timezone", "cat /etc/timezone"),
