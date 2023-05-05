@@ -127,6 +127,8 @@ handle_create_snapshot(Req) ->
     case prometheus:create_snapshot(Timeout, Settings) of
         {ok, Response} ->
             menelaus_util:reply_text(Req, Response, 200);
+        {error, timeout} ->
+            menelaus_util:reply_text(Req, <<"Request timed out">>, 500);
         {error, Reason} ->
             menelaus_util:reply_text(Req, Reason, 500)
     end.
