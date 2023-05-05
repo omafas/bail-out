@@ -1954,7 +1954,7 @@ def post_rest_api(description, api, guts):
     user_and_password = f"@localtoken:{token}"
     url = f"http://{local_url_addr}:{port}/{api}"
 
-    command = ["curl", "-X", "POST", "-sS", "--proxy", "",
+    command = ["curl", "-X", "POST", "-sS", "--proxy", "", "--fail",
                "-u", user_and_password, url]
     # Don't append a newline to the result, since that would corrupt
     # the snapshot.
@@ -2013,8 +2013,11 @@ def get_prometheus_stats_from_disk(guts):
 
 def get_prometheus_stats(guts):
     snapshot_dir_path = get_prometheus_stats_via_snapshot(guts)
-    if snapshot_dir_path is not None:
+    if snapshot_dir_path is not None and os.path.exists(snapshot_dir_path):
         return snapshot_dir_path
+
+    log("Failed to get prometheus snapshot. Will attempt to get stats "
+        "from disk.")
 
     return get_prometheus_stats_from_disk(guts)
 
