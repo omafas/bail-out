@@ -16,7 +16,7 @@
 -endif.
 
 -export([query_range/6, query_range_async/7, query/4,
-         create_snapshot/2, reload/2, quit/2,
+         create_snapshot/2, reload/1, quit/2,
          delete_series/5, clean_tombstones/2]).
 
 -type metrics_data() :: [JSONObject :: {[{binary(), term()}]}].
@@ -36,9 +36,9 @@ quit(Timeout, Settings) ->
         {error, Reason} -> {error, Reason}
     end.
 
--spec reload(http_timeout(), prometheus_cfg:stats_settings()) -> ok | error().
-reload(Timeout, Settings) ->
-    case post("/-/reload", [], Timeout, Settings) of
+-spec reload(prometheus_cfg:stats_settings()) -> ok | error().
+reload(Settings) ->
+    case post("/-/reload", [], infinity, Settings) of
         {ok, text, _} -> ok;
         {error, Reason} -> {error, Reason}
     end.
@@ -145,7 +145,7 @@ query_async(Query, Time, Timeout, Settings, Handler) ->
 
 -spec post(Path :: string(),
            Body :: proplists:proplist(),
-           Timeout :: http_timeout(),
+           Timeout :: http_timeout() | infinity,
            prometheus_cfg:stats_settings()) ->
                 successful_post() | error().
 post(Path, Body, Timeout, Settings) ->

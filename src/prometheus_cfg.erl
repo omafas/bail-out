@@ -36,6 +36,7 @@
             specs = undefined,
             prometheus_port = undefined,
             reload_timer_ref = undefined,
+            reload_pid = undefined,
             intervals_calc_timer_ref = undefined,
             pruning_timer_ref = undefined,
             pruning_pid = undefined,
@@ -512,6 +513,15 @@ handle_info({'EXIT', Pid, Reason},
                       pruning_start_time = undefined,
                       last_pruning_time = NewLastPruningTime}};
 
+handle_info({'EXIT', Pid, normal}, #s{reload_pid = Pid} = State) ->
+    {noreply, State#s{reload_pid = undefined}};
+
+handle_info({'EXIT', Pid, Reason}, #s{reload_pid = Pid} = State) ->
+    ?log_error("Received exit from reload pid ~p with reason ~p.",
+               [Pid, Reason]),
+    %% Wait a bit and then restart the reload
+    {noreply, start_reload_timer(State#s{reload_pid = undefined})};
+
 handle_info({'EXIT', Pid, normal}, State) ->
     ?log_debug("Received exit from ~p with reason normal. Ignoring... ", [Pid]),
     {noreply, State};
@@ -525,13 +535,20 @@ handle_info(Info, State) ->
     ?log_error("Unhandled info: ~p", [Info]),
     {noreply, State}.
 
-terminate(Reason, #s{pruning_pid = PruningPid} = State) ->
+terminate(Reason, #s{pruning_pid = PruningPid,
+                     reload_pid = ReloadPid} = State) ->
     ?log_error("Terminate: ~p", [Reason]),
     case PruningPid of
         undefined ->
             ok;
         _ ->
             misc:terminate_and_wait(PruningPid, Reason)
+    end,
+    case ReloadPid of
+        undefined ->
+            ok;
+        _ ->
+            misc:terminate_and_wait(ReloadPid, Reason)
     end,
     terminate_prometheus(State),
     ok.
@@ -601,9 +618,11 @@ maybe_apply_new_settings(#s{cur_settings = OldSettings,
             ?log_debug("Settings didn't change, ignoring update"),
             State;
         NewSettings ->
-            ?log_debug("New settings received: ~p~nOld settings: ~p",
+            ?log_debug("New settings received: ~p~n"
+                       "Added: ~p, Deleted: ~p",
                        [sanitize_settings(NewSettings),
-                        sanitize_settings(OldSettings)]),
+                        sanitize_settings(NewSettings -- OldSettings),
+                        sanitize_settings(OldSettings -- NewSettings)]),
             ensure_prometheus_config(NewSettings),
             NewState = apply_config(State#s{cur_settings = NewSettings}),
             restart_intervals_calculation_timer(NewState)
@@ -689,15 +708,38 @@ terminate_prometheus(#s{prometheus_port = PortServer,
     ?log_debug("Prometheus port server stopped successfully"),
     State#s{prometheus_port = undefined, specs = undefined}.
 
+try_config_reload(#s{reload_pid = ReloadPid} = State) when ReloadPid =/=
+                                                           undefined ->
+    ?log_debug("Terminating reload pid ~p to restart reload", [ReloadPid]),
+    misc:terminate_and_wait(ReloadPid, kill),
+    %% Allow time for EXIT to be received from prior reload pid before
+    %% starting another instance.
+    start_reload_timer(State);
 try_config_reload(#s{cur_settings = Settings} = State) ->
-    ?log_debug("Reloading prometheus config"),
-    case prometheus:reload(?DEFAULT_PROMETHEUS_TIMEOUT, Settings) of
+    %% Don't want a pending timer to affect the process we're about to start
+    NewState = cancel_reload_timer(State),
+
+    %% Reload from a separate process as the reloading of the config may
+    %% take a long time and we don't want to block other operations.
+    Pid = proc_lib:spawn_link(
+            fun () ->
+                    do_prometheus_reload(Settings)
+            end),
+    ?log_debug("Started prometheus reload process: ~p", [Pid]),
+    NewState#s{reload_pid = Pid}.
+
+do_prometheus_reload(Settings) ->
+    Start = erlang:monotonic_time(millisecond),
+    case prometheus:reload(Settings) of
         ok ->
-            ?log_debug("Config successfully reloaded"),
-            cancel_reload_timer(State);
+            End = erlang:monotonic_time(millisecond),
+            ?log_debug("Config successfully reloaded in ~p msecs",
+                       [End - Start]);
         {error, Reason} ->
-            ?log_error("Failed to reload config: ~p", [Reason]),
-            start_reload_timer(State)
+            End = erlang:monotonic_time(millisecond),
+            ?log_error("Failed after ~p msecs to reload config: ~p",
+                       [End - Start, Reason]),
+            error(Reason)
     end.
 
 start_reload_timer(#s{reload_timer_ref = undefined} = State) ->
