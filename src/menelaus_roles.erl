@@ -1784,24 +1784,31 @@ produce_roles_by_permission_test_() ->
 
 params_version_test() ->
     meck:new(ns_bucket, [passthrough]),
-    meck:expect(ns_bucket,
-                get_bucket,
-                fun(_) ->
-                        {ok, [{type, membase}, {storage_mode, magma}]}
-                end),
+    meck:new(cluster_compat_mode, [passthrough]),
+    try
+        meck:expect(cluster_compat_mode, is_cluster_72,
+                         fun () -> true end),
+        meck:expect(ns_bucket,
+                    get_bucket,
+                    fun(_) ->
+                            {ok, [{type, membase}, {storage_mode, magma}]}
+                    end),
+        Test = ?cut(params_version(ns_bucket:toy_buckets(_))),
+        Update = ?cut(lists:keyreplace("test", 1, toy_buckets_props(),
+                                       {"test", _})),
 
-    Test = ?cut(params_version(ns_bucket:toy_buckets(_))),
-    Update = ?cut(lists:keyreplace("test", 1, toy_buckets_props(),
-                                   {"test", _})),
-
-    Version1 = Test(toy_buckets_props()),
-    Version2 = Test(lists:keydelete("test", 1, toy_buckets_props())),
-    Version3 = Test(Update([{uuid, <<"test_id1">>}, {props, []}])),
-    Version4 = Test(Update([{uuid, <<"test_id">>}, {props, []},
-                            {collections, toy_manifest()}])),
-    ?assertNotEqual(Version1, Version2),
-    ?assertNotEqual(Version1, Version3),
-    ?assertNotEqual(Version1, Version4).
+        Version1 = Test(toy_buckets_props()),
+        Version2 = Test(lists:keydelete("test", 1, toy_buckets_props())),
+        Version3 = Test(Update([{uuid, <<"test_id1">>}, {props, []}])),
+        Version4 = Test(Update([{uuid, <<"test_id">>}, {props, []},
+                                {collections, toy_manifest()}])),
+        ?assertNotEqual(Version1, Version2),
+        ?assertNotEqual(Version1, Version3),
+        ?assertNotEqual(Version1, Version4)
+    after
+        meck:unload(cluster_compat_mode),
+        meck:unload(ns_bucket)
+    end.
 
 validate_roles(Roles) ->
     lists:all(
