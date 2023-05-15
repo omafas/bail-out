@@ -561,7 +561,12 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["metrics"] ->
                     {{[admin, stats_export], read},
                      fun menelaus_web_prometheus:handle_get_metrics/1};
+                %% This API is being deprecated and should not be used. Instead
+                %% the prometheus_sd_config endpoint should be used.
                 ["prometheus_sd_config.yaml"] ->
+                    {{[admin, stats_export], read},
+                     fun menelaus_web_prometheus:handle_sd_config_yaml/1};
+                ["prometheus_sd_config"] ->
                     {{[admin, stats_export], read},
                      fun menelaus_web_prometheus:handle_sd_config/1};
                 [?PROMETHEUS_API | _] ->

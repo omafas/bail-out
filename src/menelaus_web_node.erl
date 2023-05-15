@@ -43,6 +43,7 @@
          handle_change_external_listeners/2,
          handle_export_chronicle_snapshot/1,
          get_hostnames/2,
+         get_hostnames/3,
          handle_node_init/1,
          get_context/3,
          get_context/4,
