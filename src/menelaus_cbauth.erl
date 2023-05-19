@@ -11,7 +11,9 @@
 -module(menelaus_cbauth).
 
 -export([handle_cbauth_post/1,
-         handle_extract_user_from_cert_post/1]).
+         handle_extract_user_from_cert_post/1,
+         handle_rpc_connect/3]).
+
 -behaviour(gen_server).
 
 -export([start_link/0]).
@@ -20,13 +22,21 @@
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
 
--record(state, {cbauth_info = undefined,
+-record(state, {cbauth_info :: map(),
                 rpc_processes = [],
                 cert_version,
                 client_cert_auth_version}).
 
 -include("ns_common.hrl").
 -include("cut.hrl").
+
+-define(VERSION_1, "v1").
+
+handle_rpc_connect(?VERSION_1, Label, Req) ->
+    json_rpc_connection_sup:handle_rpc_connect(
+      Label ++ "-auth", [{type, auth}, {version, ?VERSION_1}], Req);
+handle_rpc_connect(_, _Label, Req) ->
+    menelaus_util:reply_text(Req, "Version is not supported", 400).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -40,17 +50,23 @@ init([]) ->
     ns_pubsub:subscribe_link(ssl_service_events, fun ssl_service_event/1),
     json_rpc_connection_sup:reannounce(),
     {ok, #state{cert_version = new_cert_version(),
-                client_cert_auth_version = client_cert_auth_version()}}.
+                client_cert_auth_version = client_cert_auth_version(),
+                cbauth_info = maps:new()}}.
 
 new_cert_version() ->
     misc:rand_uniform(0, 16#100000000).
 
-json_rpc_event({_, Label, _} = Event) ->
-    case is_cbauth_connection(Label) of
-        true ->
-            ok = gen_server:cast(?MODULE, Event);
-        false ->
-            ok
+json_rpc_event({_Msg, Label, Params, _Pid} = Event) ->
+    case proplists:get_value(type, Params) of
+        auth ->
+            gen_server:cast(?MODULE, Event);
+        _ ->
+            case is_cbauth_connection(Label) of
+                true ->
+                    ok = gen_server:cast(?MODULE, Event);
+                false ->
+                    ok
+            end
     end.
 
 node_disco_event(_Event) ->
@@ -96,29 +112,36 @@ is_interesting(Key) -> collections:key_match(Key) =/= false.
 handle_call(_Msg, _From, State) ->
     {reply, not_implemented, State}.
 
-handle_cast({Msg, Label, Pid}, #state{rpc_processes = Processes,
-                                      cbauth_info = CBAuthInfo} = State) ->
-    ?log_debug("Observed json rpc process ~p ~p", [{Label, Pid}, Msg]),
-    Info = case CBAuthInfo of
-               undefined ->
-                   build_auth_info(State);
-               _ ->
-                   CBAuthInfo
-           end,
-    NewProcesses = case notify_cbauth(Label, Pid, Info) of
+handle_cast({Msg, Label, Params, Pid},
+            #state{rpc_processes = Processes,
+                   cbauth_info = CBAuthInfo} = State) ->
+    Version = proplists:get_value(version, Params, internal),
+    OldInfo = maps:get(Version, CBAuthInfo, undefined),
+
+    ?log_debug("Observed json rpc process ~p ~p", [{Label, Params, Pid}, Msg]),
+    {Info, NewCBAuthInfo} =
+        case OldInfo of
+            undefined ->
+                I = build_auth_info(Version, build_auth_info_ctx(), State),
+                {I, maps:put(Version, I, CBAuthInfo)};
+            _ ->
+                {OldInfo, CBAuthInfo}
+        end,
+    NewProcesses = case notify_cbauth(Label, Version, Pid, Info) of
                        error ->
                            Processes;
                        ok ->
-                           case lists:keyfind({Label, Pid}, 2, Processes) of
+                           case lists:keyfind({Label, Version, Pid}, 2,
+                                              Processes) of
                                false ->
                                    MRef = erlang:monitor(process, Pid),
-                                   [{MRef, {Label, Pid}} | Processes];
+                                   [{MRef, {Label, Version, Pid}} | Processes];
                                _ ->
                                    Processes
                            end
                    end,
     {noreply, State#state{rpc_processes = NewProcesses,
-                          cbauth_info = Info}}.
+                          cbauth_info = NewCBAuthInfo}}.
 
 handle_info(ssl_service_event, State) ->
     self() ! maybe_notify_cbauth,
@@ -132,22 +155,28 @@ handle_info(maybe_notify_cbauth, State) ->
     {noreply, maybe_notify_cbauth(State)};
 handle_info({'DOWN', MRef, _, Pid, Reason},
             #state{rpc_processes = Processes} = State) ->
-    {value, {MRef, {Label, Pid}}, NewProcesses} = lists:keytake(MRef, 1, Processes),
-    ?log_debug("Observed json rpc process ~p died with reason ~p", [{Label, Pid}, Reason]),
+    {value, {MRef, {_, _, Pid} = Info}, NewProcesses} =
+        lists:keytake(MRef, 1, Processes),
+    ?log_debug("Observed json rpc process ~p died with reason ~p",
+               [Info,  Reason]),
     {noreply, State#state{rpc_processes = NewProcesses}};
 
 handle_info(_Info, State) ->
     {noreply, State}.
 
 maybe_notify_cbauth(#state{rpc_processes = Processes,
-                           cbauth_info = CBAuthInfo} = State) ->
-    case build_auth_info(State) of
-        CBAuthInfo ->
-            State;
-        Info ->
-            [notify_cbauth(Label, Pid, Info) || {_, {Label, Pid}} <- Processes],
-            State#state{cbauth_info = Info}
-    end.
+                           cbauth_info = OldInfo} = State) ->
+    NewInfo = build_auth_infos(State),
+    maps:foreach(
+      fun (Ver, I) ->
+              maps:get(Ver, OldInfo, default) =:= I orelse
+                  notify_version(Ver, Processes, I)
+      end, NewInfo),
+    State#state{cbauth_info = NewInfo}.
+
+notify_version(Ver, Processes, Info) ->
+    [notify_cbauth(Label, Ver, Pid, Info) ||
+        {_, {Label, V, Pid}} <- Processes, V =:= Ver].
 
 personalize_info(Label, Info) ->
     "htuabc-" ++ ReversedTrimmedLabel = lists:reverse(Label),
@@ -182,17 +211,21 @@ personalize_info(Label, Info) ->
                           {nodes, NewNodes},
                           {tlsConfig, TLSConfig}]).
 
-notify_cbauth(Label, Pid, Info) ->
-    Method = "AuthCacheSvc.UpdateDB",
-    NewInfo = {personalize_info(Label, Info)},
+notify_cbauth(Label, internal, Pid, Info) ->
+    do_notify_cbauth(Label, "AuthCacheSvc.UpdateDB", Pid,
+                     personalize_info(Label, Info));
+notify_cbauth(Label, _, Pid, Info) ->
+    do_notify_cbauth(Label, "AuthCacheSvc.UpdateDBExt", Pid, Info).
 
-    try json_rpc_connection:perform_call(Label, Method, NewInfo) of
+do_notify_cbauth(Label, Method, Pid, Info) ->
+    try json_rpc_connection:perform_call(Label, Method, {Info}) of
         {error, method_not_found} ->
             error;
         {error, {rpc_error, _}} ->
             error;
         {error, Error} ->
-            ?log_error("Error returned from go component ~p: ~p. This shouldn't happen but crash it just in case.",
+            ?log_error("Error returned from go component ~p: ~p. "
+                       "This shouldn't happen but crash it just in case.",
                        [{Label, Pid}, Error]),
             exit(Pid, Error),
             error;
@@ -241,14 +274,55 @@ build_node_info(N, User, Config, Snapshot) ->
        erlang:list_to_binary(ns_config:search_node_prop(N, Config, memcached, admin_pass))},
       {ports, Ports}] ++ Local}.
 
-build_auth_info(#state{cert_version = CertVersion,
-                       client_cert_auth_version = ClientCertAuthVersion}) ->
+-define(AUTH_CHECK_ENDPOINT, "/_cbauth").
+-define(PERM_CHECK_ENDPOINT, "/_cbauth/checkPermission").
+-define(EXTRACT_USER_ENDPOINT, "/_cbauth/extractUserFromCert").
+
+versions() ->
+    [internal, ?VERSION_1].
+
+build_auth_infos(State = #state{rpc_processes = Processes}) ->
+    Ctx = build_auth_info_ctx(),
+    Versions = lists:usort([V || {_, {_, V, _}} <- Processes]),
+    maps:from_list(
+      [{V, build_auth_info(V, Ctx, State)} || V <- versions(),
+                                              lists:member(V, Versions)]).
+
+build_auth_info_ctx() ->
     Config = ns_config:get(),
     Snapshot =
         chronicle_compat:get_snapshot(
           [ns_bucket:fetch_snapshot(all, _),
            ns_cluster_membership:fetch_snapshot(_)], #{ns_config => Config}),
 
+    AuthVersion = auth_version(Config),
+    PermissionsVersion =
+        menelaus_web_rbac:check_permissions_url_version(Snapshot),
+    CcaState = ns_ssl_services_setup:client_cert_auth_state(),
+    {AuthVersion, PermissionsVersion, CcaState, Config, Snapshot}.
+
+
+%% this function promises to the external clients that any client with
+%% corresponding version of cbauth would be compatible. in order to make
+%% any changes, the version should be increased and ns_server should still
+%% support all the previous versions.
+build_auth_info(?VERSION_1, {AuthVersion, PermissionsVersion, CcaState, _Config,
+                             _Snapshot},
+                #state{client_cert_auth_version = ClientCertAuthVersion}) ->
+    [{authCheckEndpoint, <<?AUTH_CHECK_ENDPOINT>>},
+     {authVersion, AuthVersion},
+     {permissionCheckEndpoint, <<?PERM_CHECK_ENDPOINT>>},
+     {permissionsVersion, PermissionsVersion},
+     {clientCertAuthVersion, ClientCertAuthVersion},
+     {extractUserFromCertEndpoint, <<?EXTRACT_USER_ENDPOINT>>},
+     {clientCertAuthState, list_to_binary(CcaState)}];
+
+%% we free to modify the output of this function as soon as the golang client
+%% code is modified accordingly
+build_auth_info(internal, {AuthVersion, PermissionsVersion, CcaState, Config,
+                           Snapshot},
+                #state{cert_version = CertVersion,
+                       client_cert_auth_version = ClientCertAuthVersion}) ->
     Nodes = lists:foldl(fun (Node, Acc) ->
                                 case build_node_info(Node, Config, Snapshot) of
                                     undefined ->
@@ -258,15 +332,12 @@ build_auth_info(#state{cert_version = CertVersion,
                                 end
                         end, [], ns_cluster_membership:nodes_wanted(Snapshot)),
 
-    CcaState = ns_ssl_services_setup:client_cert_auth_state(),
     Port = service_ports:get_port(rest_port, Config),
-    AuthCheckURL = misc:local_url(Port, "/_cbauth", []),
-    PermissionCheckURL = misc:local_url(Port, "/_cbauth/checkPermission", []),
-    PermissionsVersion = menelaus_web_rbac:check_permissions_url_version(
-                           Snapshot),
+    AuthCheckURL = misc:local_url(Port, ?AUTH_CHECK_ENDPOINT, []),
+    PermissionCheckURL = misc:local_url(Port, ?PERM_CHECK_ENDPOINT, []),
     LimitsCheckURL = misc:local_url(Port, "/_cbauth/getUserLimits", []),
     UuidCheckURL = misc:local_url(Port, "/_cbauth/getUserUuid", []),
-    EUserFromCertURL = misc:local_url(Port, "/_cbauth/extractUserFromCert", []),
+    EUserFromCertURL = misc:local_url(Port, ?EXTRACT_USER_ENDPOINT, []),
     ClusterDataEncrypt = misc:should_cluster_data_be_encrypted(),
     DisableNonSSLPorts = misc:disable_non_ssl_ports(),
     TLSServices = menelaus_web_settings:services_with_security_settings(),
@@ -282,7 +353,7 @@ build_auth_info(#state{cert_version = CertVersion,
      {limitsCheckURL, list_to_binary(LimitsCheckURL)},
      {uuidCheckURL, list_to_binary(UuidCheckURL)},
      {userVersion, user_version()},
-     {authVersion, auth_version(Config)},
+     {authVersion, AuthVersion},
      {certVersion, CertVersion},
      {limitsConfig, LimitsConfig},
      {extractUserFromCertURL, list_to_binary(EUserFromCertURL)},

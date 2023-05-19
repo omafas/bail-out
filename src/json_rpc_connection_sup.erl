@@ -13,7 +13,11 @@
 
 -include("ns_common.hrl").
 
--export([start_link/0, handle_rpc_connect/1, reannounce/0]).
+-export([start_link/0,
+         handle_rpc_connect/1,
+         handle_rpc_connect/3,
+         reannounce/0]).
+
 -export([init/1]).
 
 start_link() ->
@@ -26,12 +30,15 @@ init([]) ->
 
 handle_rpc_connect(Req) ->
     "/" ++ Path = mochiweb_request:get(path, Req),
+    handle_rpc_connect(Path, [], Req).
+
+handle_rpc_connect(Label, Params, Req) ->
     Sock = mochiweb_request:get(socket, Req),
     menelaus_util:reply(Req, 200),
-    ok = start_handler(Path, Sock),
+    ok = start_handler(Label, Params, Sock),
     erlang:exit(normal).
 
-start_handler(Label, Sock) ->
+start_handler(Label, Params, Sock) ->
     Ref = make_ref(),
     Starter = self(),
 
@@ -54,7 +61,7 @@ start_handler(Label, Sock) ->
                 end
         end,
 
-    {ok, Pid} = supervisor:start_child(?MODULE, [Label, GetSocket]),
+    {ok, Pid} = supervisor:start_child(?MODULE, [Label, Params, GetSocket]),
     ok = gen_tcp:controlling_process(Sock, Pid),
     Pid ! {Ref, Sock},
     ok.

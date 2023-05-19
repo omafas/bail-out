@@ -289,7 +289,7 @@ spawn_connection_waiter(Agent, Service) ->
 
 wait_for_connection_loop(Agent, WantedLabel, Timeout) ->
     receive
-        {_, Label, Pid} when Label =:= WantedLabel ->
+        {_, Label, _Params, Pid} when Label =:= WantedLabel ->
             gen_server:cast(Agent, {got_connection, Pid}),
             unlink(Agent);
         Timeout ->

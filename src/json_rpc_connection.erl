@@ -13,7 +13,7 @@
 
 -include("ns_common.hrl").
 
--export([start_link/2,
+-export([start_link/3,
          perform_call/3, perform_call/4,
          reannounce/1]).
 
@@ -22,6 +22,7 @@
          terminate/2, code_change/3]).
 
 -record(state, {label :: string(),
+                params :: list(),
                 counter :: non_neg_integer(),
                 sock :: port(),
                 id_to_caller_tid :: ets:tid()}).
@@ -35,8 +36,8 @@ label_to_name(Pid) when is_pid(Pid) ->
 label_to_name(Label) when is_list(Label)  ->
     list_to_atom(?PREFIX ++ Label).
 
-start_link(Label, GetSocket) ->
-    proc_lib:start_link(?MODULE, init, [{Label, GetSocket}]).
+start_link(Label, Params, GetSocket) ->
+    proc_lib:start_link(?MODULE, init, [{Label, Params, GetSocket}]).
 
 perform_call(Label, Name, EJsonArg, Opts = #{timeout := Timeout}) ->
     EJsonArgThunk = fun () -> EJsonArg end,
@@ -49,7 +50,7 @@ perform_call(Label, Name, EJsonArg) ->
 reannounce(Pid) when is_pid(Pid) ->
     gen_server:cast(Pid, reannounce).
 
-init({Label, GetSocket}) ->
+init({Label, Params, GetSocket}) ->
     proc_lib:init_ack({ok, self()}),
     InetSock = GetSocket(),
 
@@ -67,16 +68,18 @@ init({Label, GetSocket}) ->
     _ = proc_lib:spawn_link(erlang, apply, [fun receiver_loop/3, [InetSock, self(), <<>>]]),
     ?log_debug("Observed revrpc connection: label ~p, handling process ~p",
                [Label, self()]),
-    gen_event:notify(json_rpc_events, {started, Label, self()}),
+    gen_event:notify(json_rpc_events, {started, Label, Params, self()}),
 
     gen_server:enter_loop(?MODULE, [],
                           #state{label = Label,
+                                 params = Params,
                                  counter = 0,
                                  sock = InetSock,
                                  id_to_caller_tid = IdToCaller}).
 
-handle_cast(reannounce, #state{label = Label} = State) ->
-    gen_event:notify(json_rpc_events, {needs_update, Label, self()}),
+handle_cast(reannounce, #state{label = Label,
+                               params = Params} = State) ->
+    gen_event:notify(json_rpc_events, {needs_update, Label, Params, self()}),
     {noreply, State};
 handle_cast(_Msg, _State) ->
     erlang:error(unknown).

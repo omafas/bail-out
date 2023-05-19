@@ -1096,8 +1096,15 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {done, reply_text(Req, "Method Not Allowed", 405)}
             end;
         "RPCCONNECT" ->
-            {{[admin, internal], all}, fun json_rpc_connection_sup:handle_rpc_connect/1};
-
+            case PathTokens of
+                ["auth", Version, Label] ->
+                    {{[admin, internal], all},
+                     fun menelaus_cbauth:handle_rpc_connect/3,
+                     [Version, Label]};
+                _ ->
+                    {{[admin, internal], all},
+                     fun json_rpc_connection_sup:handle_rpc_connect/1}
+            end;
         _ ->
             {done, reply_text(Req, "Method Not Allowed", 405)}
     end.
