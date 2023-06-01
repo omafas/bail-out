@@ -454,18 +454,31 @@ verify_rest_auth(Req, Permission) ->
 %%    identity.
 
 -spec extract_effective_identity(rbac_identity(), mochiweb_request()) ->
-                                                    error | rbac_identity().
-extract_effective_identity({[$@ | _], admin} = Identity, Req) ->
-     case extract_on_behalf_of_identity(Req) of
-         error ->
-             error;
-         undefined ->
-             Identity;
-         {ok, RealIdentity} ->
-            RealIdentity
-     end;
-extract_effective_identity(Identity, _Req) ->
-    Identity.
+                                        error | rbac_identity().
+extract_effective_identity(Identity, Req) ->
+    case extract_on_behalf_of_identity(Req) of
+        error ->
+            error;
+        undefined ->
+            Identity;
+        {ok, RealIdentity} ->
+            %% The permission is formed the way that it is currently granted
+            %% to full admins only. We might consider to reformulate it
+            %% like {[onbehalf], impersonate} or, such in the upcoming
+            %% major release when we will be able to change roles
+            %%
+            %% Supporting on-behalf for user roles other than full admin
+            %% is out of scope now, though it can be easily achived by checking
+            %% each permission twice, against the authenticated user and against
+            %% the impersonated one
+            case menelaus_roles:is_allowed(
+                   {[admin, security, admin], impersonate}, Identity) of
+                true ->
+                    RealIdentity;
+                false ->
+                    error
+            end
+    end.
 
 -spec extract_on_behalf_of_identity(mochiweb_request()) ->
                                                 error | undefined
