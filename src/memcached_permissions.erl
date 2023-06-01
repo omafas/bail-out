@@ -54,14 +54,15 @@ bucket_permissions_to_check(Bucket) ->
      {{[{bucket, Bucket}, data, dcp], write},   'DcpConsumer'}].
 
 global_permissions_to_check() ->
-    [{{[stats, memcached], read},           'Stats'},
-     {{[admin, internal, stats], read},     'Stats'},
-     {{[buckets], create},                  'BucketManagement'},
-     {{[admin, memcached, node], write},    'NodeManagement'},
-     {{[admin, memcached, session], write}, 'SessionManagement'},
-     {{[admin, memcached, idle], write},    'IdleConnection'},
-     {{[admin, security, audit], write},    'AuditManagement'},
-     {{[pools], read},                      'SystemSettings'}].
+    [{{[stats, memcached], read},              'Stats'},
+     {{[admin, internal, stats], read},        'Stats'},
+     {{[buckets], create},                     'BucketManagement'},
+     {{[admin, memcached, node], write},       'NodeManagement'},
+     {{[admin, memcached, session], write},    'SessionManagement'},
+     {{[admin, memcached, idle], write},       'IdleConnection'},
+     {{[admin, security, audit], write},       'AuditManagement'},
+     {{[pools], read},                         'SystemSettings'},
+     {{[admin, security, admin], impersonate}, 'Impersonate'}].
 
 start_link() ->
     Path = ns_config:search_node_prop(ns_config:latest(), memcached, rbac_file),
