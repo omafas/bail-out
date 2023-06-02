@@ -572,7 +572,12 @@ sigar_json_test() ->
     ?assertEqual(compute_cpu_stats(CountersExpected2, CountersExpected1), []),
     Rates = compute_cpu_stats(CountersExpected0, CountersExpected2),
     RateKeys = [cpu_host_utilization_rate, cpu_host_user_rate,
-                cpu_host_sys_rate, cpu_irq_rate, cpu_stolen_rate],
+                cpu_host_sys_rate] ++ case misc:is_linux() of
+                                          false ->
+                                              [];
+                                          true ->
+                                              [cpu_irq_rate, cpu_stolen_rate]
+                                      end,
     Expected = [{K, V} || K <- RateKeys, {K1, V} <- Rates, K =:= K1,
                           is_number(V)],
     ?assertEqual(length(Expected), length(RateKeys)).
