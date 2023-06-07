@@ -508,6 +508,8 @@ conf(internal) ->
      {gotraceback, gotraceback, <<"single">>, fun get_string/1},
      {{auto_failover_disabled, index}, indexAutoFailoverDisabled, true,
       fun get_bool/1},
+     {failover_bulk_buckets_config_factor, failoverBulkConfigFactor,
+      ?MAX_BUCKETS_SUPPORTED, get_number(1, ?MAX_BUCKETS_SUPPORTED)},
      {{cert, use_sha1}, certUseSha1, false, fun get_bool/1},
      {allow_http_node_addition, httpNodeAddition, false, fun get_bool/1}];
 conf(developer_preview) ->

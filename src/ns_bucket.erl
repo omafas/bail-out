@@ -88,12 +88,13 @@
          update_maps/3,
          update_buckets/3,
          set_bucket_config/2,
-         set_bucket_config_failover/3,
+         set_buckets_config_failover/2,
          set_fast_forward_map/2,
          set_map/2,
          set_initial_map/3,
          set_map_opts/2,
          set_servers/2,
+         remove_servers_from_buckets/2,
          update_bucket_props/2,
          update_bucket_props/4,
          node_bucket_names/1,
@@ -1174,49 +1175,79 @@ set_map_opts(Bucket, Opts) ->
 set_servers(Bucket, Servers) ->
     set_property(Bucket, servers, Servers).
 
-set_bucket_config_failover(Bucket, NewMap, NewServerList) ->
-    validate_map(NewMap),
-    ok = update_bucket_config(
-           Bucket,
-           fun (OldConfig) ->
-                   NewConfig = lists:foldl(
-                                 fun({Key, Value}, Cfg) ->
-                                         lists:keystore(Key, 1, Cfg,
-                                                        {Key, Value})
-                                 end, OldConfig, [{fastForwardMap, undefined},
-                                                  {map, NewMap},
-                                                  {servers, NewServerList}]),
-                   master_activity_events:note_set_ff_map(
-                     Bucket, undefined,
-                     proplists:get_value(fastForwardMap, OldConfig, [])),
-                   master_activity_events:note_set_map(
-                     Bucket, NewMap, proplists:get_value(map, OldConfig, [])),
-                   NewConfig
-           end).
+update_servers(Servers, BucketConfig) ->
+    lists:keystore(servers, 1, BucketConfig, {servers, Servers}).
+
+remove_servers_from_buckets(Buckets, Nodes) ->
+    UpdtFunc =
+        fun(OldConfig) ->
+                Servers = get_servers(OldConfig),
+                update_servers(Servers -- Nodes, OldConfig)
+        end,
+    ok = update_buckets_config([{Bucket, UpdtFunc} || Bucket <- Buckets]).
+
+bucket_failover_cfg_update(Bucket, OldConfig, FailedNodes, NewMap) ->
+    Servers = ns_bucket:get_servers(OldConfig),
+    NewConfig =
+        misc:update_proplist(OldConfig, [{servers, Servers -- FailedNodes},
+                                         {fastForwardMap, undefined},
+                                         {map, NewMap}]),
+    master_activity_events:note_set_ff_map(
+      Bucket, undefined,
+      proplists:get_value(fastForwardMap, OldConfig, [])),
+    master_activity_events:note_set_map(
+      Bucket, NewMap, proplists:get_value(map, OldConfig, [])),
+    NewConfig.
+
+set_buckets_config_failover(BucketsAndMap, FailedNodes) ->
+    ok = update_buckets_config(
+           lists:map(
+             fun({Bucket, NewMap}) ->
+                     validate_map(NewMap),
+                     {Bucket, bucket_failover_cfg_update(Bucket, _, FailedNodes,
+                                                         NewMap)}
+             end, BucketsAndMap)).
 
 % Update the bucket config atomically.
 update_bucket_config(BucketName, Fun) ->
-    update_bucket_config(chronicle_compat:backend(), BucketName, Fun).
+    update_buckets_config([{BucketName, Fun}]).
 
-update_bucket_config(ns_config, BucketName, Fun) ->
+update_buckets_config(BucketsUpdates) ->
+    update_buckets_config(chronicle_compat:backend(), BucketsUpdates).
+
+update_buckets_config(ns_config, BucketsUpdates) ->
     ns_config:update_sub_key(
       buckets, configs,
       fun (Buckets) ->
-              RV = misc:key_update(BucketName, Buckets, Fun),
-              RV =/= false orelse exit({not_found, BucketName}),
-              RV
+              lists:foldl(
+                fun ({BucketName, Fun}, BucketsAcc) ->
+                        RV = misc:key_update(BucketName, BucketsAcc, Fun),
+                        RV =/= false orelse exit({not_found, BucketName}),
+                        RV
+                end, Buckets, BucketsUpdates)
       end);
-update_bucket_config(chronicle, BucketName, Fun) ->
-    PropsKey = sub_key(BucketName, props),
+update_buckets_config(chronicle, BucketsUpdates) ->
     RV =
         chronicle_kv:transaction(
-          kv, [PropsKey],
+          kv,
+          [sub_key(BucketName, props) || {BucketName, _} <- BucketsUpdates],
           fun (Snapshot) ->
-                  case get_bucket(BucketName, Snapshot) of
-                      {ok, Config} ->
-                          {commit, [{set, PropsKey, Fun(Config)}]};
-                      not_present ->
-                          {abort, not_found}
+                  Commits = lists:map(
+                              fun({BucketName, UpdtFun}) ->
+                                      case get_bucket(BucketName, Snapshot) of
+                                          {ok, CurrentConfig} ->
+                                              {set, sub_key(BucketName, props),
+                                               UpdtFun(CurrentConfig)};
+                                          not_present ->
+                                              {abort, not_found}
+                                      end
+                              end, BucketsUpdates),
+
+                  case lists:keyfind(abort, 1, Commits) of
+                      false ->
+                          {commit, Commits};
+                      Res ->
+                          Res
                   end
           end),
     case RV of
