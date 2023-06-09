@@ -199,9 +199,16 @@ handle_call({decrypt, Data}, _From, State) ->
              Ret
      end, State};
 handle_call({change_password, NewPassword}, _From, State) ->
-    {reply,
-     call_gosecrets_and_store_data_key(
-       {change_password, NewPassword}, "Master password change", State), State};
+    Reply = call_gosecrets_and_store_data_key(
+              {change_password, NewPassword}, "Master password change", State),
+    case Reply of
+        ok ->
+            application:set_env(ns_babysitter, master_password, NewPassword),
+            ok;
+        {error, _} ->
+            ok
+    end,
+    {reply, Reply, State};
 handle_call(get_data_key, _From, State) ->
     {reply, call_gosecrets(get_data_key, State), State};
 handle_call(rotate_data_key, _From, State) ->
