@@ -20,7 +20,7 @@ GoInstall (TARGET ns_gosecrets PACKAGE gosecrets
 
 GoInstall (TARGET ns_generate_hash PACKAGE generate_hash
   GOPATH "${CMAKE_CURRENT_SOURCE_DIR}" "${GODEPSDIR}"
-  GOVERSION 1.19
+  GOVERSION SUPPORTED_NEWER
   INSTALL_PATH bin)
 
 ADD_CUSTOM_TARGET (gocode-clean
