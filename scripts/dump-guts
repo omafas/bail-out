@@ -431,6 +431,8 @@ search_config(NSConfig, Key, Default) ->
     case lists:keyfind(Key, 1, NSConfig) of
         false ->
             Default;
+        {_, '_deleted'} ->
+            Default;
         {_, Value} ->
             strip_config_meta(Value)
     end.
