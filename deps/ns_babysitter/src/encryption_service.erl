@@ -136,15 +136,6 @@ set_password(Password, State) ->
     ?log_debug("Sending password to gosecrets"),
     call_gosecrets({set_password, Password}, State).
 
-recover_or_prompt_password(EncryptedDataKey, State) ->
-    case application:get_env(master_password) of
-        {ok, P} ->
-            ?log_info("Password was recovered from application environment"),
-            ok = set_password(P, State);
-        _ ->
-            prompt_the_password(EncryptedDataKey, State)
-    end.
-
 init([]) ->
     Path = data_key_store_path(),
     EncryptedDataKey =
@@ -158,11 +149,18 @@ init([]) ->
         end,
     State = start_gosecrets(),
     Password =
-        case os:getenv("CB_MASTER_PASSWORD") of
-            false ->
-                "";
-            S ->
-                S
+        case application:get_env(master_password) of
+            {ok, P} ->
+                ?log_info("Password was recovered from application "
+                          "environment"),
+                P;
+            undefined ->
+                case os:getenv("CB_MASTER_PASSWORD") of
+                    false ->
+                        "";
+                    S ->
+                        S
+                end
         end,
     ok = set_password(Password, State),
 
@@ -182,7 +180,7 @@ init([]) ->
             ok;
         Error ->
             ?log_error("Incorrect master password. Error: ~p", [Error]),
-            recover_or_prompt_password(EncryptedDataKey, State)
+            prompt_the_password(EncryptedDataKey, State)
     end,
     {ok, State}.
 
@@ -199,9 +197,16 @@ handle_call({decrypt, Data}, _From, State) ->
              Ret
      end, State};
 handle_call({change_password, NewPassword}, _From, State) ->
-    {reply,
-     call_gosecrets_and_store_data_key(
-       {change_password, NewPassword}, "Master password change", State), State};
+    Reply = call_gosecrets_and_store_data_key(
+              {change_password, NewPassword}, "Master password change", State),
+    case Reply of
+        ok ->
+            application:set_env(ns_babysitter, master_password, NewPassword),
+            ok;
+        {error, _} ->
+            ok
+    end,
+    {reply, Reply, State};
 handle_call(get_data_key, _From, State) ->
     {reply, call_gosecrets(get_data_key, State), State};
 handle_call(rotate_data_key, _From, State) ->
