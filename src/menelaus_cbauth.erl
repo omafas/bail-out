@@ -22,10 +22,17 @@
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
 
+-record(rpc_process, {label :: string(),
+                      version :: string(),
+                      mref :: reference(),
+                      heartbeat_interval :: integer() | undefined,
+                      last_heartbeat :: integer()}).
+
 -record(state, {cbauth_info :: map(),
-                rpc_processes = [],
+                rpc_processes :: map(),
                 cert_version,
-                client_cert_auth_version}).
+                client_cert_auth_version,
+                timer :: misc:timer()}).
 
 -include("ns_common.hrl").
 -include("cut.hrl").
@@ -33,8 +40,15 @@
 -define(VERSION_1, "v1").
 
 handle_rpc_connect(?VERSION_1, Label, Req) ->
-    json_rpc_connection_sup:handle_rpc_connect(
-      Label ++ "-auth", [{type, auth}, {version, ?VERSION_1}], Req);
+    validator:handle(
+      fun (Params) ->
+              json_rpc_connection_sup:handle_rpc_connect(
+                Label ++ "-auth",
+                misc:update_proplist(
+                  Params, [{type, auth}, {version, ?VERSION_1}]), Req)
+      end, Req, qs,
+      [validator:integer(heartbeat, 1, infinity, _),
+       validator:unsupported(_)]);
 handle_rpc_connect(_, _Label, Req) ->
     menelaus_util:reply_text(Req, "Version is not supported", 400).
 
@@ -51,7 +65,9 @@ init([]) ->
     json_rpc_connection_sup:reannounce(),
     {ok, #state{cert_version = new_cert_version(),
                 client_cert_auth_version = client_cert_auth_version(),
-                cbauth_info = maps:new()}}.
+                cbauth_info = maps:new(),
+                rpc_processes = maps:new(),
+                timer = misc:create_timer(heartbeat)}}.
 
 new_cert_version() ->
     misc:rand_uniform(0, 16#100000000).
@@ -110,6 +126,20 @@ is_interesting({node, N, prometheus_auth_info}) when N =:= node() -> true;
 is_interesting({node, N, uuid}) when N =:= node() -> true;
 is_interesting(Key) -> collections:key_match(Key) =/= false.
 
+register_heartbeat(P) ->
+    P#rpc_process{last_heartbeat = erlang:monotonic_time(millisecond)}.
+
+new_process(Label, Version, Pid, Params) ->
+    MRef = erlang:monitor(process, Pid),
+    #rpc_process{
+       label = Label, version = Version, mref = MRef,
+       heartbeat_interval =
+           case proplists:get_value(heartbeat, Params) of
+               undefined -> undefined;
+               I -> I * 1000
+           end,
+       last_heartbeat = erlang:monotonic_time(millisecond)}.
+
 handle_call(_Msg, _From, State) ->
     {reply, not_implemented, State}.
 
@@ -128,21 +158,23 @@ handle_cast({Msg, Label, Params, Pid},
             _ ->
                 {OldInfo, CBAuthInfo}
         end,
-    NewProcesses = case notify_cbauth(Label, Version, Pid, Info) of
-                       error ->
-                           Processes;
-                       ok ->
-                           case lists:keyfind({Label, Version, Pid}, 2,
-                                              Processes) of
-                               false ->
-                                   MRef = erlang:monitor(process, Pid),
-                                   [{MRef, {Label, Version, Pid}} | Processes];
-                               _ ->
-                                   Processes
-                           end
-                   end,
-    {noreply, State#state{rpc_processes = NewProcesses,
-                          cbauth_info = NewCBAuthInfo}}.
+    NewProcesses =
+        case notify_cbauth(Label, Version, Pid, Info) of
+            error ->
+                Processes;
+            ok ->
+                case maps:find(Pid, Processes) of
+                    {ok, P = #rpc_process{label = L, version = V}} when
+                          L =:= Label andalso V =:= Version ->
+                        maps:update(Pid, register_heartbeat(P), Processes);
+                    error ->
+                        maps:put(Pid, new_process(Label, Version, Pid, Params),
+                                 Processes)
+                end
+        end,
+    NewState = State#state{rpc_processes = NewProcesses,
+                           cbauth_info = NewCBAuthInfo},
+    {noreply, process_heartbeats(NewState)}.
 
 handle_info(ssl_service_event, State) ->
     self() ! maybe_notify_cbauth,
@@ -156,28 +188,92 @@ handle_info(maybe_notify_cbauth, State) ->
     {noreply, maybe_notify_cbauth(State)};
 handle_info({'DOWN', MRef, _, Pid, Reason},
             #state{rpc_processes = Processes} = State) ->
-    {value, {MRef, {_, _, Pid} = Info}, NewProcesses} =
-        lists:keytake(MRef, 1, Processes),
+    {#rpc_process{mref = MRef} = P, NewProcesses} = maps:take(Pid, Processes),
     ?log_debug("Observed json rpc process ~p died with reason ~p",
-               [Info,  Reason]),
+               [P,  Reason]),
     {noreply, State#state{rpc_processes = NewProcesses}};
+handle_info(heartbeat, State) ->
+    {noreply, process_heartbeats(State)};
 
 handle_info(_Info, State) ->
     {noreply, State}.
 
+process_heartbeats(#state{rpc_processes = Processes,
+                          timer = Timer} = State) ->
+    misc:flush(heartbeat),
+    Now = erlang:monotonic_time(millisecond),
+    {ToSend, NextTime} =
+        maps:fold(
+          fun (_, #rpc_process{heartbeat_interval = undefined}, Acc) ->
+                  Acc;
+              (Pid, #rpc_process{heartbeat_interval = I,
+                                 last_heartbeat = Last} = P,
+               {AccToSend, AccNextTime}) ->
+                  GetNextTime =
+                      fun (N) ->
+                              case AccNextTime of
+                                  undefined ->
+                                      N;
+                                  _ ->
+                                      min(N, AccNextTime)
+                              end
+                      end,
+
+                  case Last + I of
+                      T when T =< Now ->
+                          {[{Pid, P} | AccToSend], GetNextTime(I)};
+                      Future ->
+                          {AccToSend, GetNextTime(Future - Now)}
+                  end
+          end, {[], undefined}, Processes),
+
+    Results = async:map(fun ({Pid, #rpc_process{label = Label} = P}) ->
+                                {send_heartbeat(Label, Pid), Pid, P}
+                        end, ToSend),
+
+    NewProcesses =
+        lists:foldl(
+          fun ({ok, Pid, P}, AccProcesses) ->
+                  maps:update(Pid, register_heartbeat(P), AccProcesses);
+              ({error, _, _}, AccProcesses) ->
+                  AccProcesses
+          end, Processes, Results),
+
+    NextTimer = case NextTime of
+                    undefined ->
+                        Timer;
+                    _ ->
+                        misc:arm_timer(NextTime, Timer)
+                end,
+    State#state{rpc_processes = NewProcesses, timer = NextTimer}.
+
 maybe_notify_cbauth(#state{rpc_processes = Processes,
                            cbauth_info = OldInfo} = State) ->
     NewInfo = build_auth_infos(State),
-    maps:foreach(
-      fun (Ver, I) ->
-              maps:get(Ver, OldInfo, default) =:= I orelse
-                  notify_version(Ver, Processes, I)
-      end, NewInfo),
-    State#state{cbauth_info = NewInfo}.
+    NewProcesses =
+        maps:fold(
+          fun (Ver, I, Acc) ->
+                  case maps:get(Ver, OldInfo, default) of
+                      I ->
+                          Acc;
+                      _ ->
+                          notify_version(Ver, Acc, I)
+                  end
+          end, Processes, NewInfo),
+    State#state{cbauth_info = NewInfo, rpc_processes = NewProcesses}.
 
 notify_version(Ver, Processes, Info) ->
-    [notify_cbauth(Label, Ver, Pid, Info) ||
-        {_, {Label, V, Pid}} <- Processes, V =:= Ver].
+    maps:map(
+      fun (Pid, #rpc_process{label = Label, version = V} = P) when V =:= Ver ->
+              case notify_cbauth(Label, Ver, Pid, Info) of
+                  ok ->
+                      register_heartbeat(P);
+                  error ->
+                      P
+              end;
+          (_, P) ->
+              P
+      end, Processes).
 
 personalize_info(Label, Info) ->
     "htuabc-" ++ ReversedTrimmedLabel = lists:reverse(Label),
@@ -213,12 +309,21 @@ personalize_info(Label, Info) ->
                           {tlsConfig, TLSConfig}]).
 
 notify_cbauth(Label, internal, Pid, Info) ->
-    do_notify_cbauth(Label, "AuthCacheSvc.UpdateDB", Pid,
-                     personalize_info(Label, Info));
+    invoke_method(Label, "AuthCacheSvc.UpdateDB", Pid,
+                  personalize_info(Label, Info));
 notify_cbauth(Label, _, Pid, Info) ->
-    do_notify_cbauth(Label, "AuthCacheSvc.UpdateDBExt", Pid, Info).
+    invoke_method(Label, "AuthCacheSvc.UpdateDBExt", Pid, Info).
 
-do_notify_cbauth(Label, Method, Pid, Info) ->
+send_heartbeat(Label, Pid) ->
+    TestCondition = list_to_atom(atom_to_list(?MODULE) ++ "_skip_heartbeats"),
+    case testconditions:get(TestCondition) of
+        false ->
+            invoke_method(Label, "AuthCacheSvc.Heartbeat", Pid, []);
+        true ->
+            ?log_debug("Skip heartbeat for label ~p", [Label])
+    end.
+
+invoke_method(Label, Method, Pid, Info) ->
     try json_rpc_connection:perform_call(Label, Method, {Info}) of
         {error, method_not_found} ->
             error;
@@ -231,6 +336,8 @@ do_notify_cbauth(Label, Method, Pid, Info) ->
             exit(Pid, Error),
             error;
         {ok, true} ->
+            ok;
+        {ok, null} ->
             ok
     catch exit:{noproc, _} ->
             ?log_debug("Process ~p is already dead", [{Label, Pid}]),
@@ -284,7 +391,9 @@ versions() ->
 
 build_auth_infos(State = #state{rpc_processes = Processes}) ->
     Ctx = build_auth_info_ctx(),
-    Versions = lists:usort([V || {_, {_, V, _}} <- Processes]),
+    Versions =
+        lists:usort(
+          [V || {_, #rpc_process{version = V}} <- maps:to_list(Processes)]),
     maps:from_list(
       [{V, build_auth_info(V, Ctx, State)} || V <- versions(),
                                               lists:member(V, Versions)]).
