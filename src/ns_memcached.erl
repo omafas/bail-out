@@ -120,7 +120,8 @@
          get_failover_log/2,
          get_failover_logs/2,
          get_collections_uid/1,
-         maybe_add_impersonate_user_frame_info/2
+         maybe_add_impersonate_user_frame_info/2,
+         delete_bucket/2
         ]).
 
 %% for ns_memcached_sockets_pool, memcached_file_refresh only
@@ -897,6 +898,10 @@ delete_bucket(Sock, Bucket, Force, DeleteData) ->
                 ok
         end
     end.
+
+delete_bucket(Bucket, Opts) ->
+    ns_memcached_sockets_pool:executing_on_socket(
+      mc_client_binary:delete_bucket(_, Bucket, Opts)).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
