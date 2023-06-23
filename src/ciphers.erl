@@ -9,8 +9,7 @@
 -module(ciphers).
 
 -export([is_valid_name/1, code/1, openssl_name/1, high/0, medium/0,
-         only_known/1, supported/1, is_tls13_cipher/1, all_tls13/0,
-         backwards_compatible_ciphers/0]).
+         only_known/1, supported/1, is_tls13_cipher/1, all_tls13/0]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -50,20 +49,6 @@ medium() ->
     [<<"TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA">>,
      <<"TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA">>,
      <<"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256">>].
-
-backwards_compatible_ciphers() ->
-    backwards_compatible_ciphers('tlsv1.3').
-backwards_compatible_ciphers(Version) ->
-    lists:map(
-      fun(#{cipher := C, key_exchange := K,
-            mac := M, prf := P}) ->
-              case P of
-                  default_prf ->
-                      {K, C, M};
-                  _ ->
-                      {K, C, M, P}
-              end
-      end, ssl:cipher_suites(all, Version)).
 
 supported(ns_server) ->
     [N || C <- ssl:cipher_suites(all, 'tlsv1.3'),

@@ -308,9 +308,38 @@ low_security_ciphers_openssl() ->
      "EXP-RC4-MD5",
      "EXP-RC4-MD5"].
 
+%% Security vulnerabily with weak ciphers: https://sweet32.info/
+%%
+%% Excludes two kerberos ciphers that are also considered unsafe, because they
+%% are rarely included in openssl installations, and has a more niche use
+%% case(s). Including them in this comment for completeness.
+%%
+%% Excludes:
+%%  | OpenSSL           | IANA                           |
+%%  +-------------------+--------------------------------+
+%%  | KRB5-DES-CBC3-MD5 | TLS_KRB5_WITH_3DES_EDE_CBC_MD5 |
+%%  | KRB5-DES-CBC3-SHA | TLS_KRB5_WITH_3DES_EDE_CBC_SHA |
+%%
+%% Originally added in RFC: https://www.ietf.org/rfc/rfc2712.txt
+sweet32_ciphers() ->
+    ["DES-CBC3-SHA",
+     "DH-DSS-DES-CBC-SHA",
+     "DH-RSA-DES-CBC-SHA",
+     "EDH-DSS-DES-CBC-SHA",
+     "EDH-RSA-DES-CBC-SHA",
+     "ADH-DES-CBC-SHA",
+     "PSK-3DES-EDE-CBC-SHA",
+     "ECDH-ECDSA-DES-CBC3-SHA",
+     "ECDHE-ECDSA-DES-CBC3-SHA",
+     "ECDH-RSA-DES-CBC3-SHA",
+     "ECDHE-RSA-DES-CBC3-SHA",
+     "AECDH-DES-CBC3-SHA",
+     "SRP-3DES-EDE-CBC-SHA",
+     "SRP-RSA-3DES-EDE-CBC-SHA",
+     "SRP-DSS-3DES-EDE-CBC-SHA"].
+
 openssl_cipher_to_erlang(Cipher) ->
-    try ssl_cipher_format:suite_legacy(
-          ssl_cipher_format:suite_openssl_str_to_map(Cipher)) of
+    try ssl_cipher_format:suite_openssl_str_to_map(Cipher) of
         V ->
             {ok, V}
     catch _:_ ->
@@ -319,9 +348,12 @@ openssl_cipher_to_erlang(Cipher) ->
             {error, unsupported}
     end.
 
+%% Right now this list includes ciphers we already know aren't secure as well
+%% as the 'sweet32' specific ciphers.
 low_security_ciphers() ->
-    Ciphers = low_security_ciphers_openssl(),
-    [EC || C <- Ciphers, {ok, EC} <- [openssl_cipher_to_erlang(C)]].
+    List = low_security_ciphers_openssl() ++ sweet32_ciphers(),
+    [EC || C <- List, {ok, EC} <- [openssl_cipher_to_erlang(C)]].
+
 
 ns_server_ciphers() ->
     Config = ns_config:latest(),
@@ -332,8 +364,15 @@ ns_server_ciphers() ->
             %% new installations
             case application:get_env(ssl_ciphers) of
                 {ok, Ciphers} -> Ciphers;
-                undefined -> ciphers:backwards_compatible_ciphers()
-                                 -- low_security_ciphers()
+                undefined ->
+                    Ciphers = ssl:cipher_suites(all, 'tlsv1.3'),
+                    LowList = low_security_ciphers(),
+
+                    %% Filter out any ciphers that aren't compatible with the
+                    %% current cryptolib.
+                    %% https://www.erlang.org/doc/man/ssl.html#cipher_suites-2
+                    %%
+                    ssl:filter_cipher_suites(Ciphers -- LowList, [])
             end;
         List -> List
     end.
