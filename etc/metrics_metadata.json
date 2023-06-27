@@ -379,6 +379,18 @@
             }
         ]
     },
+    "sysproc_start_time": {
+        "type": "counter",
+        "help": "OS specific time when process was started",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "proc",
+                "help": "Name of the process (e.g. babysitter, bash, etc.)"
+            }
+        ]
+    },
     "sys_disk_queue": {
         "type": "gauge",
         "help": "Current disk queue length of the disk",
