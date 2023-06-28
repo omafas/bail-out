@@ -403,6 +403,18 @@
             }
         ]
     },
+    "sys_disk_time_seconds": {
+        "type": "counter",
+        "help": "Amount of time that the disk spent performing IO",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "disk",
+                "help": "Name of the disk"
+            }
+        ]
+    },
     "sys_disk_read_bytes": {
         "type": "counter",
         "help": "Number of bytes read by the disk",
