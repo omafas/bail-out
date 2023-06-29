@@ -500,9 +500,21 @@ start_link(Node, M, F, A)
 %% registering it properly.
 turn_into_gen_server({local, Name}, Mod, Args, GenServerOpts) ->
     erlang:register(Name, self()),
-    {ok, State} = Mod:init(Args),
+    {State, HibernateStatus} =
+        case Mod:init(Args) of
+            {ok, S} ->
+                {S, false};
+            {ok, S, hibernate} ->
+                {S, true}
+        end,
     proc_lib:init_ack({ok, self()}),
-    gen_server:enter_loop(Mod, GenServerOpts, State, {local, Name}).
+    case HibernateStatus of
+        true ->
+            gen_server:enter_loop(Mod, GenServerOpts, State,
+                                  {local, Name}, hibernate);
+        false ->
+            gen_server:enter_loop(Mod, GenServerOpts, State, {local, Name})
+    end.
 
 sync_wait(Pid) ->
     receive
