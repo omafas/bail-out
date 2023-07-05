@@ -18,7 +18,7 @@ start_link() ->
 set_couchdb_loglevel() ->
     LogLevel = ns_server:get_loglevel(couchdb),
     CouchLogLevel = ns_server_to_couchdb_loglevel(LogLevel),
-    couch_config:set("log", "level", CouchLogLevel).
+    ok = couch_config:set("log", "level", CouchLogLevel).
 
 ns_server_to_couchdb_loglevel(debug) ->
     "debug";
