@@ -9,6 +9,7 @@
   {[collections_per_quota, enabled], true}]}.
 {resource_management_metakv,
  [{[index, index_creation_rr, enabled], true},
-  {[index, topology_change_rr, enabled], true}]}.
+  {[index, topology_change_rr, enabled], true},
+  {[index, index_overhead_per_node, enabled], true}]}.
 {{n1ql, sequential_scan_disabled}, true}.
 {allow_hash_migration_during_auth, true}.

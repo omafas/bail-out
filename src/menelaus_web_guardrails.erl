@@ -96,6 +96,13 @@ params() ->
      {"index.topologyChangeRR.minimum",
       #{type => {num, 0, 100},
         cfg_key => [metakv, index, topology_change_rr, minimum]}},
+     %% Index service overhead configuration
+     {"index.indexOverheadPerNode.enabled",
+      #{type => bool,
+        cfg_key => [metakv, index, index_overhead_per_node, enabled]}},
+     {"index.indexOverheadPerNode.maximum",
+      #{type => {num, 0, infinity},
+        cfg_key => [metakv, index, index_overhead_per_node, maximum]}},
      %% Max disk usage % per node
      {"diskUsage.enabled",
       #{type => bool,
@@ -170,7 +177,11 @@ raw_default_for_metakv() ->
        %% Minimum resident ratio that a topology change must not breach
        {topology_change_rr,
         [{enabled, false},
-         {minimum, 10}]}
+         {minimum, 10}]},
+       %% max index overhead per node
+       {index_overhead_per_node,
+        [{enabled, false},
+         {maximum, 1}]}
       ]}
     ].
 
@@ -260,7 +271,9 @@ default_config_t() ->
                       [{[index, index_creation_rr, enabled], true},
                        {[index, index_creation_rr, minimum], 10},
                        {[index, topology_change_rr, enabled], true},
-                       {[index, topology_change_rr, minimum], 10}]}],
+                       {[index, topology_change_rr, minimum], 10},
+                       {[index, index_overhead_per_node, enabled], true},
+                       {[index, index_overhead_per_node, maximum], 2}]}],
     meck:expect(config_profile, get_value,
                 fun (Key, Default) ->
                         proplists:get_value(Key, ConfigProfile, Default)
@@ -296,7 +309,10 @@ default_config_t() ->
            {minimum, 10}]},
          {topology_change_rr,
           [{enabled, true},
-           {minimum, 10}]}]
+            {minimum, 10}]},
+          {index_overhead_per_node,
+           [{enabled, true},
+            {maximum, 2}]}]
        }],
       default_for_metakv()).
 

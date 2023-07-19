@@ -103,6 +103,10 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
                                       "topologyChangeRR": {
                                           "enabled": True,
                                           "minimum": 5
+                                      },
+                                      "indexOverheadPerNode": {
+                                          "enabled": True,
+                                          "maximum": 11
                                       }
                                   },
                                   "coresPerBucket": {
@@ -141,6 +145,10 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
         assert topology_change_config.get("enabled") is True
         assert topology_change_config.get("minimum") == 5
 
+        index_overhead_config = index_config.get("indexOverheadPerNode")
+        assert index_overhead_config.get("enabled") is True
+        assert index_overhead_config.get("maximum") == 11
+
         data_disk_usage_config = get("diskUsage", r)
         assert data_disk_usage_config.get("enabled") is True
         assert data_disk_usage_config.get("maximum") == 90
@@ -167,6 +175,8 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
                 "index.indexCreationRR.minimum": 7,
                 "index.topologyChangeRR.enabled": "false",
                 "index.topologyChangeRR.minimum": 6,
+                "index.indexOverheadPerNode.enabled": "false",
+                "index.indexOverheadPerNode.maximum": 12,
                 "coresPerBucket.enabled": "false",
                 "coresPerBucket.minimum": 0.3,
                 "diskUsage.enabled": "false",
@@ -198,6 +208,10 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
         topology_change_rr_config = index_config.get("topologyChangeRR")
         assert topology_change_rr_config.get("enabled") is False
         assert topology_change_rr_config.get("minimum") == 6
+
+        index_overhead_config = index_config.get("indexOverheadPerNode")
+        assert index_overhead_config.get("enabled") is False
+        assert index_overhead_config.get("maximum") == 12
 
         assert get("coresPerBucket", r).get("enabled") is False
         assert get("coresPerBucket", r).get("minimum") == 0.3
@@ -267,6 +281,16 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
             })
         assert get("enabled", r) is True
         assert get("minimum", r) == 7
+
+        r = testlib.post_succ(
+            self.cluster,
+            "/settings/resourceManagement/index/indexOverheadPerNode",
+            json={
+                "enabled": True,
+                "maximum": 13
+            })
+        assert get("enabled", r) is True
+        assert get("maximum", r) == 13
 
 
 class GuardRailRestrictionTests(testlib.BaseTestSet):
