@@ -493,7 +493,15 @@ extract_on_behalf_of_identity(Req) ->
         Header when is_list(Header) ->
             case parse_on_behalf_of_header(Header) of
                 {User, Domain} ->
-                    {ok, {User, list_to_existing_atom(Domain)}};
+                    try
+                        ExistingDomain = list_to_existing_atom(Domain),
+                        {ok, {User, ExistingDomain}}
+                    catch
+                        error:badarg ->
+                            ?log_debug("Invalid domain in cb-on-behalf-of: ~s",
+                                       [ns_config_log:tag_user_name(Header)]),
+                            error
+                    end;
                 _ ->
                     error
             end;
