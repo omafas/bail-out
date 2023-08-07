@@ -906,12 +906,18 @@ handle_settings_stats(Req) ->
     reply_json(Req, {struct, build_settings_stats()}).
 
 build_settings_stats() ->
-    Defaults = default_settings_stats_config(),
+    Defaults =
+        default_settings_stats_config(cluster_compat_mode:is_enterprise(),
+                                      cluster_compat_mode:is_cluster_72()),
     [{send_stats, SendStats}] = ns_config:search_prop(
                                   ns_config:get(), settings, stats, Defaults),
     [{sendStats, SendStats}].
 
-default_settings_stats_config() ->
+%% Compat check for 7.2 added in 7.2.3 and was deemed ok because it won't break
+%% anything in mixed mode cluster with nodes on versions 7.2.X
+default_settings_stats_config(false = _IsEnterprise, true = _Is72) ->
+    [{send_stats, true}];
+default_settings_stats_config(_, _) ->
     [{send_stats, false}].
 
 handle_settings_stats_post(Req) ->
@@ -924,6 +930,12 @@ handle_settings_stats_post(Req) ->
                   settings_stats_validators()]).
 
 apply_stats_settings(Props) ->
+    apply_stats_settings(cluster_compat_mode:is_enterprise(),
+                         cluster_compat_mode:is_cluster_72(), Props).
+
+apply_stats_settings(false = _IsEnterprise, true = _Is72, _Props) ->
+    ok;
+apply_stats_settings(_, _, Props) ->
     SendStats = proplists:get_value(sendStats, Props),
     case SendStats of
         undefined -> ok;
