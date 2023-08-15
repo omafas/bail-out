@@ -135,7 +135,9 @@ from_nodes(Nodes, Function, Args, Timeout) ->
                  MetricName :: atom(),
                  Value :: number().
 for_alerts() ->
-    Q = <<"{name=~`kv_ep_meta_data_memory_bytes|"
+    Q = <<"{name=~`kv_curr_connections|"
+                  "kv_max_user_connections|"
+                  "kv_ep_meta_data_memory_bytes|"
                   "kv_ep_max_size|"
                   "kv_ep_oom_errors|"
                   "kv_ep_item_commit_failed|"
@@ -158,10 +160,12 @@ for_alerts() ->
                                 {true, {"@global", binary_to_atom(N, latin1)}};
                             <<"index_", _/binary>> = N ->
                                 {true, {"@index", binary_to_atom(N, latin1)}};
-                            <<"kv_", N/binary>> ->
+                            <<"kv_ep_", N/binary>> ->
                                 B = proplists:get_value(<<"bucket">>, Props),
                                 {true, {binary_to_list(B),
                                         binary_to_atom(N, latin1)}};
+                            <<"kv_", _/binary>> = N ->
+                                {true, {"@global", binary_to_atom(N, latin1)}};
                             <<"sys_", N/binary>> ->
                                 {true, {"@system",
                                         binary_to_atom(N, latin1)}};

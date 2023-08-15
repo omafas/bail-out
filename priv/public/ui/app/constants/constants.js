@@ -37,7 +37,8 @@ let knownAlerts = [
   'disk_usage_analyzer_stuck',
   'memory_threshold',
   'history_size_warning',
-  'indexer_low_resident_percentage'
+  'indexer_low_resident_percentage',
+  'memcached_connections'
 ];
 
 let timeUnitToSeconds = {

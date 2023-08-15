@@ -81,6 +81,9 @@
 %% Default history size threshold
 -define(HIST_WARN_PERC, 90).
 
+%% Default memcached connection threshold
+-define(MEMCACHED_CONNECTION_THRESHOLD, 90).
+
 -export([start_link/0, stop/0, local_alert/2, global_alert/2,
          fetch_alerts/0, consume_alerts/1]).
 
@@ -114,6 +117,8 @@ short_description(memory_threshold) ->
     "system memory usage threshold exceeded";
 short_description(history_size_warning) ->
     "history size approaching limit";
+short_description(memcached_connections) ->
+    "memcached connections approaching limit";
 short_description(Other) ->
     %% this case is needed for tests to work
     couch_util:to_list(Other).
@@ -162,8 +167,10 @@ errors(history_size_warning) ->
     "Warning: On bucket \"~s\" mutation history is greater than ~b% of history "
     "retention size for at least ~b/~b vbuckets. Please ensure that the "
     "history retention size is sufficiently large, in order for the mutation "
-    "history to be retained for the history retention time.".
-
+    "history to be retained for the history retention time.";
+errors(memcached_connections) ->
+    "Warning: On node ~s the number of connections being used by memcached "
+    "(~p) is above the notice threshold of ~b%. The limit is ~p.".
 %% ------------------------------------------------------------------
 %% API Function Definitions
 %% ------------------------------------------------------------------
@@ -314,7 +321,7 @@ alert_keys() ->
      indexer_low_resident_percentage,
      ep_clock_cas_drift_threshold_exceeded,
      communication_issue, time_out_of_sync, disk_usage_analyzer_stuck,
-     memory_threshold, history_size_warning].
+     memory_threshold, history_size_warning, memcached_connections].
 
 config_upgrade_to_70(Config) ->
     config_email_alerts_upgrade(
@@ -420,7 +427,8 @@ global_checks() ->
     [oom, ip, write_fail, overhead, disk, audit_write_fail,
      indexer_ram_max_usage, cas_drift_threshold, communication_issue,
      time_out_of_sync, disk_usage_analyzer_stuck, memory_threshold,
-     history_size_warning, indexer_low_resident_percentage].
+     history_size_warning, indexer_low_resident_percentage,
+     memcached_connections].
 
 %% @doc fires off various checks
 check_alerts(Opaque, Hist, Stats) ->
@@ -738,6 +746,33 @@ check(memory_threshold, Opaque, _History, Stats) ->
                     check_memory_threshold(CGUsed, CGLimit, cgroup);
                 false ->
                     ok
+            end
+    end,
+    Opaque;
+check(memcached_connections, Opaque, _History, Stats) ->
+    case proplists:get_value("@global", Stats) of
+        undefined ->
+            ?log_debug("Skipping memcached connections check as there are no "
+                       "global stats: ~p", [Stats]);
+        GlobalStats ->
+            {value, Config} = ns_config:search(alert_limits),
+            AlertPerc =
+                proplists:get_value(memcached_connection_warning_threshold,
+                                    Config, ?MEMCACHED_CONNECTION_THRESHOLD),
+            Max = proplists:get_value(kv_max_user_connections, GlobalStats),
+            AlertLimit = Max * AlertPerc / 100,
+
+            Used = proplists:get_value(kv_curr_connections, GlobalStats),
+            case Used > AlertLimit of
+                true when is_number(Max) andalso is_number(Used) ->
+                    Err = fmt_to_bin(errors(memcached_connections),
+                                     [node(), Used, AlertPerc, Max]),
+                    global_alert(memcached_connections, Err);
+                false -> ok;
+                _ ->
+                    ?log_error("Failed to check memcached connections. Got "
+                               "global stats ~p and percentage threshold ~p",
+                               [GlobalStats, AlertPerc])
             end
     end,
     Opaque.
@@ -1115,7 +1150,11 @@ params() ->
                                    default => ?MEM_CRIT_PERC}},
      {"historyWarningThreshold", #{type => {int, 0, 100},
                                    cfg_key => history_warning_threshold,
-                                   default => ?HIST_WARN_PERC}}].
+                                   default => ?HIST_WARN_PERC}},
+     {"memcachedConnectionWarningThreshold",
+      #{type => {int, 0, 100},
+        cfg_key => memcached_connection_warning_threshold,
+        default => ?MEMCACHED_CONNECTION_THRESHOLD}}].
 
 build_alert_limits() ->
     case ns_config:search(alert_limits) of
