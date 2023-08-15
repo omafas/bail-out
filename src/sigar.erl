@@ -440,10 +440,10 @@ compute_cpu_stats(#{<<"supported">> := true} = OldCounters,
     Stolen = maps:get(<<"cpu_stolen_ms">>, Diffs, 0),
     Total = maps:get(<<"cpu_total_ms">>, Diffs),
 
-    RawCpuTotal = get_raw_counter(<<"cpu_total_ms">>, Counters),
-    RawCpuIdle = get_raw_counter(<<"cpu_idle_ms">>, Counters),
-    RawCpuUser = get_raw_counter(<<"cpu_user_ms">>, Counters),
-    RawCpuSys = get_raw_counter(<<"cpu_sys_ms">>, Counters),
+    RawCpuTotal = get_raw_counter_msec_to_sec(<<"cpu_total_ms">>, Counters),
+    RawCpuIdle = get_raw_counter_msec_to_sec(<<"cpu_idle_ms">>, Counters),
+    RawCpuUser = get_raw_counter_msec_to_sec(<<"cpu_user_ms">>, Counters),
+    RawCpuSys = get_raw_counter_msec_to_sec(<<"cpu_sys_ms">>, Counters),
 
     [{cpu_host_utilization_rate, compute_utilization(Total - Idle, Total)},
      {cpu_host_user_rate, compute_utilization(User, Total)},
@@ -457,8 +457,8 @@ compute_cpu_stats(#{<<"supported">> := true} = OldCounters,
             Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle),
             [{cpu_host_seconds_total_other, Other}];
         true ->
-            RawCpuIrq = get_raw_counter(cpu_irq_ms, Counters),
-            RawCpuStolen = get_raw_counter(cpu_stolen_ms, Counters),
+            RawCpuIrq = get_raw_counter_msec_to_sec(cpu_irq_ms, Counters),
+            RawCpuStolen = get_raw_counter_msec_to_sec(cpu_stolen_ms, Counters),
             Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle +
                                    RawCpuIrq + RawCpuStolen),
             [{cpu_irq_rate, compute_utilization(Irq, Total)},
@@ -471,9 +471,15 @@ compute_cpu_stats(_, _) -> [].
 
 %% The current measurement is returned as a raw counter in seconds.
 %% The user can then use prometheus functions to do computations.
-get_raw_counter(Stat, Counters) ->
+get_raw_counter_msec_to_sec(Stat, Counters) ->
+    get_raw_counter_inner(Stat, Counters, 1000).
+
+get_raw_counter_usec_to_sec(Stat, Counters) ->
+    get_raw_counter_inner(Stat, Counters, 1000_000).
+
+get_raw_counter_inner(Stat, Counters, Divisor) ->
     Value = maps:get(Stat, Counters, 0),
-    Value / 1000.
+    Value / Divisor.
 
 compute_cgroups_counters(Cores, PrevTS, TS,
                          #{<<"supported">> := true} = Old,
@@ -492,15 +498,23 @@ compute_cgroups_counters(Cores, PrevTS, TS,
                               _  -> 0
                           end
                   end,
+    RawCpuUser = get_raw_counter_usec_to_sec(<<"user_usec">>, New),
+    RawCpuSys = get_raw_counter_usec_to_sec(<<"system_usec">>, New),
+    RawCpuThrottled = get_raw_counter_usec_to_sec(<<"throttled_usec">>, New),
+    RawCpuBurst = get_raw_counter_usec_to_sec(<<"burst_usec">>, New),
+
     [{cpu_utilization_rate, ComputeRate(<<"usage_usec">>)},
      {cpu_user_rate, ComputeRate(<<"user_usec">>)},
      {cpu_sys_rate, ComputeRate(<<"system_usec">>)},
      {cpu_throttled_rate, ComputeRate(<<"throttled_usec">>)},
-     {cpu_burst_rate, ComputeRate(<<"burst_usec">>)}];
+     {cpu_burst_rate, ComputeRate(<<"burst_usec">>)},
+     {cpu_cgroup_seconds_total_user, RawCpuUser},
+     {cpu_cgroup_seconds_total_sys, RawCpuSys},
+     {cpu_cgroup_seconds_total_throttled, RawCpuThrottled},
+     {cpu_cgroup_seconds_total_burst, RawCpuBurst}];
 compute_cgroups_counters(_, _, _, _, _) ->
     [].
 
-%% No cgroup counters so just use the host ones.
 default_cgroups_counters(HostCounters) ->
     [{cpu_utilization_rate,
       proplists:get_value(cpu_host_utilization_rate, HostCounters)},

@@ -218,26 +218,34 @@ psi_test() ->
 
 -endif.
 
+key_to_binary(Key) when is_atom(Key) ->
+    atom_to_binary(Key);
+key_to_binary(Key) when is_binary(Key) ->
+    Key;
+key_to_binary(Key) when is_list(Key) ->
+    list_to_binary(Key).
+
 report_system_stats(ReportFun) ->
     Stats = gen_server:call(?MODULE, get_stats),
     SystemStats = proplists:get_value("@system", Stats, []),
     lists:foreach(
-      fun ({Key, Val}) when not is_binary(Key) ->
-              KeyBin = atom_to_binary(Key),
+      fun ({Key, Val}) ->
+              KeyBin = key_to_binary(Key),
               {StatName, Labels0} =
                 case KeyBin of
                     <<"cpu_host_seconds_total_", Mode/binary>> ->
                         {<<"cpu_host_seconds_total">>,
                          [{<<"mode">>, Mode}]};
+                    <<"pressure/", PsiKey/binary>> ->
+                        get_pressure_name_labels(PsiKey);
+                    <<"cpu_cgroup_seconds_total_", Mode/binary>> ->
+                        {<<"cpu_cgroup_seconds_total">>,
+                         [{<<"mode">>, Mode}]};
                     _ ->
                         {KeyBin, []}
                 end,
               Labels = Labels0 ++ [{<<"category">>, <<"system">>}],
-              ReportFun({<<"sys">>, StatName, Labels, Val});
-          ({<<"pressure/", PsiKey/binary>>, Val}) ->
-              {Name, PLabels} = get_pressure_name_labels(PsiKey),
-              ReportFun({<<"sys">>, Name,
-                         [{<<"category">>, <<"system">>} | PLabels], Val})
+              ReportFun({<<"sys">>, StatName, Labels, Val})
       end, SystemStats),
 
     SysProcStats = proplists:get_value("@system-processes", Stats, []),

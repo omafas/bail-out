@@ -92,6 +92,19 @@
             }
         ]
     },
+    "sys_cpu_cgroup_seconds_total": {
+        "type": "counter",
+        "help": "Number of CPU seconds utilized in the cgroup, by mode",
+        "added": "7.2.4",
+        "unit": "seconds",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "mode",
+                "help": "type of usage (user, sys, throttled, burst)"
+            }
+        ]
+    },
     "sys_cpu_host_sys_rate": {
         "type": "gauge",
         "help": "System CPU utilization rate in the host",
