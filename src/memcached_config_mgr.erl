@@ -15,7 +15,8 @@
 -include("cut.hrl").
 
 %% API
--export([start_link/0, trigger_tls_config_push/0]).
+-export([start_link/0, trigger_tls_config_push/0,
+         memcached_port_pid/0]).
 
 %% referenced from ns_config_default
 -export([get_minidump_dir/2, get_interfaces/2,
@@ -51,10 +52,7 @@ trigger_tls_config_push() ->
 init([]) ->
     register(?MODULE, self()),
     proc_lib:init_ack({ok, self()}),
-    ?log_debug("waiting for completion of initial ns_ports_setup round"),
-    ns_ports_setup:sync(),
-    ?log_debug("ns_ports_setup seems to be ready"),
-    Pid = find_port_pid_loop(100, 250),
+    Pid = memcached_port_pid(),
     remote_monitors:monitor(Pid),
     Config = ns_config:get(),
     WantedMcdConfig = memcached_config(Config),
@@ -100,7 +98,8 @@ init([]) ->
             _ ->
                 ?log_debug("found memcached port to be already active"),
                 McdConfig
-    end,
+        end,
+
     State = #state{port_pid = Pid,
                    memcached_config = ActualMcdConfig},
     gen_server:enter_loop(?MODULE, [], State).
@@ -147,6 +146,12 @@ is_notable_tls_config_key(client_cert_auth) -> true;
 is_notable_tls_config_key(cipher_suites) -> true;
 is_notable_tls_config_key(honor_cipher_order) -> true;
 is_notable_tls_config_key(_) -> false.
+
+memcached_port_pid() ->
+    ?log_debug("waiting for completion of initial ns_ports_setup round"),
+    ns_ports_setup:sync(),
+    ?log_debug("ns_ports_setup seems to be ready"),
+    find_port_pid_loop(100, 250).
 
 find_port_pid_loop(Tries, Delay) when Tries > 0 ->
     RV = ns_ports_manager:find_port(ns_server:get_babysitter_node(), memcached),
