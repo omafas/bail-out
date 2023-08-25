@@ -1226,6 +1226,7 @@ change_password_validators() ->
 
 handle_change_password(Req) ->
     menelaus_util:assert_is_enterprise(),
+    assert_no_on_behalf(Req),
 
     case menelaus_auth:get_token(Req) of
         undefined ->
@@ -1590,6 +1591,11 @@ assert_no_users_upgrade() ->
             menelaus_util:web_exception(
               503, "Not allowed during cluster upgrade.")
     end.
+
+assert_no_on_behalf(Req) ->
+    not menelaus_auth:acting_on_behalf(Req) orelse
+            menelaus_util:web_exception(403,
+                                        "Not allowed for on behalf requests.").
 
 verify_ldap_access(Req, Permission, ExistingMapping) ->
     verify_ldap_access(Req, Permission, ExistingMapping, false).
