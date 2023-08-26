@@ -18,6 +18,7 @@
 
 -define(ALE_LOGGER, ale_logger).
 -define(ERROR_LOGGER, error_logger).
+-define(TRACE_LOGGER, trace_logger).
 
 -type time() :: {integer(), integer(), integer()}.
 

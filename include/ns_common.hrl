@@ -65,6 +65,7 @@
 -define(BABYSITTER_LOG_FILENAME, "babysitter.log").
 -define(NS_COUCHDB_LOG_FILENAME, "ns_couchdb.log").
 -define(REPORTS_LOG_FILENAME, "reports.log").
+-define(TRACE_LOG_FILENAME, "trace.log").
 -define(ACCESS_LOG_FILENAME, "http_access.log").
 -define(INT_ACCESS_LOG_FILENAME, "http_access_internal.log").
 -define(GOXDCR_LOG_FILENAME, "goxdcr.log").

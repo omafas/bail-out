@@ -45,6 +45,10 @@
 
 -include("ale.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -record(state, {compile_frozen = false :: boolean(),
                 sinks                  :: dict:dict(),
                 loggers                :: dict:dict()}).
@@ -309,13 +313,20 @@ init([]) ->
                                    ?DEFAULT_FORMATTER, State),
     {ok, State2} = do_start_logger(?ALE_LOGGER, ?DEFAULT_LOGLEVEL,
                                    ?DEFAULT_FORMATTER, State1),
-    _ = logger:remove_handler(?ERROR_LOGGER),
+    {ok, State3} = do_start_logger(?TRACE_LOGGER,
+                                   ?DEFAULT_LOGLEVEL,
+                                   ?DEFAULT_FORMATTER, State2),
+
+    lists:foreach(fun (Logger) ->
+                          _ = logger:remove_handler(Logger)
+                  end, [?ERROR_LOGGER, ?TRACE_LOGGER]),
 
     %% Erlang starts this for us when we disable default handler.
     _ = logger:remove_handler(simple),
 
     ok = set_error_logger_handler(),
-    {ok, State2}.
+    ok = set_noisy_progress_reports_handler(),
+    {ok, State3}.
 
 handle_call(get_state, _From, State) ->
     {reply, State, State};
@@ -377,10 +388,15 @@ handle_call(thaw_compilations, _From, State) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-handle_cast({removing_handler, ?ERROR_LOGGER}, State) ->
+handle_cast({removing_handler, Logger}, State) ->
     ale:error(?ALE_LOGGER, "~p has been removed. Setting it up again.",
-              [?ERROR_LOGGER]),
-    ok = set_error_logger_handler(),
+              [Logger]),
+    case Logger of
+        ?ERROR_LOGGER ->
+            ok = set_error_logger_handler();
+        ?TRACE_LOGGER ->
+            ok = set_noisy_progress_reports_handler()
+    end,
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -587,12 +603,69 @@ do_get_sink_loglevel(LoggerName, SinkName, State) ->
                 end)
       end).
 
+noisy_supervisors() ->
+    [tls_dyn_connection_sup].
+
+perform_action(log, Log) ->
+    Log;
+perform_action(stop, _Log) ->
+    stop.
+
+%% sup_names could be local names: {local, Name} or global names: {global, Name}
+%% or of the type used here in supervisor_bridge code:
+%%
+%% https://github.com/erlang/otp/blob/b5e045c8c3bbeb6ad6f66e38cf7140c045890d00/
+%% lib/stdlib/src/supervisor_bridge.erl#L99
+
+get_sup_name({Pid, Name}) when is_pid(Pid) ->
+    Name;
+get_sup_name(Name) ->
+    Name.
+
+%% Supervisor progress report gets generated from here:
+%%
+%% https://github.com/erlang/otp/blob/b5e045c8c3bbeb6ad6f66e38cf7140c045890d00/
+%% lib/stdlib/src/supervisor_bridge.erl#L90
+
+noisy_progress_reports_inner(
+  #{msg := {report, #{label := {supervisor, progress}} = Report}} = Log,
+  Action) ->
+
+    #{report := ReportProps} = Report,
+    ProcName = get_sup_name(proplists:get_value(supervisor, ReportProps)),
+
+    case lists:member(ProcName, noisy_supervisors()) of
+        true ->
+            perform_action(Action, Log);
+        false ->
+            ignore
+    end;
+noisy_progress_reports_inner(_Log, _Action) ->
+    ignore.
+
+-spec noisy_progress_reports(Log :: logger:log_event(), Action :: log | stop) ->
+          logger:filter_return().
+noisy_progress_reports(Log, Action) when Action =:= log; Action =:= stop ->
+    noisy_progress_reports_inner(Log, Action);
+noisy_progress_reports(Log, Action) ->
+    erlang:error(badarg, {Log, Action}).
+
 set_error_logger_handler() ->
     logger:add_handler(
       ?ERROR_LOGGER, ?MODULE,
       #{level => info,
         filter_default => log,
-        filters => [{remote_gl, {fun logger_filters:remote_gl/2, stop}}]}).
+        filters => [{remote_gl, {fun logger_filters:remote_gl/2, stop}},
+                    {stop_noisy_progress_reports,
+                     {fun noisy_progress_reports/2, stop}}]}).
+
+set_noisy_progress_reports_handler() ->
+    logger:add_handler(
+      ?TRACE_LOGGER, ?MODULE,
+      #{level => info,
+        filter_default => stop,
+        filters => [{log_noisy_progress_reports,
+                     {fun noisy_progress_reports/2, log}}]}).
 
 compile(#state{compile_frozen = Frozen,
                loggers=Loggers} = State,
@@ -637,3 +710,66 @@ call_logger_impl(LoggerName, F, Args) ->
         error:undef ->
             throw(unknown_logger)
     end.
+
+-ifdef(TEST).
+generate_log({report, {ReportType, ProcType, ProcName}}) ->
+    ProcName1 =
+        case is_atom(ProcName) of
+            true ->
+                %% Generate a dummy pid.
+                {erlang:list_to_pid("<0.255.0>"), ProcName};
+            false ->
+                ProcName
+        end,
+    #{msg => {report, #{label => {ProcType, ReportType},
+                        report => [{ProcType, ProcName1}]}}};
+generate_log({string, String}) ->
+    #{msg => {string, String}}.
+
+noisy_progress_reports_test__({Log, Action, Result}) ->
+    ?assertEqual(Result, noisy_progress_reports(Log, Action)).
+
+noisy_progress_reports_test_() ->
+    TestArgs = [%% ignore reports.
+                {generate_log(
+                   {report, {ReportType, ProcType, ProcName}}), Action, ignore}
+                || ReportType <- [progress, not_progress],
+                   ProcType <- [supervisor, not_supervisor],
+                   ProcName <- [alice, {local, bob}, {global, charlie}],
+                   Action <- [log, stop]] ++
+                %% Perform correct action on a report.
+                [begin
+                     Log = generate_log(
+                             {report,
+                              {progress, supervisor, tls_dyn_connection_sup}}),
+                     case Action of
+                         stop ->
+                             {Log, stop, stop};
+                         log ->
+                             {Log, log, Log}
+                     end
+                 end || Action <- [log, stop]] ++
+                %% ignore non-reports.
+                [{generate_log({string, <<"There once was a ship ...">>}),
+                  Action, ignore} || Action <- [log, stop]] ++
+                [{garbage, log, ignore},
+                 {garbage, stop, ignore}],
+
+    Test = fun ({Log, Action, _Result} = Args) ->
+                   {lists:flatten(
+                      io_lib:format("Log: ~p, Action: ~p", [Log, Action])),
+                    fun () ->
+                            noisy_progress_reports_test__(Args)
+                    end}
+           end,
+
+    {foreach,
+     fun() -> ok end,
+     [Test(TestArg) || TestArg <- TestArgs]}.
+
+noisy_progress_reports_invalid_action_test() ->
+    ?assertException(
+       error, badarg,
+       noisy_progress_reports(
+         generate_log({report, {progress, foo, bar}}), invalid_action)).
+-endif.

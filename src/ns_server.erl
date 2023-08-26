@@ -120,7 +120,7 @@ init_logging() ->
     ale:info(?NS_SERVER_LOGGER, "Started & configured logging").
 
 do_init_logging() ->
-    StdLoggers = [?ALE_LOGGER, ?ERROR_LOGGER],
+    StdLoggers = [?ALE_LOGGER, ?ERROR_LOGGER, ?TRACE_LOGGER],
     AllLoggers = [?CHRONICLE_ALE_LOGGER | StdLoggers] ++ ?LOGGERS,
 
     lists:foreach(
@@ -134,6 +134,7 @@ do_init_logging() ->
     ok = start_disk_sink(disk_xdcr, ?XDCR_TARGET_LOG_FILENAME),
     ok = start_disk_sink(disk_stats, ?STATS_LOG_FILENAME),
     ok = start_disk_sink(disk_reports, ?REPORTS_LOG_FILENAME),
+    ok = start_disk_sink(disk_trace, ?TRACE_LOG_FILENAME),
     ok = start_disk_sink(disk_access, ?ACCESS_LOG_FILENAME),
     ok = start_disk_sink(disk_access_int, ?INT_ACCESS_LOG_FILENAME),
     ok = start_disk_sink(disk_metakv, ?METAKV_LOG_FILENAME),
@@ -161,7 +162,7 @@ do_init_logging() ->
                          {?NS_DOCTOR_LOGGER, warn}],
 
     MainFilesLoggers = AllLoggers --
-        [?XDCR_LOGGER, ?ERROR_LOGGER,
+        [?XDCR_LOGGER, ?ERROR_LOGGER, ?TRACE_LOGGER,
          ?METAKV_LOGGER, ?JSON_RPC_LOGGER],
 
     lists:foreach(
@@ -183,6 +184,7 @@ do_init_logging() ->
 
     ok = ale:add_sink(?ERROR_LOGGER, disk_debug, get_loglevel(?ERROR_LOGGER)),
     ok = ale:add_sink(?ERROR_LOGGER, disk_reports, get_loglevel(?ERROR_LOGGER)),
+    ok = ale:add_sink(?TRACE_LOGGER, disk_trace, get_loglevel(?TRACE_LOGGER)),
 
     ok = ale:add_sink(?USER_LOGGER, ns_log, info),
     ok = ale:add_sink(?MENELAUS_LOGGER, ns_log, info),
