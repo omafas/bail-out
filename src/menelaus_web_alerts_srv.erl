@@ -118,7 +118,7 @@ short_description(memory_threshold) ->
 short_description(history_size_warning) ->
     "history size approaching limit";
 short_description(memcached_connections) ->
-    "memcached connections approaching limit";
+    "data service connections approaching limit";
 short_description(Other) ->
     %% this case is needed for tests to work
     couch_util:to_list(Other).
@@ -169,8 +169,9 @@ errors(history_size_warning) ->
     "history retention size is sufficiently large, in order for the mutation "
     "history to be retained for the history retention time.";
 errors(memcached_connections) ->
-    "Warning: On node ~s the number of connections being used by memcached "
-    "(~p) is above the notice threshold of ~b%. The limit is ~p.".
+    "Warning: On node ~s the number of connections being used by the Data "
+    "Service (~p) is above the notice threshold of ~b%. The limit is ~p.".
+
 %% ------------------------------------------------------------------
 %% API Function Definitions
 %% ------------------------------------------------------------------
