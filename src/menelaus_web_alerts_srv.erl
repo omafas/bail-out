@@ -756,42 +756,52 @@ check(memcached_connections, Opaque, _History, Stats) ->
             ?log_debug("Skipping memcached connections check as there are no "
                        "global stats: ~p", [Stats]);
         GlobalStats ->
-            {value, Config} = ns_config:search(alert_limits),
-            AlertPerc =
-                proplists:get_value(memcached_user_connection_warning_threshold,
-                                    Config, ?MEMCACHED_CONNECTION_THRESHOLD),
-            Max = proplists:get_value(kv_max_user_connections, GlobalStats,
-                                      undefined),
-            case Max of
-                undefined -> ok;
-                _ when is_number(Max) ->
-                    AlertLimit = Max * AlertPerc / 100,
-                    Used = proplists:get_value(kv_user_connections,
-                                               GlobalStats, undefined),
-                    case Used of
-                        undefined -> ok;
-                        _ when is_number(Used) ->
-                            case Used > AlertLimit of
-                                false -> ok;
-                                true  ->
-                                    Err =
-                                        fmt_to_bin(
-                                          errors(memcached_connections),
-                                          [node(), user, Used, AlertPerc, Max]),
-                                    global_alert(memcached_connections, Err)
-                            end;
-                        _ ->
-                            ?log_debug("Skipping memcached connections check "
-                                       "as kv_user_connections is not a "
-                                       "number. global stats: ~p", [Stats])
-                    end;
-                _ ->
-                    ?log_error("Failed to check memcached connections. Got "
-                               "global stats ~p and percentage threshold ~p",
-                               [GlobalStats, AlertPerc])
-            end
+            check_memcached_connections(user, GlobalStats)
     end,
     Opaque.
+
+-spec check_memcached_connections(user, term()) -> term().
+check_memcached_connections(Type, GlobalStats) ->
+    ThresholdName =
+        list_to_atom(
+          lists:concat(["memcached_", Type,
+                        "_connection_warning_threshold"])),
+    MaxStatName =
+        list_to_atom(lists:concat(["kv_max_", Type, "_connections"])),
+    CurrStatName =
+        list_to_atom(lists:concat(["kv_", Type, "_connections"])),
+
+    {value, Config} = ns_config:search(alert_limits),
+    AlertPerc = proplists:get_value(ThresholdName,
+                                    Config,
+                                    ?MEMCACHED_CONNECTION_THRESHOLD),
+    Max = proplists:get_value(MaxStatName, GlobalStats, undefined),
+    case Max of
+        undefined -> ok;
+        _ when is_number(Max) ->
+            AlertLimit = Max * AlertPerc / 100,
+            Used = proplists:get_value(CurrStatName, GlobalStats, undefined),
+            case Used of
+                undefined -> ok;
+                _ when is_number(Used) ->
+                    case Used > AlertLimit of
+                        false -> ok;
+                        true  ->
+                            Err =
+                                fmt_to_bin(
+                                  errors(memcached_connections),
+                                  [node(), Type, Used, AlertPerc, Max]),
+                            global_alert({memcached_connections, Type}, Err)
+                    end;
+                _ ->
+                    ?log_debug("Skipping memcached connections check ~p is not "
+                               "a number. global stats: ~p",
+                               [CurrStatName, GlobalStats])
+            end;
+        _ ->
+            ?log_debug("Skipping memcached connections check as ~p is not a "
+                       "number. global stats: ~p", [MaxStatName, GlobalStats])
+    end.
 
 check_memory_threshold(MemUsed, MemTotal, Type) ->
     Percentage = (MemUsed * 100) / MemTotal,
