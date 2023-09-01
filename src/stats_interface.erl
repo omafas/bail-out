@@ -136,7 +136,9 @@ from_nodes(Nodes, Function, Args, Timeout) ->
                  Value :: number().
 for_alerts() ->
     Q = <<"{name=~`kv_user_connections|"
+                  "kv_system_connections|"
                   "kv_max_user_connections|"
+                  "kv_max_system_connections|"
                   "kv_ep_meta_data_memory_bytes|"
                   "kv_ep_max_size|"
                   "kv_ep_oom_errors|"
