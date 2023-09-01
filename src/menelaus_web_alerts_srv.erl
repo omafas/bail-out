@@ -169,7 +169,7 @@ errors(history_size_warning) ->
     "history retention size is sufficiently large, in order for the mutation "
     "history to be retained for the history retention time.";
 errors(memcached_connections) ->
-    "Warning: On node ~s the number of connections being used by the Data "
+    "Warning: On node ~s the number of ~s connections being used by the Data "
     "Service (~p) is above the notice threshold of ~b%. The limit is ~p.".
 
 %% ------------------------------------------------------------------
@@ -760,16 +760,31 @@ check(memcached_connections, Opaque, _History, Stats) ->
             AlertPerc =
                 proplists:get_value(memcached_connection_warning_threshold,
                                     Config, ?MEMCACHED_CONNECTION_THRESHOLD),
-            Max = proplists:get_value(kv_max_user_connections, GlobalStats),
-            AlertLimit = Max * AlertPerc / 100,
-
-            Used = proplists:get_value(kv_curr_connections, GlobalStats),
-            case Used > AlertLimit of
-                true when is_number(Max) andalso is_number(Used) ->
-                    Err = fmt_to_bin(errors(memcached_connections),
-                                     [node(), Used, AlertPerc, Max]),
-                    global_alert(memcached_connections, Err);
-                false -> ok;
+            Max = proplists:get_value(kv_max_user_connections, GlobalStats,
+                                      undefined),
+            case Max of
+                undefined -> ok;
+                _ when is_number(Max) ->
+                    AlertLimit = Max * AlertPerc / 100,
+                    Used = proplists:get_value(kv_user_connections,
+                                               GlobalStats, undefined),
+                    case Used of
+                        undefined -> ok;
+                        _ when is_number(Used) ->
+                            case Used > AlertLimit of
+                                false -> ok;
+                                true  ->
+                                    Err =
+                                        fmt_to_bin(
+                                          errors(memcached_connections),
+                                          [node(), user, Used, AlertPerc, Max]),
+                                    global_alert(memcached_connections, Err)
+                            end;
+                        _ ->
+                            ?log_debug("Skipping memcached connections check "
+                                       "as kv_user_connections is not a "
+                                       "number. global stats: ~p", [Stats])
+                    end;
                 _ ->
                     ?log_error("Failed to check memcached connections. Got "
                                "global stats ~p and percentage threshold ~p",

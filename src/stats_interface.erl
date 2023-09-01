@@ -135,7 +135,7 @@ from_nodes(Nodes, Function, Args, Timeout) ->
                  MetricName :: atom(),
                  Value :: number().
 for_alerts() ->
-    Q = <<"{name=~`kv_curr_connections|"
+    Q = <<"{name=~`kv_user_connections|"
                   "kv_max_user_connections|"
                   "kv_ep_meta_data_memory_bytes|"
                   "kv_ep_max_size|"
