@@ -1191,7 +1191,28 @@ scrapes_info(Settings) ->
 %% removing of job label may lead to a stat not being decimated.
 derived_metrics(ns_server, Settings) ->
     [{"cm_failover_safeness_level", failover_safeness_level_promql(Settings)},
-     {"sysproc_cpu_utilization", sysproc_cpu_utilization_promql(Settings)}];
+     {"sysproc_cpu_utilization", sysproc_cpu_utilization_promql(Settings)},
+
+     {"sys_cpu_host_utilization_rate", sys_cpu_rate_promql(total, Settings)},
+     {"sys_cpu_host_user_rate", sys_cpu_rate_promql(user, Settings)},
+     {"sys_cpu_host_sys_rate", sys_cpu_rate_promql(sys, Settings)},
+     {"sys_cpu_host_other_rate", sys_cpu_rate_promql(other, Settings)},
+     {"sys_cpu_host_idle_rate", sys_cpu_rate_promql(idle, Settings)}
+    ] ++
+    case misc:is_linux() of
+        false ->
+            [];
+        true ->
+            [{"sys_cpu_irq_rate", sys_cpu_rate_promql(irq, Settings)},
+             {"sys_cpu_stolen_rate", sys_cpu_rate_promql(stolen, Settings)}]
+    end ++
+    [{"sys_cpu_cgroup_usage_rate", cgroup_cpu_rate_promql(usage, Settings)},
+     {"sys_cpu_cgroup_user_rate", cgroup_cpu_rate_promql(user, Settings)},
+     {"sys_cpu_cgroup_sys_rate", cgroup_cpu_rate_promql(sys, Settings)},
+     {"sys_cpu_cgroup_throttled_rate", cgroup_cpu_rate_promql(throttled,
+                                                                  Settings)},
+     {"sys_cpu_cgroup_burst_rate", cgroup_cpu_rate_promql(burst, Settings)}
+    ];
 derived_metrics(_, _) ->
     [].
 
@@ -1222,6 +1243,33 @@ sysproc_cpu_utilization_promql(Settings) ->
         "irate(sysproc_cpu_seconds_total{mode=`sys`}[~bs])) * 100",
 
     lists:flatten(io_lib:format(Q, [RateInterval, RateInterval])).
+
+prom_query(total, RateInterval) ->
+    Q = "100 - "
+        "(irate(sys_cpu_host_seconds_total{mode=`idle`}[~bs]) / "
+        "ignoring(name,mode) sys_cpu_host_cores_available * 100)",
+
+    io_lib:format(Q, [RateInterval]);
+prom_query(Mode, RateInterval) ->
+    Q = "irate(sys_cpu_host_seconds_total{mode=`~p`}[~bs]) / "
+        "ignoring(name,mode) sys_cpu_host_cores_available * 100",
+
+    io_lib:format(Q, [Mode, RateInterval]).
+
+sys_cpu_rate_promql(Mode, Settings) ->
+    Interval = derived_metrics_interval(Settings),
+    RateInterval = 3 * Interval,
+
+    lists:flatten(prom_query(Mode, RateInterval)).
+
+cgroup_cpu_rate_promql(Mode, Settings) ->
+    Interval = derived_metrics_interval(Settings),
+    RateInterval = 3 * Interval,
+
+    Q = "irate(sys_cpu_cgroup_seconds_total{mode=`~p`}[~bs]) / "
+        "ignoring(name,mode) sys_cpu_host_cores_available * 100",
+
+    lists:flatten(io_lib:format(Q, [Mode, RateInterval])).
 
 init_pruning_timer(#s{cur_settings = Settings} = State) ->
     Levels = proplists:get_value(decimation_defs, Settings),
@@ -1823,11 +1871,38 @@ prometheus_derived_metrics_config_test() ->
       #{groups := [#{rules := [#{record := _}|_]}]},
       RulesConfig([{derived_metrics_filter, all}], [kv])),
 
-    ?assertMatch(
-      #{groups := [#{rules := [#{record := <<"cm_failover_safeness_level">>},
-                               #{record := <<"sysproc_cpu_utilization">>}]}]
-       },
-      RulesConfig([{derived_metrics_filter, all}], [])),
+    ExpectedMetrics = [<<"cm_failover_safeness_level">>,
+                       <<"sysproc_cpu_utilization">>,
+                       <<"sys_cpu_host_utilization_rate">>,
+                       <<"sys_cpu_host_user_rate">>,
+                       <<"sys_cpu_host_sys_rate">>,
+                       <<"sys_cpu_host_other_rate">>,
+                       <<"sys_cpu_host_idle_rate">>,
+                       <<"sys_cpu_cgroup_usage_rate">>,
+                       <<"sys_cpu_cgroup_user_rate">>,
+                       <<"sys_cpu_cgroup_sys_rate">>,
+                       <<"sys_cpu_cgroup_throttled_rate">>,
+                       <<"sys_cpu_cgroup_burst_rate">>] ++
+    case misc:is_linux() of
+        true ->
+            [<<"sys_cpu_irq_rate">>,
+             <<"sys_cpu_stolen_rate">>];
+        false ->
+            []
+    end,
+    RulesCfg = RulesConfig([{derived_metrics_filter, all}], []),
+    #{groups := [#{rules := Rules}]} = RulesCfg,
+    IsRulePresent =
+        fun (Name) ->
+                case lists:search(
+                       fun (#{record := N}) -> N == Name end,
+                       Rules) of
+                    {value, _} -> true;
+                    false -> false
+                end
+        end,
+    ?assertEqual(length(ExpectedMetrics), length(Rules)),
+    [?assert(IsRulePresent(N)) || N <- ExpectedMetrics],
 
     FailoverSafenessName = <<"cm_failover_safeness_level">>,
     ?assertMatch(

@@ -83,8 +83,7 @@ handle_call({get_all, {PrevTS, PrevCounters, PrevCGroups}, PidNames}, _From,
         case maps:get(<<"supported">>, CGroups, false) of
             true -> compute_cgroups_counters(Cores, PrevTS, TS,
                                              PrevCGroups, CGroups);
-            false when HostCounters == [] -> [];
-            false -> default_cgroups_counters(HostCounters)
+            false -> []
         end,
     ProcStats = get_process_stats(NewState#state.most_recent_data, PidNames),
     DiskStats = get_disk_stats(NewState#state.most_recent_data),
@@ -423,33 +422,16 @@ proc_stat_name(ProcName, Stat) ->
     <<ProcName/binary, $/, Stat/binary>>.
 
 compute_cpu_stats(undefined, _Counters) -> [];
-compute_cpu_stats(#{<<"supported">> := true} = OldCounters,
+compute_cpu_stats(#{<<"supported">> := true} = _OldCounters,
                   #{<<"supported">> := true} = Counters) ->
-    Diffs = maps:map(fun (Key, Value) ->
-                             OldValue = maps:get(Key, OldCounters, undefined),
-                             case OldValue of
-                                 X when is_number(X), is_number(Value) ->
-                                     Value - X;
-                                 _ -> 0
-                             end
-                     end, Counters),
-    Idle = maps:get(<<"cpu_idle_ms">>, Diffs, 0),
-    User = maps:get(<<"cpu_user_ms">>, Diffs, 0),
-    Sys = maps:get(<<"cpu_sys_ms">>, Diffs, 0),
-    Irq = maps:get(<<"cpu_irq_ms">>, Diffs, 0),
-    Stolen = maps:get(<<"cpu_stolen_ms">>, Diffs, 0),
-    Total = maps:get(<<"cpu_total_ms">>, Diffs),
 
     RawCpuTotal = get_raw_counter_msec_to_sec(<<"cpu_total_ms">>, Counters),
     RawCpuIdle = get_raw_counter_msec_to_sec(<<"cpu_idle_ms">>, Counters),
     RawCpuUser = get_raw_counter_msec_to_sec(<<"cpu_user_ms">>, Counters),
     RawCpuSys = get_raw_counter_msec_to_sec(<<"cpu_sys_ms">>, Counters),
 
-    [{cpu_host_utilization_rate, compute_utilization(Total - Idle, Total)},
-     {cpu_host_user_rate, compute_utilization(User, Total)},
-     {cpu_host_sys_rate, compute_utilization(Sys, Total)},
-     %% Raw counters so users can do their own computations using promql.
-     {cpu_host_seconds_total_idle, RawCpuIdle},
+    %% Raw counters so users can do their own computations using promql.
+    [{cpu_host_seconds_total_idle, RawCpuIdle},
      {cpu_host_seconds_total_user, RawCpuUser},
      {cpu_host_seconds_total_sys, RawCpuSys}] ++
     case misc:is_linux() of
@@ -462,9 +444,9 @@ compute_cpu_stats(#{<<"supported">> := true} = OldCounters,
                                                        Counters),
             Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle +
                                    RawCpuIrq + RawCpuStolen),
-            [{cpu_irq_rate, compute_utilization(Irq, Total)},
-             {cpu_stolen_rate, compute_utilization(Stolen, Total)},
-             {cpu_host_seconds_total_irq, RawCpuIrq},
+            %% Raw counters so users can do their own computations using
+            %% promql.
+            [{cpu_host_seconds_total_irq, RawCpuIrq},
              {cpu_host_seconds_total_stolen, RawCpuStolen},
              {cpu_host_seconds_total_other, Other}]
     end;
@@ -483,53 +465,24 @@ get_raw_counter_inner(Stat, Counters, Divisor) ->
     Value / Divisor.
 
 compute_cgroups_counters(Cores, PrevTS, TS,
-                         #{<<"supported">> := true} = Old,
+                         #{<<"supported">> := true} = _Old,
                          #{<<"supported">> := true} = New)
                                         when is_number(PrevTS), is_number(TS),
                                              is_number(Cores), Cores > 0 ->
-    TimeDelta = TS - PrevTS,
-    ComputeRate = fun (Key) ->
-                          OldV = maps:get(Key, Old, undefined),
-                          NewV = maps:get(Key, New, undefined),
-                          case {OldV =/= undefined, NewV =/= undefined} of
-                              {true, true}
-                                when is_number(OldV), is_number(NewV) ->
-                                  compute_utilization(NewV - OldV,
-                                                      TimeDelta * Cores);
-                              _  -> 0
-                          end
-                  end,
+    RawCpuUsage = get_raw_counter_usec_to_sec(<<"usage_usec">>, New),
     RawCpuUser = get_raw_counter_usec_to_sec(<<"user_usec">>, New),
     RawCpuSys = get_raw_counter_usec_to_sec(<<"system_usec">>, New),
     RawCpuThrottled = get_raw_counter_usec_to_sec(<<"throttled_usec">>, New),
     RawCpuBurst = get_raw_counter_usec_to_sec(<<"burst_usec">>, New),
 
-    [{cpu_utilization_rate, ComputeRate(<<"usage_usec">>)},
-     {cpu_user_rate, ComputeRate(<<"user_usec">>)},
-     {cpu_sys_rate, ComputeRate(<<"system_usec">>)},
-     {cpu_throttled_rate, ComputeRate(<<"throttled_usec">>)},
-     {cpu_burst_rate, ComputeRate(<<"burst_usec">>)},
+    %% Raw counters so users can do their own computations using promql
+    [{cpu_cgroup_seconds_total_usage, RawCpuUsage},
      {cpu_cgroup_seconds_total_user, RawCpuUser},
      {cpu_cgroup_seconds_total_sys, RawCpuSys},
      {cpu_cgroup_seconds_total_throttled, RawCpuThrottled},
      {cpu_cgroup_seconds_total_burst, RawCpuBurst}];
 compute_cgroups_counters(_, _, _, _, _) ->
     [].
-
-default_cgroups_counters(HostCounters) ->
-    [{cpu_utilization_rate,
-      proplists:get_value(cpu_host_utilization_rate, HostCounters)},
-     {cpu_user_rate,
-      proplists:get_value(cpu_host_user_rate, HostCounters)},
-     {cpu_sys_rate,
-      proplists:get_value(cpu_host_sys_rate, HostCounters)}].
-
-compute_utilization(Used, Total) ->
-    try
-        100 * Used / Total
-    catch error:badarith ->
-            0
-    end.
 
 maybe_update_stats(#state{most_recent_data_ts_usec = TS} = State) ->
     case TS == undefined orelse timestamp() - TS >= ?SIGAR_CACHE_TIME_USEC of
@@ -844,17 +797,5 @@ sigar_json_test() ->
                           <<"cpu_total_ms">> => 2332003090,
                           <<"cpu_user_ms">> => 323534130},
     ?assertEqual(compute_cpu_stats(CountersExpected1, CountersExpected2), []),
-    ?assertEqual(compute_cpu_stats(CountersExpected2, CountersExpected1), []),
-    Rates = compute_cpu_stats(CountersExpected0, CountersExpected2),
-    RateKeys = [cpu_host_utilization_rate, cpu_host_user_rate,
-                cpu_host_sys_rate] ++ case misc:is_linux() of
-                                          false ->
-                                              [];
-                                          true ->
-                                              [cpu_irq_rate, cpu_stolen_rate]
-                                      end,
-    Expected = [{K, V} || K <- RateKeys, {K1, V} <- Rates, K =:= K1,
-                          is_number(V)],
-    ?assertEqual(length(Expected), length(RateKeys)).
+    ?assertEqual(compute_cpu_stats(CountersExpected2, CountersExpected1), []).
 -endif.
-
