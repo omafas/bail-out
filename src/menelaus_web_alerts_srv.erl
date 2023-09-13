@@ -798,14 +798,21 @@ get_history_size_alert(Bucket, Threshold) ->
                                   DiskUsages
                           end
                   end,
-    GetStats = fun () ->
-                       case ns_memcached:raw_stats(
-                              node(), Bucket, <<"diskinfo detail">>,
-                              StatsParser(_, _, _), []) of
-                           {ok, V} -> V;
-                           Error -> Error
-                       end
-               end,
+    GetStats =
+        fun () ->
+                try
+                    case ns_memcached:raw_stats(
+                           node(), Bucket, <<"diskinfo detail">>,
+                           StatsParser(_, _, _), []) of
+                        {ok, V} -> V;
+                        Error -> Error
+                    end
+                catch exit:{noproc, _} ->
+                        ?log_debug("memcached is not started for bucket ~p yet",
+                                   [Bucket]),
+                        []
+                end
+        end,
     GetVBsOverThreshold =
         fun (MaxPerVBucket) ->
                 lists:filtermap(CheckVBucket(MaxPerVBucket, _),
@@ -813,10 +820,12 @@ get_history_size_alert(Bucket, Threshold) ->
         end,
     case ns_bucket:get_bucket(Bucket) of
         {ok, BCfg} ->
+            OnThisNode = lists:member(node(), ns_bucket:get_servers(BCfg)),
             MaxSize = ns_bucket:history_retention_bytes(BCfg),
             MaxTime = ns_bucket:history_retention_seconds(BCfg),
             TotalVBs = ns_bucket:get_num_vbuckets(BCfg),
-            case MaxSize > 0 andalso MaxTime > 0 andalso TotalVBs > 0 of
+            case OnThisNode andalso MaxSize > 0 andalso MaxTime > 0 andalso
+                TotalVBs > 0 of
                 true ->
                     case GetVBsOverThreshold(MaxSize / TotalVBs) of
                         [] -> ok;
