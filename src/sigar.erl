@@ -457,8 +457,9 @@ compute_cpu_stats(#{<<"supported">> := true} = OldCounters,
             Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle),
             [{cpu_host_seconds_total_other, Other}];
         true ->
-            RawCpuIrq = get_raw_counter_msec_to_sec(cpu_irq_ms, Counters),
-            RawCpuStolen = get_raw_counter_msec_to_sec(cpu_stolen_ms, Counters),
+            RawCpuIrq = get_raw_counter_msec_to_sec(<<"cpu_irq_ms">>, Counters),
+            RawCpuStolen = get_raw_counter_msec_to_sec(<<"cpu_stolen_ms">>,
+                                                       Counters),
             Other = RawCpuTotal - (RawCpuUser + RawCpuSys + RawCpuIdle +
                                    RawCpuIrq + RawCpuStolen),
             [{cpu_irq_rate, compute_utilization(Irq, Total)},
