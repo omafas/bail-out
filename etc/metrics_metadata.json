@@ -262,10 +262,28 @@
         "unit": "bytes",
         "stability": "committed"
     },
+    "sysproc_cpu_seconds_total": {
+        "type": "counter",
+        "help": "Amount of user CPU cycles used, by process",
+        "added": "7.2.4",
+        "stability": "committed",
+        "labels": [
+            {
+                "name": "proc",
+                "help": "Name of the process (e.g. babysitter, bash, etc.)"
+            },
+            {
+                "name": "mode",
+                "help": "type of usage (user, sys)"
+            }
+        ]
+    },
     "sysproc_cpu_utilization": {
         "type": "gauge",
         "help": "CPU utilization rate, by process",
         "added": "7.0.0",
+        "deprecated": "7.2.0",
+        "notes": "Instead use sysproc_cpu_user + sysproc_cpu_sys",
         "stability": "committed",
         "labels": [
             {

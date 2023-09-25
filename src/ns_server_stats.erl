@@ -243,10 +243,18 @@ report_system_stats(ReportFun) ->
     SysProcStats = proplists:get_value("@system-processes", Stats, []),
     lists:foreach(
         fun ({KeyBin, Val}) ->
-            [Proc, Name] = binary:split(KeyBin, <<"/">>),
-            ReportFun({<<"sysproc">>, Name,
-                       [{<<"proc">>, Proc},
-                        {<<"category">>, <<"system-processes">>}], Val})
+            [Proc, Name0] = binary:split(KeyBin, <<"/">>),
+            {Name, Labels0} =
+                case Name0 of
+                    <<"cpu_seconds_total_", Mode/binary>> ->
+                        {<<"cpu_seconds_total">>,
+                         [{<<"mode">>, Mode}]};
+                    _ ->
+                        {Name0, []}
+                end,
+            Labels = Labels0 ++ [{<<"proc">>, Proc},
+                                 {<<"category">>, <<"system-processes">>}],
+            ReportFun({<<"sysproc">>, Name, Labels, Val})
         end, SysProcStats),
 
     DiskStats = proplists:get_value("@system-disks", Stats, []),

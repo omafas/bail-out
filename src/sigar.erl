@@ -346,13 +346,21 @@ do_collapse_duplicates(KV, Acc) ->
     [KV | Acc].
 
 %% The "_faults" stats are reported with suffix _raw.
+%% cpu_user/sys will be reported in seconds.
 fix_stat_name(Stat) ->
     case Stat of
         <<"minor_faults">> -> <<"minor_faults_raw">>;
         <<"major_faults">> -> <<"major_faults_raw">>;
         <<"page_faults">> -> <<"page_faults_raw">>;
+        <<"cpu_user">> -> <<"cpu_seconds_total_user">>;
+        <<"cpu_sys">> -> <<"cpu_seconds_total_sys">>;
         _ -> Stat
     end.
+
+%% These stats are reported in msecs by the sigar program and are
+%% converted to seconds for use by ns_server/prometheus.
+stats_to_convert() ->
+    [<<"cpu_seconds_total_user">>, <<"cpu_seconds_total_sys">>].
 
 populate_disk_stat(DiskName, StatName, Value) ->
     case Value of
@@ -376,7 +384,14 @@ populate_proc_stat(ProcName, Stat, Value) ->
         _ ->
             StatName = fix_stat_name(Stat),
             case Value of
-                X when is_number(X) ->
+                X0 when is_number(X0) ->
+                    X = case lists:member(StatName, stats_to_convert()) of
+                            false ->
+                                X0;
+                            true ->
+                                %% Convert from msecs to seconds
+                                X0 / 1000
+                        end,
                     {true, {proc_stat_name(ProcName, StatName), X}};
                 _ -> false
             end
