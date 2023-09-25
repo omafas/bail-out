@@ -282,8 +282,7 @@
         "type": "gauge",
         "help": "CPU utilization rate, by process",
         "added": "7.0.0",
-        "deprecated": "7.2.0",
-        "notes": "Instead use sysproc_cpu_user + sysproc_cpu_sys",
+        "notes": "7.2.4 changed to use irate of sysproc_cpu_seconds_total for user/sys modes.",
         "stability": "committed",
         "labels": [
             {

@@ -1190,7 +1190,8 @@ scrapes_info(Settings) ->
 %% metrics, as other pieces of code may assume those metrics exist. For example,
 %% removing of job label may lead to a stat not being decimated.
 derived_metrics(ns_server, Settings) ->
-    [{"cm_failover_safeness_level", failover_safeness_level_promql(Settings)}];
+    [{"cm_failover_safeness_level", failover_safeness_level_promql(Settings)},
+     {"sysproc_cpu_utilization", sysproc_cpu_utilization_promql(Settings)}];
 derived_metrics(_, _) ->
     [].
 
@@ -1211,6 +1212,16 @@ failover_safeness_level_promql(Settings) ->
                     "1 - (" ++ DrainTime ++ " > bool 1) * "
                     "(max_over_time((" ++ DrainTime ++ ")[~bs:~bs]) > bool 2)",
                     [RateInterval, RateInterval, LookBackInterval, Interval])).
+
+sysproc_cpu_utilization_promql(Settings) ->
+    Interval = derived_metrics_interval(Settings),
+    RateInterval = 3 * Interval,
+
+    Q = "(irate(sysproc_cpu_seconds_total{mode=`user`}[~bs]) + "
+        "ignoring(mode) "
+        "irate(sysproc_cpu_seconds_total{mode=`sys`}[~bs])) * 100",
+
+    lists:flatten(io_lib:format(Q, [RateInterval, RateInterval])).
 
 init_pruning_timer(#s{cur_settings = Settings} = State) ->
     Levels = proplists:get_value(decimation_defs, Settings),
@@ -1813,7 +1824,9 @@ prometheus_derived_metrics_config_test() ->
       RulesConfig([{derived_metrics_filter, all}], [kv])),
 
     ?assertMatch(
-      #{groups := [#{rules := [#{record := <<"cm_failover_safeness_level">>}]}]},
+      #{groups := [#{rules := [#{record := <<"cm_failover_safeness_level">>},
+                               #{record := <<"sysproc_cpu_utilization">>}]}]
+       },
       RulesConfig([{derived_metrics_filter, all}], [])),
 
     FailoverSafenessName = <<"cm_failover_safeness_level">>,
