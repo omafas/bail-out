@@ -16,6 +16,10 @@
 -include("ns_common.hrl").
 -include("cut.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -define(METRICS_TIMEOUT, 5000).
 -define(PART_SIZE, 1024).
 -define(WINDOW_SIZE, 3).
@@ -263,7 +267,21 @@ name_to_iolist(A) -> A.
 
 format_label_value(Val) ->
     ValBin = label_val_to_bin(Val),
-    re:replace(ValBin, <<"\"">>, <<"\\\\\"">>, [global, {return, binary}]).
+    lists:foldl(
+      fun ({Re, Replace}, Acc) ->
+          re:replace(Acc, Re, Replace, [global, {return, binary}])
+      end, ValBin, [{<<"\\\\">>, <<"\\\\\\\\">>},
+                    {<<"\"">>, <<"\\\\\"">>}]).
+
+-ifdef(TEST).
+
+format_label_value_test() ->
+    OriginalStr = "\\abc\"def\"ghi\\jkl\\\\mno\"\"pqr\"",
+    Result = <<"\\\\abc\\\"def\\\"ghi\\\\jkl\\\\\\\\mno\\\"\\\"pqr\\\"">>,
+    ?assertEqual(Result, format_label_value(OriginalStr)),
+    ?assertEqual(Result, format_label_value(list_to_binary(OriginalStr))).
+
+-endif.
 
 label_val_to_bin(N) when is_integer(N) -> integer_to_binary(N);
 label_val_to_bin(F) when is_float(F) -> float_to_binary(F);
