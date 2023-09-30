@@ -166,8 +166,18 @@ loop(Req0, Config) ->
               %% Using raw_path so encoded slash characters like %2F are
               %% handed correctly, in that we delay converting %2F's to slash
               %% characters until after we split by slashes.
-              "/" ++ RawPath = mochiweb_request:get(raw_path, Req),
-              {Path, _, _} = mochiweb_util:urlsplit_path(RawPath),
+              RawPath = mochiweb_request:get(raw_path, Req),
+              Path =
+                  case uri_string:parse(RawPath) of
+                      #{path := "/" ++ P} -> P;
+                      #{} ->
+                          ?log_debug("Invalid path in: ~p", [RawPath]),
+                          menelaus_util:web_exception(400, "Bad Request");
+                      {error, _, _} = Error ->
+                          ?log_debug("Invalid uri in http request: ~p, "
+                                     "error: ~p", [RawPath, Error]),
+                          menelaus_util:web_exception(400, "Bad Request")
+                  end,
               PathTokens = lists:map(fun mochiweb_util:unquote/1,
                                      string:tokens(Path, "/")),
               request_tracker:request(
