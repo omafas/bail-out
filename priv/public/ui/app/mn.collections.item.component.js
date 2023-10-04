@@ -30,6 +30,7 @@ class MnCollectionsItemComponent extends MnLifeCycleHooksToStream {
       inputs: [
         "collection",
         "scopeName",
+        "scopeId",
         "bucketName",
         "mnCollectionsStatsPoller"
       ]
@@ -76,7 +77,9 @@ class MnCollectionsItemComponent extends MnLifeCycleHooksToStream {
     this.mnCollectionsStatsPoller.subscribeUIStatsPoller({
       bucket: this.bucketName,
       scope: this.scopeName,
+      scope_id: "0x" + this.scopeId,
       collection: this.collection.name,
+      collection_id: "0x" + this.collection.uid,
       node: "all",
       zoom: 3000,
       step: 1,

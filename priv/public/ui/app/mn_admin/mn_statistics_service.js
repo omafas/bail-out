@@ -539,8 +539,14 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
         if (config.scope) {
           cfg1.metric.scope = config.scope;
         }
+        if (config.scope_id) {
+          cfg1.metric.scope_id = config.scope_id;
+        }
         if (config.collection) {
           cfg1.metric.collection = config.collection;
+        }
+        if (config.collection_id) {
+          cfg1.metric.collection_id = config.collection_id;
         }
         if (config.node == "all" && !config.specificStat) {
           cfg1.nodesAggregation = statDesc.nodesAggregation;

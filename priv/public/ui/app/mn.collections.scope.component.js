@@ -90,6 +90,7 @@ class MnCollectionsScopeComponent extends MnLifeCycleHooksToStream {
     this.mnCollectionsStatsPoller.subscribeUIStatsPoller({
       bucket: this.bucketName,
       scope: this.scope.name,
+      scope_id: '0x' + this.scope.uid,
       node: "all",
       zoom: 3000,
       applyFunctions: ["sum"],
