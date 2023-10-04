@@ -96,8 +96,15 @@ manual_failover_test_setup(SetupConfig) ->
         fun(_, _, Fun, _) ->
             Fun()
         end),
+    meck:expect(leader_activities, run_activity,
+        fun(_, _, _, Fun, _) ->
+            Fun()
+        end),
     meck:expect(leader_activities, deactivate_quorum_nodes,
         fun(_) -> ok end),
+    meck:expect(leader_activities, deactivate_quorum_nodes,
+        fun(_,_,_) -> ok end),
+
 
     meck:new(chronicle),
     meck:expect(chronicle, check_quorum, fun() -> true end),
@@ -233,7 +240,7 @@ manual_failover_t(_SetupConfig, _R) ->
 
     %% We should have gathered a quorum for the failover.
     ?assert(meck:called(leader_activities, run_activity,
-        [failover, majority, '_', '_'])),
+                        [default, failover, majority, '_', '_'])),
 
     %% We should have completed the failover.
     Counters = chronicle_compat:get(counters, #{required => true}),
@@ -324,7 +331,8 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
 
     %% We should have gathered a quorum for the failover.
     ?assert(meck:called(leader_activities, run_activity,
-        [failover, majority, '_', '_'])).
+                        [default, failover, majority, '_', '_'])).
+
 
 auto_failover_test_() ->
     PartitionA = [{'a', [kv]}, {'b', [kv]}, {'q', [query]}],
@@ -344,7 +352,12 @@ auto_failover_test_() ->
 
     Tests = [
         {"Auto failover",
-            fun auto_failover_t/2}
+            fun auto_failover_t/2},
+        {"Auto failover post network partition stale config test",
+            fun auto_failover_post_network_partition_stale_config/2},
+        {"Auto failover post network partition stale config active nodes "
+         " changed test",
+            fun auto_failover_active_nodes_changed/2}
     ],
 
     %% foreachx here to let us pass parameters to setup.
@@ -453,6 +466,10 @@ auto_failover_t(_SetupConfig, PidMap) ->
     %% auto-failover provided we've ticked enough.
     gen_server:call(AutoFailoverPid, {disable_auto_failover, []}),
 
+    %% We should have gathered a quorum for the auto_failover.
+    ?assert(meck:called(leader_activities, run_activity,
+        [auto_failover, majority, '_', '_'])),
+
     %% We should have completed the failover.
     Counters = chronicle_compat:get(counters, #{required => true}),
     ?assertNotEqual(undefined,
@@ -460,4 +477,167 @@ auto_failover_t(_SetupConfig, PidMap) ->
 
     %% Without any auto-failover errors
     ?assertEqual([],
+        get_auto_failover_reported_errors(AutoFailoverPid)).
+
+
+%% Test post-network partition that we do not auto-failover nodes due to a stale
+%% config.
+%%
+%% Consider a scenario in which we have a network partition with as follows:
+%%
+%% Partition A - [a, b, q]
+%% Partition B - [c, d]
+%%
+%% In which [a, b, c, d] are KV nodes, and q runs any other service to provide
+%% one side of the partition with a viable quorum.
+%%
+%% N.B. there can be multiple orchestrators, particularly during network
+%% partitions. In this case we expect each side of a network partition to have
+%% an orchestrator node provided the network is partitioned for long enough.
+%%
+%% In such a scenario, partition A may try to fail over all of the nodes in
+%% partition B, and partition B may try to fail over all of the nodes in
+%% partition A. It is allowed and acceptable to fail over either partition,
+%% provided that we have 2 or more replicas. As partition A has a quorum, and
+%% partition B does not, the nodes in partition B will be failed over by the
+%% orchestrator of partition A. When the network partition heals, one of the
+%% orchestrator nodes will yield to another. In this case the orchestrator of
+%% partition A will yield to the orchestrator of partition B.
+%%
+%% The orchestrator of partition B will have been attempting to fail over the
+%% nodes in partition A up til this point. Prior to this change, the safety
+%% checks done by auto_failover, such as the preservation of durable mutations,
+%% would be performed before gathering any quorum of nodes. This, combined with
+%% a lengthy (in machine time) quorum gathering timeout of 15 seconds lead to a
+%% scenario in which the orchestrator from partition B would pass auto_failover
+%% checks with:
+%%
+%% 1) a view of the nodes in a partitioned state
+%% 2) a config prior to the network partition (as no material change is possible
+%%    without an orchestrator)
+%%
+%% In simpler terms, the orchestrator of partition B performed safety checks
+%% without knowledge that the nodes of partition B had already been failed over.
+%% This could then lead to the failover of all of the KV nodes in the cluster,
+%% and 100% data loss.
+%%
+%% This test tests that in such a scenario we take the quorum and sync the
+%% config before performing auto_failover checks.
+auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
+    #{auto_failover := AutoFailoverPid} = PidMap,
+
+    %% Part of our test, we should not have any reported errors yet.
+    ?assertEqual([],
+        get_auto_failover_reported_errors(AutoFailoverPid)),
+
+    %% On config sync we find our updates config
+    meck:expect(chronicle_compat, config_sync,
+        fun(_,_,_) ->
+            %% Now sync the config and we realise that the partition without
+            %% quorum has all been failed over...
+            OldNodes = maps:get(nodes, SetupConfig),
+            NewNodes = lists:foldl(
+                fun({Node, Services}, Acc) ->
+                    Acc#{
+                        Node => {inactiveFailed, Services}
+                    }
+                end,
+                OldNodes,
+                maps:get(partition_without_quorum, SetupConfig)),
+
+            setup_node_config(NewNodes),
+            setup_bucket_config(
+                maps:get(buckets, SetupConfig)),
+            ok
+        end),
+
+    %% Tick auto-failover 4 times. We could wait long enough to do the auto
+    %% failover but we can speed this test up a bit by manually ticking. This
+    %% amount of ticks should be the minimum to process the auto-failover.
+    lists:foreach(
+        fun(_) ->
+            AutoFailoverPid ! tick
+        end,
+        lists:seq(0, 3)),
+
+    %% Disable auto-failover, this gen_server call will let us finish processing
+    %% the ticks that we have queued above (which will run the auto-failover to
+    %% completion), before returning which will mean that we've attempted an
+    %% auto-failover provided we've ticked enough.
+    gen_server:call(AutoFailoverPid, {disable_auto_failover, []}),
+
+    %% We should have gathered a quorum for the auto_failover.
+    ?assert(meck:called(leader_activities, run_activity,
+        [auto_failover, majority, '_', '_'])),
+
+    %% We should have failed to fail over, and, we should now have the reported
+    %% error (autofailover_unsafe) stored in the auto_failover state.
+    ?assertEqual([autofailover_unsafe],
+        get_auto_failover_reported_errors(AutoFailoverPid)).
+
+%% Similar to the stale config test, it is also possible for us to find that the
+%% list of nodes that we are attempting to fail over, or the list of nodes that
+%% we think are down, have changed underneath us to become not active. In such a
+%% case we should abort the auto-failover as we do not need to fail over
+%% inactive nodes, and we should not assume that the nodes we consider Down are
+%% active in our safety checks. The next failover should pick up the state
+%% changes and do the right thing.
+auto_failover_active_nodes_changed(
+    SetupConfig, PidMap) ->
+    #{auto_failover := AutoFailoverPid} = PidMap,
+
+    %% Part of our test, we should not have any reported errors yet.
+    ?assertEqual([],
+        get_auto_failover_reported_errors(AutoFailoverPid)),
+
+    %% On config sync we find our updates config
+    meck:expect(chronicle_compat, config_sync,
+        fun(_,_,_) ->
+            %% Now sync the config and we realise that the partition without
+            %% quorum has all been failed over...
+            OldNodes = maps:get(nodes, SetupConfig),
+
+            PartitionWithoutQuorum =
+                maps:get(partition_without_quorum, SetupConfig),
+            PartitionWithQuorum = maps:get(partition_with_quorum, SetupConfig),
+
+            NowInactiveNodes =
+                PartitionWithoutQuorum ++ [lists:last(PartitionWithQuorum)],
+
+            NewNodes = lists:foldl(
+                fun({Node, Services}, Acc) ->
+                    Acc#{
+                        Node => {inactiveFailed, Services}
+                    }
+                end,
+                OldNodes, NowInactiveNodes),
+
+            setup_node_config(NewNodes),
+            setup_bucket_config(
+                maps:get(buckets, SetupConfig)),
+            ok
+        end),
+
+    %% Tick auto-failover 4 times. We could wait long enough to do the auto
+    %% failover but we can speed this test up a bit by manually ticking. This
+    %% amount of ticks should be the minimum to process the auto-failover.
+    lists:foreach(
+        fun(_) ->
+            AutoFailoverPid ! tick
+        end,
+        lists:seq(0, 3)),
+
+    %% Disable auto-failover, this gen_server call will let us finish processing
+    %% the ticks that we have queued above (which will run the auto-failover to
+    %% completion), before returning which will mean that we've attempted an
+    %% auto-failover provided we've ticked enough.
+    gen_server:call(AutoFailoverPid, {disable_auto_failover, []}),
+
+    %% We should have gathered a quorum for the auto_failover.
+    ?assert(meck:called(leader_activities, run_activity,
+        [auto_failover, majority, '_', '_'])),
+
+    %% We should have failed to fail over, and, we should now have the reported
+    %% error (active_nodes_changed) stored in the auto_failover state.
+    ?assertEqual([active_nodes_changed],
         get_auto_failover_reported_errors(AutoFailoverPid)).

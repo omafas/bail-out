@@ -28,7 +28,8 @@
 -export([switch_quorum/1, switch_quorum/2]).
 
 -export([activate_quorum_nodes/1, activate_quorum_nodes/2]).
--export([deactivate_quorum_nodes/1, deactivate_quorum_nodes/2]).
+-export([deactivate_quorum_nodes/1, deactivate_quorum_nodes/2,
+         deactivate_quorum_nodes/3]).
 -export([update_quorum_nodes/1, update_quorum_nodes/2]).
 
 %% used only by leader_* modules only
@@ -236,23 +237,29 @@ deactivate_quorum_nodes(Nodes) ->
     deactivate_quorum_nodes(Nodes, []).
 
 deactivate_quorum_nodes(Nodes, Opts) ->
-    update_quorum_nodes(_ -- Nodes, Opts).
+    deactivate_quorum_nodes(default, Nodes, Opts).
+
+deactivate_quorum_nodes(Domain, Nodes, Opts) ->
+    update_quorum_nodes(Domain, _ -- Nodes, Opts).
 
 update_quorum_nodes(Fun) ->
     update_quorum_nodes(Fun, []).
 
 update_quorum_nodes(Fun, Opts) ->
-    run_activity(update_quorum_nodes, majority,
-                 fun () ->
-                         {ok, Nodes} = call(get_quorum_nodes),
-                         NewNodes    = Fun(Nodes),
-                         case switch_quorum([majority, {majority, NewNodes}]) of
-                             ok ->
-                                 call({set_quorum_nodes, Nodes, NewNodes});
-                             Error ->
-                                 Error
-                         end
-                 end, Opts).
+    update_quorum_nodes(default, Fun, Opts).
+
+update_quorum_nodes(Domain, Fun, Opts) ->
+    run_activity(Domain, update_quorum_nodes, majority,
+        fun () ->
+            {ok, Nodes} = call(get_quorum_nodes),
+            NewNodes    = Fun(Nodes),
+            case switch_quorum([majority, {majority, NewNodes}]) of
+                ok ->
+                    call({set_quorum_nodes, Nodes, NewNodes});
+                Error ->
+                    Error
+            end
+        end, Opts).
 
 %% gen_server callbacks
 init([]) ->

@@ -605,6 +605,50 @@ failover_nodes(Nodes, S, DownNodes, NodeStatuses, UpdateCount) ->
     end.
 
 try_autofailover(Nodes, DownNodes, FailoverReasons) ->
+    %% No safety checks yet, first we take the quorum to prevent any material
+    %% change to the config while we perform our checks and run the failover.
+    %% Note that the domain of the activity has been set to 'auto_failover' as
+    %% we must use the same, non-default, domain for inner activities in the
+    %% failover code.
+    leader_activities:run_activity(
+      auto_failover, majority,
+      ?cut(try_auto_failover_body(Nodes, DownNodes, FailoverReasons)),
+      [{unsafe, false}]).
+
+try_auto_failover_body(Nodes, DownNodes, FailoverReasons) ->
+    %% Sync the config before we start, we need to be up to date with the rest
+    %% of the cluster. It could be the case that we were partitioned off
+    %% immediately before this and some other orchestrator has taken action that
+    %% we would not otherwise have seen.
+    Timeout = ?get_timeout(failover_config_pull, 10000),
+    UpNodes = ns_cluster_membership:get_nodes_with_status(_ =/=
+        inactiveFailed),
+    SyncNodes = UpNodes -- Nodes,
+    case chronicle_compat:config_sync(pull, SyncNodes, Timeout) of
+        ok ->
+            ok;
+        E ->
+            ?log_error("Config pull from ~p failed: ~p",
+                [SyncNodes, E]),
+            erlang:exit(config_sync_failed)
+    end,
+
+    %% It could be the case that Nodes (to failover) or DownNodes are no longer
+    %% active nodes if we have just recovered from a network partition and
+    %% another node orchestrated some failover. We shouldn't attempt to fail
+    %% over a non-active node, or use inactive DownNodes in safety checks, so
+    %% double check that things are as we believe they ought to be here.
+    UpToDateActiveNodes = ns_cluster_membership:active_nodes(),
+    case Nodes -- UpToDateActiveNodes =:= []  andalso
+         DownNodes -- UpToDateActiveNodes =:= [] of
+        true ->
+            %% All of these nodes are still active, lets continue
+            validate_safety_and_try_auto_failover(Nodes, DownNodes,
+                                                  FailoverReasons);
+        false -> active_nodes_changed
+    end.
+
+validate_safety_and_try_auto_failover(Nodes, DownNodes, FailoverReasons) ->
     case ns_cluster_membership:service_nodes(Nodes, kv) of
         [] ->
             {ValidNodes, UnsafeNodes} =
@@ -722,7 +766,11 @@ process_failover_error(stopped_by_user, Nodes, S) ->
     report_failover_error(stopped_by_user, "Stopped by user.", Nodes, S);
 process_failover_error(last_node, Nodes, S) ->
     report_failover_error(last_node, "Could not fail over the final active "
-                                     "node running a service.", Nodes, S).
+                                     "node running a service.", Nodes, S);
+process_failover_error(active_nodes_changed, Nodes, S) ->
+    report_failover_error(active_nodes_changed,
+                          "The list of active nodes changed whilst processing "
+                          "the failover.", Nodes, S).
 
 report_failover_error(Flag, ErrMsg, Nodes, State) ->
     case should_report(Flag, State) of
