@@ -36,6 +36,15 @@ start(Nodes, Options) ->
     Parent = self(),
     ?log_debug("Starting failover with Nodes = ~p, Options = ~p",
                [Nodes, Options]),
+
+    %% Check if failover is possible. This is inherently unsafe. If our config
+    %% is stale (which may be the case if we have just been partitioned off from
+    %% the rest of the cluster) then this check may not have the most up to date
+    %% information and we may pass it for a failover that should not be possible
+    %% (i.e. if we are going to fail over the last node of some service). This
+    %% check will be repeated after we gather the quorum and sync the config for
+    %% the sake of safety. We still perform it here to avoid trying to take the
+    %% quorum and blocking the orchestrator for impossible failovers.
     case is_possible(Nodes, Options) of
         ok ->
             Pid = proc_lib:spawn_link(
@@ -233,6 +242,16 @@ deactivate_nodes(Nodes, Options) ->
 %% @doc Fail one or more nodes. Doesn't eject the node from the cluster. Takes
 %% effect immediately.
 failover(Nodes, Options) ->
+    %% Note that we are checking for fail over possibility whilst holding the
+    %% quorum and after syncing the config to ensure that we have the most up
+    %% to date config when checking if it is possible to fail over.
+    case is_possible(Nodes, Options) of
+        ok -> continue;
+        Error ->
+          ?log_error("Failover is not possible due to ~p", [Error]),
+          erlang:exit(Error)
+    end,
+
     not maps:is_key(quorum_failover, Options) orelse
         failover_collections(),
     KVNodes = ns_cluster_membership:service_nodes(Nodes, kv),

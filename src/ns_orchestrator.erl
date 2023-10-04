@@ -188,6 +188,7 @@ start_failover(Nodes, AllowUnsafe) ->
                               retry_aborting_rebalance |
                               in_recovery |
                               orchestration_unsafe |
+                              last_node |
                               config_sync_failed |
                               quorum_lost |
                               stopped_by_user |

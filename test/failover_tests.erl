@@ -68,8 +68,9 @@ manual_failover_test_() ->
 
     Tests = [
         {"Manual failover",
-        fun manual_failover_t/2}
-    ],
+         fun manual_failover_t/2},
+        {"Manual failover data loss due to stale config",
+         fun manual_failover_post_network_partition_stale_config/2}],
 
     %% foreachx here to let us pass parameters to setup.
     {foreachx,
@@ -238,3 +239,89 @@ manual_failover_t(_SetupConfig, _R) ->
     Counters = chronicle_compat:get(counters, #{required => true}),
     ?assertNotEqual(undefined,
         proplists:get_value(failover_complete, Counters)).
+
+
+%% Test post-network partition that we do not allow failover of nodes due to a
+%% stale config.
+%%
+%% Consider a scenario in which we have a network partition with as follows:
+%%
+%% Partition A - [a, b]
+%% Partition B - [c]
+%%
+%% In which [a, b, c] are KV nodes.
+%%
+%% N.B. there can be multiple orchestrators, particularly during network
+%% partitions. In this case we expect each side of a network partition to have
+%% an orchestrator node provided the network is partitioned for long enough.
+%%
+%% In such a scenario, partition A may try to fail over all of the nodes in
+%% partition B, and partition B may try to fail over all of the nodes in
+%% partition A. It is allowed and acceptable to fail over either partition,
+%% provided that we have 2 or more replicas. As partition A has a quorum, and
+%% partition B does not, the nodes in partition B will be failed over by the
+%% orchestrator of partition A. When the network partition heals, one of the
+%% orchestrator nodes will yield to another. In this case the orchestrator of
+%% partition A will yield to the orchestrator of partition B.
+%%
+%% The orchestrator of partition B will have a config prior to the network
+%% partition (as no material change is possible without an orchestrator) config
+%% for a brief period of time. This, combined with a lengthy (in machine time)
+%% quorum gathering timeout of 15 seconds lead to a scenario in which the
+%% orchestrator from partition B would pass the failover safety check
+%% (preventing the removal of the final KV node) with the stale config, before
+%% gathering a quorum and proceeding to fail over all of the KV nodes in the
+%% cluster.
+%%
+%% This test tests that in such a scenario we check that the failover is
+%% possible after gathering the quorum and syncing the config.
+manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
+    %% We are failing over all but node 'c' here.
+    NodesToFailOver = ['a', 'b'],
+
+    %% On config sync we find our updates config
+    meck:expect(chronicle_compat, config_sync,
+        fun(_,_,_) ->
+            %% Now sync the config and we realise that 'c' has actually been
+            %% failed over
+            OldNodes = maps:get(nodes, SetupConfig),
+            NewNodes = maps:put('c', {inactiveFailed, kv}, OldNodes),
+
+            setup_node_config(NewNodes),
+            setup_bucket_config(maps:get(buckets, SetupConfig)),
+            ok
+        end),
+
+    %% Need to trap the exit of the failover process to avoid nuking the test
+    %% process when it exits.
+    erlang:process_flag(trap_exit, true),
+
+    Options = #{
+        allow_unsafe => false,
+        %% auto failover
+        auto => false,
+        failover_reasons => "ok",
+        down_nodes => NodesToFailOver
+    },
+
+    ?debugMsg("Starting failover test"),
+
+    {ok, FailoverPid} = failover:start(NodesToFailOver, Options),
+
+    %% Failover runs in a different process, wait for it to stop
+    misc:wait_for_process(FailoverPid, 1000),
+
+    erlang:process_flag(trap_exit, false),
+
+    %% This is the test, we must receive an 'EXIT' from FailoverPid with reason
+    %% last_node (which means that we did not perform a failover).
+    receive
+        {'EXIT', FailoverPid, last_node} ->
+            ok
+    after 1000 ->
+        exit(timeout)
+    end,
+
+    %% We should have gathered a quorum for the failover.
+    ?assert(meck:called(leader_activities, run_activity,
+        [failover, majority, '_', '_'])).

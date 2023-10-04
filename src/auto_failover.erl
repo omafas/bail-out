@@ -719,7 +719,10 @@ process_failover_error(config_sync_failed, Nodes, S) ->
                           "Could not synchronize metadata with some nodes.",
                           Nodes, S);
 process_failover_error(stopped_by_user, Nodes, S) ->
-    report_failover_error(stopped_by_user, "Stopped by user.", Nodes, S).
+    report_failover_error(stopped_by_user, "Stopped by user.", Nodes, S);
+process_failover_error(last_node, Nodes, S) ->
+    report_failover_error(last_node, "Could not fail over the final active "
+                                     "node running a service.", Nodes, S).
 
 report_failover_error(Flag, ErrMsg, Nodes, State) ->
     case should_report(Flag, State) of
