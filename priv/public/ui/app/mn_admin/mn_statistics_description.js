@@ -900,6 +900,31 @@ function get70CompatDesc() {
           unit: "bytes",
           title: "Analytics Heap Committed",
           desc: "Bytes of JVM heap committed for Analytics on this server."
+        },
+        "cbas_pending_requests": {
+          unit: "number",
+          title: "Analytics Pending Requests",
+          desc: "Number of pending requests for Analytics on this server."
+        },
+        "cbas_queued_jobs": {
+          unit: "number",
+          title: "Analytics Queued Jobs",
+          desc: "Number of queued jobs for Analytics on this server."
+        },
+        "cbas_running_jobs": {
+          unit: "number",
+          title: "Analytics Running Jobs",
+          desc: "Number of running jobs for Analytics on this server."
+        },
+        "cbas_active_links": {
+          unit: "number",
+          title: "Analytics Active Links",
+          desc: "Number of active links for Analytics on this server."
+        },
+        "cbas_requests_total": {
+          unit: "number",
+          title: "Analytics Total Requests",
+          desc: "Total number of received requests for Analytics on this server."
         }
       }
     }

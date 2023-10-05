@@ -881,6 +881,26 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
           stats: {"@system.sysproc_mem_resident_java_cbas": true},
           size: "small",
           specificStat: true
+        }, {
+          stats: {"@cbas.cbas_pending_requests": true},
+          size: "small",
+          specificStat: true
+        }, {
+          stats: {"@cbas.cbas_queued_jobs": true},
+          size: "small",
+          specificStat: true
+        }, {
+          stats: {"@cbas.cbas_running_jobs": true},
+          size: "small",
+          specificStat: true
+        }, {
+          stats: {"@cbas.cbas_active_links": true},
+          size: "small",
+          specificStat: true
+        }, {
+          stats: {"@cbas.cbas_requests_total": true},
+          size: "small",
+          specificStat: true
         }]
       }, {
         name: "Eventing",
