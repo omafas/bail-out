@@ -18,7 +18,7 @@
 
 %% API
 -export([start_link/0,
-         get_all/2,
+         get_all/1,
          get_gauges/1,
          get_cgroups_info/0,
          stop/0]).
@@ -48,8 +48,8 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-get_all(Opaque, PidNames) ->
-    gen_server:call(?MODULE, {get_all, Opaque, PidNames}).
+get_all(PidNames) ->
+    gen_server:call(?MODULE, {get_all, PidNames}).
 
 get_gauges(Items) ->
     gen_server:call(?MODULE, {get_gauges, Items}).
@@ -69,26 +69,20 @@ init([]) ->
     Port = spawn_sigar(Name, ns_server:get_babysitter_pid()),
     {ok, #state{port = Port}}.
 
-handle_call({get_all, undefined, PidNames}, _From, State) ->
-    handle_call({get_all, {undefined, undefined, undefined}, PidNames}, _From,
-                State);
-handle_call({get_all, {PrevTS, PrevCounters, PrevCGroups}, PidNames}, _From,
-            State) ->
+handle_call({get_all, PidNames}, _From, State) ->
     NewState = update_sigar_data(State),
-    #state{most_recent_unpacked = {Counters, Gauges, CGroups},
-           most_recent_data_ts_usec = TS} = NewState,
-    HostCounters = compute_cpu_stats(PrevCounters, Counters),
+    #state{most_recent_unpacked = {Counters, Gauges, CGroups}} = NewState,
+    HostCounters = compute_cpu_stats(Counters),
     Cores = proplists:get_value(cpu_cores_available, Gauges),
     CGroupsCounters =
         case maps:get(<<"supported">>, CGroups, false) of
-            true -> compute_cgroups_counters(Cores, PrevTS, TS,
-                                             PrevCGroups, CGroups);
+            true -> compute_cgroups_counters(Cores, CGroups);
             false -> []
         end,
     ProcStats = get_process_stats(NewState#state.most_recent_data, PidNames),
     DiskStats = get_disk_stats(NewState#state.most_recent_data),
-    {reply, {{HostCounters ++ CGroupsCounters, Gauges, ProcStats, DiskStats},
-             {TS, Counters, CGroups}}, NewState};
+    {reply, {HostCounters ++ CGroupsCounters, Gauges, ProcStats, DiskStats},
+     NewState};
 
 handle_call({get_gauges, Items}, _From, State) ->
     NewState = maybe_update_stats(State),
@@ -421,9 +415,7 @@ populate_processes(StatsMap, ProcNames) ->
 proc_stat_name(ProcName, Stat) ->
     <<ProcName/binary, $/, Stat/binary>>.
 
-compute_cpu_stats(undefined, _Counters) -> [];
-compute_cpu_stats(#{<<"supported">> := true} = _OldCounters,
-                  #{<<"supported">> := true} = Counters) ->
+compute_cpu_stats(#{<<"supported">> := true} = Counters) ->
 
     RawCpuTotal = get_raw_counter_msec_to_sec(<<"cpu_total_ms">>, Counters),
     RawCpuIdle = get_raw_counter_msec_to_sec(<<"cpu_idle_ms">>, Counters),
@@ -450,7 +442,7 @@ compute_cpu_stats(#{<<"supported">> := true} = _OldCounters,
              {cpu_host_seconds_total_stolen, RawCpuStolen},
              {cpu_host_seconds_total_other, Other}]
     end;
-compute_cpu_stats(_, _) -> [].
+compute_cpu_stats(_) -> [].
 
 %% The current measurement is returned as a raw counter in seconds.
 %% The user can then use prometheus functions to do computations.
@@ -464,11 +456,9 @@ get_raw_counter_inner(Stat, Counters, Divisor) ->
     Value = maps:get(Stat, Counters, 0),
     Value / Divisor.
 
-compute_cgroups_counters(Cores, PrevTS, TS,
-                         #{<<"supported">> := true} = _Old,
+compute_cgroups_counters(Cores,
                          #{<<"supported">> := true} = New)
-                                        when is_number(PrevTS), is_number(TS),
-                                             is_number(Cores), Cores > 0 ->
+                                        when is_number(Cores), Cores > 0 ->
     RawCpuUsage = get_raw_counter_usec_to_sec(<<"usage_usec">>, New),
     RawCpuUser = get_raw_counter_usec_to_sec(<<"user_usec">>, New),
     RawCpuSys = get_raw_counter_usec_to_sec(<<"system_usec">>, New),
@@ -481,7 +471,7 @@ compute_cgroups_counters(Cores, PrevTS, TS,
      {cpu_cgroup_seconds_total_sys, RawCpuSys},
      {cpu_cgroup_seconds_total_throttled, RawCpuThrottled},
      {cpu_cgroup_seconds_total_burst, RawCpuBurst}];
-compute_cgroups_counters(_, _, _, _, _) ->
+compute_cgroups_counters(_, _) ->
     [].
 
 maybe_update_stats(#state{most_recent_data_ts_usec = TS} = State) ->
@@ -788,14 +778,5 @@ sigar_json_test() ->
              {<<"Process2/cpu_utilization">>,34}],
     CountersExpected1 = #{<<"supported">> => false},
     validate_results(Acc1, CountersExpected1, GaugesExpected1, Cgroups1, Proc1,
-                     PNames1, []),
-    CountersExpected2 = #{<<"supported">> => true,
-                          <<"cpu_idle_ms">> => 655676513,
-                          <<"cpu_irq_ms">> => 2,
-                          <<"cpu_stolen_ms">> => 1,
-                          <<"cpu_sys_ms">> => 232792540,
-                          <<"cpu_total_ms">> => 2332003090,
-                          <<"cpu_user_ms">> => 323534130},
-    ?assertEqual(compute_cpu_stats(CountersExpected1, CountersExpected2), []),
-    ?assertEqual(compute_cpu_stats(CountersExpected2, CountersExpected1), []).
+                     PNames1, []).
 -endif.

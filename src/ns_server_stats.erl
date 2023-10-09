@@ -49,8 +49,7 @@
 
 -record(state, {
           process_stats_timer :: reference() | undefined,
-          pid_names :: [{os_pid(), binary()}],
-          sigar_opaque :: term()
+          pid_names :: [{os_pid(), binary()}]
          }).
 
 start_link() ->
@@ -452,13 +451,13 @@ log_system_stats(TS) ->
 
     log_stats(TS, "@system", lists:keymerge(1, NSServerStats, NSCouchDbStats)).
 
-process_stats(#state{sigar_opaque = Opaque, pid_names = PidNames} = State) ->
-    {{Counters, Gauges, ProcStats, DiskStats}, NewOpaque} =
-        sigar:get_all(Opaque, PidNames),
+process_stats(#state{pid_names = PidNames} = State) ->
+    {Counters, Gauges, ProcStats, DiskStats} =
+        sigar:get_all(PidNames),
     RetStats = [{"@system", Counters ++ Gauges},
                 {"@system-processes", ProcStats},
                 {"@system-disks", DiskStats}],
-    {RetStats, State#state{sigar_opaque = NewOpaque}}.
+    {RetStats, State}.
 
 increment_counter(Name, By) ->
     try
