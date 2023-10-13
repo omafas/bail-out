@@ -50,6 +50,7 @@ fields() ->
      log_path,
      rotate_interval,
      rotate_size,
+     prune_age,
      descriptors_path,
      sync,
      disabled_userids,

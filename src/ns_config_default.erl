@@ -22,6 +22,7 @@
 -define(ISASL_PW, "isasl.pw").
 -define(NS_LOG, "ns_log").
 -define(EVENT_LOG, "event_log").
+-define(DEFAULT_AUDIT_PRUNE_INTERVAL, 0).
 
 get_current_version() ->
     %% This function identifies the version of the config and one of its
@@ -164,6 +165,7 @@ default() ->
       [{auditd_enabled, false},
        {rotate_interval, 86400},
        {rotate_size, 20*1024*1024},
+       {prune_age, ?DEFAULT_AUDIT_PRUNE_INTERVAL},
        {disabled, []},
        {enabled, []},
        {disabled_users, []},

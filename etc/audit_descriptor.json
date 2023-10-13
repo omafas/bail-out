@@ -815,6 +815,7 @@
           "optional_fields": {
               "auditd_enabled": true,
               "rotate_interval": 1,
+              "prune_age": 0,
               "rotate_size": 1,
               "log_path": "",
               "disabled_userids": "",
