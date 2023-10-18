@@ -18,6 +18,7 @@
                 }).
 -define(METADATA_VCLOCK, '_vclock').
 -define(DELETED_MARKER, '_deleted').
+-define(NS_CONFIG_LATEST_MARKER, 'latest-config-marker').
 
 -type uuid() :: binary().
 -type vclock_counter() :: integer().
@@ -31,7 +32,7 @@
 -type kvpair() :: {key(), value()}.
 -type kvlist() :: [kvpair()].
 
--type ns_config() :: #config{} | [kvlist()] | 'latest-config-marker'.
+-type ns_config() :: #config{} | [kvlist()] | ?NS_CONFIG_LATEST_MARKER.
 
 -type run_txn_return() :: {commit, [kvlist()]}
                         | {commit, [kvlist()], any()}

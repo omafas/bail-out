@@ -479,7 +479,7 @@ get_timeout(Operation, Default) ->
 
 search_node(Key) -> search_node(latest(), Key).
 
-search('latest-config-marker', Key) ->
+search(?NS_CONFIG_LATEST_MARKER, Key) ->
     search(Key);
 search(Config, Key) ->
     case search_raw(Config, Key) of
@@ -561,8 +561,8 @@ search_prop(Config, Key, SubKey, DefaultSubVal) ->
             DefaultSubVal
     end.
 
-search_node_prop('latest-config-marker', Key, SubKey, DefaultSubVal) ->
-    search_node_prop(node(), 'latest-config-marker', Key, SubKey, DefaultSubVal);
+search_node_prop(?NS_CONFIG_LATEST_MARKER, Key, SubKey, DefaultSubVal) ->
+    search_node_prop(node(), ?NS_CONFIG_LATEST_MARKER, Key, SubKey, DefaultSubVal);
 search_node_prop(Node, Config, Key, SubKey) when is_atom(Node) ->
     search_node_prop(Node, Config, Key, SubKey, undefined);
 search_node_prop(Config, Key, SubKey, DefaultSubVal) ->
@@ -620,7 +620,7 @@ fold(Fun, Acc0, [KVList | Rest]) ->
     fold(Fun, Acc, Rest);
 fold(Fun, Acc, #config{dynamic = DL, static = SL}) ->
     fold(Fun, fold(Fun, Acc, SL), DL);
-fold(Fun, Acc, 'latest-config-marker') ->
+fold(Fun, Acc, ?NS_CONFIG_LATEST_MARKER) ->
     fold(Fun, Acc, ns_config:get()).
 
 %% Implementation
@@ -683,7 +683,7 @@ attach_vclock(Value, Node) ->
 %% "revision" of config they see. (Or not, if other config has some
 %% "natural" way to track revision of data, e.g. ZAB's/RAFT's txn ids
 %% or equivalent multi-paxos thing)
-compute_global_rev('latest-config-marker') ->
+compute_global_rev(?NS_CONFIG_LATEST_MARKER) ->
     compute_global_rev(ns_config:get());
 compute_global_rev(Config) ->
     KVList = config_dynamic(Config),
@@ -1444,7 +1444,7 @@ sync_announcements() ->
     misc:wait_for_process(Pid, infinity).
 
 latest() ->
-    'latest-config-marker'.
+    ?NS_CONFIG_LATEST_MARKER.
 
 
 -ifdef(TEST).
