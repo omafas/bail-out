@@ -42,6 +42,7 @@
          get_ns_server_stats/0,
          add_histo/2,
          stale_histo_epoch_cleaner/0,
+         report_derived_stats/1,
          report_prom_stats/2,
          report_prom_stats/3]).
 
@@ -180,6 +181,13 @@ report_prom_stats(ReportFun, IsHighCard) ->
             Try(couchdb, fun () -> report_couchdb_stats(ReportFun) end)
     end,
     ok.
+
+report_derived_stats(ReportFun) ->
+    try report_ns_server_derived_stats(ReportFun)
+    catch C:E:ST ->
+              ?log_error("Derived stats reporting exception: ~p:~p~n~p",
+                         [C, E, ST])
+    end.
 
 get_pressure_name_labels(PsiKey) ->
     [Level, PsiKey0] = binary:split(PsiKey, <<"/">>),
@@ -349,6 +357,37 @@ report_ns_server_hc_stats(ReportFun) ->
           ok
       end, [], ?MODULE),
     ok.
+
+%% Derived stats are those where ns_server has instructed prometheus to
+%% do the calculations. The result of this is the stat resides in the local
+%% prometheus instance. In order to report the stat in ns_server's REST
+%% results we have to query prometheus for the stat and then report it.
+report_ns_server_derived_stats(ReportFun) ->
+    Settings = prometheus_cfg:settings(),
+    Derived = [N || {N, _} <- prometheus_cfg:derived_metrics(ns_server,
+                                                             Settings)],
+    Query = promQL:format_promql({'or', [promQL:metric(M) || M <- Derived]}),
+    Timeout = prometheus:determine_timeout(undefined, Settings,
+                                           query_derived_request_timeout),
+    case prometheus:query(Query, undefined, Timeout, Settings) of
+        {ok, []} ->
+            ok;
+        {ok, Metrics} ->
+            lists:map(
+              fun ({[{<<"metric">>, {Props}}, {<<"value">>, [_, Value]}]}) ->
+                      report_derived_stats(Props, Value, ReportFun);
+                  ({[{<<"value">>, [_, Value]}, {<<"metric">>, {Props}}]}) ->
+                      report_derived_stats(Props, Value, ReportFun)
+              end, Metrics);
+        {error, Err} ->
+            ?log_error("Failed to get derived ns_server stats: ~p", [Err])
+    end.
+
+report_derived_stats(Props, Value, ReportFun) ->
+    Name = proplists:get_value(<<"__name__">>, Props),
+    Props2 = proplists:delete(<<"__name__">>, Props),
+    Props3 = proplists:delete(<<"name">>, Props2),
+    ReportFun({Name, Props3, Value}).
 
 low_cardinality_stats() ->
     [{c, {<<"rest_request_enters">>, []}},

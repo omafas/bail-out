@@ -54,6 +54,8 @@ params_internal() ->
         type => {int, 1, prometheus_cfg:max_scrape_int()}}},
      {"snapshotCreationTimeout",
       #{cfg_key => snapshot_timeout_msecs, type => pos_int}},
+     {"requestTimeouts.queryDerived",
+      #{cfg_key => query_derived_request_timeout, type => pos_int}},
      {"scrapeIntervalsCalculationPeriod",
       #{cfg_key => intervals_calculation_period, type => pos_int_or_minus_one}},
      {"cbcollect.statsMaxSize",
@@ -117,7 +119,13 @@ params_internal() ->
     [{"statsExport." ++ N ++ ".highCardEnabled",
       #{cfg_key => [external_prometheus_services, S, high_cardinality_enabled],
         type => bool}}
-     || {S, N} <- Services].
+     || {S, N} <- Services] ++
+    [{"statsExport." ++ N ++ ".derivedStatsEnabled",
+      #{cfg_key => [external_prometheus_services, S, derived_stats_enabled],
+        type => bool}}
+     || {S, N} <- [{ns_server,
+                    atom_to_list(
+                      ns_cluster_membership:json_service_name(ns_server))}]].
 
 type_spec(derived_metrics_filter) ->
     #{validators => [fun derived_metrics_filter/2],

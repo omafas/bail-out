@@ -17,6 +17,7 @@
 
 -export([query_range/6, query_range_async/7, query/4,
          create_snapshot/2, reload/1, quit/2,
+         determine_timeout/3,
          delete_series/5, clean_tombstones/2]).
 
 -type metrics_data() :: [JSONObject :: {[{binary(), term()}]}].
@@ -28,6 +29,13 @@
 -type successful_post() :: {ok, json, {[JSONObject :: term()]}} |
                            {ok, text, BinString :: binary()} |
                            {ok, no_content, BinString :: binary()}.
+
+determine_timeout(undefined, Settings, TimeoutName) ->
+    Timeout = proplists:get_value(TimeoutName, Settings),
+    true = is_number(Timeout) andalso Timeout >= 0,
+    Timeout;
+determine_timeout(Timeout, _Settings, _TimeoutName) ->
+    Timeout.
 
 -spec quit(http_timeout(), prometheus_cfg:stats_settings()) -> ok | error().
 quit(Timeout, Settings) ->

@@ -79,6 +79,7 @@
     {decimation_enabled, true | false} |
     {truncation_enabled, true | false} |
     {clean_tombstones_enabled, true | false} |
+    {query_derived_request_timeout, pos_integer()} |
     {decimation_defs,
      [{atom(), pos_integer(), pos_integer() | skip}]} |
     {pruning_interval, pos_integer()} |
@@ -98,7 +99,8 @@
         {high_cardinality_scrape_timeout, integer()}]}]} |
     {external_prometheus_services,
      [{extended_service_name(),
-       [{high_cardinality_enabled, true | false}]}]} |
+       [{high_cardinality_enabled, true | false} |
+        {derived_stats_enabled, true | false}]}]} |
     {prometheus_metrics_enabled, true | false} |
     {prometheus_metrics_scrape_interval, pos_integer()} |
     {listen_addr_type, loopback | any} |
@@ -154,6 +156,7 @@ default_settings() ->
      {decimation_enabled, false},
      {truncation_enabled, false},
      {clean_tombstones_enabled, false},
+     {query_derived_request_timeout, 500}, %% in msecs
      {decimation_defs, decimation_definitions_default()},
      {pruning_interval, 60000}, %% frequency to try to prune stats (msecs)
      {truncate_max_age, 3*?SECS_IN_DAY}, %% age (secs) to truncate stats
@@ -173,7 +176,8 @@ default_settings() ->
                       {high_cardinality_scrape_interval, ?AUTO_CALCULATED},
                       {high_cardinality_scrape_timeout, ?AUTO_CALCULATED}]}
                         || S <- ?DEFAULT_HIGH_CARD_SERVICES -- [ns_server]]},
-     {external_prometheus_services, [{S, [{high_cardinality_enabled, true}]}
+     {external_prometheus_services, [{S, [{high_cardinality_enabled, true},
+                                          {derived_stats_enabled, true}]}
                                         || S <- ?DEFAULT_HIGH_CARD_SERVICES]},
      {prometheus_metrics_enabled, false},
      {prometheus_metrics_scrape_interval, 60}, %% in seconds
