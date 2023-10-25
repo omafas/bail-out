@@ -117,6 +117,18 @@
         "added": "7.1.1",
         "stability": "committed"
     },
+    "sys_cpu_host_idle_rate": {
+        "type": "gauge",
+        "help": "Idle CPU utilization rate in the host",
+        "added": "7.2.4",
+        "stability": "committed"
+    },
+    "sys_cpu_host_other_rate": {
+        "type": "gauge",
+        "help": "Other (not idle/user/sys/irq/stolen) CPU utilization rate in the host",
+        "added": "7.2.4",
+        "stability": "committed"
+    },
     "sys_cpu_host_utilization_rate": {
         "type": "gauge",
         "help": "CPU utilization rate in the host",
@@ -244,7 +256,7 @@
         "type": "counter",
         "help": "Absolute stall time when tasks were stalled on a given resource",
         "added": "7.2.4",
-        "units": "microseconds",
+        "unit": "microseconds",
         "stability": "committed",
         "labels": [
             {
@@ -295,7 +307,6 @@
         "type": "gauge",
         "help": "CPU utilization rate, by process",
         "added": "7.0.0",
-        "notes": "7.2.4 changed to use irate of sysproc_cpu_seconds_total for user/sys modes.",
         "stability": "committed",
         "labels": [
             {
@@ -534,6 +545,7 @@
         "help": "Failover safeness",
         "added": "7.0.0",
         "stability": "internal",
+        "notes": "This is for internal use and may be removed in the future",
         "labels": [
             {
                 "name": "bucket",

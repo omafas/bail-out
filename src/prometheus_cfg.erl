@@ -1210,12 +1210,12 @@ derived_metrics(ns_server, Settings) ->
             [{"sys_cpu_irq_rate", sys_cpu_rate_promql(irq, Settings)},
              {"sys_cpu_stolen_rate", sys_cpu_rate_promql(stolen, Settings)}]
     end ++
-    [{"sys_cpu_cgroup_usage_rate", cgroup_cpu_rate_promql(usage, Settings)},
-     {"sys_cpu_cgroup_user_rate", cgroup_cpu_rate_promql(user, Settings)},
-     {"sys_cpu_cgroup_sys_rate", cgroup_cpu_rate_promql(sys, Settings)},
-     {"sys_cpu_cgroup_throttled_rate", cgroup_cpu_rate_promql(throttled,
-                                                                  Settings)},
-     {"sys_cpu_cgroup_burst_rate", cgroup_cpu_rate_promql(burst, Settings)}
+    [{"sys_cpu_utilization_rate", sys_cpu_utilization_rate_promql(Settings)},
+     {"sys_cpu_user_rate", sys_cpu_user_rate_promql(Settings)},
+     {"sys_cpu_sys_rate", sys_cpu_sys_rate_promql(Settings)},
+     %% These don't have values if not part of a cgroup
+     {"sys_cpu_throttled_rate", cgroup_cpu_rate_promql(throttled, Settings)},
+     {"sys_cpu_burst_rate", cgroup_cpu_rate_promql(burst, Settings)}
     ];
 derived_metrics(_, _) ->
     [].
@@ -1247,6 +1247,35 @@ sysproc_cpu_utilization_promql(Settings) ->
         "irate(sysproc_cpu_seconds_total{mode=`sys`}[~bs])) * 100",
 
     lists:flatten(io_lib:format(Q, [RateInterval, RateInterval])).
+
+%% sys_cpu_utilization_rate used to be either:
+%%
+%%    computed using cgroup.usage_usec if couchbase was part of a cgroup
+%% or
+%%    sys_cpu_host_utilization_rate if couchbase was not part of a cgroup
+%%
+%% sys_cpu_utilization_rate was replaced by sys_cgroup_cpu_rate and we
+%% know if couchbase is part of a cgroup it's cpu rate must be higher
+%% than sys_cpu_host_utilization_rate as the cgroup is just a portion of
+%% the overall host cpu usage.
+sys_cpu_utilization_rate_promql(Settings) ->
+    SysCpuHostUtilizationRate = sys_cpu_rate_promql(total, Settings),
+    SysCpuCgroupUsageRate = cgroup_cpu_rate_promql(usage, Settings),
+    lists:flatten(io_lib:format("max(~s or ~s)",
+                                [SysCpuHostUtilizationRate,
+                                 SysCpuCgroupUsageRate])).
+
+sys_cpu_user_rate_promql(Settings) ->
+    SysCpuHostUserRate = sys_cpu_rate_promql(user, Settings),
+    SysCpuCgroupUserRate = cgroup_cpu_rate_promql(user, Settings),
+    lists:flatten(io_lib:format("max(~s or ~s)",
+                                [SysCpuHostUserRate, SysCpuCgroupUserRate])).
+
+sys_cpu_sys_rate_promql(Settings) ->
+    SysCpuHostSysRate = sys_cpu_rate_promql(sys, Settings),
+    SysCpuCgroupSysRate = cgroup_cpu_rate_promql(sys, Settings),
+    lists:flatten(io_lib:format("max(~s or ~s)",
+                                [SysCpuHostSysRate, SysCpuCgroupSysRate])).
 
 prom_query(total, RateInterval) ->
     Q = "100 - "
@@ -1882,11 +1911,11 @@ prometheus_derived_metrics_config_test() ->
                        <<"sys_cpu_host_sys_rate">>,
                        <<"sys_cpu_host_other_rate">>,
                        <<"sys_cpu_host_idle_rate">>,
-                       <<"sys_cpu_cgroup_usage_rate">>,
-                       <<"sys_cpu_cgroup_user_rate">>,
-                       <<"sys_cpu_cgroup_sys_rate">>,
-                       <<"sys_cpu_cgroup_throttled_rate">>,
-                       <<"sys_cpu_cgroup_burst_rate">>] ++
+                       <<"sys_cpu_utilization_rate">>,
+                       <<"sys_cpu_user_rate">>,
+                       <<"sys_cpu_sys_rate">>,
+                       <<"sys_cpu_throttled_rate">>,
+                       <<"sys_cpu_burst_rate">>] ++
     case misc:is_linux() of
         true ->
             [<<"sys_cpu_irq_rate">>,
