@@ -840,7 +840,8 @@ def make_query_statement_task(statement, user, password, port,
 
 
 def make_cbas_statement_task(statement, user, password, port):
-    url = "http://%s:%s/analytics/service/diagnostics?statement=%s" % (
+    # TODO: switch to /analytics/service/diagnostics in 7.6.0 (MB-59335)
+    url = "http://%s:%s/query/service?statement=%s" % (
         local_url_addr, port, urllib.parse.quote(statement))
 
     return make_curl_task(name="Result of query statement \'%s\'" % statement,
@@ -1413,7 +1414,7 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
         ]
 
     cbas_tasks = []
-    cbas_port = read_guts(guts, "cbas_http_port")
+    cbas_port = read_guts(guts, "cbas_admin_port")
     if cbas_port:
         cbas_diag_url = 'http://%s:%s/analytics/node/diagnostics' % (
             local_url_addr, cbas_port)
