@@ -1572,7 +1572,8 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
                       "analytics_info.log", "analytics_debug.log", "analytics_shutdown.log",
                       "analytics_error.log", "analytics_warn.log", "analytics_dcpdebug.log",
                       "analytics_trace.json", "analytics_access.log", "analytics_cbas_debug.log",
-                      "indexer_stats.log", "backup_service.log", "sigar_port.log", "sigar_port.log.old"]],
+                      "indexer_stats.log", "backup_service.log", "sigar_port.log", "sigar_port.1.log",
+                      "sigar_port.2.log", "sigar_port.3.log"]],
 
         [make_cbstats_task(kind, memcached_pass, guts)
          for kind in ["all", "checkpoint", "collections", "config",
