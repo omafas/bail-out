@@ -69,16 +69,22 @@ supported(ns_server) ->
     [N || C <- ssl:cipher_suites(all, 'tlsv1.3'),
           {ok, N} <- [cipher_name_by_code(
                         ssl_cipher_format:suite_map_to_bin(C))]];
-supported(fts) -> golang_ciphers({1, 13, 7});
-supported(index) -> golang_ciphers({1, 13, 7});
-supported(n1ql) -> golang_ciphers({1, 13, 7});
-supported(eventing) -> golang_ciphers({1, 13, 7});
-supported(backup) -> golang_ciphers({1, 13, 14});
+%% services don't hardcode the go version in their CMakeLists.txt anymore and
+%% they specify SUPPORTED_NEWER or SUPPORTED_OLDER for each release.
+%% More information about it here: https://hub.internal.couchbase.com/
+%% confluence/display/CR/Centralized+Go+Version+Management
+%%
+%% All services currently specify SUPPORTED_NEWER, which is currently 1.21.3.
+supported(fts) -> golang_ciphers({1, 21, 3});
+supported(index) -> golang_ciphers({1, 21, 3});
+supported(n1ql) -> golang_ciphers({1, 21, 3});
+supported(eventing) -> golang_ciphers({1, 21, 3});
+supported(backup) -> golang_ciphers({1, 21, 3});
 supported(kv) ->
 %% This list is constructed using the following command
 %%  $ ./install/bin/openssl ciphers -stdname "ALL" | awk '{print "<<\x22"$1"\x22>>,"}'
 %%  $ ./install/bin/openssl version
-%%  OpenSSL 1.1.1b  26 Feb 2019
+%% OpenSSL 3.1.3 19 Sep 2023 (Library: OpenSSL 3.1.3 19 Sep 2023)
     [
         <<"TLS_AES_256_GCM_SHA384">>,
         <<"TLS_CHACHA20_POLY1305_SHA256">>,
@@ -145,13 +151,10 @@ supported(kv) ->
         <<"TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA">>,
         <<"TLS_DHE_RSA_WITH_AES_128_CBC_SHA">>,
         <<"TLS_DHE_DSS_WITH_AES_128_CBC_SHA">>,
-        <<"TLS_DHE_RSA_WITH_SEED_CBC_SHA">>,
-        <<"TLS_DHE_DSS_WITH_SEED_CBC_SHA">>,
         <<"TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA">>,
         <<"TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA">>,
         <<"TLS_ECDH_anon_WITH_AES_128_CBC_SHA">>,
         <<"TLS_DH_anon_WITH_AES_128_CBC_SHA">>,
-        <<"TLS_DH_anon_WITH_SEED_CBC_SHA">>,
         <<"TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA">>,
         <<"TLS_RSA_PSK_WITH_AES_256_GCM_SHA384">>,
         <<"TLS_DHE_PSK_WITH_AES_256_GCM_SHA384">>,
@@ -219,19 +222,24 @@ supported(kv) ->
         <<"TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256">>,
         <<"TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256">>,
         <<"TLS_RSA_WITH_AES_128_CBC_SHA">>,
-        <<"TLS_RSA_WITH_SEED_CBC_SHA">>,
         <<"TLS_RSA_WITH_CAMELLIA_128_CBC_SHA">>,
-        <<"TLS_RSA_WITH_IDEA_CBC_SHA">>,
         <<"TLS_PSK_WITH_AES_128_CBC_SHA256">>,
         <<"TLS_PSK_WITH_AES_128_CBC_SHA">>,
         <<"TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256">>
     ];
 supported(cbas) ->
 %% From Murtadha,
-%% [1] analytics/cbas/cbas-test/cbas-cbserver-test/src/test/java/com/couchbase/
-%%     analytics/test/cbserver/SupportedCiphersTest.java
-%% The above was run on the java version we bundle (adoptopenjdk-11) and the
-%% output is as below:
+%% analytics/cbas/cbas-test/cbas-cbserver-test/src/test/java/com/couchbase/
+%% analytics/test/cbserver/SupportedCiphersTest.java will generate the cipher
+%% suites supported by the cbas service.
+%%
+%% To run the above test against the current Java version bundled with the
+%% server, run the following commands:
+%%
+%% 1. Build the project at the top level.
+%% 2. cd ./analytics
+%% 3. mvn install -Dmaven.repo.local=../.m2repo -DskipTests -pl :cbas-cbserver-test
+%% 4. JAVA_HOME=../install/lib/cbas/runtime mvn -Dmaven.repo.local=../.m2repo test -pl :cbas-cbserver-test '-Dtest=**/SupportedCiphersTest.java'
     [
         <<"TLS_AES_128_GCM_SHA256">>,
         <<"TLS_AES_256_GCM_SHA384">>,
@@ -284,18 +292,9 @@ supported(cbas) ->
         <<"TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256">>
     ].
 
-golang_ciphers({1, 13, 14}) -> golang_ciphers({1, 13, 7});
-golang_ciphers({1, 13, 7}) ->
-%% 1.13.14 and 1.13.7 have the same cipher list.
-%%
-%% 1.13.14
-%% https://github.com/golang/go/commit/d3ba94164a1c404a01369fb54ddd4f5b94d91348
-%% https://github.com/golang/go/blob/d3ba94164a1c404a01369fb54ddd4f5b94d91348/src/crypto/tls/cipher_suites.go
-%%
-%% 1.13.7
-%% https://github.com/golang/go/commit/7d2473dc81c659fba3f3b83bc6e93ca5fe37a898
-%% https://github.com/golang/go/blob/7d2473dc81c659fba3f3b83bc6e93ca5fe37a898/src/crypto/tls/cipher_suites.go
-%% (note that POLY1305 ciphers have non standard names in go file, add _SHA256)
+%% From https://cs.opensource.google/go/go/+/refs/tags/go1.21.3:src/crypto/tls/
+%% cipher_suites.go;l=656
+golang_ciphers({1, 21, 3}) ->
     [
         <<"TLS_RSA_WITH_RC4_128_SHA">>,
         <<"TLS_RSA_WITH_3DES_EDE_CBC_SHA">>,
