@@ -46,6 +46,9 @@
          update_snapshot/1,
          update_snapshot/2]).
 
+%% Helper function API
+-export([setup_cluster_compat_version/1]).
+
 -define(TABLE_NAME, fake_chronicle_kv).
 
 %% --------------------
@@ -78,6 +81,13 @@ update_snapshot(Map) when is_map(Map) ->
     OldSnapshot = get_ets_snapshot(),
     NewSnapshot = maps:merge(OldSnapshot, NewKVs),
     store_ets_snapshot(NewSnapshot).
+
+%% ----------------------
+%% API - Helper Functions
+%% ----------------------
+-spec setup_cluster_compat_version(list()) -> true.
+setup_cluster_compat_version(Version) ->
+    update_snapshot(cluster_compat_version, Version).
 
 %% ----------------------------------
 %% Internal - chronicle_kv meck setup
@@ -144,6 +154,13 @@ meck_setup_chronicle_kv_setters() ->
     meck:expect(chronicle_kv, txn,
         fun(Name, Fun, Opts) ->
             transaction(Name, [], Fun, Opts)
+        end),
+
+
+    meck:expect(chronicle_kv, set,
+        fun(_Name, Key, Value) ->
+            update_snapshot(Key, Value),
+            {ok, 1}
         end).
 
 %% ----------------------------------

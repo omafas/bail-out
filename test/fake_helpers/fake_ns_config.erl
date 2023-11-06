@@ -50,6 +50,9 @@
          update_snapshot/1,
          update_snapshot/2]).
 
+%% Helper function API
+-export([setup_cluster_compat_version/1]).
+
 -define(TABLE_NAME, fake_ns_config).
 
 %% --------------------
@@ -77,6 +80,16 @@ update_snapshot(NewSnapshot) when is_list(NewSnapshot) ->
     OldSnapshot = get_ets_snapshot(),
     StoreSnapshot = misc:update_proplist(OldSnapshot, NewSnapshot),
     store_ets_snapshot(StoreSnapshot).
+
+
+%% ----------------------
+%% API - Helper Functions
+%% ----------------------
+%% TODO MB-58898: Moves to chronicle in master, requires setting in both
+%% ns_config and chronicle_kv in neo.
+-spec setup_cluster_compat_version(list()) -> true.
+setup_cluster_compat_version(Version) ->
+    update_snapshot(cluster_compat_version, Version).
 
 %% -------------------------------
 %% Internal - ns_config meck setup
