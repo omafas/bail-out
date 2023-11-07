@@ -105,6 +105,8 @@ meck_setup_chronicle_kv() ->
     %% intercepted by meck, so we must control all entry to these modules.
     meck:new(chronicle_kv),
 
+    meck:expect(chronicle_kv, sync, 2, ok),
+
     meck_setup_chronicle_kv_getters(),
     meck_setup_chronicle_kv_setters().
 

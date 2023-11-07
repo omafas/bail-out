@@ -325,3 +325,139 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
     %% We should have gathered a quorum for the failover.
     ?assert(meck:called(leader_activities, run_activity,
         [failover, majority, '_', '_'])).
+
+auto_failover_test_() ->
+    PartitionA = [{'a', [kv]}, {'b', [kv]}, {'q', [query]}],
+    PartitionB = [{'c', [kv]}, {'d', [kv]}],
+
+    Nodes = lists:foldl(
+        fun({Node, Services}, Acc) ->
+            Acc#{ Node => {active, Services}}
+        end, #{}, PartitionA ++ PartitionB),
+
+    Buckets = ["default"],
+    SetupArgs =
+        #{nodes => Nodes,
+            buckets => Buckets,
+            partition_with_quorum => PartitionA,
+            partition_without_quorum => PartitionB},
+
+    Tests = [
+        {"Auto failover",
+            fun auto_failover_t/2}
+    ],
+
+    %% foreachx here to let us pass parameters to setup.
+    {foreachx,
+        fun auto_failover_test_setup/1,
+        fun auto_failover_test_teardown/2,
+        [{SetupArgs, fun(T, R) ->
+            {Name, ?_test(TestFun(T, R))}
+                     end} || {Name, TestFun} <- Tests]}.
+
+auto_failover_test_setup(SetupConfig) ->
+    Pids = manual_failover_test_setup(SetupConfig),
+
+    %% Needed to complete a failover(/subsequent rebalance)
+    {ok, RebalanceReportManagerPid} = ns_rebalance_report_manager:start_link(),
+    {ok, CompatModeManagerPid} = compat_mode_manager:start_link(),
+
+    %% Config for auto_failover
+    fake_ns_config:update_snapshot([{auto_failover_cfg,
+        [{enabled, true},
+            {timeout, 1},
+            {count, 0},
+            {max_count, 5},
+            {failover_preserve_durability_majority, true}]}]),
+
+    %% We need this to not throw an error in auto_failover tick, but we won't
+    %% use the status so an empty list is fine.
+    meck:new(ns_doctor),
+    meck:expect(ns_doctor, get_nodes, fun() -> [] end),
+
+    %% The test will see the partition that had the quorum as down and attempt
+    %% to fail it over, not realising that the partition without quorum had
+    %% already been failed over.
+    meck:new(node_status_analyzer),
+    meck:expect(node_status_analyzer, get_nodes,
+        fun() ->
+            lists:foldl(
+                fun({Node, _Services}, Acc) ->
+                    dict:store(Node, {unhealthy, foo}, Acc)
+                end,
+                dict:new(),
+                maps:get(partition_with_quorum, SetupConfig))
+        end),
+
+    %% Needed to start the orchestrator. We don't really need the janitor to run
+    %% for this test, so we will mock it instead of run it because we'd need to
+    %% do some extra stuff to get it running.
+    meck:new(ns_janitor_server),
+    meck:expect(ns_janitor_server, start_cleanup,
+        fun(_) -> {ok, self()} end),
+    meck:expect(ns_janitor_server, terminate_cleanup,
+        fun(_) ->
+            CallerPid = self(),
+            CallerPid ! {cleanup_done, foo, bar},
+            ok
+        end),
+
+    %% Need to start the orchestrator so that auto_failover can follow the full
+    %% code path.
+    {ok, OrchestratorPid} = ns_orchestrator:start_link(),
+
+    %% And we must start auto_failover itself to tick it and test it as it would
+    %% normally run.
+    {ok, AutoFailoverPid} = auto_failover:start_link(),
+
+    Pids#{orchestrator => OrchestratorPid,
+        ns_rebalance_report_manager => RebalanceReportManagerPid,
+        compat_mode_manager => CompatModeManagerPid,
+        auto_failover => AutoFailoverPid}.
+
+auto_failover_test_teardown(Config, PidMap) ->
+    meck:unload(ns_janitor_server),
+    meck:unload(node_status_analyzer),
+    meck:unload(ns_doctor),
+
+    manual_failover_test_teardown(Config, PidMap).
+
+get_auto_failover_reported_errors(AutoFailoverPid) ->
+    %% Little bit of a hack, we are relying on the format of the
+    %% auto_failover:state record, but this is exactly the information that we
+    %% want to check.
+    {state, _, _, _, _, _, _, _, Errors} = sys:get_state(AutoFailoverPid),
+    sets:to_list(Errors).
+
+auto_failover_t(_SetupConfig, PidMap) ->
+    #{auto_failover := AutoFailoverPid} = PidMap,
+
+    %% Part of our test, we should not have any reported errors yet.
+    ?assertEqual([],
+        get_auto_failover_reported_errors(AutoFailoverPid)),
+
+    meck:expect(chronicle_compat, config_sync, fun(_,_,_) -> ok end),
+
+    %% Tick auto-failover 4 times. We could wait long enough to do the auto
+    %% failover but we can speed this test up a bit by manually ticking. This
+    %% amount of ticks should be the minimum to process the auto-failover.
+    lists:foreach(
+        fun(_) ->
+            AutoFailoverPid ! tick
+        end,
+        lists:seq(0, 3)),
+
+    %% Disable auto-failover, this gen_server call will let us finish processing
+    %% the ticks that we have queued above (which will run the auto-failover to
+    %% completion), before returning which will mean that we've attempted an
+    %% auto-failover provided we've ticked enough.
+    gen_server:call(AutoFailoverPid, {disable_auto_failover, []}),
+
+    %% We should have completed the failover.
+    Counters = chronicle_compat:get(counters, #{required => true}),
+    ?assertNotEqual(undefined,
+        proplists:get_value(failover_complete, Counters)),
+
+    %% Without any auto-failover errors
+    ?assertEqual([],
+        get_auto_failover_reported_errors(AutoFailoverPid)).
