@@ -543,11 +543,17 @@ client_cert_auth_version() ->
     base64:encode(crypto:hash(sha, B)).
 
 handle_cbauth_post(Req) ->
-    {User, Domain} = menelaus_auth:get_identity(Req),
-    UUID = menelaus_users:get_user_uuid({User, Domain}),
-    menelaus_util:reply_json(Req, {[{user, erlang:list_to_binary(User)},
-                                    {domain, Domain}] ++
-                                    [{uuid, UUID} || UUID =/= undefined]}).
+    case ns_config_auth:is_system_provisioned() of
+        true ->
+            {User, Domain} = menelaus_auth:get_identity(Req),
+            UUID = menelaus_users:get_user_uuid({User, Domain}),
+            menelaus_util:reply_json(
+              Req, {[{user, erlang:list_to_binary(User)},
+                     {domain, Domain}] ++
+                        [{uuid, UUID} || UUID =/= undefined]});
+        false ->
+            menelaus_util:require_auth(Req)
+    end.
 
 handle_extract_user_from_cert_post(Req) ->
     CertBin = mochiweb_request:recv_body(Req),
