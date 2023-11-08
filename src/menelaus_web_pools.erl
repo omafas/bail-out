@@ -16,6 +16,10 @@
 -include("ns_heart.hrl").
 -include("cut.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -export([handle_pools/1,
          check_and_handle_pool_info/2,
          handle_pool_info_streaming/2,
@@ -420,28 +424,42 @@ validate_memory_quota(Config, Snapshot, ValidatorState) ->
 
 do_validate_memory_quota(Config, Snapshot, Quotas, ValidatorState) ->
     Nodes = ns_cluster_membership:nodes_wanted(Snapshot),
-    {ok, NodeStatuses} = ns_doctor:wait_statuses(Nodes, 3 * ?HEART_BEAT_PERIOD),
-    NodeInfos =
-        lists:map(
-          fun (Node) ->
-                  NodeStatus = dict:fetch(Node, NodeStatuses),
-                  {_, MemoryData} = lists:keyfind(memory_data, 1, NodeStatus),
-                  NodeServices =
-                      ns_cluster_membership:node_services(Snapshot, Node),
-                  {Node, NodeServices, MemoryData}
-          end, Nodes),
+    case ns_doctor:wait_statuses(Nodes, 3 * ?HEART_BEAT_PERIOD) of
+        {ok, NodeStatuses} ->
+            NodeInfos =
+                lists:map(
+                    fun (Node) ->
+                        NodeStatus = dict:fetch(Node, NodeStatuses),
+                        {_, MemoryData} =
+                            lists:keyfind(memory_data, 1, NodeStatus),
+                        NodeServices =
+                            ns_cluster_membership:node_services(Snapshot, Node),
+                        {Node, NodeServices, MemoryData}
+                    end, Nodes),
 
-    case memory_quota:check_quotas(NodeInfos, Config, Snapshot, Quotas) of
-        ok ->
-            validator:return_value(quotas, Quotas, ValidatorState);
+            case memory_quota:check_quotas(NodeInfos,
+                                           Config,
+                                           Snapshot,
+                                           Quotas) of
+                ok ->
+                    validator:return_value(quotas, Quotas, ValidatorState);
+                {error, Error} ->
+                    {Key, Msg} = quota_error_msg(Error),
+                    validator:return_error(Key, Msg, ValidatorState)
+            end;
         {error, Error} ->
-            {Key, Msg} = quota_error_msg(Error),
-            validator:return_error(Key, Msg, ValidatorState)
+            {_Key, Msg} = quota_error_msg(Error),
+            menelaus_util:web_exception(500, Msg)
     end.
 
 quota_error_msg({total_quota_too_high, Node, TotalQuota, MaxAllowed}) ->
     Msg = io_lib:format("Total quota (~bMB) exceeds the maximum allowed quota (~bMB) on node ~p",
                         [TotalQuota, MaxAllowed, Node]),
+    {'_', Msg};
+quota_error_msg({timeout, Nodes}) ->
+    Msg =
+        io_lib:format("Did not receive response in time from nodes ~p",
+                      [Nodes]),
     {'_', Msg};
 quota_error_msg({service_quota_too_low, Service, Quota, MinAllowed}) ->
     Details = case Service of
@@ -651,3 +669,31 @@ glean_node_details(NodeInfo) ->
          [{swapTotal, SwapTotal},
           {swapUsed, SwapUsed},
           {storageConf, {struct, SConf}}]}.
+
+-ifdef(TEST).
+
+timeout_on_pools_default_post_test() ->
+    meck:new(ns_cluster_membership, [passthrough]),
+    meck:new(ns_doctor, [passthrough]),
+    meck:new(validator, [passthrough]),
+
+    meck:expect(ns_cluster_membership, nodes_wanted, fun(_) -> ok end),
+    meck:expect(ns_doctor,
+                wait_statuses,
+                fun(_, _) ->
+                        {error, {timeout, "1234"}}
+                end),
+    meck:expect(validator, return_error, fun(_,_,_) -> ok end),
+
+    Msg =
+        io_lib:format(
+          "Did not receive response in time from nodes ~p", ["1234"]),
+    ?assertThrow(
+       {web_exception, 500, Msg, []},
+       do_validate_memory_quota([],[], [],[])),
+
+    meck:unload(ns_cluster_membership),
+    meck:unload(ns_doctor),
+    meck:unload(validator).
+
+-endif.
