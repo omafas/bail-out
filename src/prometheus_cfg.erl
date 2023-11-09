@@ -1261,20 +1261,20 @@ sysproc_cpu_utilization_promql(Settings) ->
 sys_cpu_utilization_rate_promql(Settings) ->
     SysCpuHostUtilizationRate = sys_cpu_rate_promql(total, Settings),
     SysCpuCgroupUsageRate = cgroup_cpu_rate_promql(usage, Settings),
-    lists:flatten(io_lib:format("max(~s or ~s)",
+    lists:flatten(io_lib:format("max(~s or ~s) without(mode, name)",
                                 [SysCpuHostUtilizationRate,
                                  SysCpuCgroupUsageRate])).
 
 sys_cpu_user_rate_promql(Settings) ->
     SysCpuHostUserRate = sys_cpu_rate_promql(user, Settings),
     SysCpuCgroupUserRate = cgroup_cpu_rate_promql(user, Settings),
-    lists:flatten(io_lib:format("max(~s or ~s)",
+    lists:flatten(io_lib:format("max(~s or ~s) without(mode, name)",
                                 [SysCpuHostUserRate, SysCpuCgroupUserRate])).
 
 sys_cpu_sys_rate_promql(Settings) ->
     SysCpuHostSysRate = sys_cpu_rate_promql(sys, Settings),
     SysCpuCgroupSysRate = cgroup_cpu_rate_promql(sys, Settings),
-    lists:flatten(io_lib:format("max(~s or ~s)",
+    lists:flatten(io_lib:format("max(~s or ~s) without(mode, name)",
                                 [SysCpuHostSysRate, SysCpuCgroupSysRate])).
 
 prom_query(total, RateInterval) ->
