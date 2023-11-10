@@ -130,6 +130,7 @@ manual_failover_test_setup(SetupConfig) ->
     %% We will spawn auto-reprovision for this test. To spawn it we must spawn
     %% the leader_registry. Needed for leader_registry
     meck:new(fake_ns_pubsub, [non_strict]),
+    meck:new(ns_pubsub),
     meck:expect(ns_pubsub, subscribe_link,
         fun(_, Handler) ->
                 %% Stash the handler in some function, notify_key
@@ -199,6 +200,7 @@ manual_failover_test_teardown(_Config, PidMap) ->
 
     meck:unload(janitor_agent),
     meck:unload(fake_ns_pubsub),
+    meck:unload(ns_pubsub),
     meck:unload(chronicle_compat),
     meck:unload(chronicle_master),
     meck:unload(testconditions),
