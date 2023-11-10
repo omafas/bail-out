@@ -240,7 +240,10 @@ log_web_hit(Peer, Req, Resp) ->
                 [$@ | _] ->
                     debug;
                 _ ->
-                    info
+                    case mochiweb_request:get(path, Req) of
+                        "/_goxdcr/" ++ _ -> debug;
+                        _ -> info
+                    end
             end,
     try
         ale:xlog(?ACCESS_LOGGER, Level, {Peer, Req, Resp}, "", [])
