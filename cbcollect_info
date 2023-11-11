@@ -1262,6 +1262,10 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
     viewdir = os.path.realpath(read_guts(guts, "idx_dir"))
     rebdir = os.path.realpath(os.path.join(
         read_guts(guts, "log_path"), "rebalance"))
+    cbasdirs = correct_split(read_guts(guts, "cbas_data_paths"), ",")
+    cbasdirs = [os.path.realpath(cbasdir) for cbasdir in cbasdirs]
+    if dbdir in cbasdirs:
+        cbasdirs.remove(dbdir)
     nodes = correct_split(read_guts(guts, "nodes"), ",")
 
     diag_url = "http://%s:%s/diag" % (
@@ -1488,6 +1492,9 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
                  ["ls", "-lRai", dbdir]),
         UnixTask("Index directory structure",
                  ["ls", "-lRai", viewdir]),
+        [UnixTask("Analytics directory structure",
+                  ["ls", "-lRai", cbasdir])
+         for cbasdir in cbasdirs],
         UnixTask("couch_dbinfo",
                  ["find", dbdir, "-type", "f",
                   "-name", "*.couch.*",
@@ -1502,6 +1509,9 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
                     "dir /s " + winquote_path(dbdir)),
         WindowsTask("Index directory structure",
                     "dir /s " + winquote_path(viewdir)),
+        [WindowsTask("Analytics directory structure",
+                     "dir /s " + winquote_path(cbasdir))
+         for cbasdir in cbasdirs],
         WindowsTask("Version file",
                     "type " + winquote_path(basedir()) + "\\VERSION.txt"),
         WindowsTask("Manifest file",

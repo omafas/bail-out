@@ -538,6 +538,7 @@ main_with_everything(StaticTerms, NSConfig, Node) ->
                                                        event_log, []),
                                 filename, ""),
 
+    CbasDataPaths = search_config_for_node(NSConfig, Node, cbas_dirs, []),
     Nodes = [node_host(N) || N <- confget(#config.nodes_wanted)],
 
     {_, DataDir} = lists:keyfind(path_config_datadir, 1, StaticTerms),
@@ -571,6 +572,7 @@ main_with_everything(StaticTerms, NSConfig, Node) ->
          {node, Node},
          {ns_log_path, NSLogPath},
          {event_log_path, EventLogPath},
+         {cbas_data_paths, string:join(CbasDataPaths, ",")},
          {log_path, search_config(StaticTerms, error_logger_mf_dir, "")},
          {memcached_admin, MCDAdmin},
          {memcached_logs_path, MCDLogs},
