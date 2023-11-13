@@ -88,13 +88,14 @@
          update_maps/3,
          update_buckets/3,
          set_bucket_config/2,
-         set_buckets_config_failover/2,
+         update_servers_and_map/4,
+         validate_map/1,
          set_fast_forward_map/2,
          set_map/2,
          set_initial_map/3,
          set_map_opts/2,
          set_servers/2,
-         remove_servers_from_buckets/2,
+         remove_servers_from_bucket/2,
          update_bucket_props/2,
          update_bucket_props/4,
          node_bucket_names/1,
@@ -125,7 +126,9 @@
          chronicle_upgrade_to_72/1,
          extract_bucket_props/1,
          build_bucket_props_json/1,
-         build_compaction_settings_json/1]).
+         build_compaction_settings_json/1,
+         update_bucket_config/2,
+         update_buckets_config/1]).
 
 -import(json_builder,
         [to_binary/1,
@@ -1178,15 +1181,11 @@ set_servers(Bucket, Servers) ->
 update_servers(Servers, BucketConfig) ->
     lists:keystore(servers, 1, BucketConfig, {servers, Servers}).
 
-remove_servers_from_buckets(Buckets, Nodes) ->
-    UpdtFunc =
-        fun(OldConfig) ->
-                Servers = get_servers(OldConfig),
-                update_servers(Servers -- Nodes, OldConfig)
-        end,
-    ok = update_buckets_config([{Bucket, UpdtFunc} || Bucket <- Buckets]).
+remove_servers_from_bucket(BucketConfig, ToRemoveServers) ->
+    Servers = get_servers(BucketConfig),
+    update_servers(Servers -- ToRemoveServers, BucketConfig).
 
-bucket_failover_cfg_update(Bucket, OldConfig, FailedNodes, NewMap) ->
+update_servers_and_map(Bucket, OldConfig, FailedNodes, NewMap) ->
     Servers = ns_bucket:get_servers(OldConfig),
     NewConfig =
         misc:update_proplist(OldConfig, [{servers, Servers -- FailedNodes},
@@ -1198,15 +1197,6 @@ bucket_failover_cfg_update(Bucket, OldConfig, FailedNodes, NewMap) ->
     master_activity_events:note_set_map(
       Bucket, NewMap, proplists:get_value(map, OldConfig, [])),
     NewConfig.
-
-set_buckets_config_failover(BucketsAndMap, FailedNodes) ->
-    ok = update_buckets_config(
-           lists:map(
-             fun({Bucket, NewMap}) ->
-                     validate_map(NewMap),
-                     {Bucket, bucket_failover_cfg_update(Bucket, _, FailedNodes,
-                                                         NewMap)}
-             end, BucketsAndMap)).
 
 % Update the bucket config atomically.
 update_bucket_config(BucketName, Fun) ->
