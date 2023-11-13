@@ -98,6 +98,8 @@ node_disco_event(_Event) ->
 
 handle_config_event(client_cert_auth) ->
     ?MODULE ! client_cert_auth_event;
+handle_config_event({node, Node, membership}) when Node =:= node() ->
+    ?MODULE ! node_status_changed;
 handle_config_event(_) ->
     ?MODULE ! maybe_notify_cbauth.
 
@@ -191,6 +193,27 @@ handle_info(client_cert_auth_event, State) ->
     self() ! maybe_notify_cbauth,
     {noreply, State#state{client_cert_auth_version =
                               client_cert_auth_version()}};
+handle_info(node_status_changed, State = #state{rpc_processes = Processes}) ->
+    self() ! maybe_notify_cbauth,
+    case ns_cluster_membership:get_cluster_membership(node()) of
+        active ->
+            {noreply, State};
+        Other ->
+            ?log_debug("Killing all external connections due to node status"
+                       " changing to ~p", [Other]),
+            NewProcesses =
+                maps:filter(
+                  fun (_Pid, #rpc_process{version = internal}) ->
+                          true;
+                      (Pid, #rpc_process{label = Label, mref = MRef}) ->
+                          ?log_debug("Killing connection ~p with pid = ~p",
+                                     [Label, Pid]),
+                          true = erlang:demonitor(MRef, [flush]),
+                          exit(Pid, shutdown),
+                          false
+                  end, Processes),
+            {noreply, State#state{rpc_processes = NewProcesses}}
+    end;
 handle_info(maybe_notify_cbauth, State) ->
     misc:flush(maybe_notify_cbauth),
     {noreply, maybe_notify_cbauth(State)};
