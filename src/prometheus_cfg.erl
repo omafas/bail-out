@@ -917,7 +917,7 @@ prometheus_metrics_jobs_config(Settings) ->
 
 get_service_port(ns_server) -> rest_port;
 get_service_port(index) -> indexer_http_port;
-get_service_port(cbas) -> cbas_http_port;
+get_service_port(cbas) -> cbas_parent_port;
 get_service_port(n1ql) -> query_port;
 get_service_port(fts) -> fts_http_port;
 get_service_port(eventing) -> eventing_http_port;
