@@ -64,6 +64,7 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
+    erlang:process_flag(trap_exit, true),
     ns_pubsub:subscribe_link(json_rpc_events, fun json_rpc_event/1),
     ns_pubsub:subscribe_link(ns_node_disco_events, fun node_disco_event/1),
     chronicle_compat_events:subscribe(fun is_interesting/1,
@@ -109,7 +110,26 @@ user_storage_event(_Event) ->
 ssl_service_event(_Event) ->
     ?MODULE ! ssl_service_event.
 
-terminate(_Reason, _State)     -> ok.
+terminate(_Reason, State) ->
+    terminate_external_connections(State),
+    ok.
+
+terminate_external_connections(State = #state{rpc_processes = Processes}) ->
+    {NewProcesses, ToWait} =
+        maps:fold(
+          fun (Pid, #rpc_process{version = internal} = P, {Acc, ToWaitAcc}) ->
+                  {maps:put(Pid, P, Acc), ToWaitAcc};
+              (Pid, #rpc_process{label = Label, mref = MRef},
+               {Acc, ToWaitAcc}) ->
+                  ?log_debug("Killing connection ~p with pid = ~p",
+                             [Label, Pid]),
+                  true = erlang:demonitor(MRef, [flush]),
+                  exit(Pid, shutdown),
+                  {Acc, [Pid | ToWaitAcc]}
+          end, {#{}, []}, Processes),
+    [misc:wait_for_process(P, infinity) || P <- ToWait],
+    State#state{rpc_processes = NewProcesses}.
+
 code_change(_OldVsn, State, _) -> {ok, State}.
 
 is_interesting(client_cert_auth) -> true;
@@ -193,7 +213,7 @@ handle_info(client_cert_auth_event, State) ->
     self() ! maybe_notify_cbauth,
     {noreply, State#state{client_cert_auth_version =
                               client_cert_auth_version()}};
-handle_info(node_status_changed, State = #state{rpc_processes = Processes}) ->
+handle_info(node_status_changed, State) ->
     self() ! maybe_notify_cbauth,
     case ns_cluster_membership:get_cluster_membership(node()) of
         active ->
@@ -201,18 +221,7 @@ handle_info(node_status_changed, State = #state{rpc_processes = Processes}) ->
         Other ->
             ?log_debug("Killing all external connections due to node status"
                        " changing to ~p", [Other]),
-            NewProcesses =
-                maps:filter(
-                  fun (_Pid, #rpc_process{version = internal}) ->
-                          true;
-                      (Pid, #rpc_process{label = Label, mref = MRef}) ->
-                          ?log_debug("Killing connection ~p with pid = ~p",
-                                     [Label, Pid]),
-                          true = erlang:demonitor(MRef, [flush]),
-                          exit(Pid, shutdown),
-                          false
-                  end, Processes),
-            {noreply, State#state{rpc_processes = NewProcesses}}
+            {noreply, terminate_external_connections(State)}
     end;
 handle_info(maybe_notify_cbauth, State) ->
     misc:flush(maybe_notify_cbauth),
@@ -225,7 +234,9 @@ handle_info({'DOWN', MRef, _, Pid, Reason},
     {noreply, State#state{rpc_processes = NewProcesses}};
 handle_info(heartbeat, State) ->
     {noreply, process_heartbeats(State)};
-
+handle_info({'EXIT', Pid, Reason}, State) ->
+    ?log_debug("Linked process ~p exited with ~p. Exiting.", [Pid, Reason]),
+    {stop, Reason, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
