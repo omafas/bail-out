@@ -13,7 +13,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, stop_replicator/0]).
+-export([start_link/0]).
 -export([init/1]).
 
 -include("ns_common.hrl").
@@ -23,14 +23,6 @@ start_link() ->
 
 init([]) ->
     {ok, {{one_for_all, 3, 10}, child_specs()}}.
-
-stop_replicator() ->
-    case supervisor:terminate_child(?MODULE, users_replicator) of
-        ok ->
-            ok = supervisor:delete_child(?MODULE, users_replicator);
-        Error ->
-            ?log_debug("Error terminating users_replicator ~p", [Error])
-    end.
 
 child_specs() ->
     [{users_replicator,

@@ -66,7 +66,7 @@
          build_scram_auth/1,
          build_plain_auth/1,
          build_plain_auth/2,
-         empty_storage/0,
+         delete_storage_offline/0,
          cleanup_bucket_roles/1,
          get_passwordless/0,
          get_salt_and_mac/1,
@@ -80,7 +80,7 @@
         ]).
 
 %% callbacks for replicated_dets
--export([init/1, on_save/3, on_empty/1, handle_call/4, handle_info/2]).
+-export([init/1, on_save/3, handle_call/4, handle_info/2]).
 
 -export([start_storage/0, start_replicator/0, start_auth_cache/0]).
 
@@ -108,10 +108,12 @@ versions_name() ->
 auth_cache_name() ->
     menelaus_users_cache.
 
+path() ->
+    filename:join(path_config:component_path(data, "config"), "users.dets").
+
 start_storage() ->
     Replicator = erlang:whereis(replicator_name()),
-    Path = filename:join(path_config:component_path(data, "config"), "users.dets"),
-    replicated_dets:start_link(?MODULE, [], storage_name(), Path, Replicator).
+    replicated_dets:start_link(?MODULE, [], storage_name(), path(), Replicator).
 
 get_users_version() ->
     case ns_node_disco:couchdb_node() == node() of
@@ -170,8 +172,15 @@ start_auth_cache() ->
               {get_auth_version(), get_users_version(), get_groups_version()}
       end).
 
-empty_storage() ->
-    replicated_dets:empty(storage_name()).
+delete_storage_offline() ->
+    Path = path(),
+    case file:delete(Path) of
+        ok ->
+            ?log_info("User storage ~p was deleted", [Path]);
+        {error, enoent} ->
+            ?log_info("User storage ~p does not exist. Nothing to delete",
+                      [Path])
+    end.
 
 is_deleted_user(UUID) when is_list(UUID) ->
     is_deleted_user(list_to_binary(UUID));
@@ -277,11 +286,6 @@ handle_info(complete_init, #state{base = undefined}) ->
                                                  {UUID, Identity})
                    end))),
     {noreply, #state{base = init_versions()}}.
-
-on_empty(_State) ->
-    true = ets:delete_all_objects(versions_name()),
-    true = ets:delete_all_objects(?UUID_USER_MAP),
-    #state{base = init_versions()}.
 
 maybe_update_passwordless(_Identity, _Value, _Deleted, State = #state{passwordless = undefined}) ->
     State;
