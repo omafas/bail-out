@@ -93,17 +93,11 @@ manual_failover_test_setup(SetupConfig) ->
 
     meck:new(leader_activities, [passthrough]),
     meck:expect(leader_activities, run_activity,
-        fun(_, _, Fun, _) ->
-            Fun()
-        end),
-    meck:expect(leader_activities, run_activity,
-        fun(_, _, _, Fun, _) ->
-            Fun()
+        fun(_Name, _Quorum, Body, _Opts) ->
+            Body()
         end),
     meck:expect(leader_activities, deactivate_quorum_nodes,
         fun(_) -> ok end),
-    meck:expect(leader_activities, deactivate_quorum_nodes,
-        fun(_,_,_) -> ok end),
 
 
     meck:new(chronicle),
@@ -242,7 +236,7 @@ manual_failover_t(_SetupConfig, _R) ->
 
     %% We should have gathered a quorum for the failover.
     ?assert(meck:called(leader_activities, run_activity,
-                        [default, failover, majority, '_', '_'])),
+                        [failover, majority, '_', '_'])),
 
     %% We should have completed the failover.
     Counters = chronicle_compat:get(counters, #{required => true}),
@@ -333,7 +327,7 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
 
     %% We should have gathered a quorum for the failover.
     ?assert(meck:called(leader_activities, run_activity,
-                        [default, failover, majority, '_', '_'])).
+                        [failover, majority, '_', '_'])).
 
 
 auto_failover_test_() ->
@@ -470,7 +464,7 @@ auto_failover_t(_SetupConfig, PidMap) ->
 
     %% We should have gathered a quorum for the auto_failover.
     ?assert(meck:called(leader_activities, run_activity,
-        [auto_failover, majority, '_', '_'])),
+                        [auto_failover, majority, '_', '_'])),
 
     %% We should have completed the failover.
     Counters = chronicle_compat:get(counters, #{required => true}),
@@ -570,7 +564,7 @@ auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
 
     %% We should have gathered a quorum for the auto_failover.
     ?assert(meck:called(leader_activities, run_activity,
-        [auto_failover, majority, '_', '_'])),
+                        [auto_failover, majority, '_', '_'])),
 
     %% We should have failed to fail over, and, we should now have the reported
     %% error (autofailover_unsafe) stored in the auto_failover state.
@@ -637,7 +631,7 @@ auto_failover_active_nodes_changed(
 
     %% We should have gathered a quorum for the auto_failover.
     ?assert(meck:called(leader_activities, run_activity,
-        [auto_failover, majority, '_', '_'])),
+                        [auto_failover, majority, '_', '_'])),
 
     %% We should have failed to fail over, and, we should now have the reported
     %% error (active_nodes_changed) stored in the auto_failover state.

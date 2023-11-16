@@ -72,17 +72,8 @@ start(Nodes, Options) ->
 allow_unsafe(Options) ->
     maps:get(allow_unsafe, Options, false).
 
-get_leader_activities_domain_from_options(Options) ->
-    case maps:get(auto, Options, undefined) of
-        true -> auto_failover;
-        _ -> default
-    end.
-
 run(Nodes, Options, Parent) when Nodes =/= [] ->
-    Domain = get_leader_activities_domain_from_options(Options),
-
     Result = leader_activities:run_activity(
-               Domain,
                failover, majority,
                ?cut(activity_body(Nodes, Options, Parent)),
                [{unsafe, allow_unsafe(Options)}]),
@@ -236,9 +227,7 @@ config_sync_nodes(FailedNodes) ->
     Nodes -- FailedNodes.
 
 deactivate_nodes(Nodes, Options) ->
-    Domain = get_leader_activities_domain_from_options(Options),
-
-    ok = leader_activities:deactivate_quorum_nodes(Domain, Nodes, []),
+    ok = leader_activities:deactivate_quorum_nodes(Nodes),
     case maps:get(quorum_failover, Options, undefined) of
         undefined ->
             ale:info(?USER_LOGGER, "Deactivating failed over nodes ~p",
