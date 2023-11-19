@@ -1417,11 +1417,11 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
         ]
 
     cbas_tasks = []
-    cbas_port = read_guts(guts, "cbas_http_port")
+    cbas_port = read_guts(guts, "cbas_parent_port")
     if cbas_port:
         cbas_diag_url = 'http://%s:%s/analytics/node/diagnostics' % (
             local_url_addr, cbas_port)
-        cbas_parent_port = read_guts(guts, "cbas_parent_port")
+        cbas_parent_port = cbas_port
 
         def make_cbas(statement):
             return make_cbas_statement_task(statement, user="@",
