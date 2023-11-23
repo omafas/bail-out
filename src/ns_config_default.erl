@@ -364,15 +364,6 @@ upgrade_config(Config) ->
     case ConfigVersion of
         CurrentVersion ->
             [];
-        {6,5} ->
-            [{set, {node, node(), config_version}, {6,5,1}} |
-             upgrade_config_from_6_5_to_6_5_1(Config)];
-        {6,5,1} ->
-                [{set, {node, node(), config_version}, {7,0}} |
-                 upgrade_config_from_6_5_1_to_7_0(Config)];
-        {7,0} ->
-                [{set, {node, node(), config_version}, {7,1}} |
-                 upgrade_config_from_7_0_to_7_1(Config)];
         {7,1} ->
             %% When upgrading to the latest config_version always upgrade
             %% service_ports.
@@ -400,51 +391,6 @@ upgrade_key(Key, DefaultConfig) ->
     WholeKey = {node, node(), Key},
     {value, Value} = ns_config:search([DefaultConfig], WholeKey),
     {set, WholeKey, Value}.
-
-upgrade_sub_keys(Key, SubKeys, Config, DefaultConfig) ->
-    WholeKey = {node, node(), Key},
-    {value, DefaultVal} = ns_config:search([DefaultConfig], WholeKey),
-    {value, CurrentVal} = ns_config:search(Config, WholeKey),
-    {set, WholeKey, do_upgrade_sub_keys(SubKeys, CurrentVal, DefaultVal)}.
-
-do_upgrade_sub_keys(SubKeys, {Json}, {DefaultJson}) ->
-    {do_upgrade_sub_keys(SubKeys, Json, DefaultJson)};
-do_upgrade_sub_keys(SubKeys, Props, DefaultProps) ->
-    lists:foldl(
-      fun ({delete, SubKey}, Acc) ->
-              lists:keydelete(SubKey, 1, Acc);
-          (SubKey, Acc) ->
-              Val = {SubKey, _} = lists:keyfind(SubKey, 1, DefaultProps),
-              lists:keystore(SubKey, 1, Acc, Val)
-      end, Props, SubKeys).
-
-upgrade_config_from_6_5_to_6_5_1(Config) ->
-    DefaultConfig = default(),
-    do_upgrade_config_from_6_5_to_6_5_1(Config, DefaultConfig).
-
-do_upgrade_config_from_6_5_to_6_5_1(Config, DefaultConfig) ->
-    [upgrade_sub_keys(memcached, [admin_user], Config, DefaultConfig)].
-
-upgrade_config_from_6_5_1_to_7_0(Config) ->
-    DefaultConfig = default(),
-    do_upgrade_config_from_6_5_1_to_7_0(Config, DefaultConfig).
-
-do_upgrade_config_from_6_5_1_to_7_0(Config, DefaultConfig) ->
-    [upgrade_key(memcached_config, DefaultConfig),
-     upgrade_key(memcached_defaults, DefaultConfig),
-     upgrade_sub_keys(memcached, [other_users], Config, DefaultConfig)].
-
-upgrade_config_from_7_0_to_7_1(Config) ->
-    DefaultConfig = default(),
-    do_upgrade_config_from_7_0_to_7_1(Config, DefaultConfig).
-
-do_upgrade_config_from_7_0_to_7_1(Config, DefaultConfig) ->
-    [upgrade_key(memcached_config, DefaultConfig),
-     upgrade_key(memcached_defaults, DefaultConfig),
-     %% Do targeted upgrade of specific memcached keys/subkeys to preserve
-     %% any custom changes that may have been made.
-     upgrade_sub_keys(memcached, [{delete, log_sleeptime}],
-                      Config, DefaultConfig)].
 
 upgrade_config_from_7_1_to_7_2(Config) ->
     DefaultConfig = default(),
@@ -505,33 +451,6 @@ fixup(KV) ->
     dist_manager:fixup_config(KV).
 
 -ifdef(TEST).
-upgrade_6_5_to_6_5_1_test() ->
-    Cfg = [[{some_key, some_value},
-            {{node, node(), memcached}, [{old, info}, {admin_user, old}]}]],
-
-    Default = [{{node, node(), memcached}, [{some, stuff}, {admin_user, new}]}],
-
-    ?assertMatch([{set, {node, _, memcached}, [{old, info}, {admin_user, new}]}],
-                 do_upgrade_config_from_6_5_to_6_5_1(Cfg, Default)).
-
-upgrade_6_5_1_to_7_0_test() ->
-    Cfg = [[{some_key, some_value},
-            {{node, node(), memcached}, [{old, info}, {other_users, old}]},
-            {{node, node(), memcached_defaults}, old_memcached_defaults},
-            {{node, node(), memcached_config}, old_memcached_config}]],
-
-    Default = [{{node, node(), memcached}, [{some, stuff}, {other_users, new}]},
-               {{node, node(), memcached_defaults}, [{some, stuff},
-                                                     {num_storage_threads, 4}]},
-               {{node, node(), memcached_config}, new_memcached_config}],
-
-    ?assertMatch([{set, {node, _, memcached_config}, new_memcached_config},
-                  {set, {node, _, memcached_defaults},
-                   [{some, stuff}, {num_storage_threads, 4}]},
-                  {set, {node, _, memcached},
-                   [{old, info}, {other_users, new}]}],
-                 do_upgrade_config_from_6_5_1_to_7_0(Cfg, Default)).
-
 no_upgrade_on_current_version_test() ->
     ?assertEqual([], upgrade_config([[{{node, node(), config_version}, get_current_version()}]])).
 
@@ -560,7 +479,7 @@ all_upgrades_test_() ->
 test_all_upgrades() ->
     Default = default(),
     KVs = misc:update_proplist(Default,
-                               [{{node, node(), config_version}, {6,5}}]),
+                               [{{node, node(), config_version}, {7,1}}]),
     Cfg = #config{dynamic = [KVs], uuid = <<"uuid">>},
     UpgradedCfg = ns_config:upgrade_config(Cfg, fun upgrade_config/1),
 
