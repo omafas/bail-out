@@ -64,8 +64,8 @@
          reset_count_async/0,
          is_enabled/0,
          is_enabled/1,
-         validate_kv/2,
-         validate_services_safety/3]).
+         validate_kv/3,
+         validate_services_safety/4]).
 
 %% For email alert notificatons
 -export([alert_keys/0]).
@@ -604,55 +604,13 @@ failover_nodes(Nodes, S, DownNodes, NodeStatuses, UpdateCount) ->
             process_failover_error(Error, Nodes, S)
     end.
 
+
 try_autofailover(Nodes, DownNodes, FailoverReasons) ->
-    %% No safety checks yet, first we take the quorum to prevent any material
-    %% change to the config while we perform our checks and run the failover.
-    %% Note that the domain of the activity has been set to 'auto_failover' as
-    %% we must use the same, non-default, domain for inner activities in the
-    %% failover code.
-    leader_activities:run_activity(
-      auto_failover, majority,
-      ?cut(try_auto_failover_body(Nodes, DownNodes, FailoverReasons)),
-      [{unsafe, false}]).
-
-try_auto_failover_body(Nodes, DownNodes, FailoverReasons) ->
-    %% Sync the config before we start, we need to be up to date with the rest
-    %% of the cluster. It could be the case that we were partitioned off
-    %% immediately before this and some other orchestrator has taken action that
-    %% we would not otherwise have seen.
-    Timeout = ?get_timeout(failover_config_pull, 10000),
-    UpNodes = ns_cluster_membership:get_nodes_with_status(_ =/=
-        inactiveFailed),
-    SyncNodes = UpNodes -- Nodes,
-    case chronicle_compat:config_sync(pull, SyncNodes, Timeout) of
-        ok ->
-            ok;
-        E ->
-            ?log_error("Config pull from ~p failed: ~p",
-                [SyncNodes, E]),
-            erlang:exit(config_sync_failed)
-    end,
-
-    %% It could be the case that Nodes (to failover) or DownNodes are no longer
-    %% active nodes if we have just recovered from a network partition and
-    %% another node orchestrated some failover. We shouldn't attempt to fail
-    %% over a non-active node, or use inactive DownNodes in safety checks, so
-    %% double check that things are as we believe they ought to be here.
-    UpToDateActiveNodes = ns_cluster_membership:active_nodes(),
-    case Nodes -- UpToDateActiveNodes =:= []  andalso
-         DownNodes -- UpToDateActiveNodes =:= [] of
-        true ->
-            %% All of these nodes are still active, lets continue
-            validate_safety_and_try_auto_failover(Nodes, DownNodes,
-                                                  FailoverReasons);
-        false -> active_nodes_changed
-    end.
-
-validate_safety_and_try_auto_failover(Nodes, DownNodes, FailoverReasons) ->
     case ns_cluster_membership:service_nodes(Nodes, kv) of
         [] ->
+            Snapshot = failover:get_snapshot(),
             {ValidNodes, UnsafeNodes} =
-                validate_services_safety(Nodes, DownNodes, []),
+                validate_services_safety(Snapshot, Nodes, DownNodes, []),
             case ValidNodes of
                 [] ->
                     {ok, UnsafeNodes};
@@ -766,11 +724,7 @@ process_failover_error(stopped_by_user, Nodes, S) ->
     report_failover_error(stopped_by_user, "Stopped by user.", Nodes, S);
 process_failover_error(last_node, Nodes, S) ->
     report_failover_error(last_node, "Could not fail over the final active "
-                                     "node running a service.", Nodes, S);
-process_failover_error(active_nodes_changed, Nodes, S) ->
-    report_failover_error(active_nodes_changed,
-                          "The list of active nodes changed whilst processing "
-                          "the failover.", Nodes, S).
+                                     "node running a service.", Nodes, S).
 
 report_failover_error(Flag, ErrMsg, Nodes, State) ->
     case should_report(Flag, State) of
@@ -1041,21 +995,23 @@ restart_on_compat_mode_change() ->
 send_tick_msg() ->
     erlang:send_after(get_tick_period(), self(), tick).
 
-validate_kv(FailoverNodes, DownNodes) ->
-    case ns_cluster_membership:service_nodes(FailoverNodes, kv) of
+validate_kv(Snapshot, FailoverNodes, DownNodes) ->
+    case ns_cluster_membership:service_nodes(Snapshot, FailoverNodes, kv) of
         [] ->
             ok;
         FailoverKVNodes ->
-            case validate_kv_safety(FailoverKVNodes) of
+            case validate_kv_safety(Snapshot, FailoverKVNodes) of
                 ok ->
-                    validate_durability_failover(FailoverKVNodes, DownNodes);
+                    validate_durability_failover(Snapshot, FailoverKVNodes,
+                                                 DownNodes);
                 Error ->
                     Error
             end
     end.
 
-validate_kv_safety(Nodes) ->
-    case validate_membase_buckets(validate_bucket_safety(_, _, Nodes)) of
+validate_kv_safety(Snapshot, Nodes) ->
+    case validate_membase_buckets(Snapshot,
+                                  validate_bucket_safety(_, _, Nodes)) of
         [] ->
             ok;
         UnsafeBuckets ->
@@ -1069,7 +1025,7 @@ validate_bucket_safety(_BucketName, Map, Nodes) ->
                       false
               end, mb_map:promote_replicas(Map, Nodes)).
 
-validate_membase_buckets(ValidateFun) ->
+validate_membase_buckets(Snapshot, ValidateFun) ->
     lists:filtermap(
       fun ({BucketName, BucketConfig}) ->
               case ns_bucket:bucket_type(BucketConfig) of
@@ -1083,18 +1039,20 @@ validate_membase_buckets(ValidateFun) ->
                   memcached ->
                       false
               end
-      end, ns_bucket:get_buckets()).
+      end, ns_bucket:get_buckets(Snapshot)).
 
-validate_durability_failover(FailoverNodes, DownNodes) ->
+validate_durability_failover(Snapshot, FailoverNodes, DownNodes) ->
     ShouldPreserveDurabilityMajority = should_preserve_durability_majority(),
     case validate_membase_buckets(
-        validate_nodes_up_for_durability_failover_for_bucket(_, _,
-                                                             FailoverNodes,
-                                                             DownNodes)) of
+           Snapshot,
+           validate_nodes_up_for_durability_failover_for_bucket(_, _,
+                                                                FailoverNodes,
+                                                                DownNodes)) of
         [] when ShouldPreserveDurabilityMajority ->
             case validate_membase_buckets(
-                validate_durability_majority_preserved_for_bucket(
-                    _, _, FailoverNodes)) of
+                   Snapshot,
+                   validate_durability_majority_preserved_for_bucket(
+                     _, _, FailoverNodes)) of
                 [] ->
                     ok;
                 UnsafeBuckets ->
@@ -1137,8 +1095,8 @@ has_safe_check(index) ->
 has_safe_check(_) ->
     false.
 
-service_safety_check(Service, DownNodes, UUIDDict) ->
-    ActiveNodes = ns_cluster_membership:service_active_nodes(Service),
+service_safety_check(Snapshot, Service, DownNodes, UUIDDict) ->
+    ActiveNodes = ns_cluster_membership:service_active_nodes(Snapshot, Service),
     case ActiveNodes -- DownNodes of
         [] ->
             {error, mail_too_small};
@@ -1165,26 +1123,29 @@ service_safety_check(Service, DownNodes, UUIDDict) ->
             end
     end.
 
-get_service_safety(Service, DownNodes, UUIDDict, Cache) ->
+get_service_safety(Snapshot, Service, DownNodes, UUIDDict, Cache) ->
     case has_safe_check(Service) of
         true ->
             case maps:find(Service, Cache) of
                 {ok, Res} ->
                     {Res, Cache};
                 error ->
-                    Res = service_safety_check(Service, DownNodes, UUIDDict),
+                    Res = service_safety_check(Snapshot, Service, DownNodes,
+                                               UUIDDict),
                     {Res, maps:put(Service, Res, Cache)}
             end;
         false ->
             {ok, Cache}
     end.
 
-validate_services_safety([], _DownNodes, _UUIDDict, Cache) ->
+validate_services_safety(_Snapshot, [], _DownNodes, _UUIDDict, Cache) ->
     {ok, Cache};
-validate_services_safety([Service | Rest], DownNodes, UUIDDict, Cache) ->
-    case get_service_safety(Service, DownNodes, UUIDDict, Cache) of
+validate_services_safety(Snapshot, [Service | Rest], DownNodes, UUIDDict,
+                         Cache) ->
+    case get_service_safety(Snapshot, Service, DownNodes, UUIDDict, Cache) of
         {ok, NewCache} ->
-            validate_services_safety(Rest, DownNodes, UUIDDict, NewCache);
+            validate_services_safety(Snapshot, Rest, DownNodes, UUIDDict,
+                                     NewCache);
         {{error, Error}, NewCache} ->
             {{error, Error}, Service, NewCache}
     end.
@@ -1194,18 +1155,19 @@ validate_services_safety([Service | Rest], DownNodes, UUIDDict, Cache) ->
 %% Note: the service safety check may involve an RPC to
 %%       the service on a remote node.
 %% Note: NodesToFailover should be a subset of DownNodes.
--spec validate_services_safety([node()], [node()], [node()]) ->
-                                      {[node()], [{node(), {atom(), list()}}]}.
-validate_services_safety(NodesToFailover, DownNodes, KVNodes) ->
+-spec validate_services_safety(map(), [node()], [node()], [node()]) ->
+          {[node()], [{node(), {atom(), list()}}]}.
+validate_services_safety(Snapshot, NodesToFailover, DownNodes, KVNodes) ->
     NonKVNodes = NodesToFailover -- KVNodes,
     UUIDDict = ns_config:get_node_uuid_map(ns_config:latest()),
 
     {ValidNodes, UnsafeNodes, _} =
         lists:foldl(
           fun (Node, {Nodes, Errors, Cache}) ->
-                  Services = ns_cluster_membership:node_services(Node),
-                  case validate_services_safety(Services, DownNodes, UUIDDict,
-                                                Cache) of
+                  Services = ns_cluster_membership:node_services(Snapshot,
+                                                                 Node),
+                  case validate_services_safety(Snapshot, Services, DownNodes,
+                                                UUIDDict, Cache) of
                       {ok, NewCache} ->
                           {[Node | Nodes], Errors, NewCache};
                       {{error, Error}, Service, NewCache} ->

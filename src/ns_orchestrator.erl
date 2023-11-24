@@ -690,9 +690,10 @@ idle({failover, Nodes, AllowUnsafe}, From, _State) ->
     handle_start_failover(Nodes, AllowUnsafe, From, true, hard_failover, #{});
 idle({start_failover, Nodes, AllowUnsafe}, From, _State) ->
     handle_start_failover(Nodes, AllowUnsafe, From, false, hard_failover, #{});
-idle({try_autofailover, Nodes, #{down_nodes := DownNodes} = Options}, From,
-     _State) ->
-    case auto_failover:validate_kv(Nodes, DownNodes) of
+idle({try_autofailover, Nodes, #{down_nodes := DownNodes} = Options},
+     From, _State) ->
+    Snapshot = failover:get_snapshot(),
+    case auto_failover:validate_kv(Snapshot, Nodes, DownNodes) of
         {unsafe, UnsafeBuckets} ->
             {keep_state_and_data,
              [{reply, From, {autofailover_unsafe, UnsafeBuckets}}]};

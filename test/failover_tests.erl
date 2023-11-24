@@ -350,10 +350,7 @@ auto_failover_test_() ->
         {"Auto failover",
             fun auto_failover_t/2},
         {"Auto failover post network partition stale config test",
-            fun auto_failover_post_network_partition_stale_config/2},
-        {"Auto failover post network partition stale config active nodes "
-         " changed test",
-            fun auto_failover_active_nodes_changed/2}
+            fun auto_failover_post_network_partition_stale_config/2}
     ],
 
     %% foreachx here to let us pass parameters to setup.
@@ -462,10 +459,6 @@ auto_failover_t(_SetupConfig, PidMap) ->
     %% auto-failover provided we've ticked enough.
     gen_server:call(AutoFailoverPid, {disable_auto_failover, []}),
 
-    %% We should have gathered a quorum for the auto_failover.
-    ?assert(meck:called(leader_activities, run_activity,
-                        [auto_failover, majority, '_', '_'])),
-
     %% We should have completed the failover.
     Counters = chronicle_compat:get(counters, #{required => true}),
     ?assertNotEqual(undefined,
@@ -562,78 +555,7 @@ auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
     %% auto-failover provided we've ticked enough.
     gen_server:call(AutoFailoverPid, {disable_auto_failover, []}),
 
-    %% We should have gathered a quorum for the auto_failover.
-    ?assert(meck:called(leader_activities, run_activity,
-                        [auto_failover, majority, '_', '_'])),
-
     %% We should have failed to fail over, and, we should now have the reported
     %% error (autofailover_unsafe) stored in the auto_failover state.
     ?assertEqual([autofailover_unsafe],
-        get_auto_failover_reported_errors(AutoFailoverPid)).
-
-%% Similar to the stale config test, it is also possible for us to find that the
-%% list of nodes that we are attempting to fail over, or the list of nodes that
-%% we think are down, have changed underneath us to become not active. In such a
-%% case we should abort the auto-failover as we do not need to fail over
-%% inactive nodes, and we should not assume that the nodes we consider Down are
-%% active in our safety checks. The next failover should pick up the state
-%% changes and do the right thing.
-auto_failover_active_nodes_changed(
-    SetupConfig, PidMap) ->
-    #{auto_failover := AutoFailoverPid} = PidMap,
-
-    %% Part of our test, we should not have any reported errors yet.
-    ?assertEqual([],
-        get_auto_failover_reported_errors(AutoFailoverPid)),
-
-    %% On config sync we find our updates config
-    meck:expect(chronicle_compat, config_sync,
-        fun(_,_,_) ->
-            %% Now sync the config and we realise that the partition without
-            %% quorum has all been failed over...
-            OldNodes = maps:get(nodes, SetupConfig),
-
-            PartitionWithoutQuorum =
-                maps:get(partition_without_quorum, SetupConfig),
-            PartitionWithQuorum = maps:get(partition_with_quorum, SetupConfig),
-
-            NowInactiveNodes =
-                PartitionWithoutQuorum ++ [lists:last(PartitionWithQuorum)],
-
-            NewNodes = lists:foldl(
-                fun({Node, Services}, Acc) ->
-                    Acc#{
-                        Node => {inactiveFailed, Services}
-                    }
-                end,
-                OldNodes, NowInactiveNodes),
-
-            setup_node_config(NewNodes),
-            setup_bucket_config(
-                maps:get(buckets, SetupConfig)),
-            ok
-        end),
-
-    %% Tick auto-failover 4 times. We could wait long enough to do the auto
-    %% failover but we can speed this test up a bit by manually ticking. This
-    %% amount of ticks should be the minimum to process the auto-failover.
-    lists:foreach(
-        fun(_) ->
-            AutoFailoverPid ! tick
-        end,
-        lists:seq(0, 3)),
-
-    %% Disable auto-failover, this gen_server call will let us finish processing
-    %% the ticks that we have queued above (which will run the auto-failover to
-    %% completion), before returning which will mean that we've attempted an
-    %% auto-failover provided we've ticked enough.
-    gen_server:call(AutoFailoverPid, {disable_auto_failover, []}),
-
-    %% We should have gathered a quorum for the auto_failover.
-    ?assert(meck:called(leader_activities, run_activity,
-                        [auto_failover, majority, '_', '_'])),
-
-    %% We should have failed to fail over, and, we should now have the reported
-    %% error (active_nodes_changed) stored in the auto_failover state.
-    ?assertEqual([active_nodes_changed],
         get_auto_failover_reported_errors(AutoFailoverPid)).
