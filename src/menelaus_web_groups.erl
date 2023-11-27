@@ -32,9 +32,7 @@ build_group_uri(GroupPList) ->
 handle_server_groups(Req) ->
     menelaus_util:assert_is_enterprise(),
     Groups = ns_cluster_membership:server_groups(),
-    IncludeOtpCookie = menelaus_auth:has_permission({[admin, internal], all},
-                                                    Req),
-    Ctx = menelaus_web_node:get_context(Req, IncludeOtpCookie, unstable),
+    Ctx = menelaus_web_node:get_context(Req, false, unstable),
     Fun = menelaus_web_node:build_nodes_info_fun(Ctx),
     J = [begin
              UUIDBin = proplists:get_value(uuid, G),

@@ -23,6 +23,7 @@
 -export([handle_node/2,
          build_full_node_info/1,
          build_full_node_info/2,
+         build_full_node_info/3,
          build_memory_quota_info/1,
          build_nodes_info_fun/1,
          build_nodes_info/1,
@@ -199,7 +200,7 @@ handle_node(S, Req) when is_list(S) ->
 handle_node(Node, Req) when is_atom(Node) ->
     case lists:member(Node, ns_node_disco:nodes_wanted()) of
         true ->
-            Result = build_full_node_info(Req, Node, false),
+            Result = build_full_node_info(Req, Node),
             reply_json(Req, Result);
         false ->
             reply_json(Req, <<"Node is unknown to this cluster.">>, 404)
@@ -237,7 +238,7 @@ build_full_node_info(Node) ->
     build_full_node_info(undefined, Node).
 
 build_full_node_info(Req, Node) ->
-    build_full_node_info(Req, Node, true).
+    build_full_node_info(Req, Node, false).
 
 build_full_node_info(Req, Node, IncludeOtpCookie) ->
     Ctx = get_context(Req, IncludeOtpCookie, unstable),

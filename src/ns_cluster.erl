@@ -1209,7 +1209,7 @@ get_request_target(NodeKVList, Scheme) ->
 do_add_node_engaged_inner(ChronicleInfo, {Scheme, Hostname, Port},
                           OtpNode, HiddenAuth, Services) ->
     {struct, MyNodeKVList} =
-        menelaus_web_node:build_full_node_info(node()),
+        menelaus_web_node:build_full_node_info(undefined, node(), true),
     Struct = {struct, [{<<"targetNode">>, OtpNode},
                        {<<"requestedServices">>, Services}
                        | MyNodeKVList] ++
