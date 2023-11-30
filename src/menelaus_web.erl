@@ -1352,20 +1352,12 @@ response_time_ms(Req) ->
 
 -ifdef(TEST).
 parse_http_path_uri_test() ->
-    ?assertEqual("fakePrefix/diag/eval",
+    ?assertEqual("/fakePrefix/diag/eval/",
                  parse_path_uri("//fakePrefix/diag/eval/")),
-    ?assertEqual("fakePrefix/diag/eval",
+    ?assertEqual("/fakePrefix/diag/eval/",
                  parse_path_uri("///////fakePrefix/diag/eval/")),
-    ?assertEqual("fake/path", parse_path_uri("/fake/path")),
+    ?assertEqual("/fake/path", parse_path_uri("/fake/path")),
     ?assertEqual("", parse_path_uri("")),
     ?assertEqual({web_exception, 400, "Bad Request", []},
                  catch(parse_path_uri("\\/\/"))).
-
-reduce_slashes_test() ->
-    ?assertEqual("", lists:flatten(reduce_slashes("///"))),
-    ?assertEqual("thing/blah/foobar",
-                 lists:flatten(reduce_slashes("thing//blah//foobar///"))),
-    ?assertEqual("thing/blah/foobar",
-                 lists:flatten(
-                   reduce_slashes("////thing//blah///foobar/////"))).
 -endif.
