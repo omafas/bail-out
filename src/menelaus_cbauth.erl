@@ -40,22 +40,30 @@
 -define(VERSION_1, "v1").
 
 handle_rpc_connect(?VERSION_1, Label, Req) ->
-    case ns_cluster_membership:get_cluster_membership(node()) of
-        active ->
-            validator:handle(
-              fun (Params) ->
-                      json_rpc_connection_sup:handle_rpc_connect(
-                        Label ++ "-auth",
-                        misc:update_proplist(
-                          Params, [{type, auth}, {version, ?VERSION_1}]), Req)
-              end, Req, qs,
-              [validator:integer(heartbeat, 1, infinity, _),
-               validator:unsupported(_)]);
-        Other ->
-            ?log_debug(
-               "Reject the revrpc connection from ~s because node is ~p",
-               [Label, Other]),
-            menelaus_util:reply_text(Req, "Node is not active", 503)
+    case ns_config_auth:is_system_provisioned() of
+        true ->
+            case ns_cluster_membership:get_cluster_membership(node()) of
+                active ->
+                    validator:handle(
+                      fun (Params) ->
+                              json_rpc_connection_sup:handle_rpc_connect(
+                                Label ++ "-auth",
+                                misc:update_proplist(
+                                  Params,
+                                  [{type, auth}, {version, ?VERSION_1}]), Req)
+                      end, Req, qs,
+                      [validator:integer(heartbeat, 1, infinity, _),
+                       validator:unsupported(_)]);
+                Other ->
+                    ?log_debug(
+                       "Reject the revrpc connection from ~s because node is "
+                       "~p", [Label, Other]),
+                    menelaus_util:reply_text(Req, "Node is not active", 503)
+            end;
+        false ->
+            ?log_debug("Reject the revrpc connection from ~s because the "
+                       "cluster is not provisioned", [Label]),
+            menelaus_util:reply_text(Req, "Cluster is not provisioned", 503)
     end;
 handle_rpc_connect(_, _Label, Req) ->
     menelaus_util:reply_text(Req, "Version is not supported", 400).
