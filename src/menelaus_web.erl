@@ -1210,19 +1210,15 @@ perform_action(Req, {ui, IsSSL, Fun, Args}) ->
 perform_action(Req, {Permission, Fun}) ->
     perform_action(Req, {Permission, Fun, []});
 perform_action(Req, {Permission, Fun, Args}) ->
+    check_uuid(Req),
     {RV, Headers} = menelaus_auth:verify_rest_auth(Req, Permission),
     NewReq = menelaus_auth:apply_headers(Req, Headers),
     case RV of
         allowed ->
             ReqBody =
                 fun () ->
-                        case get_bucket_id(Permission) of
-                            false ->
-                                check_uuid(Fun, Args, NewReq);
-                            Bucket ->
-                                check_bucket_uuid(Bucket, fun check_uuid/3,
-                                                  [Fun, Args], NewReq)
-                        end
+                        check_bucket_uuid(get_bucket_id(Permission), NewReq),
+                        erlang:apply(Fun, Args ++ [NewReq])
                 end,
             user_request_throttler:request(NewReq, ReqBody);
         auth_failure ->
@@ -1237,7 +1233,7 @@ perform_action(Req, {Permission, Fun, Args}) ->
             menelaus_util:reply_json(NewReq, Msg, 503)
     end.
 
-check_uuid(F, Args, Req) ->
+check_uuid(Req) ->
     ReqUUID0 = proplists:get_value("uuid", mochiweb_request:parse_qs(Req)),
     case ReqUUID0 =/= undefined of
         true ->
@@ -1249,32 +1245,27 @@ check_uuid(F, Args, Req) ->
             %% the request go through. But, if ReqUUID is not-empty
             %% and UUID is empty then we will retrun 404 error.
             %%
-            case ReqUUID =:= UUID of
-                true ->
-                    erlang:apply(F, Args ++ [Req]);
-                false ->
-                    reply_text(Req, "Cluster uuid does not match the requested.\r\n", 404)
-            end;
+            ReqUUID =:= UUID orelse
+                menelaus_util:web_exception(
+                  404, "Cluster uuid does not match the requested.\r\n");
         false ->
-            erlang:apply(F, Args ++ [Req])
+            ok
     end.
 
-check_bucket_uuid(Bucket, F, Args, Req) ->
+check_bucket_uuid(false, _Req) ->
+    ok;
+check_bucket_uuid(Bucket, Req) ->
     case ns_bucket:uuid(Bucket, direct) of
         not_present ->
             ?log_debug("Attempt to access non existent bucket ~p", [Bucket]),
-            reply_not_found(Req);
+            menelaus_util:web_exception(
+              404, "Attempt to access non existent bucket");
         UUID ->
             ReqUUID = proplists:get_value("bucket_uuid",
                                           mochiweb_request:parse_qs(Req)),
-            case ReqUUID =:= undefined orelse
-                list_to_binary(ReqUUID) =:= UUID of
-                true ->
-                    erlang:apply(F, Args ++ [Req]);
-                false ->
-                    reply_text(
-                      Req, "Bucket uuid does not match the requested.\r\n", 404)
-            end
+            ReqUUID =:= undefined orelse list_to_binary(ReqUUID) =:= UUID
+                orelse menelaus_util:web_exception(
+                         404, "Bucket uuid does not match the requested.\r\n")
     end.
 
 %% Returns an UUID from the ns_config
