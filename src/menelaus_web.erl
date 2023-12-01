@@ -161,7 +161,10 @@ webconfig(Prop) ->
 parse_path_uri(RawPath) ->
     RawPathSingleSlash =  lists:flatten(mochiweb_util:normalize_path(RawPath)),
     case uri_string:parse(RawPathSingleSlash) of
-        #{path := P} -> P;
+        #{path := "/" ++ P} -> P;
+        #{} ->
+            ?log_debug("Invalid path in: ~p", [RawPath]),
+            menelaus_util:web_exception(400, "Bad Request");
         {error, _, _} = Error ->
             ?log_debug("Invalid uri in http request: ~p, "
                        "error: ~p", [RawPath, Error]),
@@ -1352,12 +1355,13 @@ response_time_ms(Req) ->
 
 -ifdef(TEST).
 parse_http_path_uri_test() ->
-    ?assertEqual("/fakePrefix/diag/eval/",
+    ?assertEqual("fakePrefix/diag/eval/",
                  parse_path_uri("//fakePrefix/diag/eval/")),
-    ?assertEqual("/fakePrefix/diag/eval/",
+    ?assertEqual("fakePrefix/diag/eval/",
                  parse_path_uri("///////fakePrefix/diag/eval/")),
-    ?assertEqual("/fake/path", parse_path_uri("/fake/path")),
-    ?assertEqual("", parse_path_uri("")),
+    ?assertEqual("fake/path", parse_path_uri("/fake/path")),
+    ?assertEqual({web_exception, 400, "Bad Request", []},
+                 catch(parse_path_uri(""))),
     ?assertEqual({web_exception, 400, "Bad Request", []},
                  catch(parse_path_uri("\\/\/"))).
 -endif.
