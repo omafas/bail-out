@@ -249,7 +249,6 @@ get_snapshot() ->
 %% effect immediately.
 failover(Nodes, Options) ->
     Snapshot = get_snapshot(),
-    #{down_nodes := DownNodes} = Options,
 
     %% Whilst we also check this in ns_orchestrator in the auto_failover path,
     %% it could be the case that the config has materially changed before we
@@ -261,6 +260,7 @@ failover(Nodes, Options) ->
     %% we can abort early...
     case maps:find(auto, Options) of
         {ok, true} ->
+            #{down_nodes := DownNodes} = Options,
             case auto_failover:validate_kv(Snapshot, Nodes, DownNodes) of
                 ok -> continue;
                 {unsafe, Buckets} ->
