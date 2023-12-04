@@ -221,8 +221,7 @@ manual_failover_t(_SetupConfig, _R) ->
         allow_unsafe => false,
         %% auto failover
         auto => false,
-        failover_reasons => "ok",
-        down_nodes => NodesToFailOver
+        failover_reasons => "ok"
     },
 
     ?debugMsg("Starting failover test"),
@@ -303,8 +302,7 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
         allow_unsafe => false,
         %% auto failover
         auto => false,
-        failover_reasons => "ok",
-        down_nodes => NodesToFailOver
+        failover_reasons => "ok"
     },
 
     ?debugMsg("Starting failover test"),
