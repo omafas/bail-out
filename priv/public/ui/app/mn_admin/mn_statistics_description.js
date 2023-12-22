@@ -2144,9 +2144,9 @@ function get65CompatDesc() {
             desc:"Number of replicated mutations per second. Per-replication. (measured from rate_replicated)"
           },
           "wtavg_docs_latency": {
-            unit: "millisecond",
+            unit: "second",
             title: "XDCR Doc Batch Latency",
-            desc: "Weighted average latency in ms of sending replicated mutations to remote cluster. Per-replication. (measured from wtavg_docs_latency)"
+            desc: "Weighted average latency in seconds of sending replicated mutations to remote cluster. Per-replication. (measured from wtavg_docs_latency)"
           },
           "wtavg_meta_latency": {
             unit: "millisecond",
