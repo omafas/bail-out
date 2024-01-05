@@ -27,7 +27,7 @@ class ClusterRequirements:
                  memsize=None, min_memsize=None, num_connected=None,
                  min_num_connected=None, afamily=None, services=None,
                  master_password_state=None, num_vbuckets=None,
-                 encryption=None):
+                 encryption=None, buckets=None):
 
         def maybe(ReqClass, *args):
             if all(x is None for x in args):
@@ -46,7 +46,8 @@ class ClusterRequirements:
                 'master_password_state': maybe(MasterPasswordState,
                                                master_password_state),
                 'num_vbuckets': maybe(NumVbuckets, num_vbuckets),
-                'encryption': maybe(N2nEncryption, encryption)
+                'encryption': maybe(N2nEncryption, encryption),
+                'buckets': maybe(Buckets, buckets)
             }
 
     def __str__(self):
@@ -92,10 +93,8 @@ class ClusterRequirements:
         return {
                 'protocol': "ipv4",
                 'num_nodes': start_args['num_nodes'],
-                # We don't want to create a bucket by default as we can rely on
-                # test sets creating a bucket if needed in setup, and eventually
-                # with an explicit cluster requirement, to offload bucket
-                # creation and teardown to the test framework
+                # We don't want to create a bucket by default as we rely on
+                # testset requirements to handle bucket creation and teardown
                 'create_bucket': False
                }
 
@@ -196,7 +195,8 @@ class ClusterRequirements:
                             ('services', Services),
                             ('master_password_state', MasterPasswordState),
                             ('num_vbuckets', NumVbuckets),
-                            ('encryption', N2nEncryption)]
+                            ('encryption', N2nEncryption),
+                            ('buckets', Buckets)]
         for req_name, req_class in generation_order:
             if self.requirements[req_name] is None:
                 new_req = req_class.random(req_dict)
@@ -645,6 +645,68 @@ class N2nEncryption(Requirement):
         else:
             encryption = random.choice([True, False])
         return N2nEncryption(encryption)
+
+
+# Specify a list of buckets required by a testset. Any buckets from other
+# testsets will be removed, unless this requirement is not specified.
+class Buckets(Requirement):
+
+    def __init__(self, buckets):
+        super().__init__(buckets=buckets)
+        self.buckets = buckets
+
+    @staticmethod
+    def check_prop(prop, bucket_info, expected_value):
+        if prop == "ramQuota":
+            # Convert both to int, to avoid confusing to debug issues when using
+            # a string in the requirement
+            return (int(bucket_info['quota']['rawRAM'] / 1_048_576) ==
+                    int(expected_value))
+        else:
+            return bucket_info[prop] == expected_value
+
+    def is_met(self, cluster):
+        buckets = testlib.get_succ(cluster, "/pools/default/buckets").json()
+        missing_buckets = self.buckets
+        undesired_buckets = []
+        for bucket in buckets:
+            desired = False
+            for desired_bucket in self.buckets:
+                if all(self.check_prop(prop, bucket, value)
+                       for prop, value in desired_bucket.items()):
+                    missing_buckets.remove(desired_bucket)
+                    desired = True
+            if not desired:
+                undesired_buckets.append(bucket)
+
+        if len(undesired_buckets) > 0:
+            print(f"Undesired bucket(s) found: {undesired_buckets}.\n"
+                  f"Desired: {self.buckets}")
+            return False
+        if len(missing_buckets) > 0:
+            print(f"Missing desired bucket(s): {missing_buckets}.\n"
+                  f"Found: {buckets}")
+            return False
+        return True
+
+    def can_be_met(self):
+        return True
+
+    def make_met(self, cluster):
+        testlib.delete_all_buckets(cluster)
+        for bucket in self.buckets:
+            cluster.create_bucket(bucket, sync=True)
+
+    @staticmethod
+    def random(req_dict):
+        ram_quota = req_dict.get("memsize")
+        if ram_quota is None:
+            # Default to 100MB if the cluster doesn't have a specified memsize
+            ram_quota = 100
+        return Buckets(
+            random.choice([[],
+                           [{"name": "default",
+                             "ramQuota": ram_quota}]]))
 
 
 # Intersects two limits where each limit is defined either by exact match,
