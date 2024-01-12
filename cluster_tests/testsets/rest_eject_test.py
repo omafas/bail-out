@@ -39,8 +39,20 @@ class RestEjectTest(testlib.BaseTestSet):
         data = {"otpNode": f"{otp_name}"}
         self.cluster.eject_node(failover_node, self.cluster.connected_nodes[1])
         self.cluster.rebalance(wait=True)
+
+        # Add node back in
         self.cluster.add_node(failover_node)
         self.cluster.rebalance(wait=True)
+
+        # Self eject the node after failing it over again
+        self.cluster.failover_node(failover_node, graceful=False)
+        self.cluster.eject_node(failover_node, failover_node)
+        self.cluster.rebalance(wait=True)
+
+        # Add node back in
+        self.cluster.add_node(failover_node)
+        self.cluster.rebalance(wait=True)
+
 
         # The previously failed over ejected node was added back in
         # and should not be allowed to be ejected because it is active

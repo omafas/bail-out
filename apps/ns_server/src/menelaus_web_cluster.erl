@@ -614,7 +614,7 @@ do_eject_myself_rec(0, _) ->
     exit(self_eject_failed);
 do_eject_myself_rec(IterationsLeft, Period) ->
     MySelf = node(),
-    case ns_node_disco:nodes_actual() of
+    case catch ns_node_disco:nodes_actual() of
         [MySelf] -> ok;
         _ ->
             timer:sleep(Period),
@@ -679,9 +679,12 @@ do_handle_eject_post(Req, OtpNode) ->
 
     case OtpNode =:= node() of
         true ->
-            do_eject_myself(),
-            ns_audit:remove_node(Req, node()),
-            reply(Req, 200);
+            menelaus_util:survive_web_server_restart(
+                fun() ->
+                    ns_audit:remove_node(Req, node()),
+                    do_eject_myself(),
+                    reply(Req, 200)
+                end);
         false ->
             case lists:member(OtpNode, ns_node_disco:nodes_wanted()) of
                 true ->
