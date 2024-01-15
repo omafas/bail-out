@@ -35,6 +35,10 @@ init(StageNodes) ->
     PerStageProgress = dict:from_list(init_per_stage_progress(StageNodes)),
     Aggregated = aggregate(PerStageProgress),
     StageInfo = init_per_stage_info(StageNodes),
+    lists:foreach(
+      fun ({Stage, _Nodes}) ->
+              notify_progress(Stage, 0)
+      end, StageNodes),
     #stage_info{per_stage_progress = PerStageProgress,
                 aggregated = Aggregated,
                 per_stage_info = StageInfo}.
@@ -54,6 +58,7 @@ update_progress(
   #stage_info{per_stage_progress = OldPerStageProgress} = StageInfo) ->
     NewPerStageProgress = do_update_progress(Stage, StageProgress,
                                              OldPerStageProgress),
+    notify_progress(Stage, NewPerStageProgress),
     Aggregated = aggregate(NewPerStageProgress),
     StageInfo#stage_info{
       per_stage_progress = NewPerStageProgress,
@@ -66,6 +71,32 @@ do_update_progress(Stage, StageProgress, PerStage) ->
                                            New
                                    end, OldStageProgress, StageProgress)
                 end, StageProgress, PerStage).
+
+notify_progress(Stage, Progress) when is_number(Progress) ->
+    %% Notify with no expiration so that we don't get gaps when progress isn't
+    %% made for >= 3 mins
+    ns_server_stats:notify_gauge(
+      {rebalance_progress,
+       [{stage, Stage}]},
+      Progress);
+notify_progress(Stage, PerStageProgress) ->
+    case dict:find(Stage, PerStageProgress) of
+        error ->
+            0;
+        {ok, NewStageProgress} ->
+            SummedProgress =
+                dict:fold(
+                  fun (_Node, NodeProgress, Sum) ->
+                          case NodeProgress of
+                              %% Some stages report sub-stage with the progress
+                              {_SubStage, P} when is_number(P) -> Sum + P;
+                              P when is_number(P) -> Sum + P
+                          end
+                  end, 0, NewStageProgress),
+
+            Progress = SummedProgress / dict:size(NewStageProgress),
+            notify_progress(Stage, Progress)
+    end.
 
 aggregate(PerStage) ->
     TmpAggr = dict:fold(
@@ -249,5 +280,10 @@ maybe_create_new_stage_progress(
                 init_per_stage_progress([{ProgressStage, Nodes}]),
             update_progress(ProgressStage, Dict, StageInfo)
     end;
+maybe_create_new_stage_progress([Stage], completed, StageInfo) ->
+    %% Make sure that completed stages get their progress set to 100%.
+    %% [Stage] ensures that we ignore sub-stages
+    notify_progress(Stage, 1),
+    StageInfo;
 maybe_create_new_stage_progress(_Stage, _Info, StageInfo) ->
     StageInfo.

@@ -940,6 +940,19 @@
             }
         ]
     },
+    "cm_rebalance_progress": {
+        "type": "gauge",
+        "help": "Estimate of the rebalance progress (0 - 1) for each stage. Only reported by the orchestrator node.",
+        "added": "7.2.6",
+        "stability": "volatile",
+        "unit": "ratio",
+        "labels": [
+            {
+                "name": "stage",
+                "help": "Service that the progress is for"
+            }
+        ]
+    },
     "cm_request_hibernates_total": {
         "type": "counter",
         "help": "Number of times requests were hibernated",
