@@ -1144,6 +1144,7 @@ def make_os_tasks():
         LinuxTask("NUMA data", "numactl --show"),
         LinuxTask("NUMA data", "cat /sys/devices/system/node/node*/numastat"),
         UnixTask("Kernel log buffer", "dmesg -T || dmesg -H || dmesg"),
+        LinuxTask("Collect dmesg from journalctl", "journalctl -ko short-monotonic --no-hostname"),
         LinuxTask("Transparent Huge Pages data",
                   "cat /sys/kernel/mm/transparent_hugepage/enabled"),
         LinuxTask("Transparent Huge Pages data",
