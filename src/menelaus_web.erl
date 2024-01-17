@@ -158,17 +158,13 @@ webconfig() ->
 webconfig(Prop) ->
     proplists:get_value(Prop, webconfig()).
 
-parse_path_uri(RawPath) ->
-    RawPathSingleSlash =  lists:flatten(mochiweb_util:normalize_path(RawPath)),
-    case uri_string:parse(RawPathSingleSlash) of
-        #{path := "/" ++ P} -> P;
-        #{} ->
-            ?log_debug("Invalid path in: ~p", [RawPath]),
-            menelaus_util:web_exception(400, "Bad Request");
-        {error, _, _} = Error ->
-            ?log_debug("Invalid uri in http request: ~p, "
-                       "error: ~p", [RawPath, Error]),
-            menelaus_util:web_exception(400, "Bad Request")
+parse_path(RawPath) ->
+    RawPathSingleSlash = lists:flatten(mochiweb_util:normalize_path(RawPath)),
+    case RawPathSingleSlash of
+        "/" ++ RawPathStripped ->
+            {Path, _, _} = mochiweb_util:urlsplit_path(RawPathStripped),
+            Path;
+        _ -> menelaus_util:web_exception(400, "Bad Request")
     end.
 
 loop(Req0, Config) ->
@@ -184,7 +180,7 @@ loop(Req0, Config) ->
               %% handed correctly, in that we delay converting %2F's to slash
               %% characters until after we split by slashes.
               RawPath = mochiweb_request:get(raw_path, Req),
-              Path = parse_path_uri(RawPath),
+              Path = parse_path(RawPath),
               PathTokens = lists:map(fun mochiweb_util:unquote/1,
                                      string:tokens(Path, "/")),
               request_tracker:request(
@@ -1347,12 +1343,12 @@ response_time_ms(Req) ->
 -ifdef(TEST).
 parse_http_path_uri_test() ->
     ?assertEqual("fakePrefix/diag/eval/",
-                 parse_path_uri("//fakePrefix/diag/eval/")),
+                 parse_path("//fakePrefix/diag/eval/")),
     ?assertEqual("fakePrefix/diag/eval/",
-                 parse_path_uri("///////fakePrefix/diag/eval/")),
-    ?assertEqual("fake/path", parse_path_uri("/fake/path")),
+                 parse_path("///////fakePrefix/diag/eval/")),
+    ?assertEqual("fake/path", parse_path("/fake/path")),
     ?assertEqual({web_exception, 400, "Bad Request", []},
-                 catch(parse_path_uri(""))),
+                 catch(parse_path(""))),
     ?assertEqual({web_exception, 400, "Bad Request", []},
-                 catch(parse_path_uri("\\/\/"))).
+                 catch(parse_path("\\/\/"))).
 -endif.
