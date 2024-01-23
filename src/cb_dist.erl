@@ -549,17 +549,16 @@ maybe_update_pkey_passphrase(Type, Mod,
         true ->
             case extract_pkey_passphrase() of
                 {ok, PassFun} ->
-                    Pass = PassFun(),
                     MS = ets:fun2ms(
                            fun ({T, [{password, _} | L]}) when T =:= Type ->
-                                    {T, [{password, Pass} | L]};
+                                    {T, [{password, PassFun} | L]};
                                ({T, L}) when T =:= Type ->
-                                    {T, [{password, Pass} | L]}
+                                    {T, [{password, PassFun} | L]}
                            end),
                     try
                         N = ets:select_replace(ssl_dist_opts, MS),
                         info_msg("Updated ~p ssl_dist_opts records", [N]),
-                        case Pass of
+                        case PassFun() of
                             undefined ->
                                 error_msg("Extracted pkey passphrase is "
                                           "undefined", []),

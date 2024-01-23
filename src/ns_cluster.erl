@@ -1107,7 +1107,7 @@ check_otp_tls_connectivity(Host, Port, AFamily) ->
     %% cb_dist might not have updated the password in ssl_dist_opts yet,
     %% so update it here
     PassFun = ns_secrets:get_pkey_pass(),
-    Opts2 = misc:update_proplist(Opts, [{password, PassFun()}]),
+    Opts2 = misc:update_proplist(Opts, [{password, PassFun}]),
     SNIOpts = case inet:parse_address(Host) of
                   {ok, _} -> [];
                   _ -> [{server_name_indication, Host}]

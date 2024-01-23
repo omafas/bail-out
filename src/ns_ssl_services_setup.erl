@@ -460,7 +460,7 @@ ssl_server_opts() ->
            {honor_cipher_order, Order},
            {secure_renegotiate, true},
            {client_renegotiation, ClientReneg},
-           {password, PassphraseFun()}]).
+           {password, PassphraseFun}]).
 
 tls_option_versions(anti_replay) -> ['tlsv1.3'];
 tls_option_versions(beast_mitigation) -> ['tlsv1'];
