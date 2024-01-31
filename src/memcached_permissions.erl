@@ -37,7 +37,7 @@
                 cluster_admin,
                 prometheus_user}).
 
-collection_permissions_to_check([B, S, C]) ->
+standard_collection_permissions([B, S, C]) ->
     [{{[{collection, [B, S, C]}, data, docs], read},      'Read'},
      {{[{collection, [B, S, C]}, data, docs], insert},    'Insert'},
      {{[{collection, [B, S, C]}, data, docs], delete},    'Delete'},
@@ -48,6 +48,28 @@ collection_permissions_to_check([B, S, C]) ->
      {{[{collection, [B, S, C]}, data, sxattr], write},   'SystemXattrWrite'},
      {{[{collection, [B, S, C]}, data, dcpstream], read}, 'DcpStream'},
      {{[{collection, [B, S, C]}, stats], read},           'SimpleStats'}].
+
+system_collection_permissions([B, S, C]) ->
+    [{{[{collection, [B, S, C]}, data, docs], sread},
+      'SystemCollectionLookup'},
+     {{[{collection, [B, S, C]}, data, docs], swrite},
+      'SystemCollectionMutation'}] ++
+        standard_collection_permissions([B, S, C]).
+
+%% If C is a filter (any/all), include system collection permissions -
+%% for example, we may be specifying a bucket-level system collection
+%% permission. This will be called as [B, all, all]:
+collection_permissions_to_check([B, S, C]) when is_atom(C) ->
+    system_collection_permissions([B, S, C]);
+
+%% A system collection is defined in kv (7.6) as a collection that begins with
+%% "_" (there are exceptions like [B, _default, _default]). The set of system
+%% collection permissions is a superset of standard ones, so ignore outliers.
+collection_permissions_to_check([B, S, [$_|Name]]) ->
+    system_collection_permissions([B, S, [$_|Name]]);
+
+collection_permissions_to_check([B, S, C]) ->
+    standard_collection_permissions([B, S, C]).
 
 bucket_permissions_to_check(Bucket) ->
     [{{[admin, internal, stats], read},         'SimpleStats'},
@@ -181,6 +203,13 @@ priv_is_granted(Privilege, [Object | Rest], Map) ->
             false
     end.
 
+%% Note that privileges can be set at the bucket, scope or collection level.
+%% If the same privilege is applied to a parent level, priv_set erases the
+%% privilege from its children (as they inherit the parent's privileges).
+%% For example, specifying:
+%% {[{collection, [bucket1, S, C]}, data, docs], [sread]} and
+%% {[{bucket, bucket1}, data, docs], [sread]}
+%% only sets SystemCollectionLookup at the bucket level.
 priv_set(Privilege, [Object], Map) ->
     maps:update_with(
       Object,
@@ -447,9 +476,9 @@ priv_object_test() ->
 permissions_for_user_test_() ->
     Manifest =
         [{uid, 2},
-         {scopes, [{"s",  [{uid, 1}, {collections, [{"c",  [{uid, 1}]},
+         {scopes, [{"s",  [{uid, 1}, {collections, [{"_c",  [{uid, 1}]},
                                                     {"c1", [{uid, 2}]}]}]},
-                   {"s1", [{uid, 2}, {collections, [{"c",  [{uid, 3}]}]}]}]}],
+                   {"s1", [{uid, 2}, {collections, [{"_c",  [{uid, 3}]}]}]}]}],
     Snapshot =
         ns_bucket:toy_buckets(
           [{"test", [{uuid, <<"test_id">>}]},
@@ -460,10 +489,15 @@ permissions_for_user_test_() ->
     DataRead = fun (L) ->
                        lists:usort([P || {{[_, data | _], read}, P} <- L])
                end,
-
+    SysRead = fun (L) ->
+                      lists:usort([P || {{[_, data, docs ], sread}, P} <- L])
+              end,
+    SysWrite = fun (L) ->
+                       lists:usort([P || {{[_, data, docs ], swrite}, P} <- L])
+               end,
     BucketsPlusCollections = bucket_permissions_to_check(undefined) ++
-        collection_permissions_to_check([x, x, x]),
-    JustCollections = collection_permissions_to_check([x, x, x]),
+        collection_permissions_to_check([x, x, "_x"]),
+    JustCollections = collection_permissions_to_check([x, x, "_x"]),
 
     AllBucketPermissions = All(BucketsPlusCollections),
 
@@ -511,47 +545,71 @@ permissions_for_user_test_() ->
            [{["test"], ['SimpleStats']}]),
       Test([{bucket_full_access, ["test"]}],
            ['SystemSettings'],
-           [{["test"], AllBucketPermissions}]),
+           [{["test"],
+             AllBucketPermissions -- SysWrite(BucketsPlusCollections)}]),
       Test([{views_admin, [{"test", <<"test_id">>}]},
             {views_reader, [{"default", <<"default_id">>}]}],
            ['Stats', 'SystemSettings'],
-           [{["default"], ['Read']},
-            {["test"], Read(BucketsPlusCollections)}]),
+           [{["default"], ['Read', 'SystemCollectionLookup']},
+            {["test"],
+             Read(BucketsPlusCollections) ++ SysRead(BucketsPlusCollections)}]),
       Test([{data_reader, [{"test", <<"test_id">>}, any, any]}],
            ['SystemSettings'],
-           [{["test"], ['Read', 'RangeScan']}]),
+           [{["test"], ['Read', 'RangeScan', 'SystemCollectionLookup']}]),
       Test([{data_reader, [{"default", <<"default_id">>}, {"s", 1}, any]}],
            ['SystemSettings'],
-           [{["default", 1], ['Read', 'RangeScan']}]),
-      Test([{data_reader, [{"default", <<"default_id">>}, {"s", 1}, {"c", 1}]}],
+           [{["default", 1], ['Read', 'RangeScan', 'SystemCollectionLookup']}]),
+      Test([{data_reader, [{"default", <<"default_id">>}, {"s", 1},
+                           {"_c", 1}]}],
            ['SystemSettings'],
-           [{["default", 1, 1], ['Read', 'RangeScan']}]),
+           [{["default", 1, 1],
+             ['Read', 'RangeScan', 'SystemCollectionLookup']}]),
+      Test([{data_reader, [{"default", <<"default_id">>}, {"s", 1},
+                           {"c1", 2}]}],
+           ['SystemSettings'],
+           [{["default", 1, 2],
+             ['Read', 'RangeScan']}]),
       Test([{data_dcp_reader, [{"test", <<"test_id">>}, any, any]}],
            ['IdleConnection','SystemSettings'],
-           [{["test"], DataRead(BucketsPlusCollections)}]),
+           [{["test"], DataRead(BucketsPlusCollections) ++
+                 SysRead(BucketsPlusCollections)}]),
       Test([{data_dcp_reader,
-             [{"default", <<"default_id">>}, {"s", 1}, {"c", 1}]}],
+             [{"default", <<"default_id">>}, {"s", 1}, {"_c", 1}]}],
            ['IdleConnection','SystemSettings'],
-           [{["default"], ['DcpProducer']},
+           [{["default"], ['DcpProducer', 'SystemCollectionLookup']},
             {["default", 1, 1], DataRead(JustCollections)}]),
+      Test([{data_dcp_reader,
+             [{"default", <<"default_id">>}, {"s", 1}, {"c1", 2}]}],
+           ['IdleConnection','SystemSettings'],
+           [{["default"], ['DcpProducer', 'SystemCollectionLookup']},
+            {["default", 1, 2], DataRead(JustCollections)}]),
       Test([{data_monitoring,
-             [{"default", <<"default_id">>}, {"s", 1}, {"c", 1}]}],
+             [{"default", <<"default_id">>}, {"s", 1}, {"_c", 1}]}],
            ['SystemSettings'],
            [{["default", 1, 1], ['SimpleStats']}]),
+      Test([{data_monitoring,
+             [{"default", <<"default_id">>}, {"s", 1}, {"c1", 2}]}],
+           ['SystemSettings'],
+           [{["default", 1, 2], ['SimpleStats']}]),
       Test([{data_backup, [{"test", <<"test_id">>}]},
             {data_monitoring, [{"default", <<"default_id">>}, any, any]}],
            ['SystemSettings'],
            [{["default"], ['SimpleStats']},
             {["test"], AllBucketPermissions}]),
+      %% See MB-60778.
+      Test([{mobile_sync_gateway, [{"test", <<"test_id">>}]}],
+           ['IdleConnection','SystemSettings'],
+           [{["test"], AllBucketPermissions}]),
       Test([{data_writer, [{"test", <<"test_id">>}, any, any]}],
            ['SystemSettings'],
            [{["test"], ['Delete', 'Insert', 'Upsert']}]),
       Test([{data_writer, [{"test", <<"test_id">>}, any, any]},
-            {data_writer, [{"default", <<"default_id">>}, {"s", 1}, {"c", 1}]},
+            {data_writer, [{"default", <<"default_id">>}, {"s", 1}, {"_c", 1}]},
             {data_writer, [{"default", <<"default_id">>}, {"s", 1}, any]},
             {data_reader, [{"default", <<"default_id">>}, {"s1", 2}, any]}],
            ['SystemSettings'],
            [{["test"], ['Delete', 'Insert', 'Upsert']},
             {["default", 1], ['Delete', 'Insert', 'Upsert']},
-            {["default", 2], ['Read', 'RangeScan']}])]}.
+            {["default", 2],
+             ['Read', 'RangeScan', 'SystemCollectionLookup']}])]}.
 -endif.

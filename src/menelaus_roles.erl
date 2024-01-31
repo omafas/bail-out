@@ -233,7 +233,8 @@ roles() ->
                 "user can read and write data except for the _system scope "
                 "which can only be read.">>},
        {ce, true}],
-      [{[{collection, [bucket_name, "_system", any]}, data], [read]},
+      [{[{bucket, bucket_name}, data, docs], [read, insert, delete, upsert,
+                                             range_scan, sread]},
        {[{bucket, bucket_name}, data], all},
        {[{bucket, bucket_name}, views], all},
        {[{bucket, bucket_name}, n1ql, index], all},
@@ -247,6 +248,7 @@ roles() ->
        {desc, <<"Can create and manage views of a given bucket. This user can "
                 "access the web console. This user can read some data.">>}],
       [{[{bucket, bucket_name}, views], all},
+       {[{bucket, bucket_name}, data, docs], [read, sread]},
        {[{bucket, bucket_name}, data], [read]},
        {[{bucket, bucket_name}, stats], [read]},
        {[{bucket, any}, settings], [read]},
@@ -266,7 +268,7 @@ roles() ->
                 "cannot access the web console and is intended only for "
                 "application access. This user can read some data.">>}],
       [{[{bucket, bucket_name}, views], [read]},
-       {[{bucket, bucket_name}, data, docs], [read]},
+       {[{bucket, bucket_name}, data, docs], [read, sread]},
        {[pools], [read]}]},
      {replication_admin, [],
       [{name, <<"XDCR Admin">>},
@@ -275,6 +277,7 @@ roles() ->
                 "replication streams out of this cluster. This user can "
                 "access the web console. This user can read some data.">>}],
       [{[{bucket, any}, xdcr], all},
+       {[{bucket, any}, data, docs], [read, sread]},
        {[{bucket, any}, data], [read]},
        {[{bucket, any}, settings], [read]},
        {[{bucket, any}, stats], [read]},
@@ -296,7 +299,7 @@ roles() ->
                 "for application access. This user can read data, but cannot "
                 "write it.">>}],
       [{[{collection, ?RBAC_COLLECTION_PARAMS}, data, docs],
-        [read, range_scan]},
+        [read, range_scan, sread]},
        {[{bucket, bucket_name}, settings], [read]},
        {[pools], [read]}]},
      {data_writer, ?RBAC_COLLECTION_PARAMS,
@@ -317,11 +320,12 @@ roles() ->
                 "collection. This user cannot access the web console and is "
                 "intended only for application access. "
                 "This user can read data.">>}],
-      [{[{collection, ?RBAC_COLLECTION_PARAMS}, data, docs], [read]},
+      [{[{collection, ?RBAC_COLLECTION_PARAMS}, data, docs], [read, sread]},
        {[{collection, ?RBAC_COLLECTION_PARAMS}, data, dcpstream], [read]},
        {[{collection, ?RBAC_COLLECTION_PARAMS}, data, sxattr], [read]},
        {[{collection, ?RBAC_COLLECTION_PARAMS}, collections], [read]},
        {[{bucket, bucket_name}, data, dcp], [read]},
+       {[{bucket, bucket_name}, data, docs], [sread]},
        {[{bucket, bucket_name}, settings], [read]},
        {[admin, memcached, idle], [write]},
        {[pools], [read]}]},
@@ -360,7 +364,7 @@ roles() ->
                 "access the web console. This user can read some data.">>}],
       [{[{bucket, bucket_name}, fts], [read, write, manage]},
        {[{bucket, bucket_name}, collections], [read]},
-       {[{bucket, bucket_name}, data, docs], [read]},
+       {[{bucket, bucket_name}, data, docs], [read, sread]},
        {[settings, fts], [read, write, manage]},
        {[ui], [read]},
        {[pools], [read]},
@@ -383,7 +387,7 @@ roles() ->
                 "collection to retrieve data. This user can access the web "
                 "console and can read data, but not write it.">>}],
       [{[{collection, ?RBAC_COLLECTION_PARAMS}, n1ql, select], [execute]},
-       {[{collection, ?RBAC_COLLECTION_PARAMS}, data, docs], [read]},
+       {[{collection, ?RBAC_COLLECTION_PARAMS}, data, docs], [read, sread]},
        {[{bucket, bucket_name}, settings], [read]},
        {[ui], [read]},
        {[pools], [read]}]},
@@ -550,7 +554,7 @@ roles() ->
        {desc, <<"Can create XDCR streams into a given bucket. This user cannot "
                 "access the web console.">>}],
       [{[{bucket, bucket_name}, settings], [read]},
-       {[{bucket, bucket_name}, data, docs], [read]},
+       {[{bucket, bucket_name}, data, docs], [read, sread]},
        {[{bucket, bucket_name}, data, meta], [write]},
        {[{bucket, bucket_name}, data, sxattr], [read, write]},
        {[{bucket, bucket_name}, stats], [read]},
@@ -602,9 +606,7 @@ roles() ->
                 "only for use by Sync Gateway. This user can read and "
                 "write data, manage indexes and views, and read some "
                 "cluster information.">>}],
-      [{[{collection, [bucket_name, ?SYSTEM_SCOPE_NAME, "_mobile"]}, data],
-        all},
-       {[{collection, [bucket_name, ?SYSTEM_SCOPE_NAME, any]}, data], none},
+      [%% See MB-60778
        {[{bucket, bucket_name}, data], all},
        {[{bucket, bucket_name}, views], all},
        {[{bucket, bucket_name}, n1ql, index], all},
@@ -1614,6 +1616,79 @@ admin_event_metakv_permissions_test() ->
     ?assertEqual(false, is_allowed({[admin, event], write}, Roles)),
     ?assertEqual(false, is_allowed({[admin, event], read}, Roles)),
     ?assertEqual(false, is_allowed({[admin, metakv], write}, Roles)).
+
+roles_bucket_sys_write_permissions() ->
+    [admin, eventing_admin, backup_admin, data_backup, mobile_sync_gateway].
+
+system_collections_write_permissions_test() ->
+    AllRoles = roles() ++ add_serverless_roles(true),
+    AllNames = extract_all_names(AllRoles),
+
+    {SysWrite, NoSysWrite} =
+        lists:partition(
+          fun ({Name, _}) ->
+                  lists:member(Name, roles_bucket_sys_write_permissions())
+          end, AllNames),
+
+    %% Ensure that all roles in SysWrite can write to all system collections.
+    %% Include mobile_sync_gateway until MB-60778 is addressed.
+    lists:foreach(
+      fun(Name) ->
+              Roles = compile_roles([Name], AllRoles),
+              ?assertEqual(true, is_allowed({[{bucket, "default"},
+                                              data, docs], swrite}, Roles)),
+              ?assertEqual(true, is_allowed({[{collection,
+                                               ["default", "s", "c"]},
+                                              data, docs], swrite}, Roles))
+      end, SysWrite),
+
+    %% Ensure none of the roles in NoSysWrite can write to system collections.
+    Roles0 = compile_roles(NoSysWrite, AllRoles),
+    ?assertEqual(false, is_allowed({[{bucket, "default"}, data, docs], swrite},
+                                   Roles0)),
+    ?assertEqual(false, is_allowed({[{collection, ["default", "s", "c"]},
+                                     data, docs], swrite}, Roles0)).
+
+system_collections_read_permissions_test() ->
+    AllRoles = roles() ++ add_serverless_roles(true),
+    AllNames = extract_all_names(AllRoles),
+
+    %% For now, we're retaining the ability to read from system collections -
+    %% avoid filtering out system collections in DCP streams (when DCPProducer
+    %% is set at the bucket level or DCPStream at the collection level). If
+    %% docs can be read in non-system collections, allow reads from system
+    %% collections too.
+    lists:foreach(
+      fun(Name)->
+              Roles = compile_roles([Name], AllRoles),
+              Perms0 = [{[{bucket, "default"}, data], read},
+                        {[{bucket, "default"}, data, docs], read},
+                        {[{bucket, "default"}, data, dcp], read}],
+              Allowed0 = lists:any(is_allowed(_, Roles), Perms0),
+              ?assertEqual(Allowed0,
+                           is_allowed({[{bucket, "default"},
+                                        data, docs], sread}, Roles)),
+              Perms1 = [{[{collection, ["default", "s", "c"]},
+                          data], read},
+                        {[{collection, ["default", "s", "c"]},
+                          data, docs], read},
+                        {[{collection, ["default", "s", "c"]},
+                          data, dcpstream], read}],
+              Allowed1 = lists:any(is_allowed(_, Roles), Perms1),
+              ?assertEqual(Allowed1,
+                           is_allowed({[{collection,
+                                         ["default", "s", "c"]},
+                                        data, docs], sread}, Roles))
+      end, AllNames),
+
+    %% mobile_sync_gateway can read from all system collections.
+    Roles = compile_roles([{mobile_sync_gateway,["test"]}], AllRoles),
+    ?assertEqual(true, is_allowed({[{collection,
+                                     ["test", ?SYSTEM_SCOPE_NAME, "_mobile"]},
+                                    data, docs], sread}, Roles)),
+    ?assertEqual(true, is_allowed({[{collection,
+                                      ["test", ?SYSTEM_SCOPE_NAME, "_query"]},
+                                     data, docs], sread}, Roles)).
 
 bucket_views_admin_check_global(Roles) ->
     ?assertEqual(false, is_allowed({[xdcr], read}, Roles)),
