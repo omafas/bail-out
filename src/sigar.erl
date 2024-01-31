@@ -253,7 +253,7 @@ get_global_stats(StatsMap) ->
     %% Dialyzer thinks that system_info can't return 'unknown', while according
     %% to doc it seems like it actually can. So, in order to avoid a warning
     %% the value is compared with 0 insead of explicit match to 'unknown'
-    HostCoresAvailable = case erlang:system_info(logical_processors) of
+    HostCoresAvailable = case erlang:system_info(logical_processors_online) of
                              P when is_number(P), P > 0 -> P;
                              _ -> 0
                          end,
