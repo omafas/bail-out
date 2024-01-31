@@ -1300,7 +1300,7 @@ cgroup_cpu_rate_promql(Mode, Settings) ->
     RateInterval = 3 * Interval,
 
     Q = "irate(sys_cpu_cgroup_seconds_total{mode=`~p`}[~bs]) / "
-        "ignoring(name,mode) sys_cpu_host_cores_available * 100",
+        "ignoring(name,mode) sys_cpu_cores_available * 100",
 
     lists:flatten(io_lib:format(Q, [Mode, RateInterval])).
 
