@@ -459,6 +459,9 @@ get_raw_counter_inner(Stat, Counters, Divisor) ->
 compute_cgroups_counters(Cores,
                          #{<<"supported">> := true} = New)
                                         when is_number(Cores), Cores > 0 ->
+    %% The "usage" stat includes the time for "user" and "system" so the
+    %% exposed stat be included in the "cpu_cgroup_seconds_total_*"
+    %% family.
     RawCpuUsage = get_raw_counter_usec_to_sec(<<"usage_usec">>, New),
     RawCpuUser = get_raw_counter_usec_to_sec(<<"user_usec">>, New),
     RawCpuSys = get_raw_counter_usec_to_sec(<<"system_usec">>, New),
@@ -466,7 +469,7 @@ compute_cgroups_counters(Cores,
     RawCpuBurst = get_raw_counter_usec_to_sec(<<"burst_usec">>, New),
 
     %% Raw counters so users can do their own computations using promql
-    [{cpu_cgroup_seconds_total_usage, RawCpuUsage},
+    [{cpu_cgroup_usage_seconds_total, RawCpuUsage},
      {cpu_cgroup_seconds_total_user, RawCpuUser},
      {cpu_cgroup_seconds_total_sys, RawCpuSys},
      {cpu_cgroup_seconds_total_throttled, RawCpuThrottled},

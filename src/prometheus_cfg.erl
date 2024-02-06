@@ -1295,6 +1295,14 @@ sys_cpu_rate_promql(Mode, Settings) ->
 
     lists:flatten(prom_query(Mode, RateInterval)).
 
+cgroup_cpu_rate_promql(usage, Settings) ->
+    Interval = derived_metrics_interval(Settings),
+    RateInterval = 3 * Interval,
+
+    Q = "irate(sys_cpu_cgroup_usage_seconds_total[~bs]) / "
+        "ignoring(name,mode) sys_cpu_cores_available * 100",
+
+    lists:flatten(io_lib:format(Q, [RateInterval]));
 cgroup_cpu_rate_promql(Mode, Settings) ->
     Interval = derived_metrics_interval(Settings),
     RateInterval = 3 * Interval,

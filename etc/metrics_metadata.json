@@ -105,6 +105,13 @@
             }
         ]
     },
+    "sys_cpu_cgroup_usage_seconds_total": {
+        "type": "counter",
+        "help": "Number of 'user' and 'system' and 'stolen' CPU seconds utilized in the cgroup",
+        "added": "7.2.5",
+        "unit": "seconds",
+        "stability": "committed"
+    },
     "sys_cpu_host_sys_rate": {
         "type": "gauge",
         "help": "System CPU utilization rate in the host",
