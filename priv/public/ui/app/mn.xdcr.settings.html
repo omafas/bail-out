@@ -1,0 +1,188 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<p
+   class="disclosure margin-bottom-half"
+   [ngClass]="{disclosed: (toggler.state | async)}"
+   (click)="toggler.click.next()">
+  Advanced Settings
+</p>
+<form
+   class="width-6"
+   [hidden]="!(toggler.state | async)"
+   [formGroup]="form.group"
+   (ngSubmit)="form.submit.next()">
+  <div class="formrow" *ngIf="(isEnterprise | async)">
+    <label for="replication_priority">Replication Priority</label>
+    <mn-select
+       class="inline width-12"
+       id="replication_priority"
+       [values]="['Low', 'Medium', 'High']"
+       [group]="form.group"
+       mnFormControlName="priority">
+    </mn-select>
+  </div>
+
+  <div
+     class="formrow"
+     *ngIf="(isEnterprise | async) &&
+            (compatVersion55 | async)">
+    <label for="for-xdcr-compression">
+      XDCR Compression Type
+    </label>
+    <mn-select
+       id="for-xdcr-compression"
+       [values]="['Auto', 'None']"
+       [group]="form.group"
+       mnFormControlName="compressionType">
+    </mn-select>
+    <div
+       class="error error-field"
+       [hidden]="!(error | async)?.compressionType">
+      {{(error | async)?.compressionType}}
+    </div>
+  </div>
+
+  <div
+     class="formrow">
+    <label for="source_nozzle_per_node">XDCR Source Nozzles Per Node</label>
+    <input
+       type="number"
+       formControlName="sourceNozzlePerNode">
+    <div
+       class="error"
+       [hidden]="!(error | async)?.sourceNozzlePerNode">
+      {{(error | async)?.sourceNozzlePerNode}}
+    </div>
+    <div
+       class="alert alert-warning"
+       [hidden]="(error | async) || !(success | async)?.warnings?.sourceNozzlePerNode">
+      <p>{{(success | async)?.warnings?.sourceNozzlePerNode}}</p>
+    </div>
+  </div>
+
+  <div
+     class="formrow">
+    <label for="target_nozzle_per_node">XDCR Target Nozzles Per Node</label>
+    <input
+       type="number"
+       formControlName="targetNozzlePerNode">
+    <div
+       class="error"
+       [hidden]="!(error | async)?.targetNozzlePerNode">
+      {{(error | async)?.targetNozzlePerNode}}
+    </div>
+  </div>
+
+  <div class="formrow">
+    <label for="checkpoint_interval">XDCR Checkpoint Interval</label>
+    <input
+       type="number"
+       formControlName="checkpointInterval">
+    <div
+       class="error"
+       [hidden]="!(error | async)?.checkpointInterval">
+      {{(error | async)?.checkpointInterval}}
+    </div>
+  </div>
+
+  <div class="formrow">
+    <label for="worker_batch_size">XDCR Batch Count</label>
+    <input
+       type="number"
+       formControlName="workerBatchSize">
+    <div
+       class="error"
+       [hidden]="!(error | async)?.workerBatchSize">
+      {{(error | async)?.workerBatchSize}}
+    </div>
+  </div>
+
+  <div class="formrow">
+    <label for="doc_batch_size_kb">XDCR Batch Size (kB)</label>
+    <input
+       type="number"
+       formControlName="docBatchSizeKb">
+    <div
+       class="error"
+       [hidden]="!(error | async)?.docBatchSizeKb">
+      {{(error | async)?.docBatchSizeKb}}
+    </div>
+  </div>
+
+  <div class="formrow">
+    <label for="failure_restart_interval">XDCR Failure Retry Interval</label>
+    <input
+       type="number"
+       formControlName="failureRestartInterval">
+    <div
+       class="error"
+       [hidden]="!(error | async)?.failureRestartInterval">
+      {{(error | async)?.failureRestartInterval}}
+    </div>
+  </div>
+
+  <div class="formrow">
+    <label for="optimistic_replication_threshold">XDCR Optimistic Replication Threshold</label>
+    <input
+       type="number"
+       formControlName="optimisticReplicationThreshold">
+    <div
+       class="error"
+       [hidden]="!(error | async)?.optimisticReplicationThreshold">
+      {{(error | async)?.optimisticReplicationThreshold}}
+    </div>
+  </div>
+
+  <div
+     class="formrow">
+    <label for="statistics_collection_interval">XDCR Statistics Collection Interval (ms)</label>
+    <input
+       type="number"
+       formControlName="statsInterval">
+    <div
+       class="error"
+       [hidden]="!(error | async)?.statsInterval">
+      {{(error | async)?.statsInterval}}
+    </div>
+  </div>
+
+  <div
+     class="formrow"
+     *ngIf="(isEnterprise | async)">
+    <label for="statistics_collection_interval">XDCR Network Usage Limit (MiB/sec)</label>
+    <input
+       type="number"
+       formControlName="networkUsageLimit">
+    <div
+       class="error"
+       [hidden]="!(error | async)?.networkUsageLimit">
+      {{(error | async)?.networkUsageLimit}}
+    </div>
+  </div>
+
+  <div
+     class="formrow">
+    <label for="per_logging_level">XDCR Logging Level</label>
+    <mn-select
+       class="inline width-12"
+       [values]="['Info', 'Debug', 'Trace', 'Warn', 'Error']"
+       [group]="form.group"
+       mnFormControlName="logLevel">
+    </mn-select>
+    <div
+       class="error"
+       [hidden]="!(error | async)?.logLevel">
+      {{(error | async)?.logLevel}}
+    </div>
+  </div>
+
+  <input type="submit" [hidden]="true"/>
+</form>

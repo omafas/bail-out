@@ -1,0 +1,36 @@
+Forcing streaming bucket info to be streaming terse bucket info for perf and fun
+---------------------------------------------------------------------------------
+
+Since 2.5.0 you can do:
+
+# wget -O- --post-data='ns_config:set(send_terse_streaming_buckets, true)'. http://Administrator:password@127.0.0.1:8091/diag/eval
+
+This will cause the following urls
+/pools/default/bucketsStreaming/:bucket to be serving same info as
+/pools/default/bs/:bucket (aka streaming terse bucket info)
+
+Why ?
+
+Serving tens of thousands concurrent requests for terse bucket info is
+possible for terse bucket info requests (due to heavy caching and
+right handling of fan-out of same into to lots of connections). The
+same cannot be said for normal bucket infos (at least as implemented
+now, some very similar treatment is possible but was not implemented).
+
+Terse bucket infos do not have some attributes from bucket infos. So
+some SDKs might not like lack of attributes they used to see. Ideally
+we'd always serve terse bucket infos but we cannot due to possibility
+of older clients not digesting terse bucket infos.
+
+So for cases where:
+
+a) you know you have sdk library that works with terse bucket infos
+
+b) you're desperate enough to try less tested code path
+
+we've implemented that setting.
+
+Note that, this setting _only_ applies to streaming buckets url. So it
+will not affect xdcr or UI or testrunner. This url is only used by
+smart clients and per-bucket or standalone moxi (not our "default"
+moxi).

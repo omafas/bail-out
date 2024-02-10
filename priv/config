@@ -1,0 +1,3 @@
+% -*- mode: erlang -*-
+%
+% The installer might put installation-time overrides in this priv/config file.

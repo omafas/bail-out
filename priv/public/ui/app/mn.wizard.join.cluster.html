@@ -1,0 +1,123 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div
+  class="panel dialog-med dialog dialog-wizard">
+  <div class="panel-header flex-left">
+    <img
+      src="../cb_logo_bug_white_2.svg"
+      width="32"
+      height="32"
+      class="margin-right-half">
+    <h2>Couchbase &gt; Join Cluster</h2>
+  </div>
+  <form
+    class="forms"
+    [formGroup]="joinClusterForm"
+    #ngForm="ngForm"
+    (ngSubmit)="form.submit.next()"
+    novalidate>
+    <div class="panel-content">
+      <div
+        class="error error-form"
+        [hidden]="!(joinClusterHttp.error | async)">
+        <div *ngFor="let error of (joinClusterHttp.error | async)">{{error}}</div>
+      </div>
+      <div class="error error-form">
+        <div
+          [hidden]="!(joinClusterForm.get('clusterAdmin.hostname').touched || ngForm.submitted) ||
+                    !joinClusterForm.get('clusterAdmin.hostname').errors?.required">
+          Cluster name is required
+        </div>
+        <div
+          [hidden]="!(joinClusterForm.get('clusterAdmin.user').touched || ngForm.submitted) ||
+                    !joinClusterForm.get('clusterAdmin.user').errors?.required">
+          Username is required
+        </div>
+        <div
+          [hidden]="!(joinClusterForm.get('clusterAdmin.password').touched || ngForm.submitted) ||
+                    !joinClusterForm.get('clusterAdmin.password').errors?.required">
+          Password is required
+        </div>
+        <div
+          [hidden]="(certificate | async)?.cert.type !== 'generated'">
+          This node is using self-signed certificates. No peer verification between nodes will be done.
+        </div>
+      </div>
+      <div formGroupName="clusterAdmin">
+        <div class="formrow">
+          <label for="for-hostname-field">Cluster Host Name/IP Address</label>
+          <input
+             type="text"
+             name="hostname"
+             formControlName="hostname"
+             mnName="hostname"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             maxlength="256"
+             id="for-hostname-field"
+             [mnFocus]="focusFieldSubject">
+        </div>
+        <div class="formrow">
+          <label for="secure-user">Create Admin Username</label>
+          <input
+            type="text"
+            name="user"
+            formControlName="user"
+            id="secure-user"
+            autocorrect="off"
+            spellcheck="false"
+            autocapitalize="off">
+        </div>
+        <div class="formrow">
+          <div class="column">
+            <label for="secure-password">Cluster Admin Password</label>
+            <input
+              type="password"
+              formControlName="password"
+              autocorrect="off"
+              spellcheck="false"
+              id="secure-password"
+              placeholder="6 characters minimum">
+            <!-- mn-autocomplete-off -->
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="formrow disclosure"
+        (click)="toggleConfigurationSection = !toggleConfigurationSection"
+        [ngClass]="{'disclosed': toggleConfigurationSection}">
+        Configure Services &amp; Settings For This Node
+      </div>
+
+      <div *ngIf="toggleConfigurationSection">
+        <mn-hostname-config
+          [group]="joinClusterForm.get('clusterStorage')">
+        </mn-hostname-config>
+        <mn-services-config
+          [group]="joinClusterForm.get('services')">
+        </mn-services-config>
+        <mn-node-storage-config
+          [group]="joinClusterForm.get('clusterStorage')">
+        </mn-node-storage-config>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <a
+        uiSref="app.wizard.welcome"
+        [uiOptions]="{location: false}">&lt; Back</a>
+      <button
+        [disabled]="joinClusterForm.invalid"
+        type="submit">Join Cluster</button>
+    </div>
+  </form>
+</div>

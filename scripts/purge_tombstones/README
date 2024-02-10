@@ -1,0 +1,24 @@
+This is a script to purge ns_config tombstones from pre-7.0 cluster.
+
+To compile, simply call `make' (GNU make is required). This produces a script
+called purge_tombstones.sh. The script can be used as follows:
+
+  ./purge_tombstones.sh 127.0.0.1:8091 Administrator
+
+This will prompt for a password and attempt to purge tombstones on all nodes.
+
+The script does roughly the following:
+
+ 1. Dynamically compiles and loads a module called purge_tombstones on all
+    nodes.
+ 2. Starts a process called purge_tombstones_server on all nodes.
+ 3. Suspends ns_config_rep and ns_config_rep_merger on all nodes.
+ 4. Since there may be replicated changes on the wire, in order to minimize a
+    probability of them arriving after step (6), the script will sleep for some
+    time.
+ 5. All nodes are asked to purge their local tombstones.
+ 6. ns_config_rep and ns_config_rep_merger processes are restarted (to make
+    sure they don't reapply purged tombstones that may have been replicated
+    before step (3) completed on all nodes).
+ 7. In case there are errors at any of the steps, the purge_tombstones_server
+    processes are killed and ns_config replication is resumed.

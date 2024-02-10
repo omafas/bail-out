@@ -1,0 +1,36 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div (click)="$event.stopPropagation();">
+  <div [hidden]="!(isExplicitMappingMode | async)">
+    <div
+       *ngFor="let item of explicitMappingRulesKeys | async"
+       class="mapping-rule">
+      <span class="break-word">
+        {{item[0]}} &gt; {{item[1] || ""}}
+      </span>
+      <a *ngIf="isEditMode"
+         (click)="delExplicitMappingRules(item[0])"
+         class="close-x sml">X</a>
+    </div>
+  </div>
+  <div [hidden]="!(isMigrationMode | async)">
+    <div
+       *ngFor="let item of explicitMappingMigrationRulesKeys | async"
+       class="mapping-rule">
+      <span class="break-word">
+        {{item[0]}} --&gt; {{item[1]}}
+      </span>
+      <a *ngIf="isEditMode"
+         (click)="delExplicitMappingMigrationRules(item[0])"
+         class="close-x sml">X</a>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2016-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+#
+# Decode .ts in a stream of objects to human readable datetime.
+#
+# Example usage:
+#   ./cpu --period minute stats_archives.json | ../human-time --offset -700
+#
+
+OFFSET=$(date +%z)
+ARGS=$(getopt -o o: -l offset: -n "$0" -- "$@")
+
+if [ $? != 0 ]; then
+    exit 1
+fi
+
+eval set -- "$ARGS"
+
+while true; do
+    case "$1" in
+        -o|--offset) OFFSET=$2; shift 2;;
+        --) shift; break;;
+    esac
+done
+
+exec jq --argjson offset "$OFFSET" '
+def abs:
+  if (. < 0) then -. else . end;
+
+def formatTime:
+  (($offset / 100) | floor) as $offsetHours
+  | (($offset % 100) | abs) as $offsetMinutes
+  | (($offsetHours * 60 + $offsetMinutes) * 60) as $offsetSeconds
+  | (. % 1000) as $ms
+  | (. / 1000) + $offsetSeconds
+  | strftime("%Y-%m-%dT%H:%M:%S") + ".\($ms)";
+
+map((.ts | formatTime) as $date
+    | . + {date: $date})
+' "$@"

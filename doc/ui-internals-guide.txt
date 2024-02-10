@@ -1,0 +1,253 @@
+Guide on internals of menelaus UI as of July 28
+==============================================
+
+Lets start with a descriptions of what's where in our UI:
+//= require <jquery.js>         # 3rd party: jquery is here
+//= require <jqModal.js>        # 3rd party: we use jqmodal as simple
+                                # modal windows implementation. It's
+                                # very far from perfect though
+//= require <jquery.flot.js>    # 3rd party: this is used for plotting
+                                # analytics graphs
+//= require <jquery.ba-bbq.js>  # 3rd party: we use this for our
+                                # back/forward button handling. The
+                                # code isn't great, but I had no
+                                # issues with it
+//= require <underscore.js>     # 3rd party: good generic JS library
+//= require <tools.tabs.js>     # 3rd party: quite lightweight and yet
+                                # functional tabs widget. Had no
+                                # issues with it. Solid
+//= require <jquery.cookie.js>  # 3rd party: tiny cookies library
+//= require <misc.js>           # Our misc stuff. See below.
+//= require <base64.js>         # 3rd party: base64 implementation
+//= require <mkclass.js>        # ala prototype.js class
+                                # implementation
+//= require <callbacks.js>      # simple common callback slot
+                                # implementation
+//= require <cells.js>          # generic cells
+//= require <hash-fragment-cells.js> # cells that bind url # fragment
+                                     # and cell
+//= require <right-form-observer.js> # energy efficient form observing
+//= require <app-misc.js>            # more app-specific misc stuff
+//= require <core-data.js>           # "DAO"
+//= require <analytics.js>
+//= require <manage-servers.js>
+//= require <settings.js>
+//= require <manage-buckets.js>
+//= require <monitor-buckets.js>
+app.js                          #  which 'requires' (via sprockets)
+                                #  everything above & has anything else that
+                                #  don't have it's own file yet
+
+
+misc.js
+=======
+
+This file contain various smaller utilities that are generally not
+very menelaus specific and can be reused somewhere else. The most
+notable parts of it are:
+
+* templating (this started as jresig implementation, but was
+  rewritten, 'cause even the published regexp fix has issue with IE)
+
+* spinner (we cover areas being loaded/updated with it)
+
+* $m - short and convenient method binding function. $m(object,
+  methodName) will return a function that will call given method on
+  given object no matter how it's called. Same effect can be easily
+  achieved with _.bind, but $m is usually more compact. Optional 3rd
+  argument gives you class to take method implementation from. Which
+  is useful for calling overriden methods.
+
+* $i - searching element by DOM id
+
+* page reloading
+
+* ModalAction (this handles situation where user presses back/forward
+  where we don't expect state change, right now it simply reloads app
+  when this happens)
+
+* small layer on top of bbq for working with url # fragments. We need
+  it to collapse bursts of # fragment changes into single #
+  change. Because we react on some # fragment changes by
+  changing other # fragments and we want that to be single browser
+  history update. It also provides us more convenient # fragment
+  observing facility
+
+* small layer on top of jqModal to handle ModalAction integration,
+  close event observing, etc. We can use this to switch to better
+  modal library later as this hides jqm from the rest of the code
+  completely, AFAIK.
+
+
+callbacks.js
+============
+
+The main guy here is CallbackSlot class. It models a place where you
+store observers. And it's able to 'broadcast' to those observers.
+
+Slave class provides finer access (which is not actually used in our
+code base very much right now) to the un-registration.
+
+
+cells.js
+========
+
+Every Cell instance is like cell in a spreadsheet. The idea is that
+you can have some cells to be computed from other cells. And all this
+is correctly and (I hope) efficiently recomputed when something changes.
+
+Cells provide standard API to observe value changes. So at minimum
+it's useful as a holder of data with subscription to changes.
+
+Cells can have undefined value which is special. It means that it has
+no known value. And typical cell subscribers will not be notified when
+cell becomes undefined. It is possible to subscribe to any cell
+change, or (which is default) to only change from undefined to defined
+or defined to another defined.
+
+The concept of undefined cells help us model situations where we
+started getting data for cell, but don't have it yet. The example of
+such situation is fetching something via REST API. We have a function
+(renderCellTemplate) that subscribes to cell changes. And when cell is
+undefined it renders spinner in the target area, and when cell has
+data it renders that data into target area using given template.
+
+The intended model of building UI with help of cells is that you model
+your data with cells. And your UI observes those cells and does what
+ever it needs to render/update that data to any views.
+
+Some cells are simply set by us or by user. But most of them are
+'computed' with some formula. You specify function and dependent
+cells. And framework does the right thing of re-computing cell when
+any dependent cells change.
+
+Usually formula cells are used in the following way:
+
+new Cell(function (dependencyA, dependencyB) {
+  // this refers to formula context here.
+  // this['dependencyA'] refers to _value_ of source cell named dependencyA, don't confuse it with cell object
+  // this['self'] refers to this _cell object_. You can use this.self.value to get old cell value.
+
+  // function arguments (if present) are magic.  they must have same
+  // name as cell sources and they are passed values of corresponding
+  // source cells. Not all (or even none) source cells can be listed
+  // as arguments.
+
+  // Also note that sources listed in function arguments are
+  // 'essential' meaning that cell function will not even be called if
+  // any of 'essential' dependencies is undefined. In such cases our
+  // cell is undefined
+
+  // NOTE: that this reliance on function argument names means that
+  // our code cannot be minified, 'cause minifiers usually rename
+  // function arguments
+
+  // this allows you to avoid (otherwise pretty common) things like
+  if (this.dependencyA === undefined || this.dependencyB === undefined)
+     return;
+
+  return <compute anything from dependencyA & dependencyB>
+}, {
+  dependencyA: dependencyACell, // you pass cell objects and their source name here which usually don't differ
+  dependencyB: dependencyBCell,
+  dependencyC: dependencyCCell
+});
+
+
+Long-running cell value 'computations' (REST GET is one example) are
+modeled with help of futures (sometimes called asyncs in cells code
+base). Basically your cell function returns future which means that we
+don't have real value yet, but we have a way of obtaining it. Feel
+free to study code comments on how exactly this works, but most of the
+time you'll be using futures that handle REST GETs.
+
+Those are future.get and future.getPush. There are plenty of examples
+of it's use which should be easy to understand.
+
+This allows you to abstract your code from details of asynchronous
+interactions. Because all your observers/dependent cells care is value
+changes, not how fast/soon they arrive/happen.
+
+In our current code base cells only handle server -> UI data
+flow. It's usually easy enough to handle UI -> server data updates by
+raw $.post-s. We usually use ModalAction to guard us from back/forward
+button driving us into confusing state during POST calls.
+
+We have a number of specialized cell subclasses that handle some
+interesting UI cases. You can find those in
+hash-fragment-cells.js. Those handle:
+
+* two side hash fragment <-> cell value synchronization (so that your
+  cell value changes actually update browser history and back button
+  automagically reverts to old value)
+
+* on top of that we have cells type that implements two side
+  (actually, it's 3 way) synchronization with tabs control. Switching
+  tabs will update cell value and browser history. And vice-versa and
+  vice-versa.
+
+* also we have cells type that allows you to have multi-switch (like
+  radio buttons group) on a group of links. Pressing link will
+  activate it & deactivate any other active link in this group. And
+  will update cell value and hash fragment. This is used to switch
+  zoom levels on analytics.
+
+Further reading: cells-test.js, cells.js &
+hash-fragment-cells.js. There are some comments. Start with main facilities:
+
+* value attribute
+
+* setValue method
+
+* subscribe method
+
+* recalculate, invalidate & invalidateAt
+
+
+core-data.js
+============
+
+This is were our 'DAO' lives, which is, actually, a horribly incorrect
+name. This thing includes some core cells (like /pools/default value). It also
+handles login procedure.
+
+
+app-misc.js
+===========
+
+Most important members are:
+
+* setFormValues -- fills form inputs from given values
+
+* jsonPostWithErrors -- handles POST-ing data, parsing
+  validation errors from that and signaling ModalAction while this
+  happens.
+
+* renderCellTemplate -- mentioned above
+
+* future.getPush -- handles our Comet-style streaming
+
+* multiDrawersWidget -- don't touch that. This needs to be cleaned up.
+
+* genericDialog -- our 'pretty' alerts & confirms replacement
+
+* configureActionHashParam -- this thing makes our 'js-only' links
+  support opening in new window/tab. See it's comments & code for
+  details/examples.
+
+Organization of UI
+==================
+
+Most of the UI is organized as a number of 'sections'. Sections are
+left menu items. Most sections have their own separate JS file. And
+are implemented as singleton object with the following methods:
+
+* init (constructor)
+
+* onEnter (anything that you might want to do when entering section)
+
+* onLeave
+
+And any other methods that might be useful for that singleton. init
+usually installs some event handlers/observers and creates any cells
+it might need. And wires everything.

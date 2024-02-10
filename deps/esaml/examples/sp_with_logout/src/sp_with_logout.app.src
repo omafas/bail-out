@@ -1,0 +1,15 @@
+{application, sp_with_logout,
+ [
+  {description, "SAML SP for erlang - with logout"},
+  {vsn, "2"},
+  {registered, []},
+  {included_applications, [
+  ]},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  esaml,
+                  cowboy
+                 ]},
+  {mod, { sp_app, []}}
+ ]}.

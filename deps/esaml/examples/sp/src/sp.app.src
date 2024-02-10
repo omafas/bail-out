@@ -1,0 +1,15 @@
+{application, sp,
+ [
+  {description, "SAML SP for erlang"},
+  {vsn, "2"},
+  {registered, []},
+  {included_applications, [
+  ]},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  esaml,
+                  cowboy
+                 ]},
+  {mod, { sp_app, []}}
+ ]}.

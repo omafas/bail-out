@@ -1,0 +1,28 @@
+{name, "serverless"}.
+{enable_bucket_placer, true}.
+{enable_pause_resume, true}.
+{max_buckets_supported, 100}.
+{allow_variable_num_vbuckets, true}.
+{default_num_vbuckets, 64}.
+{max_scopes_per_bucket, 100}.
+{max_collections_per_bucket, 100}.
+{cluster_scope_collection_limit, unlimited}.
+{{magma, can_set_max_shards}, true}.
+{{magma, min_memory_quota}, 256}.
+{enable_throttle_limits, true}.
+{enable_storage_limits, true}.
+{num_reader_threads, 64}.
+{num_writer_threads, 64}.
+{disable_auto_rebalance_settings, true}.
+{disallow_memcached_buckets, true}.
+{allow_per_service_rebalance, true}.
+{{indexer, num_replica}, 1}.
+{{indexer, mem_high_threshold}, 70}.
+{{indexer, mem_low_threshold}, 50}.
+{{indexer, units_high_threshold}, 60}.
+{{indexer, units_low_threshold}, 40}.
+{{prometheus, default_high_card_services},
+    [index, fts, kv, cbas, eventing, ns_server, n1ql]}.
+{{couchdb, disabled}, true}.
+{failover_disable_max_count, true}.
+{enable_metered_collections, true}.

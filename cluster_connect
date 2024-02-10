@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2011-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+import os
+import sys
+import getopt
+import urllib.request
+import urllib.error
+import traceback
+import argparse
+
+currentdir = os.path.dirname(os.path.realpath(__file__))
+pylib = os.path.join(currentdir, "pylib")
+sys.path.append(pylib)
+
+import cluster_run_lib
+
+valid_index_storage_modes = ["forestdb", "plasma", "memory_optimized"]
+valid_storage_backends = ["couchstore", "magma"]
+
+
+def service_string_convertor(value):
+    """Converts into the correct format for cluster_run_lib
+
+    e.g. "kv+index+n1ql"-> ['kv', 'index', 'n1ql']
+
+    n0:kv,n1:index+n1ql+fts+eventing+cbas+backup) ->
+    {'n0': ['kv'], 'n1': ['index', 'n1ql', 'fts', 'eventing', 'cbas', 'backup']}
+    """
+    plan = value.replace(' ', '').split(',')
+    if len(plan) == 1 and len(plan[0].split(':')) == 1:
+        return plan[0].split('+')
+    plan = dict(e.split(':') for e in plan)
+    return dict([(k, v.split('+'))
+                 for k, v in plan.items()])
+
+
+def main():
+    # RawTextHelpFormatter allows for the use of newlines, changed the
+    # max_help_position, so that long flag names and help text are on the same
+    # line.
+    arg_parser = argparse.ArgumentParser(
+        formatter_class=lambda prog: argparse.RawTextHelpFormatter(
+            prog, max_help_position=32))
+    arg_parser.add_argument(
+        '--num-nodes', '-n',
+        type=int,
+        help=f'<number of nodes>',
+        metavar='')
+    arg_parser.add_argument(
+        '--start-index',
+        type=int,
+        help=f"<starting node number> (default: 0)",
+        metavar="")
+    arg_parser.add_argument(
+        '--services', '-T',
+        type=service_string_convertor,
+        help=f"<services to run, KV if unspecified> \n"
+             f"(eg: n0:kv,n1:index+n1ql+fts+eventing+cbas+backup)",
+        metavar='')
+    arg_parser.add_argument(
+        '--bucket-quota', '-s',
+        type=int,
+        help=f"<bucket-quota> \n"
+             f"default: couchstore: 256 magma: 1024",
+        metavar="")
+    arg_parser.add_argument(
+        '--index-mem', '-I',
+        type=int,
+        help=f"<index memory size> \n"
+             f"default: 256",
+        metavar='')
+    arg_parser.add_argument(
+        '--index-type', '-M',
+        type=str.lower,
+        help=f"<index storage mode> "
+             f"({', '.join(valid_index_storage_modes)}) ",
+        choices=valid_index_storage_modes,
+        metavar='')
+    arg_parser.add_argument(
+        '--bucket-type', '-t',
+        type=str.lower,
+        help=f"<bucket type> e.g. "
+             f"({', '.join(cluster_run_lib.valid_bucket_types)})"
+             f"\ndefault: membase",
+        choices=cluster_run_lib.valid_bucket_types,
+        metavar='')
+    arg_parser.add_argument(
+        '--storage-backend', '-S',
+        type=str.lower,
+        help=f"<storage backend> "
+             f"({', '.join(valid_storage_backends)}) \n"
+             f"default: couchstore",
+        choices=valid_storage_backends,
+        metavar='')
+    arg_parser.add_argument(
+        '--replicas', '-r',
+        type=int,
+        help=f'<number of replica vBuckets> max: 3 '
+             f'default: 1',
+        choices=[0, 1, 2, 3],
+        metavar='')
+    arg_parser.add_argument(
+        '--dont-index-replicas', '-i',
+        action='store_true',
+        help=f"(don't index replicas) "
+             f"default: replica index enabled",
+        default=None)
+    arg_parser.add_argument(
+        '--afamily', '-p',
+        type=str.lower,
+        help=f"<networking protocol to use> (ipv4, ipv6) \n"
+             f"default: ipv4",
+        choices=['ipv4', 'ipv6'],
+        metavar='')
+    arg_parser.add_argument(
+        '--enable-encryption',
+        action='store_true',
+        default=None)
+    arg_parser.add_argument(
+        '--dont-rebalance',
+        action='store_true',
+        default=None)
+    arg_parser.add_argument(
+        '--serverless-groups',
+        action='store_true',
+        default=None,
+        help=f"Creates 3 groups and adds the nodes to the serverless groups"
+    )
+    arg_parser.add_argument(
+        '--dont-create-bucket',
+        action='store_true',
+        default=None,
+        help=f"Don't create a 'default' bucket",
+    )
+    arg_parser.add_argument(
+        '--width',
+        type=int,
+        help=f"The bucket width for serverless buckets",
+    )
+    arg_parser.add_argument(
+        '--weight',
+        type=int,
+        help=f"The bucket weight for serverless buckets",
+    )
+    args = arg_parser.parse_args()
+
+    args.afamily = (
+        "ipv6" if (os.getenv("IPV6", "false") == "true") else "ipv4")
+    if args.serverless_groups is not None:
+        if args.storage_backend is None:
+            args.storage_backend = "magma"
+        if args.bucket_quota is None:
+            args.bucket_quota = 256
+
+
+    # The minimum bucket quota is higher for magma, if the user doesn't specify
+    # a bucket quota, then default values should be used.
+    if args.bucket_quota is None:
+        if args.storage_backend == "couchstore":
+            args.bucket_quota = 256
+        elif args.storage_backend == "magma":
+            args.bucket_quota = 1024
+
+    if args.num_nodes is not None and args.width is not None:
+        if args.serverless_groups:
+            min_nodes = args.width * 3
+        # If serverless groups aren't used then we can create nodes <= width
+        else:
+            min_nodes = args.width
+        if args.num_nodes < min_nodes and args.width > 1:
+            sys.exit(f"Need a minimum of {min_nodes} nodes for a width of "
+                     f"{args.width}, while using this configuration")
+
+    params = {
+        "num_nodes": args.num_nodes,
+        "start_index": args.start_index,
+        "buckettype": args.bucket_type,
+        "memsize": args.bucket_quota,
+        "indexmemsize": args.index_mem,
+        "deploy": args.services,
+        "index_storage_mode": args.index_type,
+        "replicas": args.replicas,
+        "replica_index": not args.dont_index_replicas,
+        "protocol": args.afamily,
+        "encryption": args.enable_encryption,
+        "do_rebalance": not args.dont_rebalance,
+        "storage_backend": args.storage_backend,
+        "serverless_groups": args.serverless_groups,
+        "create_bucket": not args.dont_create_bucket,
+        "bucket_width": args.width,
+        "bucket_weight": args.weight
+    }
+
+    # Removing flags that the user hasn't specified; this means that the
+    # cluster_run_lib.connect function will use the default values.
+    ret = cluster_run_lib.connect(**{k:v for k, v in params.items()
+                                     if v is not None})
+
+    if ret:
+        print(arg_parser.print_help())
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except urllib.error.HTTPError as e:
+        traceback.print_exc()
+        print("\nError {}: {} ({})".format(e.code, e.reason, e.read()))
+        sys.exit(1)

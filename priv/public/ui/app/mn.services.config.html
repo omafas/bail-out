@@ -1,0 +1,99 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div [formGroup]="group">
+  <div
+     class="error"
+     [hidden]="!(postPoolsDefaultValidation.error | async)?.errors._">
+    {{(postPoolsDefaultValidation.error | async)?.errors._}}
+  </div>
+  <div
+     class="error"
+     [hidden]="!(postClusterInitHttp.error | async)?.errors?.services">
+    {{(postClusterInitHttp.error | async)?.errors.services}}
+  </div>
+
+  <div *ngFor="let service of (mnServices | async)">
+    <div class="row formrow">
+      <div
+         class="width-6"
+         *ngIf="group.value.flag"
+         formGroupName="flag">
+        <input
+           [formControlName]="service"
+           type="checkbox"
+           [attr.id]="service + '-ram-flag'">
+        <!-- *ngIf="config.services" -->
+        <!-- ng-model="config.services.model.kv" -->
+        <!-- ng-disabled="config.services.disabled.kv" -->
+        <label
+           [attr.for]="service + '-ram-flag'"
+           class="checkbox">
+          {{getServiceName(service)}}
+          <ng-template #query_details>
+            The memory quota for the Query service is a soft limit target that the garbage collector works to respect, including running more frequently as the limit is approached or crossed. When set to 0 the soft limit target is disabled and the garbage collector runs as normal.
+          </ng-template>
+          <span
+             *ngIf="service === 'n1ql'"
+             class="fa-stack icon-info margin-left-quarter"
+             [ngbTooltip]="query_details"
+             placement="right"
+             [closeDelay]="2000"
+             container="body">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+        </label>
+      </div>
+      <label
+         *ngIf="!group.value.flag"
+         [attr.for]="service + '-service-field'"
+         class="width-6">
+        {{getServiceName(service)}}
+      </label>
+      <small
+         class="form-inline width-6 text-center"
+         *ngIf="group.value.field && service === 'backup'">
+        - - - - - - -
+      </small>
+      <div
+         class="row width-6 flex-right relative"
+         *ngIf="group.value.field && service !== 'backup'"
+         formGroupName="field">
+        <input
+           [attr.id]="service + '-service-field'"
+           [formControlName]="service"
+           [mnFocus]="focusFieldSubject"
+           type="text"
+           mnName="{{service}}">
+        <!-- ng-disabled="config.services && !config.services.model.kv || (rbac && !rbac.cluster.pools.write)" -->
+        <!-- ng-model="config.memoryQuota" -->
+        <div class="inside-label">MiB</div>
+      </div>
+    </div>
+
+    <div
+       class="error"
+       [hidden]="!(postPoolsDefaultValidation.error | async)?.errors[getServiceErrorName(service)]">
+      {{(postPoolsDefaultValidation.error | async)?.errors[getServiceErrorName(service)]}}
+    </div>
+    <div
+       class="error"
+       [hidden]="!(postClusterInitHttp.error | async)?.errors[getServiceErrorName(service)]">
+      {{(postClusterInitHttp.error | async)?.errors[getServiceErrorName(service)]}}
+    </div>
+  </div>
+</div>
+
+<div
+   *ngIf="group.value.field && group.value.flag"
+   class="text-small text-right nowrap margin-right-1">
+  <strong>TOTAL QUOTA</strong> &nbsp; {{total | async}}MiB
+</div>

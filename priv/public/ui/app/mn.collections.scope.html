@@ -1,0 +1,79 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<section
+   class="cursor-pointer"
+   [ngClass]="(detailsHashObserver.stream.isOpened | async) ? statusClass : ''"
+   (click)="detailsHashObserver.stream.toggleDetails.next(scope.name)">
+  <div
+     class="cbui-tablerow has-hover"
+     [ngClass]="(detailsHashObserver.stream.isOpened | async) ? '' : statusClass">
+    <span class="cbui-table-cell flex-grow-3 cbui-tablerow-title" title="{{scope.name}}">
+      {{scope.name}}
+    </span>
+    <span class="cbui-table-cell">
+      {{scope.collections.length}}
+    </span>
+    <span class="cbui-table-cell resp-hide-sml">
+      <span [hidden]="!(interestingStats | async)['@kv-.kv_collection_item_count']">
+        {{(interestingStats | async)['@kv-.kv_collection_item_count'] | mnFormatQuantity:1000}}
+      </span>
+      <span [hidden]="(interestingStats | async)['@kv-.kv_collection_item_count']"> - </span>
+    </span>
+    <span class="cbui-table-cell resp-hide-sml">
+      <span [hidden]="!(interestingStats | async)['@kv-.kv_collection_mem_used_bytes']">
+        {{(interestingStats | async)['@kv-.kv_collection_mem_used_bytes']|mnFormatQuantity}}
+      </span>
+      <span [hidden]="(interestingStats | async)['@kv-.kv_collection_mem_used_bytes']"> - </span>
+    </span>
+    <span class="cbui-table-cell resp-hide-sml">
+      <span [hidden]="!(interestingStats | async)['@kv-.kv_collection_data_size_bytes']">
+        {{(interestingStats | async)['@kv-.kv_collection_data_size_bytes'] | mnFormatQuantity}}
+      </span>
+      <span [hidden]="(interestingStats | async)['@kv-.kv_collection_data_size_bytes']"> - </span>
+    </span>
+    <span class="cbui-table-cell resp-hide-sml">
+      <span [hidden]="!(interestingStats | async)['@kv-.kv_collection_ops']">
+        {{(interestingStats | async)['@kv-.kv_collection_ops'] | number:'1.0-0'}}
+      </span>
+      <span [hidden]="(interestingStats | async)['@kv-.kv_collection_ops']"> - </span>
+    </span>
+    <span class="cbui-table-cell flex-grow-2 text-right wrap resp-hide-xsml">
+      <a
+         [hidden]="!(permissions | async)?.cluster.collection[bucketName + ':' + scope.name + ':*']?.collections.write ||
+                   scope.name.startsWith('_')"
+         (click)="$event.stopPropagation();clickDeleteScope.next();">
+        Drop</a>
+      <a
+         (click)="$event.stopPropagation()"
+         class="margin-left-half"
+         [hidden]="!(permissions | async)?.cluster.collection[bucketName + ':' + scope.name + ':.']?.data?.docs?.read"
+         uiSref="app.admin.docs.editor"
+         [uiParams]="{bucket: bucketName, scope: scope.name}">
+        Documents</a>
+      <a
+         class="margin-left-half nowrap"
+         [hidden]="!(permissions | async)?.cluster.collection[bucketName + ':' + scope.name + ':*']?.collections.write"
+         (click)="$event.stopPropagation();clickAddCollection.next();">
+        Add Collection</a>
+    </span>
+  </div>
+  <div
+     class="cbui-tablerow-expanded"
+     [hidden]="!(detailsHashObserver.stream.isOpened | async)">
+    <mn-collections-scope-details
+       [scope]="scope"
+       [mnCollectionsStatsPoller]="mnCollectionsStatsPoller"
+       [statusClass]="statusClass"
+       [bucketName]="bucketName"
+       [scopeName]="scope.name"
+    ></mn-collections-scope-details>
+  </div>
+</section>

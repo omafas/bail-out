@@ -1,0 +1,388 @@
+#! /usr/bin/env bash
+#
+# Copyright 2010-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+
+SOFTWARE_VERSION="@PRODUCT_VERSION@"
+if [ x"${SOFTWARE_VERSION}" = "x" ]
+then
+   SOFTWARE_VERSION="unsupported developer build"
+fi
+
+ENTERPRISE=`echo @BUILD_ENTERPRISE@ | tr '[:upper:]' '[:lower:]'`
+
+if [ x"${ENTERPRISE}" = "xtrue" ]
+then
+   SOFTWARE_VERSION="${SOFTWARE_VERSION} (EE)"
+else
+   SOFTWARE_VERSION="${SOFTWARE_VERSION} (CE)"
+fi
+
+PATH="@PREFIX@/bin":$PATH
+export PATH
+
+ERL_LIBS="@PREFIX@/lib/ns_server/erlang/lib:@PREFIX@/lib/couchdb/erlang/lib:@PREFIX@/lib/couchdb/plugins"
+export ERL_LIBS
+
+DEFAULT_CONFIG_DIR="@PREFIX@/etc/couchdb/default.d"
+DEFAULT_CONFIG_FILE="@PREFIX@/etc/couchdb/default.ini"
+LOCAL_CONFIG_DIR="@PREFIX@/etc/couchdb/local.d"
+LOCAL_CONFIG_FILE="@PREFIX@/etc/couchdb/local.ini"
+
+PIDFILE="@PREFIX@/var/lib/couchbase/couchbase-server.pid"
+STATIC_CONFIG_PATH="@PREFIX@/etc/couchbase/static_config"
+CB_DATA_DIR="@PREFIX@/var/lib/couchbase"
+SSL_DIST_OPTFILE="@PREFIX@/etc/couchbase/ssl_dist_opts"
+CB_DIST_CFG_FILE="$CB_DATA_DIR/config/dist_cfg"
+HOSTS_CFG_FILE="@PREFIX@/etc/couchbase/hosts.cfg"
+CONFIG_PROFILE_PATH="@PREFIX@/etc/couchbase/${CB_CONFIG_PROFILE:-default}_profile"
+
+# For Sanitizer-enabled builds; configure so warnings are logged to a
+# separate, per exe name file in the couchbase logs directory (if
+# xSAN_OPTIONS not otherwise set).
+# Note: Due to a quirk of how the sanitizer runtime parses options, we *must*
+# set log_path in both ASAN_OPTIONS and UBSAN_OPTIONS, otherwise the default
+# log_path of UBSan(stderr) will end up getting used for both ASan and UBSan
+# warnings.
+common_sanitizer_flags="log_exe_name=1:log_path=$CB_DATA_DIR/logs/sanitizers.log:quarantine_size_mb=16:malloc_context_size=10:allocator_release_to_os=1"
+CB_ADDRESSSANITIZER="@CB_ADDRESSSANITIZER@"
+if [ x"${CB_ADDRESSSANITIZER}" != "xOFF" ]
+then
+  ASAN_OPTIONS="${ASAN_OPTIONS:-${common_sanitizer_flags}}"
+  export ASAN_OPTIONS
+fi
+CB_UNDEFINEDSANITIZER="@CB_UNDEFINEDSANITIZER@"
+if [ x"${CB_UNDEFINEDSANITIZER}" != "xOFF" ]
+then
+  UBSAN_OPTIONS="${UBSAN_OPTIONS:-${common_sanitizer_flags}}"
+  export UBSAN_OPTIONS
+fi
+
+couch_start_arguments=""
+
+LD_LIBRARY_PATH="@PREFIX@/lib":"@PREFIX@/lib/memcached":$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH
+
+ERL_CRASH_DUMP_BASE=erl_crash.dump.$(date +%s).$$
+ERL_CRASH_DUMP=$ERL_CRASH_DUMP_BASE.babysitter
+export ERL_CRASH_DUMP_BASE
+export ERL_CRASH_DUMP
+
+ERL_FULLSWEEP_AFTER=512
+export ERL_FULLSWEEP_AFTER
+
+# For some obscure reason erl requires HOME environment variable to be set.
+if [ -z "$HOME" ]
+then
+    export HOME=/tmp
+fi
+
+_check_ulimit() {
+    lim=`ulimit $1`
+    if [ $lim != "unlimited" ] && [ $lim -lt $2 ]
+    then
+        cat <<EOF
+
+The $3 for the couchbase user is set too low ($lim).
+It must be at least $2.
+
+EOF
+
+        if [ -f /etc/security/limits.conf ]
+        then
+            cat <<EOF
+Normally this can be increased by adding the following lines to
+/etc/security/limits.conf:
+
+couchbase              soft    $4                  <value>
+couchbase              hard    $4                  <value>
+
+Where <value> is greater than $2. The procedure may be totally
+different if you're running so called "non-root/non-sudo install" or
+if you've built Couchbase Server from source.
+
+EOF
+        fi
+    fi
+}
+
+_config_curl_env() {
+    # Search for the distro-provided certificate bundle. Uses the
+    # same hunt algorithm as Golang:
+    # https://golang.org/src/crypto/x509/root_linux.go
+    cert_files=(
+        "/etc/ssl/certs/ca-certificates.crt"                # Debian/Ubuntu/Gentoo etc.
+        "/etc/pki/tls/certs/ca-bundle.crt"                  # Fedora/RHEL 6
+        "/etc/ssl/ca-bundle.pem"                            # OpenSUSE
+        "/etc/pki/tls/cacert.pem"                           # OpenELEC
+        "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem" # CentOS/RHEL 7
+        "/etc/ssl/cert.pem"                                 # Alpine Linux
+    )
+    for cert_file in ${cert_files[@]}; do
+        if [ -e "${cert_file}" ]; then
+            export CURL_CA_BUNDLE=${cert_file}
+            break
+        fi
+    done
+}
+
+_check_datadir_writeable() {
+    operation="$1"
+    if [ ! -w $CB_DATA_DIR ]; then
+        cat <<ERRORMSG
+Insufficient privileges to $operation; please ensure user
+has write privileges on the $CB_DATA_DIR directory.
+ERRORMSG
+        exit 1
+    fi
+}
+
+_check_file_readable () {
+    f="$1"
+    operation="$2"
+    if [ ! -r "$f" ]; then
+        cat <<ERRORMSG
+Insufficient privileges to $operation; please ensure user
+has read privileges on $f.
+ERRORMSG
+        exit 1
+    fi
+}
+
+_prepare_datadir () {
+    test -d "$CB_DATA_DIR" || mkdir -p "$CB_DATA_DIR"
+    cd "$CB_DATA_DIR"
+}
+
+_add_config_file () {
+    couch_start_arguments="$couch_start_arguments $1"
+}
+
+_add_config_dir () {
+    for file in "$1"/*.ini; do
+        if [ -r "$file" ]; then
+          _add_config_file "$file"
+        fi
+    done
+}
+
+_load_config () {
+    _add_config_file "$DEFAULT_CONFIG_FILE"
+    _add_config_dir "$DEFAULT_CONFIG_DIR"
+    _add_config_file "$LOCAL_CONFIG_FILE"
+    _add_config_dir "$LOCAL_CONFIG_DIR"
+    if [ "$COUCHDB_ADDITIONAL_CONFIG_FILE" != '' ]
+    then
+        _add_config_file "$COUCHDB_ADDITIONAL_CONFIG_FILE"
+    fi
+}
+
+_drop_old_crashdumps () {
+    KEEP="`ls -1 erl_crash.dump.* 2>/dev/null | sort | tail -n 10`"
+    for file in erl_crash.dump.*; do
+        if [[ "$KEEP" != *$file* ]]; then
+            rm -f $file
+        fi
+    done
+}
+
+
+_start() {
+    maybe_pidfile=""
+    if [ $1 == "--with-pidfile" ]; then
+        maybe_pidfile="$PIDFILE"
+    fi
+    # Shifting arguments in order to remove the first arg because we just have
+    # handled it
+    shift
+
+    _prepare_datadir
+    _check_datadir_writeable "start Couchbase Server"
+
+    # Warn if user limits are restrictive.
+    _check_ulimit -u 10000 "maximum number of processes" "nproc"
+    _check_ulimit -n 200000 "maximum number of open files" "nofile"
+
+    # Detect curl cabundle and set environment.
+    _config_curl_env
+
+    _load_config
+
+    # note: we depend on pwd being $datadir from _prepare_datadir
+    _drop_old_crashdumps
+
+    umask 007
+
+    exec erl \
+        +A 16 \
+        -smp enable \
+        +sbwt none \
+        -kernel logger '[{handler, default, undefined}]' \
+                inetrc "\"$HOSTS_CFG_FILE\"" \
+                dist_config_file "\"$CB_DIST_CFG_FILE\"" \
+                prevent_overlapping_partitions 'false' \
+        -hidden \
+        -name 'babysitter_of_ns_1@cb.local' \
+        -proto_dist cb \
+        -epmd_module cb_epmd \
+        -no_epmd \
+        -ssl_dist_optfile $SSL_DIST_OPTFILE \
+        -setcookie nocookie \
+        $* \
+        -run ns_babysitter_bootstrap -- \
+        -couch_ini $couch_start_arguments \
+        -ns_babysitter pidfile "\"$maybe_pidfile\"" \
+        -ns_server config_path "\"$STATIC_CONFIG_PATH\""
+}
+
+# This function assumes that _start created a pidfile
+_stop() {
+    if [ ! -f "$PIDFILE" ]; then
+        echo "Pid file ($PIDFILE) is missing"
+        return 0
+    fi
+
+    _check_file_readable "$PIDFILE" "stop"
+
+    pid=`cat "$PIDFILE"`
+
+    if [ -z $pid ]; then
+        echo "Pid file ($PIDFILE) is empty"
+        return 4
+    fi
+
+    if ! _status &> /dev/null; then
+        echo "Couchbase Server is not running"
+        return 0
+    fi
+
+    kill -s TERM $pid
+    retries=90
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 1;
+        retries=$((retries-1))
+        if [ $retries -lt 1 ]; then
+            echo "Gracefull stop timed out"
+            return 2
+        fi
+    done
+}
+
+# This function assumes that _start created a pidfile
+_status() {
+    if [ ! -f "$PIDFILE" ]; then
+        echo "Couchbase Server is not running"
+        return 3
+    fi
+
+    _check_file_readable "$PIDFILE" "check status"
+
+    pid=`cat "$PIDFILE"`
+
+    progname=`ps -p "$pid" -c -o comm=`
+
+    if [ "$progname" == "beam.smp" ]; then
+        echo "Couchbase Server is running"
+        return 0
+    else
+        echo "Couchbase Server is not running"
+        return 1
+    fi
+}
+
+usage() {
+cat <<EOF
+couchbase-server is a script to start/stop Couchbase Server.
+
+Usage: $0 [--start|--status|--stop|--help|--version|-s|-k|-h|-v] [options]
+
+  Recognized options:
+     --start        Start Couchbase Server
+     --status, -s   Determine if Couchbase Server is running
+     --stop, -k     Stop Couchbase Server
+     --help, -h     Print this help text
+     --version, -v  Print software Version
+
+If none of the recognized options are specifed, --start is implied.  In
+this case, any trailing options and arguments will be passed to Couchbase
+Server; they should NOT be used unless you know what you're doing.
+
+EOF
+}
+
+_parse_options () {
+    # the getopt lack support for longopts..
+    if [ "$1" == "--version" ]
+    then
+      echo "Couchbase Server ${SOFTWARE_VERSION}"
+      exit 0
+    fi
+
+    if [ "$1" == "--help" ]
+    then
+      usage
+      exit 0
+    fi
+
+    if [ "$1" == "--status" ]
+    then
+      _status
+      exit $?
+    fi
+
+    if [ "$1" == "--start" ]
+    then
+      _start --with-pidfile -detached
+      # No "exit" is required here because _start does an exec.
+    fi
+
+    if [ "$1" == "--stop" ]
+    then
+      _stop
+      exit $?
+    fi
+
+    # All other long options are not allowed, except for a bare '--', which
+    # is used to separate script options from options to be passed to erl
+    # if we are starting the server.
+    if [[ "$1" =~ --.+ ]]
+    then
+      echo "illegal option $1"
+      exit 1
+    fi
+
+    # set +e
+    while getopts "kvhs" opt
+    do
+       case $opt in
+       k)
+         _stop
+         exit $?
+         ;;
+       v)
+         echo "Couchbase Server ${SOFTWARE_VERSION}"
+         exit 0
+         ;;
+       h)
+         usage
+         exit 0
+         ;;
+       s)
+         _status
+         exit $?
+         ;;
+       *)
+         break
+         ;;
+       esac
+    done
+
+    _start --without-pidfile $*
+}
+
+_parse_options $*

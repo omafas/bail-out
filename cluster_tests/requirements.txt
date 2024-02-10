@@ -1,0 +1,9 @@
+requests>=2.24.0
+python-ldap-test~=0.3.1
+scramp~=1.4.4
+poetry~=1.4.2
+pysaml2 @ git+https://github.com/couchbasedeps/pysaml2@couchbase-v7.4.1
+PyYAML~=6.0
+traceback-with-variables~=2.0.4
+cryptography~=38.0.1
+jsondiff~=2.0.0

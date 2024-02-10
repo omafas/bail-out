@@ -1,0 +1,108 @@
+<!--
+Copyright 2021-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<section
+   class="has-hover"
+   [ngClass]="(sectionClass | async)"
+   (click)="detailsHashObserver.stream.toggleDetails.next(bucket.name)">
+  <div
+     class="cbui-tablerow has-hover resp-xsml"
+     [ngClass]="(tableClass | async)">
+    <span class="cbui-table-cell flex-grow-3 row flex-left">
+      <span
+         class="cbui-tablerow-title ellipsis"
+         [attr.title]="bucket.name">
+        {{bucket.name}}
+      </span>
+      <span
+         class="label lt-blue"
+         *ngIf="bucket.bucketType !== 'membase'">
+        {{bucket.bucketType}}
+      </span>
+    </span>
+
+    <span class="cbui-table-cell">
+      {{bucket.basicStats.itemCount | number}}
+    </span>
+    <span class="cbui-table-cell">
+      <span *ngIf="bucket.bucketType === 'membase'">
+        {{residentRatio | async | number | mnTruncateTo3Digits}}%
+      </span>
+      <span *ngIf="bucket.bucketType !== 'membase'">
+        &#8212;
+      </span>
+    </span>
+    <span class="cbui-table-cell">
+      {{bucket.basicStats.opsPerSec | number}}
+    </span>
+    <span class="cbui-table-cell flex-grow-1-5 resp-hide-sml">
+      {{bucket.basicStats.memUsed | mnFormatQuantity}} /
+      {{bucket.quota.ram | mnFormatQuantity}}
+    </span>
+    <span class="cbui-table-cell resp-hide-med">
+      <span *ngIf="bucket.bucketType === 'membase'">
+        {{bucket.basicStats.diskUsed | mnFormatQuantity}}
+      </span>
+      <span *ngIf="bucket.bucketType !== 'membase'">
+        &#8212;
+      </span>
+    </span>
+    <span
+       class="cbui-table-cell flex-grow-2-5 wrap text-right resp-hide-xsml">
+      <span *ngIf="bucket.bucketType !== 'memcached'">
+        <a
+           [hidden]="!(showDocumentsLink | async)"
+           (click)="$event.stopPropagation()"
+           uiSref="app.admin.docs.editor"
+           [uiParams]="{bucket: bucket.name}">
+          Documents
+        </a>
+      </span>
+      <a
+         class="margin-left-1 nowrap"
+         [hidden]="!(showScopesAndCollectionsLink | async)"
+         (click)="$event.stopPropagation()"
+         uiSref="app.admin.collections"
+         [uiParams]="{commonBucket: bucket.name}">
+        Scopes & Collections
+      </a>
+    </span>
+  </div>
+
+  <div
+     class="cbui-tablerow ahgdhajd"
+     [hidden]="(statusClass | async) === 'dynamic_healthy'">
+    <span
+       class="error"
+       *ngFor="let message of (nodesCountByStatusMessage | async)">
+      {{message}}
+    </span>
+  </div>
+
+  <div
+     class="row row-min items-bottom"
+     [hidden]="!(showWarmUpProgress | async)">
+    <div class="task-progress-row">
+      <div
+         class="task-progress-row-meter"
+         [ngStyle]="{width: (warmUpProgress | async | mnTruncateTo3Digits) + '%'}">
+      </div>
+    </div>
+    <div class="task-progress-row-text flex-right">
+      {{warmUpProgress | async | mnTruncateTo3Digits}}% complete warmup
+    </div>
+  </div>
+
+  <div
+     class="cbui-tablerow-expanded"
+     *ngIf="showDetails | async">
+    <mn-bucket-item-details [bucket]="bucket"></mn-bucket-item-details>
+  </div>
+</section>

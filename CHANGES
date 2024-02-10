@@ -1,0 +1,825 @@
+This file documents user-visible changes in Couchbase clustering & UI.
+======================================================================
+
+-----------------------------------------
+Between versions 2.1.0 and 2.2.0
+-----------------------------------------
+
+* (MB-8663) per xdc-replication settings were implemented
+
+  Now we provide two REST endpoints for changing XDCR settings:
+
+    - /settings/replications/ — for global settings
+    - /settings/replications/<replication id> — for per-replication
+      settings
+
+  Additionally to that, internalSettings/ can also still be used for
+  updating some of the global XDCR settings.
+
+  Replication id can be found in corresponding XDCR task returned by
+  /pools/default/tasks REST endpoint (also see examples below).
+
+
+  Per replication settings (/settings/replications/<replication id>)
+  ==================================================================
+
+    Supported parameters:
+
+    +--------------------------------+---------------------+--------------------------------------+
+    |              Name              |        Type         |            Default value             |
+    |                                |                     |                                      |
+    +--------------------------------+---------------------+--------------------------------------+
+    |       maxConcurrentReps        |   int ∈ [2, 256]    |                                    32|
+    +--------------------------------+---------------------+--------------------------------------+
+    |       checkpointInterval       |  int ∈ [60, 14400]  |                                  1800|
+    +--------------------------------+---------------------+--------------------------------------+
+    |         docBatchSizeKb         |  int ∈ [10, 10000]  |                                  2048|
+    +--------------------------------+---------------------+--------------------------------------+
+    |     failureRestartInterval     |   int ∈ [1, 300]    |                                    30|
+    +--------------------------------+---------------------+--------------------------------------+
+    |        workerBatchSize         | int ∈ [500, 10000]  |                                   500|
+    +--------------------------------+---------------------+--------------------------------------+
+    |       connectionTimeout        |  int ∈ [10, 10000]  |                                   180|
+    +--------------------------------+---------------------+--------------------------------------+
+    |        workerProcesses         |    int ∈ [1, 32]    |                                     4|
+    +--------------------------------+---------------------+--------------------------------------+
+    |        httpConnections         |   int ∈ [1, 100]    |                                    20|
+    +--------------------------------+---------------------+--------------------------------------+
+    |       retriesPerRequest        |   int ∈ [1, 100]    |                                     2|
+    +--------------------------------+---------------------+--------------------------------------+
+    | optimisticReplicationThreshold | int ∈ [0, 20971520] |                                   256|
+    +--------------------------------+---------------------+--------------------------------------+
+    |           xmemWorker           |    int ∈ [1, 32]    |                                     1|
+    +--------------------------------+---------------------+--------------------------------------+
+    |       enablePipelineOps        |        bool         |                                  true|
+    +--------------------------------+---------------------+--------------------------------------+
+    |    localConflictResolution     |        bool         |                                 false|
+    +--------------------------------+---------------------+--------------------------------------+
+    |         socketOptions          |        term         | [{keepalive, true}, {nodelay, false}]|
+    +--------------------------------+---------------------+--------------------------------------+
+
+    Any subset of parameters can be overridden on per-replication
+    basis. To make replication use global value for certain parameter
+    pass empty value. In case of success, server responds with 200
+    status and a JSON object representing resulting per-replication
+    settings. In case of error, server responds with 400 status and
+    returns a JSON object describing the errors.
+
+    Examples:
+
+    $ curl -s -X GET -u Administrator:asdasd http://127.0.0.1:9000/pools/default/tasks
+
+    [
+      {
+        "status": "notRunning",
+        "type": "rebalance"
+      },
+      {
+        "errors": [],
+        "docsWritten": 0,
+        "docsChecked": 0,
+        "changesLeft": 0,
+        "recommendedRefreshPeriod": 10,
+        "type": "xdcr",
+        "cancelURI": "/controller/cancelXDCR/c2a76ddac3bafe1cbc0e7ac2a48d6ff9%2Fdefault%2Ftest",
+        "settingsURI": "/settings/replications/c2a76ddac3bafe1cbc0e7ac2a48d6ff92Fdefault%2Ftest",
+        "status": "running",
+        "replicationType": "xmem",
+        "id": "c2a76ddac3bafe1cbc0e7ac2a48d6ff9/default/test",
+        "source": "default",
+        "target": "/remoteClusters/c2a76ddac3bafe1cbc0e7ac2a48d6ff9/buckets/test",
+        "continuous": true
+      }
+    ]
+
+    $ curl -X GET -u Administrator:asdasd \
+           http://127.0.0.1:9000/settings/replications/c2a76ddac3bafe1cbc0e7ac2a48d6ff9%2fdefault%2ftest
+    {
+      "docBatchSizeKb": 2048,
+      "failureRestartInterval": 30,
+      "workerBatchSize": 500,
+      "optimisticReplicationThreshold": 256,
+      "maxConcurrentReps": 64,
+      "checkpointInterval": 600
+    }
+
+
+    $ curl -X POST -u Administrator:asdasd \
+           http://127.0.0.1:9000/settings/replications/c2a76ddac3bafe1cbc0e7ac2a48d6ff9%2fdefault%2ftest \
+           -d maxConcurrentReps=32 -d checkpointInterval=1800
+    {
+      "docBatchSizeKb": 2048,
+      "failureRestartInterval": 30,
+      "workerBatchSize": 500,
+      "optimisticReplicationThreshold": 256,
+      "maxConcurrentReps": 32,
+      "checkpointInterval": 1800
+    }
+
+
+    $ curl -X POST -u Administrator:asdasd \
+           http://127.0.0.1:9000/settings/replications/c2a76ddac3bafe1cbc0e7ac2a48d6ff9%2fdefault%2ftest \
+           -d maxConcurrentReps=
+    {
+      "docBatchSizeKb": 2048,
+      "failureRestartInterval": 30,
+      "workerBatchSize": 500,
+      "optimisticReplicationThreshold": 256,
+      "checkpointInterval": 1800
+    }
+
+    $ curl -X POST -u Administrator:asdasd \
+           http://127.0.0.1:9000/settings/replications/c2a76ddac3bafe1cbc0e7ac2a48d6ff9%2fdefault%2ftest \
+           -d maxConcurrentReps=1024
+    {
+      "maxConcurrentReps": "The value must be an integer between 2 and 256"
+    }
+
+  Global settings (/settings/replications/)
+  =========================================
+
+    The endpoint for global settings is very similar. The supported
+    parameters are all the same as for per-replications endpoint plus
+    the following:
+
+    +------------------+--------------+---------------+
+    |       Name       |     Type     | Default value |
+    |                  |              |               |
+    +------------------+--------------+---------------+
+    | traceDumpInvprob | int ∈ [1, ∞) |           1000|
+    +------------------+--------------+---------------+
+
+    The only difference in behavior is that it's not possible to unset
+    certain parameter.
+
+    Examples:
+
+    $ curl -X GET -u Administrator:asdasd http://127.0.0.1:9000/settings/replications/
+    {
+      "traceDumpInvprob": 1000,
+      "socketOptions": {
+        "nodelay": false,
+        "keepalive": true
+      },
+      "localConflictResolution": false,
+      "enablePipelineOps": true,
+      "xmemWorker": 1,
+      "optimisticReplicationThreshold": 256,
+      "retriesPerRequest": 2,
+      "maxConcurrentReps": 32,
+      "checkpointInterval": 1800,
+      "docBatchSizeKb": 2048,
+      "failureRestartInterval": 30,
+      "workerBatchSize": 500,
+      "connectionTimeout": 180,
+      "workerProcesses": 4,
+      "httpConnections": 20
+    }
+
+    $ curl -X POST -u Administrator:asdasd \
+           http://127.0.0.1:9000/settings/replications/ -d traceDumpInvprob=1
+    {
+      "traceDumpInvprob": 1,
+      "socketOptions": {
+        "nodelay": false,
+        "keepalive": true
+      },
+      "localConflictResolution": false,
+      "enablePipelineOps": true,
+      "xmemWorker": 1,
+      "optimisticReplicationThreshold": 256,
+      "retriesPerRequest": 2,
+      "maxConcurrentReps": 32,
+      "checkpointInterval": 1800,
+      "docBatchSizeKb": 2048,
+      "failureRestartInterval": 30,
+      "workerBatchSize": 500,
+      "connectionTimeout": 180,
+      "workerProcesses": 4,
+      "httpConnections": 20
+    }
+
+    $ curl -X POST -u Administrator:asdasd \
+           http://127.0.0.1:9000/settings/replications/ -d traceDumpInvprob=0
+    {
+      "traceDumpInvprob": "The value must be an integer between 1 and infinity"
+    }
+
+
+* (MB-8801) we introduced the script for resetting administrative
+  password either to automatically generated or to user specified
+  value
+
+  USAGE: make sure that the server is started and then run
+  cbreset_password from the bin directory. the script will
+  guide you through password resetting process
+
+* (MB-8656) we've allowed adding vm flags of child vm via env variable
+
+  By setting environment variable COUCHBASE_NS_SERVER_VM_EXTRA_ARGS it
+  is now possible to add erlang vm flags of child vm. It is interpreted
+  as erlang term which must represent list of strings.
+
+  E.g. in order to pass +swt low you can do the following:
+
+    COUCHBASE_NS_SERVER_VM_EXTRA_ARGS='["+swt", "low"]' ./cluster_run
+
+
+* (MB-8569) live filtration of list of documents in UI was
+  removed. This code is using un-optimized implementation of searching
+  list of documents and that caused non-trivial use of memory which
+  could lead to server crash.
+
+* (MB-7398 (revision)) (see MB-7398 below as part of 2.1.0 changes) As
+  part of fixing MB-8545 below we found that there's no way to switch
+  any node back from manually assigned name to automatically managed
+  name. We now reset node's name back to 127.0.0.1 and automatic name
+  management when it's leaving cluster. I.e. previously node always
+  kept it's name even after it was rebalanced out.
+
+* (MB-8465)(windows only) quite embarrasing and quite intensive memory
+  leak in one of our child processes was found. It is now fixed.
+
+* (MB-8545) we've found that hostname management (see MB-7398 below)
+  is not really effective if hostname is assigned before joining 2.0.1
+  cluster. That was because if node was joined via 2.0.1 node it would
+  always revert to automatically assigned address.
+
+  Proposed workaround is to join 2.1.0 nodes via 2.1.0. Clearly,
+  during rebalance upgrade first 2.1.0 node has to be joined via 2.0.1
+  node. In which case see jira ticket for further workaround.
+
+  This is now fixed.
+
+-----------------------------------------
+Between versions 2.0.1 and 2.1.0
+-----------------------------------------
+
+* (MB-8046) We don't allow data and config directories to be
+  world-readable anymore. Which was a potential local vulnerability.
+
+* (MB-8045) Default value of rebalanceMovesBeforeCompaction was raised
+  to 64 for severe gains in rebalance time.
+
+* (MB-7398) There's now full support of assigning symbolic hostnames
+  to cluster nodes that replaces old "manual" and kludgy
+  procedure. Now as part of node setup wizard there's input field to
+  assign it a name. When node is added to cluster as part of Add
+  Server button (or corresponding REST API), then IP address or name
+  that's used to specify that node is attempted to be assigned to this
+  node.
+
+  There's also new REST API call for renaming node.
+
+  POST to /node/controller/rename with hostname parameter will trigger
+  node rename.
+
+  Using hostnames instead of relying on built-in detection of node ip
+  address is recommended in environments where ip addresses are
+  volatile. I.e. EC2 or developer's laptop(s) in network where
+  addresses are assigned via DHCP.
+
+* (CBD-220) Erlang VM was split into 2. One is called babysitter
+  VM. That erlang VM instance is only capable of starting and
+  babysitting main erlang VM as well as memcached and moxi. Babysitter
+  is designed to be small and simple and thus very unlikely to crash
+  or be affected by any bug.
+
+  Most user-visible effect of this change is that crash of main erlang
+  VM (e.g. due to lack of memory) cannot bring down memcached or moxi
+  anymore.
+
+  But it also finally enables same ip address/hostname management
+  features on windows just like it works for as any other OS. That's
+  because erlsrv which is a way to run erlang VM as windows service
+  does not allow changing node name at runtime. But because now
+  service just runs babysitter which we don't need to rename, we are
+  now able to run main erlang VM in a way that allows node to rename
+  itself.
+
+  This change also enables some more powerful ways of on-line
+  upgrade. I.e. we'll be able to shoot old version of "erlang bits" in
+  the head and start new version. All that without interfering with
+  running instance of memcached or moxi.
+
+  There's new set of log files for log messages from babysitter
+  VM. cbcollect_info will save them as ns_server.babysitter.log.
+
+  See also doc/some-babysitting-details.txt in source tree.
+
+* (MB-7574) Support for REST call /pools/default/stats is discontinued.
+
+  This REST call was meant to aggregate stats for several buckets. And
+  it used to do so long time ago (Northscale Server 1.0.3). But after
+  'membase' bucket type was introduced, it worked only for a single
+  bucket and failed with badmatch error otherwise. The proper way to
+  grab bucket stats now is /pools/default/buckets/<bucket name>/stats
+  REST call.
+
+* (CBD-771) Stats archives are not stored in mnesia anymore.
+
+  Instead they are collected in ETS tables and saved to plain files
+  from time to time. This means historical stats from pre-upgrade to
+  2.0.2 is going to be lost.
+
+* (CBD-816) Recovery mode support
+
+  When a membase (couchbase) bucket has some vbuckets missing it can
+  be put into a recovery mode using startRecovery REST call:
+
+   curl -sX POST -u Administrator:asdasd \
+        http://lh:9000/pools/default/buckets/default/controller/startRecovery
+
+  In case of success, the response looks as follows:
+
+   {
+       "code": "ok",
+       "recoveryMap": [
+           {
+               "node": "n_1@10.17.40.207",
+               "vbuckets": [
+                   33,
+                   34,
+                   35,
+                   36,
+                   37,
+                   38,
+                   39,
+                   40,
+                   41,
+                   42,
+                   54,
+                   55,
+                   56,
+                   57,
+                   58,
+                   59,
+                   60,
+                   61,
+                   62,
+                   63
+               ]
+           }
+       ],
+       "uuid": "8e02b3a84e0bbf58cbbb58919f1a6563"
+   }
+
+  So in this case replica vbuckets 33-42 and 54-63 were created on
+  node n_2@10.17.40.207. Now the client can start pushing data to
+  these vbuckets.
+
+  All the important recovery URIs are advertised via tasks:
+
+   curl -sX GET -u 'Administrator:asdasd' http://lh:9000/pools/default/tasks
+
+   [
+       {
+           "bucket": "default",
+           "commitVbucketURI": "/pools/default/buckets/default/controller/commitVBucket?recovery_uuid=8e02b3a84e0bbf58cbbb58919f1a6563",
+           "recommendedRefreshPeriod": 10.0,
+           "recoveryStatusURI": "/pools/default/buckets/default/recoveryStatus?recovery_uuid=8e02b3a84e0bbf58cbbb58919f1a6563",
+           "stopURI": "/pools/default/buckets/default/controller/stopRecovery?recovery_uuid=8e02b3a84e0bbf58cbbb58919f1a6563",
+           "type": "recovery",
+           "uuid": "8e02b3a84e0bbf58cbbb58919f1a6563"
+       },
+       {
+           "status": "notRunning",
+           "type": "rebalance"
+       }
+   ]
+
+   - stopURI can be used to abort the recovery
+   - recoveryStatusURI will return information about the recovery in the
+     same format as startRecovery
+   - commitVBucketURI will activate certain vbucket
+
+     This call should be used after the client is done with pushing
+     the data to it. VBucket is passed as a POST parameter:
+
+      curl -sX POST -u 'Administrator:asdasd' \
+           http://lh:9000/pools/default/buckets/default/controller/commitVBucket?recovery_uuid=8e02b3a84e0bbf58cbbb58919f1a6563 \
+           -d vbucket=33
+
+      {
+          "code": "ok"
+      }
+
+
+  All the recovery related REST calls return a JSON object having a
+  "code" field. This (together with HTTP status code) indicates if the
+  call was successful.
+
+  Here's a complete list of possible REST calls replies.
+
+   - startRecovery
+
+     +-------------+-------------------+------------------------------------+
+     | HTTP Status |       Code        |              Comment               |
+     |             |                   |                                    |
+     +-------------+-------------------+------------------------------------+
+     |          200|        ok         |Recovery started. Recovery map is   |
+     |             |                   |returned in recoveryMap field.      |
+     +-------------+-------------------+------------------------------------+
+     |          400|    unsupported    |Not all nodes in the cluster support|
+     |             |                   |recovery.                           |
+     +-------------+-------------------+------------------------------------+
+     |          400|    not_needed     |Recovery is not needed.             |
+     +-------------+-------------------+------------------------------------+
+     |          404|    not_present    |Specified bucket not found.         |
+     +-------------+-------------------+------------------------------------+
+     |          500|   failed_nodes    |Could not start recovery because    |
+     |             |                   |some nodes failed. A list of failed |
+     |             |                   |nodes can be found in the           |
+     |             |                   |"failedNodes" field of the reply.   |
+     +-------------+-------------------+------------------------------------+
+     |          503| rebalance_running |Could not start recovery because    |
+     |             |                   |rebalance is running.               |
+     +-------------+-------------------+------------------------------------+
+
+   - stopRecovery
+
+     +-------------+---------------+------------------------------------+
+     | HTTP Status |     Code      |              Comment               |
+     |             |               |                                    |
+     +-------------+---------------+------------------------------------+
+     |          200|      ok       |Recovery stopped successfully.      |
+     +-------------+---------------+------------------------------------+
+     |          400| uuid_missing  |recovery_uuid query parameter has   |
+     |             |               |not been specified.                 |
+     +-------------+---------------+------------------------------------+
+     |          404| bad_recovery  |Either no recovery is in progress or|
+     |             |               |provided uuid does not match the    |
+     |             |               |uuid of running recovery.           |
+     +-------------+---------------+------------------------------------+
+
+   - commitVBucket
+
+     +-------------+------------------------+------------------------------------+
+     | HTTP Status |          Code          |              Comment               |
+     |             |                        |                                    |
+     +-------------+------------------------+------------------------------------+
+     |          200|           ok           |VBucket commited successfully.      |
+     +-------------+------------------------+------------------------------------+
+     |          200|   recovery_completed   |VBucket commited successfully. No   |
+     |             |                        |more vbuckets to recover. So the    |
+     |             |                        |cluster is not in recovery mode     |
+     |             |                        |anymore.                            |
+     +-------------+------------------------+------------------------------------+
+     |          400|      uuid_missing      |recovery_uuid query parameter has   |
+     |             |                        |not been specified.                 |
+     +-------------+------------------------+------------------------------------+
+     |          400| bad_or_missing_vbucket |VBucket is either unspecified or    |
+     |             |                        |couldn't be converted to integer.   |
+     +-------------+------------------------+------------------------------------+
+     |          404|   vbucket_not_found    |Specified VBucket is not part of the|
+     |             |                        |recovery map.                       |
+     +-------------+------------------------+------------------------------------+
+     |          404|      bad_recovery      |Either no recovery is in progress or|
+     |             |                        |provided uuid does not match the    |
+     |             |                        |uuid of running recovery.           |
+     +-------------+------------------------+------------------------------------+
+     |          500|      failed_nodes      |Could not commit vbucket because    |
+     |             |                        |some nodes faileed. A list of failed|
+     |             |                        |nodes can be found in the           |
+     |             |                        |"failedNodes" field of the reply.   |
+     +-------------+------------------------+------------------------------------+
+
+   - recoveryStatus
+
+     +-------------+---------------+------------------------------------+
+     | HTTP Status |     Code      |              Comment               |
+     |             |               |                                    |
+     +-------------+---------------+------------------------------------+
+     |          200|      ok       |Success. Recovery information is    |
+     |             |               |returned in the same format as for  |
+     |             |               |startRecovery.                      |
+     +-------------+---------------+------------------------------------+
+     |          400| uuid_missing  |recovery_uuid query parameter has   |
+     |             |               |not been specified.                 |
+     +-------------+---------------+------------------------------------+
+     |          404| bad_recovery  |Either no recovery is in progress or|
+     |             |               |provided uuid does not match the    |
+     |             |               |uuid of running recovery.           |
+     +-------------+---------------+------------------------------------+
+
+
+  Recovery map generation is very simplistic. It just distributes
+  missing vbuckets to the available nodes and tries to ensure that
+  nodes get about the same number of vbuckets. It's not always
+  possible though, because after failover we often have quite
+  unbalanced map. The resulting map is likely very unbalanced too. And
+  recovered vbuckets are not even replicated. So in a nutshell,
+  recovery is not a means of avoiding rebalance. It's suitable only
+  for recovering data. And rebalance will be needed anyway.
+
+* (MB-8013) Detailed rebalance progress implemented.
+
+  This gives user an estimate of the number of items to be transferred
+  from each node during rebalance, number of items transferred so far,
+  number of vbuckets to be moved in/out of the node. This works on a
+  per bucket level so we also show which bucket is being rebalanced
+  right now and how many has already been rebalanced.
+
+* (MB-8199) REST and CAPI request throttler implemented.
+
+  It's behavior is controlled by three parameters which can be set via
+  /internalSettings REST endpoint:
+
+    - restRequestLimit
+
+      Maximum number of simultaneous connections each node should
+      accept on REST port. Diagnostics related endpoints and
+      /internalSettings are not counted.
+
+    - capiRequestLimit
+
+      Maximum number of simultaneous connections each node should
+      accept on CAPI port. It should be noted that it includes XDCR
+      connections.
+
+    - dropRequestMemoryThresholdMiB
+
+      The amount of memory used by Erlang VM that should not be
+      exceeded. If it's exceeded the server will start dropping
+      incoming connections.
+
+  When the server decides to reject incoming connection because some
+  limit was exceeded, it does so by responding with status code of 503
+  and Retry-After header set appropriately (more or less). On REST
+  port textual description of why request was rejected returned in a
+  body. On CAPI port in CouchDB tradition a JSON object is returned
+  with "error" and "reason" fields.
+
+  By default all the thresholds are set to be unlimited.
+
+-----------------------------------------
+Between versions 2.0.0 and 2.0.1
+-----------------------------------------
+
+* (CBD-790) new REST call:
+  empty POST request to
+  /pools/default/buckets/<bucketname>/controller/unsafePurgeBucket
+  will trigger a special type of forced compaction that will "forget"
+  deleted items.
+
+  Normally couchstore keeps deletion "tombstones" forever, which
+  naturally creates space problem for some use-cases (i.e. session
+  stores). But tombstones are required for XDCR. So this unsupported
+  and undocumented facility is only safe to use when XDCR is not used
+  and was never used.
+
+* orchestration of vbucket moves during rebalance was changed to make
+  rebalance faster in some cases. Most important change is that
+  vbucket move is now split into two phases. During first phase tap
+  backfills happen (i.e. bulk of data is sent to replicas and future
+  master), second phase is when we're waiting for index update
+  completion and performing "consistent" views takeover. First phase
+  (like entire vbucket move in previous version) is sequential. Node
+  only performs one in- or out-going backfill at a time. But second
+  phase is allowed to proceed in parallel. We've found that it allows
+  index updater to see larger batches and be "utilized" larger share
+  of the time.
+
+  New moves orchestration also attempts to keep all nodes busy all the
+  time. Which is especially visible on rebalance out tests, where all
+  remaining nodes need to index about same subset of data. 2.0.0
+  couldn't keep all the nodes busy all the time. Data moved from
+  rebalanced out node was essentially indexed sequentially, vbucket
+  after vbucket.
+
+  See tickets: MB-6726 and MB-7523
+
+  Old implementation was seen to often start with (re)building
+  replicas. New moves orchestration on the other hand attempts to
+  move active vbuckets sooner, so that mutations are more evently
+  spread sooner.
+
+  We've also found that we need to coordinate index compactions with
+  massive index updates that happen as part of rebalance. Main reason
+  for that is given that all vbuckets of node are indexed in single
+  file. This file can be big. And compacting it is quite heavy
+  operation. Given that couch-style rebalance has performance issues
+  when there's heavy mutations at same time as compaction (i.e. it has
+  to reapply them to new version of file after bulk compaction is
+  done), we have seen massive waste of CPU and disk if view compaction
+  happens in parallell with index updating.
+
+  To prevent that we allow 16 moves (configurable via internal UI
+  settings) to be made to or from any given node, after which index
+  compaction is forced (unless disabled via other internal
+  setting). During moves, view compaction is disabled. We've found it
+  solves problem of huge disk space blowup during rebalance: MB-6799.
+
+  New internal setting (POST-able to /internalSettings and changeable
+  via internal settings UI) rebalanceMovesBeforeCompaction allows to
+  change that number of moves before compaction "constant".
+
+* Heavy timeouts caused by lack of +A erlang option were finally
+  fixed. We couldn't enable it previously due to crash in Erlang that
+  this option seemingly caused. We managed to understand problem and
+  implemented workaround, which allowed as to get back to +A. See
+  MB-7182.
+
+* Another, less frequent, cause of timeouts was addressed too. We've
+  found that major and even minor page faults can significantly
+  degrate erlang latencies. As part of MB-6595 we're now locking
+  erlang pages in ram (so that kernel doesn't evict them e.g. to swap)
+  and we also tuned erlang's memory allocator to be far less agressive
+  in returned previously used pages to kernel.
+
+* bucket flush REST API call is now allowed with just bucket
+  credentials, instead of always requiring admin credentials in
+  past. MB-7381
+
+* We closed dangerous, but windows-specific security problem in
+  "MB-7390: Prohibit arbitrary access to files on Windows"
+
+* windows was also taught not to pick link local addresses. MB-7417
+
+* subtle issue on offline upgrade from 1.8.x was fixed (MB-7369
+  MB-7370)
+
+* views whose names have slashes work now. MB-7193
+
+-----------------------------------------
+Between versions 1.8.1 and 2.0.0
+-----------------------------------------
+
+We didn't keep changelog for 2.0.0 release. It has too many new
+features to mention here.
+
+* we have internal settings API and UI. API is GET and POST to
+  /internalSettings. UI is hidden by default but it'll be visible if
+  index.html is replaced with index.html?enableInternalSettings=1 in
+  UI url.
+
+
+-----------------------------------------
+Between versions 1.8.0 and 1.8.1
+-----------------------------------------
+
+* ruby is not required anymore to build ns_server (and afaik rest of
+  couchbase server)
+
+* bucket deletion now waits for all nodes to complete deletion of
+  bucket. But note there's timeout and it's set to 30 seconds.
+
+* delete bucket request now correctly returns error during rebalance
+  instead of crashing
+
+* create bucket request now returns 503 instead of 400 during
+  rebalance.
+
+* bucket deletion errors are now correctly displayed on UI
+
+* we're now using our own great logging library: ale. Formatting of
+  log messages is greatly improved. With different log categories and
+  separate log files for error and info (and above) levels. So that
+  high-level and important messages are preserved longer without
+  compromising detailedness of debug logs. A lot of improvements to
+  quality of logged messages were made. Another user-visible change is
+  much faster grabbing of logs.
+
+* couchbase_server script now implements reliable
+  shutdown. I.e. couchbase_server -k will gracefully shutdown server
+  persisting all pending mutations before exiting. Actual service stop
+  invocation is synchronous.
+
+* during rebalance vbucket map is now updated after each vbucket
+  move. Providing better guide for (perhaps not so) smart clients.
+
+* new-style mb_master transition grace period is now over. 1.8.1 can
+  coexist (and support online upgrade from) membase 1.7.2 and
+  above. Versions before that are not supported because they don't
+  support new-style master election.
+
+* (MB-4554) stats gathering is now using wall clock time instead of
+  erlang's now function. erlang:now is based on wall clock time, but
+  by definition cannot jump backwards. So certain ntp time adjustments
+  caused issues for stats gathering previously.
+
+* scary looking retry_not_ready_vbuckets log message was
+  fixed. ebucketmigrator process can sometimes restart itself when
+  some of it's source vbucket were not ready when replication was
+  started. That restart was looking like crash. Now it's fixed.
+
+* vbucket map generation code now generates maps with optimal "moves"
+  from current map in the following important cases. When adding back
+  previously failed over node (assuming every other node is same and
+  healthy) and when performing "swap rebalance". Swap rebalance is
+  when you simultaneously add and remove N nodes. Where N can be any
+  natural number (up to current cluster size of course). Rebalance is
+  now significantly faster when this conditions apply.
+
+* (MB-4476) couchbase server now support node cloning better. You can
+  use clone snapshot of empty node and join those VMs into single
+  cluster.
+
+* couchbase server is not more robust when somebody tries to create
+  bucket when bucket with same name is still being shut down on any of
+  nodes
+
+* annoying and repeating log message when there is memcached type
+  buckets, but some nodes are not yet rebalanced it is now fixed
+
+* bug causing couchbase to return 500 error instead of gracefully
+  returning error when bucket parameter "name" is missing is now fixed
+
+* few races when node that orchestrates rebalance is being rebalanced
+  out are now fixed. Previously it was possible to see rebalance as
+  running and other 'rebalance-in-flight' config effects when it was
+  actually completed.
+
+* bug causing failed over node to not delete it's data files was
+  fixed. Note: previously it was only possible when node was added back
+  after being failed over.
+
+* couchbase server now performs rebalance more safely. It builds new
+  replicas before switching to them. It's now completely safe to stop
+  rebalance at any point without risking data loss
+
+* due to safer rebalance we're now deleting old vbuckets as soon as
+  possible during rebalance. Making further vbucket movements faster
+
+* couchbase server avoids reuse of tap names. Previous versions had
+  release notes that recommended to avoid rebalancing for 5 minutes
+  after stopped or failed rebalance. That problem is now fixed.
+
+* (MB-4906 Always fetch autofailover count from config) bug when
+  certain sequence of events could lead to autofailover breaking it's
+  limit of single node to fail over was fixed
+
+* (MB-4963) old "issue" of UI reporting rebalance as failed when it
+  was in fact stopped by user is now fixed
+
+* (MB-5020) bug causing rebalance to be incorrectly displayed as
+  running preventing failover was fixed
+
+* (MB-4023) couchbase server now using dedicated memcached port for
+  it's own stats gathering, orchestration, replication and
+  rebalance. Making it more robust against mis-configured clients.
+
+* /diag/masterEvents cluster events streaming facility was
+  implemented. See doc/master-events.txt for more details.
+
+* (MB-4564) during failover and rebalance out couchbase server now
+  leaves data files. So that accident failover does not leads to
+  catastrophic data loss. Those files are deleted when node is
+  rebalanced back in or becomes independent single-node cluster.
+
+* (MB-4967) couchbase_num_vbuckets_default ns_config variable (absent
+  by default) can now be used to change number of vbuckets for any
+  couchbase buckets created after that change. The only way to change
+  it is via /diag/eval.
+
+* mastership takeover is now clearly logged
+
+* (MB-4960) mem_used and some other stats are now displayed on UI
+
+* (MB-5050) autofailover service is now aware that it's not possible
+  to fail over during rebalance
+
+* (MB-5063) couchbase server now disallows attempts to rebalance out
+  unknown nodes instead of misbehaving
+
+* (MB-5019) bug when create bucket dialog was displaying incorrect
+  remaining quote right after bucket deletion is now fixed
+
+* internal cluster management stats counters facility was
+  implemented. The only way so far to see those stats is in diags or
+  by posting 'system_stats_collector:get_ns_server_stats().' to
+  /diag/eval. So far only few stats related to reliable replica
+  building during rebalance are gathered.
+
+* diags now have tap & checkpoint stats from memcached on all nodes
+
+* local tap & checkpoints stats are now logged after rebalance and
+  each 30 seconds during rebalance
+
+* (MB-5256) but with alert not being generated for failures to save
+  item mutatins to disk was fixed
+
+* (MB-5275) bug with alerts not being shown to user sometimes was fixed
+
+* (MB-5408) ns_memcached now implements smarter queuing and
+  prioritization of heavy & light operations. Leading to hopefully
+  much less memcached timeouts. Particularly vbucket delete operation
+  is known to be heavy. By running it on separate worker we allow
+  stats requests to be performed without delays and thus hopefully
+  without hitting timeouts.
+
+* simple facility to adjust some timeouts at runtime was
+  implemented. Example, usage is this diag/eval snippet:
+    ns_config:set({node, node(), {timeout, ns_memcached_outer_very_heavy}}, 120000).
+  Which will bump timeout for most heavy ns_memcached calls up to 120
+  seconds (most timeouts are in milliseconds)
+
+* config replication was improved to avoid avalanche of config NxN
+  replications caused by incoming config replications. Now only
+  locally produced replications are forcefully pushed to all
+  nodes. Note: old random gossip is still there. As well as somewhat
+  excessive full config push & pull to newly discovered node(s).
+
+* it's now possible to change max concurrent rebalance movers
+  count. Post the following to /diag/eval to set it to 4:
+    ns_config:set(rebalance_moves_per_node, 4).
