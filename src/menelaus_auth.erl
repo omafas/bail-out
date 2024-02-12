@@ -17,7 +17,7 @@
 -include("cut.hrl").
 
 -define(count_auth(Type, Res),
-        ns_server_stats:notify_counter({<<"authentication">>,
+        ns_server_stats:notify_counter({<<"authentications">>,
                                         [{<<"type">>, <<Type>>},
                                          {<<"res">>, <<Res>>}]})).
 

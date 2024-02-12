@@ -596,6 +596,22 @@
         "help": "Total number of web cache updates",
         "added": "7.0.0"
     },
+    "cm_authentications_total": {
+        "type": "counter",
+        "help": "Number of authentications performed by cluster manager",
+        "stability": "internal",
+        "added": "7.6.0",
+        "labels": [
+            {
+                "name": "res",
+                "help": "Authentication result"
+            },
+            {
+                "name": "type",
+                "help": "Authentication type"
+            }
+        ]
+    },
     "couch_docs_actual_disk_size": {
         "type": "gauge",
         "help": "Amount of disk space used by the Data Service",
