@@ -157,6 +157,7 @@ function mnStatisticsGroupsController($scope, $uibModal, $timeout,
 
   maybeShowItemsControls();
 
+  $scope.$watch("mnStatsGroupsCtl.items.eventing", onItemChange);
   $scope.$watch("mnStatsGroupsCtl.items.index", onItemChange);
   $scope.$watch("mnStatsGroupsCtl.items.xdcr", onItemChange);
   $scope.$watch("mnStatsGroupsCtl.items.fts", onItemChange);
@@ -408,7 +409,12 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
         .subscribe(resp => {
           vm.eventingItems = ((resp.data && resp.data.apps) || []).reduce((acc, func) => {
             if (func.composite_status == "deployed") {
-              acc.values.push(func.name);
+              let funcName = '';
+              if (func.function_scope) {
+                funcName = `${func.function_scope.bucket}/${func.function_scope.scope}/`;
+              }
+              funcName += func.name;
+              acc.values.push(funcName);
             }
             return acc;
           }, {values: []});
