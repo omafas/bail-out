@@ -267,12 +267,10 @@ has_permission(Permission, Req) ->
 
 -spec is_internal(mochiweb_request()) -> boolean().
 is_internal(Req) ->
-    case get_identity(Req) of
-        {"@" ++ _, admin} ->
-            true;
-        _ ->
-            false
-    end.
+    is_internal_identity(get_identity(Req)).
+
+is_internal_identity({"@" ++ _, admin}) -> true;
+is_internal_identity(_) -> false.
 
 init_auth(Identity) ->
     #authn_res{identity = Identity, authenticated_identity = Identity}.
@@ -428,6 +426,13 @@ uilogin(Req, Params) ->
             case uilogin_phase2(Req2, simple, SessionName, AuthnRes2) of
                 {ok, Headers} ->
                     menelaus_util:reply(Req, 200, Headers);
+                {error, internal} ->
+                    ns_server_stats:notify_counter(
+                      <<"rest_request_access_forbidden">>),
+                    menelaus_util:reply_json(
+                      Req,
+                      {[{message, <<"Forbidden. Internal user">>}]},
+                      403);
                 {error, {access_denied, UIPermission}} ->
                     ns_server_stats:notify_counter(
                       <<"rest_request_access_forbidden">>),
@@ -447,19 +452,25 @@ uilogin(Req, Params) ->
             menelaus_util:reply_json(Req, Msg, 503)
     end.
 
-uilogin_phase2(Req, UISessionType, UISessionName, #authn_res{} = AuthnRes) ->
+uilogin_phase2(Req, UISessionType, UISessionName,
+               #authn_res{identity = Identity} = AuthnRes) ->
     UIPermission = {[ui], read},
-    case check_permission(AuthnRes, UIPermission) of
-        allowed ->
-            Token = menelaus_ui_auth:start_ui_session(UISessionType,
-                                                      UISessionName,
-                                                      AuthnRes),
-            CookieHeader = generate_auth_cookie(Req, Token),
-            ns_audit:login_success(store_authn_res(AuthnRes, Req)),
-            {ok, [CookieHeader]};
-        AuthzRes when AuthzRes == forbidden; AuthzRes == auth_failure ->
-            ns_audit:login_failure(store_authn_res(AuthnRes, Req)),
-            {error, {access_denied, UIPermission}}
+    case is_internal_identity(Identity) of
+        false ->
+            case check_permission(AuthnRes, UIPermission) of
+                allowed ->
+                    Token = menelaus_ui_auth:start_ui_session(UISessionType,
+                                                              UISessionName,
+                                                              AuthnRes),
+                    CookieHeader = generate_auth_cookie(Req, Token),
+                    ns_audit:login_success(store_authn_res(AuthnRes, Req)),
+                    {ok, [CookieHeader]};
+                AuthzRes when AuthzRes == forbidden; AuthzRes == auth_failure ->
+                    ns_audit:login_failure(store_authn_res(AuthnRes, Req)),
+                    {error, {access_denied, UIPermission}}
+            end;
+        true ->
+            {error, internal}
     end.
 
 -spec can_use_cert_for_auth(mochiweb_request()) ->
