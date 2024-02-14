@@ -43,7 +43,9 @@
             pruning_start_time = undefined,
             last_pruning_time = undefined,
             decimation_levels = [],
-            prom_creds = fun () -> undefined end :: prom_creds()}).
+            prom_creds = fun () -> undefined end :: prom_creds(),
+            compat_vsn = undefined,
+            local_token_fun = fun () -> "" end}).
 
 -define(RELOAD_RETRY_PERIOD, 10000). %% in milliseconds
 -define(DEFAULT_PROMETHEUS_TIMEOUT, 5000). %% in milliseconds
@@ -479,6 +481,7 @@ init([]) ->
             ({node, Node, stats_scrape_dynamic_intervals})
               when Node == node() -> true;
             (rest) -> true;
+            (cluster_compat_mode) -> true;
             (_) -> false
         end,
 
@@ -489,8 +492,11 @@ init([]) ->
     CredsFun = generate_ns_to_prometheus_auth_info(),
     Settings = build_settings(CredsFun),
     ensure_prometheus_config(Settings),
-    generate_prometheus_auth_info(Settings),
-    State = apply_config(#s{cur_settings = Settings, prom_creds = CredsFun}),
+    CompatVsn = cluster_compat_mode:get_compat_version(),
+    LocalTokenFun = generate_prometheus_auth_info(Settings),
+    State = apply_config(#s{cur_settings = Settings, prom_creds = CredsFun,
+                            local_token_fun = LocalTokenFun,
+                            compat_vsn = CompatVsn}),
     State1 = init_pruning_timer(State),
     {ok, restart_intervals_calculation_timer(State1)}.
 
@@ -504,7 +510,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(settings_updated, State) ->
-    {noreply, maybe_apply_new_settings(State)};
+    {noreply, maybe_apply_new_settings(maybe_update_auth_info(State))};
 
 handle_info(reload_timer, State) ->
     {noreply, apply_config(State#s{reload_timer_ref = undefined})};
@@ -639,18 +645,29 @@ ns_to_prometheus_filename() ->
 generate_prometheus_auth_info(Settings) ->
     Token = menelaus_web_rbac:gen_password({256, [uppercase, lowercase,
                                                   digits]}),
-    AuthInfo = menelaus_users:build_internal_auth([Token]),
-    update_prom_auth_info(AuthInfo),
+    update_prom_auth_info(Token),
     TokenFile = token_file(Settings),
-    ok = misc:atomic_write_file(TokenFile, Token ++ "\n").
+    ok = misc:atomic_write_file(TokenFile, Token ++ "\n"),
+    fun () -> Token end.
 
-update_prom_auth_info(AuthInfo) ->
+update_prom_auth_info(Token) ->
+    AuthInfo = menelaus_users:build_internal_auth([Token]),
     ns_config:set({node, node(), prometheus_auth_info},
                   {?USERNAME, {auth, AuthInfo}}).
 
 token_file(Settings) ->
     filename:join(path_config:component_path(data, "config"),
                   proplists:get_value(token_file, Settings)).
+
+maybe_update_auth_info(#s{compat_vsn = CompatVsn,
+                          local_token_fun = TokenFun} = State) ->
+    NewCompatVsn = cluster_compat_mode:get_compat_version(),
+    case NewCompatVsn of
+        CompatVsn -> State;
+        _ ->
+            update_prom_auth_info(TokenFun()),
+            State#s{compat_vsn = NewCompatVsn}
+    end.
 
 maybe_apply_new_settings(#s{cur_settings = OldSettings,
                             prom_creds = PromCreds} = State) ->
