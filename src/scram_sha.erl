@@ -98,6 +98,7 @@ remove_types(Auth, Types) ->
               lists:keydelete(auth_info_key(Sha), 1, NewAuth)
       end, Auth, Types).
 
+%% Note: this functions assumes CurrentAuth is in 7.6 format
 maybe_update_hashes(CurrentAuth, Password, Type) ->
     IterationsChanged = iterations_changed(CurrentAuth, Type),
     {NewlyEnabled, NewlyDisabled} = settings_toggled(CurrentAuth),

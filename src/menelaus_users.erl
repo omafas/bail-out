@@ -623,6 +623,7 @@ authenticate(Username, Password) ->
             Res
     end.
 
+%% Note: this functions assumes CurrentAuth is in 7.6 format
 maybe_update_plain_auth_hashes(CurrentAuth, Password, Type) ->
     {HashInfo} = proplists:get_value(<<"hash">>, CurrentAuth),
     HashAlg = proplists:get_value(?HASH_ALG_KEY, HashInfo),
@@ -671,8 +672,11 @@ maybe_update_auth(CurrentAuth, Identity, Password, Type) ->
                 ns_config:read_key_fast(
                   allow_hash_migration_during_auth, AllowHashMigrationDefault),
 
+        Pre76Auth =
+            (undefined /= proplists:get_value(<<"plain">>, CurrentAuth)),
+
         case MigrateHashes of
-            true ->
+            true when not Pre76Auth ->
                 Auth = update_auth(CurrentAuth, Password, Type),
                 case Auth /= CurrentAuth of
                     true ->
@@ -680,6 +684,11 @@ maybe_update_auth(CurrentAuth, Identity, Password, Type) ->
                     false ->
                         no_change
                 end;
+            true ->
+                ?log_debug("Skipping hash migration for identity - ~p "
+                           "(pre-7.6 format)",
+                           [ns_config_log:tag_user_data(Identity)]),
+                no_change;
             false ->
                 no_change
         end
