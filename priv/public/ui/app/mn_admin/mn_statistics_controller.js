@@ -410,7 +410,7 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
           vm.eventingItems = ((resp.data && resp.data.apps) || []).reduce((acc, func) => {
             if (func.composite_status == "deployed") {
               let funcName = '';
-              if (func.function_scope) {
+              if (func.function_scope && func.function_scope.bucket !== '*') {
                 funcName = `${func.function_scope.bucket}/${func.function_scope.scope}/`;
               }
               funcName += func.name;
