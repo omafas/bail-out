@@ -106,7 +106,7 @@
 short_description(ip) ->
     "IP address changed";
 short_description(ep_oom_errors) ->
-    "hard out of memory error";
+    "heavy memory pressure";
 short_description(ep_item_commit_failed) ->
     "write commit failure";
 short_description(overhead) ->
@@ -145,7 +145,7 @@ short_description(Other) ->
 errors(ip) ->
     "Unable to listen on ~p. (POSIX error code: '~p')";
 errors(ep_oom_errors) ->
-    "Hard out-of-memory error: Bucket \"~s\" on node ~s is full. No memory currently allocated to this bucket can be easily released.";
+    "Heavy memory pressure: Bucket \"~s\" on node ~s has reached its quota. The server will attempt to recover from this issue.";
 errors(ep_item_commit_failed) ->
     "Write Commit Failure. Disk write failed for item in Bucket \"~s\" on node ~s.";
 errors(overhead) ->
