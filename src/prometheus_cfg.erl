@@ -604,7 +604,12 @@ handle_info(Info, State) ->
 
 terminate(Reason, #s{pruning_pid = PruningPid,
                      reload_pid = ReloadPid} = State) ->
-    ?log_error("Terminate: ~p", [Reason]),
+    case Reason of
+        shutdown ->
+            ?log_info("Terminate: ~p", [Reason]);
+        _ ->
+            ?log_error("Terminate: ~p", [Reason])
+    end,
     case PruningPid of
         undefined ->
             ok;
