@@ -668,7 +668,9 @@ conf(internal) ->
      {pbkdf2_sha512_iterations_internal, pbkdf2HmacSha512Iterations,
       ?DEFAULT_PBKDF2_ITER, get_number(?PBKDF2_ITER_MIN, ?PBKDF2_ITER_MAX)},
      {memcached_password_hash_iterations_internal, scramShaIterations,
-      ?DEFAULT_SCRAM_ITER, get_number(?PBKDF2_ITER_MIN, ?PBKDF2_ITER_MAX)}
+      ?DEFAULT_SCRAM_ITER, get_number(?PBKDF2_ITER_MIN, ?PBKDF2_ITER_MAX)},
+     {use_relative_web_redirects, useRelativeWebRedirects, false,
+      fun get_bool/1}
     ];
 
 conf(developer_preview) ->

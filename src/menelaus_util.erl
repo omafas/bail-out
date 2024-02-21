@@ -171,16 +171,26 @@ redirect_permanently(Path, Req) ->
             undefined -> Path;
             X -> Scheme ++ X ++ Path
         end,
-    LocationBin = list_to_binary(Location),
+
+    case ns_config:read_key_fast(use_relative_web_redirects, false) of
+        true ->
+            reply_redirect(Path, Req); %% uses relative redirect
+        false ->
+            reply_redirect(Location, Req) %% standard absolute redirect
+    end.
+
+%% NOTE: must use root-relative paths (starting with "/") or absolute URLS.
+reply_redirect(Path, Req) ->
+    LocationBin = list_to_binary(Path),
     Top = <<"<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">"
-           "<html><head>"
-           "<title>301 Moved Permanently</title>"
-           "</head><body>"
-           "<h1>Moved Permanently</h1>"
-           "<p>The document has moved <a href=\"">>,
-    Bottom = <<">here</a>.</p></body></html>\n">>,
+            "<html><head>"
+            "<title>301 Moved Permanently</title>"
+            "</head><body>"
+            "<h1>Moved Permanently</h1>"
+            "<p>The document has moved <a href=\"">>,
+    Bottom = <<"\">here</a>.</p></body></html>\n">>,
     Body = <<Top/binary, LocationBin/binary, Bottom/binary>>,
-    reply(Req, Body, 301, [{"Location", Location},
+    reply(Req, Body, 301, [{"Location", Path},
                            {"Content-Type", "text/html"}]).
 
 reply_not_found(Req) ->
