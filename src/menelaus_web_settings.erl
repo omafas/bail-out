@@ -511,7 +511,11 @@ conf(internal) ->
      {failover_bulk_buckets_config_factor, failoverBulkConfigFactor,
       ?MAX_BUCKETS_SUPPORTED, get_number(1, ?MAX_BUCKETS_SUPPORTED)},
      {{cert, use_sha1}, certUseSha1, false, fun get_bool/1},
-     {allow_http_node_addition, httpNodeAddition, false, fun get_bool/1}];
+     {allow_http_node_addition, httpNodeAddition, false, fun get_bool/1},
+     {use_relative_web_redirects, useRelativeWebRedirects, false,
+      fun get_bool/1}
+    ];
+
 conf(developer_preview) ->
     [{developer_preview_enabled, enabled, false, fun only_true/1}];
 conf(failover) ->
