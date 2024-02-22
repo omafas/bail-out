@@ -784,12 +784,15 @@ handle_delete(Type, PKeys, Req) ->
                         [K] ->
                             ns_config:delete(K),
                             AuditFun = audit_fun(Type),
-                            ns_audit:AuditFun(Req, [{K, deleted}]),
+                            ns_audit:AuditFun(
+                              Req, jsonify_security_settings([{K, deleted}])),
                             reply_json(Req, []);
                         [K, SK] ->
                             ns_config:update_key(K, proplists:delete(SK, _)),
                             AuditFun = audit_fun(Type),
-                            ns_audit:AuditFun(Req, [{K, {[{SK, deleted}]}}]),
+                            AuditParams = jsonify_security_settings(
+                                            [{K, {[{SK, deleted}]}}]),
+                            ns_audit:AuditFun(Req, AuditParams),
                             reply_json(Req, [])
                     end;
                 {error, Msg} ->
