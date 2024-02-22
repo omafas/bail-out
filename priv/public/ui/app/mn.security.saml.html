@@ -1,0 +1,999 @@
+<!--
+     Copyright 2023-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included
+     in the file licenses/BSL-Couchbase.txt.  As of the Change Date specified
+     in that file, in accordance with the Business Source License, use of this
+     software will be governed by the Apache License, Version 2.0, included in
+     the file licenses/APL2.txt.
+-->
+
+<mn-main-spinner
+   [mnSpinnerValue]="form.loadingPipe | async">
+</mn-main-spinner>
+
+<div>
+  <h3 class="margin-bottom-half">SAML Configuration</h3>
+  <p class="max-width-9">
+    SAML (Security Assertion Markup Language) is an XML-based standard used for exchanging user authentication, and attribute information between different parties, such as identity provider (IDP) and a service provider (SP). It enables single sign-on (SSO) and allows users to access different applications or websites without logging in multiple times.
+  </p>
+
+  <div
+      class="error"
+      [hidden]="!(postSaml.error | async)?.errors?._">
+      {{(postSaml.error | async)?.errors?._}}
+  </div>
+
+  <div
+      class="error"
+      [hidden]="!(postSamlGlobalError.error | async)">
+      {{(postSaml.error | async)}}
+  </div>
+
+  <form
+     (ngSubmit)="form.submit.next()"
+     [formGroup]="form.group"
+     class="forms">
+
+    <div class="formrow">
+      <div class="row flex-left margin-top-2 margin-bottom-2">
+        <label
+           class="toggle-control margin-0">
+          <input
+             type="checkbox"
+             formControlName="enabled">
+          <span class="toggle-control-body"></span>
+        </label>
+        <span class="text-small bold">&nbsp; Enabled</span>
+      </div>
+    </div>
+
+    <div [hidden]="!(form.group.get('spMetadataURL').valueChanges | async)">
+      <span class="inline">Current SP metadata URL:</span>
+      <span class="inline margin-left-1">
+        {{form.group.get('spMetadataURL').valueChanges | async}}
+      </span>
+      <span class="inline nowrap margin-left-1">
+        <a ngxClipboard [cbContent]="form.group.get('spMetadataURL').valueChanges | async">
+          Copy URL <span class="icon fa-clipboard"></span>
+        </a>
+        <a class="margin-left-1" [attr.href]="form.group.get('spMetadataURL').valueChanges | async">
+          Download Metadata <span class="icon fa-download"></span>
+        </a>
+      </span>
+    </div>
+
+    <div [hidden]="!(form.group.get('spConsumeURL').valueChanges | async)">
+      <span class="inline">Current SP consume URL:</span>
+      <span class="inline margin-left-1">
+        {{form.group.get('spConsumeURL').valueChanges | async}}
+      </span>
+      <span class="inline nowrap margin-left-1">
+        <a ngxClipboard [cbContent]="form.group.get('spConsumeURL').valueChanges | async">
+          Copy URL <span class="icon fa-clipboard"></span>
+        </a>
+      </span>
+    </div>
+
+    <div [hidden]="!(form.group.get('spLogoutURL').valueChanges | async)" class="margin-bottom-2">
+      <span class="inline">Current SP logout URL:</span>
+      <span class="inline margin-left-1">
+          {{form.group.get('spLogoutURL').valueChanges | async}}
+      </span>
+      <span class="inline nowrap margin-left-1">
+        <a ngxClipboard [cbContent]="form.group.get('spLogoutURL').valueChanges | async">
+          Copy URL <span class="icon fa-clipboard"></span>
+        </a>
+      </span>
+    </div>
+
+    <div class="formrow">
+      <h4>Service Provider Configuration</h4>
+    </div>
+
+    <div class="formrow">
+      <span
+          class="disclosure inline line-height-2"
+          [ngClass]="{'disclosed': (showServiceProviderMetaData.state | async)}"
+          (click)="showServiceProviderMetaData.click.next()">
+          Metadata
+      </span>
+      <span
+         *ngIf="(showServiceProviderMetaDataHasErrors | async)"
+         class="error inline">
+        <span class="icon-info-warning">
+          <span class="icon fa-warning"></span>
+        </span>
+        Requires attention
+      </span>
+
+      <div [hidden]="!(showServiceProviderMetaData.state | async)" class="margin-top-half margin-bottom-half indent-1-5 margin-bottom-1">
+
+        <div class="formrow fix-width-8-1">
+          <label for="spEntityId_field">SP Entity ID</label>
+          <input
+             type="text"
+             id="spEntityId_field"
+             mnFocus
+             formControlName="spEntityId"
+             [placeholder]="form.group.get('spMetadataURL').value"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off">
+          <p class="desc">
+            As a default we use metadata URL as SP Entity ID.
+          </p>
+          <div
+             class="error"
+             [hidden]="!(httpError | async)?.errors?.spEntityId">
+            {{(httpError | async)?.errors?.spEntityId}}
+          </div>
+        </div>
+
+        <div class="row flex-left">
+          <div class="formrow fix-width-5 margin-right-1">
+            <label for="orgName_field">Org Name</label>
+            <input
+               type="text"
+               id="orgName_field"
+               formControlName="spOrgName"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off">
+            <div
+               class="error"
+               [hidden]="!(httpError | async)?.errors?.spOrgName">
+              {{(httpError | async)?.errors?.spOrgName}}
+            </div>
+          </div>
+
+          <div class="formrow fix-width-5">
+            <label for="contactName_field">Contact Name</label>
+            <input
+               type="text"
+               id="contactName_field"
+               formControlName="spContactName"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off">
+            <div
+               class="error"
+               [hidden]="!(httpError | async)?.errors?.spContactName">
+              {{(httpError | async)?.errors?.spContactName}}
+            </div>
+          </div>
+        </div>
+
+        <div class="row flex-left">
+          <div class="formrow fix-width-5 margin-right-1">
+            <label for="orgDisplayName_field">Org Display Name</label>
+            <input
+               type="text"
+               id="orgDisplayName_field"
+               formControlName="spOrgDisplayName"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off">
+            <div
+               class="error"
+               [hidden]="!(httpError | async)?.errors?.spOrgDisplayName">
+              {{(httpError | async)?.errors?.spOrgDisplayName}}
+            </div>
+          </div>
+  
+          <div class="formrow fix-width-5">
+            <label for="contactEmail_field">Contact Email</label>
+            <input
+               type="text"
+               id="contactEmail_field"
+               formControlName="spContactEmail"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off">
+            <div
+               class="error"
+               [hidden]="!(httpError | async)?.errors?.spContactEmail">
+              {{(httpError | async)?.errors?.spContactEmail}}
+            </div>
+          </div>
+        </div>
+
+        <div class="formrow fix-width-5 fix-width-8-1">
+          <label for="orgUrl_field">Org URL</label>
+          <input
+             type="text"
+             id="orgUrl_field"
+             formControlName="spOrgURL"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off">
+          <div
+             class="error"
+             [hidden]="!(httpError | async)?.errors?.spOrgURL">
+            {{(httpError | async)?.errors?.spOrgURL}}
+          </div>
+        </div>
+
+        <div class="formrow">
+          <label>SP Base URL Type</label>
+          <div class="formrow checkbox-list">
+            <input
+                type="radio"
+                id="for-base-url-node"
+                formControlName="spBaseURLType"
+                value="node">
+            <label for="for-base-url-node">Node address</label>
+            <input
+                type="radio"
+                id="for-base-url-alternate"
+                formControlName="spBaseURLType"
+                value="alternate">
+            <label for="for-base-url-alternate">Alternate node address</label>
+            <input
+                type="radio"
+                id="for-base-url-custom"
+                formControlName="spBaseURLType"
+                value="custom">
+            <label for="for-base-url-custom">Custom URL</label>
+          </div>
+        </div>
+
+        <div [hidden]="!((form.group.get('spBaseURLType').valueChanges | async) === 'custom')" class="formrow fix-width-8-1">
+          <label for="customURL">Custom URL</label>
+          <input
+             type="text"
+             id="customURL"
+             formControlName="spCustomBaseURL"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off">
+          <p class="desc">
+            Custom URL should contain scheme host and optionally port
+          </p>
+          <div
+             class="error"
+             [hidden]="!(httpError | async)?.errors?.spCustomBaseURL">
+            {{(httpError | async)?.errors?.spCustomBaseURL}}
+          </div>
+        </div>
+
+        <div
+            [hidden]="(form.group.get('spBaseURLType').valueChanges | async) === 'custom'"
+            class="formrow">
+          <label>SP Base URL Scheme</label>
+          <div class="formrow checkbox-list">
+            <input
+                type="radio"
+                id="for-sp-base-scheme-https"
+                formControlName="spBaseURLScheme"
+                value="https">
+            <label for="for-sp-base-scheme-https">https</label>
+            <input
+                type="radio"
+                id="for-sp-base-scheme-http"
+                formControlName="spBaseURLScheme"
+                value="http">
+            <label for="for-sp-base-scheme-http">http</label>
+          </div>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="spSignMetadata"
+             type="checkbox"
+             id="for-sp-sign-metadata">
+          <label for="for-sp-sign-metadata">Sign metadata using certificates specified below</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="formrow">
+      <span
+          class="disclosure inline line-height-2"
+          [ngClass]="{'disclosed': (showKeyAndCertificates.state | async)}"
+          (click)="showKeyAndCertificates.click.next()">
+          Key and Certificates
+      </span>
+      <span
+         *ngIf="(showKeyAndCertificatesHasErrors | async)"
+         class="error inline">
+        <span class="icon-info-warning">
+          <span class="icon fa-warning"></span>
+        </span>
+        Requires attention
+      </span>
+
+      <div [hidden]="!(showKeyAndCertificates.state | async)" class="margin-top-half margin-bottom-half indent-1-5 margin-bottom-1">
+        <div class="formrow fix-width-8-1">
+          <label for="key">Key</label>
+          <p class="desc">This key is used for signing and decryption.</p>
+          <mn-file-reader
+             [disable]="!(form.group.get('enabled').valueChanges | async)"
+             [result]="form.group.get('spKey').valueChanges | async"
+             (onWatchResult)="setSpKey($event)">
+          </mn-file-reader>
+          <p class="desc margin-top-half margin-bottom-0">Supported file types: .pem format</p>
+          <div
+             class="error"
+             [hidden]="!(httpError | async)?.errors?.spKey">
+            {{(httpError | async)?.errors?.spKey}}
+          </div>
+        </div>
+
+        <div class="formrow fix-width-8-1">
+          <label for="certificate">Certificate</label>
+          <mn-file-reader
+             [disable]="!(form.group.get('enabled').valueChanges | async)"
+             [result]="form.group.get('spCertificate').valueChanges | async"
+             (onWatchResult)="setSpCertificate($event)">
+          </mn-file-reader>
+          <p class="desc margin-top-half margin-bottom-0">Supported file types: .pem format</p>
+          <div
+             class="error"
+             [hidden]="!(httpError | async)?.errors?.spCertificate">
+            {{(httpError | async)?.errors?.spCertificate}}
+          </div>
+        </div>
+
+        <div class="formrow fix-width-8-1">
+          <label for="certificate-chain">Certificate chain (optional)</label>
+          <p class="desc">These certificates will be passed to IDP as metadata. IDP will use them for signature validation and encryption</p>
+          <mn-file-reader
+            [disable]="!(form.group.get('enabled').valueChanges | async)"
+            [result]="form.group.get('spChain').valueChanges | async"
+            (onWatchResult)="setSpChain($event)">
+          </mn-file-reader>
+          <p class="desc margin-top-half margin-bottom-0">Supported file types: .pem format</p>
+          <div
+             class="error"
+             [hidden]="!(httpError | async)?.errors?.spChain">
+            {{(httpError | async)?.errors?.spChain}}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="formrow margin-top-1-5">
+      <h4>Identity Provider Configuration</h4>
+    </div>
+
+    <div class="formrow">
+      <span
+          class="disclosure inline line-height-2"
+          [ngClass]="{'disclosed': (showIdentityProviderMetaData.state | async)}"
+          (click)="showIdentityProviderMetaData.click.next()">
+          Metadata
+      </span>
+
+      <span
+         *ngIf="(showIdentityProviderMetaDataHasErrors | async)"
+         class="error inline">
+        <span class="icon-info-warning">
+          <span class="icon fa-warning"></span>
+        </span>
+        Requires attention
+      </span>
+
+      <div [hidden]="!(showIdentityProviderMetaData.state | async)" class="margin-top-half margin-bottom-half indent-1-5 margin-bottom-1">
+        <div class="formrow">
+          <label>Load IDP metadata from</label>
+          <div class="formrow checkbox-list">
+            <input
+                type="radio"
+                id="for-idp-metadata-origin-url"
+                formControlName="idpMetadataOrigin"
+                value="http">
+            <label for="for-idp-metadata-origin-url">URL</label>
+            <input
+                type="radio"
+                id="for-idp-metadata-origin-file"
+                formControlName="idpMetadataOrigin"
+                value="upload">
+            <label for="for-idp-metadata-origin-file">File</label>
+          </div>
+        </div>
+
+        <div [hidden]="!((form.group.get('idpMetadataOrigin').valueChanges | async) === 'http')" class="formrow fix-width-5">
+            <label for="idp-origin-url-field">URL</label>
+            <input
+                type="text"
+                id="idp-origin-url-field"
+                formControlName="idpMetadataURL"
+                autocorrect="off"
+                spellcheck="false"
+                autocapitalize="off">
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.idpMetadataURL">
+                {{(httpError | async)?.errors?.idpMetadataURL}}
+          </div>
+        </div>
+        <div [hidden]="!((form.group.get('idpMetadataOrigin').valueChanges | async) === 'upload')" class="formrow fix-width-8-1">
+            <label for="idp-origin-file-field">File</label>
+            <mn-file-reader
+               [disable]="!(form.group.get('enabled').valueChanges | async)"
+               [result]="form.group.get('idpMetadata').valueChanges | async"
+               (onWatchResult)="setIdpMetadata($event)">
+            </mn-file-reader>
+            <p class="desc margin-top-half margin-bottom-0">Supported file types: .xml</p>
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.idpMetadata">
+                {{(httpError | async)?.errors?.idpMetadata}}
+          </div>
+        </div>
+
+        <div
+            [hidden]="!((form.group.get('idpMetadataOrigin').valueChanges | async) === 'http')"
+            class="formrow form-inline">
+          <input
+            formControlName="idpMetadataRefreshIntervalSFlag"
+            type="checkbox"
+            id="idpMetadataRefreshIntervalS-flag">
+          <label for="idpMetadataRefreshIntervalS-flag">
+            Reload IDP metadata every
+          </label>
+          <input
+            type="text"
+            formControlName="idpMetadataRefreshIntervalS"
+            class="fix-width-1 margin-right-half"
+            autocorrect="off"
+            spellcheck="false"
+            autocapitalize="off">
+            seconds
+        </div>
+        <div
+            class="error"
+            [hidden]="!(httpError | async)?.errors?.idpMetadataRefreshIntervalS">
+            {{(httpError | async)?.errors?.idpMetadataRefreshIntervalS}}
+        </div>
+
+        <div class="formrow">
+          <input
+             formControlName="idpMetadataTLSVerifyPeer"
+             type="checkbox"
+             id="idpMetadataTLSVerifyPeer_flag">
+          <label for="idpMetadataTLSVerifyPeer_flag">Verify remote peer</label>
+        </div>
+
+        <div
+            [hidden]="!(form.group.get('idpMetadataTLSVerifyPeer').valueChanges | async)"
+            class="formrow fix-width-8-1">
+          <label for="caCertificates_field">CA Certificates</label>
+          <mn-file-reader
+             [disable]="!(form.group.get('enabled').valueChanges | async)"
+             [result]="form.group.get('idpMetadataTLSCAs').valueChanges | async"
+             (onWatchResult)="setIdpMetadataTLSCAs($event)">
+          </mn-file-reader>
+          <p class="desc margin-top-half margin-bottom-0">Supported file types: .pem format</p>
+          </div>
+
+        <div class="formrow">
+          <input
+             formControlName="idpSignsMetadata"
+             type="checkbox"
+             value="everything"
+             id="idp-signs-metadata">
+          <label for="idp-signs-metadata">Validate metadata using trusted fingerprints</label>
+        </div>
+
+        <div 
+          [hidden]="!(form.group.get('idpSignsMetadata').valueChanges | async)"
+          class="formrow">
+          <input
+             formControlName="spTrustedFingerprintsUsageMetadata"
+             type="checkbox"
+             id="use-trusted-fingerprints-for-bt-only">
+          <label for="use-trusted-fingerprints-for-bt-only">Use trusted fingerprints for metadata bootstrap only</label>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="spTrustedFingerprintsUsageEverything"
+             type="checkbox"
+             id="for-sp-trusted-fingerprints-usage">
+          <label for="for-sp-trusted-fingerprints-usage">Always use trusted fingerprints to validate signatures in SAML requests and responses (ignore certificates received in IDP metadata)</label>
+        </div>
+
+        <span
+           *ngIf="(hasRemotePeerWarning | async)"
+           class="error inline">
+          <span class="icon-info-warning">
+            <span class="icon fa-warning"></span>
+          </span>
+          Verify remote peer and validation of trusted fingerprints are both off.
+        </span>
+
+      </div>
+    </div>
+
+    <div class="formrow">
+      <span
+          class="disclosure inline line-height-2"
+          [ngClass]="{'disclosed': (showTrustedFingerprints.state | async)}"
+          (click)="showTrustedFingerprints.click.next()">
+          Trusted Fingerprints
+      </span>
+
+      <span
+         *ngIf="(showTrustedFingerprintsHasErrors | async)"
+         class="error inline">
+        <span class="icon-info-warning">
+          <span class="icon fa-warning"></span>
+        </span>
+        Requires attention
+      </span>
+
+      <div [hidden]="!(showTrustedFingerprints.state | async)" class="margin-top-half margin-bottom-half indent-1-5 margin-bottom-1">
+
+        <div class="formrow fix-width-5">
+            <label for="trustedFingerPrints_field">Trusted Fingerprints</label>
+            <mn-file-reader
+              [disable]="!(form.group.get('enabled').valueChanges | async)"
+              [result]="form.group.get('spTrustedFingerprints').valueChanges | async"
+              (onWatchResult)="setSpTrustedFingerprints($event)">
+            </mn-file-reader>
+            <p class="desc margin-bottom-0">Supported formats:</p>
+            <p class="desc margin-bottom-0 margin-top-0">&#60;type&#62;:&#60;base64&#62;, eg. "sha512:BQwFgN8..."</p>
+            <p class="desc margin-top-0">&#60;hex&#62;, e.g. "01:0a:03:28:0a..."</p>
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.spTrustedFingerprints">
+                {{(httpError | async)?.errors?.spTrustedFingerprints}}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="formrow margin-top-1-5">
+      <h4>Settings</h4>
+    </div>
+
+    <div class="formrow">
+      <span
+          class="disclosure inline line-height-2"
+          [ngClass]="{'disclosed': (showSingleSignOn.state | async)}"
+          (click)="showSingleSignOn.click.next()">
+          Single Sign-On
+      </span>
+
+      <span
+         *ngIf="(showSingleSignOnHasErrors | async)"
+         class="error inline">
+        <span class="icon-info-warning">
+          <span class="icon fa-warning"></span>
+        </span>
+        Requires attention
+      </span>
+
+      <div [hidden]="!(showSingleSignOn.state | async)" class="margin-top-half margin-bottom-half indent-1-5 margin-bottom-1">
+
+        <div class="formrow">
+          <label>Authentication IDP Binding</label>
+          <div class="formrow checkbox-list">
+            <input
+                type="radio"
+                id="for-auth-idp-binding-post"
+                formControlName="idpAuthnBinding"
+                value="post">
+            <label for="for-auth-idp-binding-post">Post</label>
+            <input
+                type="radio"
+                id="for-auth-idp-binding-redirect"
+                formControlName="idpAuthnBinding"
+                value="redirect">
+            <label for="for-auth-idp-binding-redirect">Redirect</label>
+          </div>
+        </div>
+
+        <div class="formrow">
+          <label>Logout IDP binding</label>
+          <div class="formrow checkbox-list">
+            <input
+                type="radio"
+                id="for-logout-idp-binding-post"
+                formControlName="idpLogoutBinding"
+                value="post">
+            <label for="for-logout-idp-binding-post">Post</label>
+            <input
+                type="radio"
+                id="for-logout-idp-binding-redirect"
+                formControlName="idpLogoutBinding"
+                value="redirect">
+            <label for="for-logout-idp-binding-redirect">Redirect</label>
+          </div>
+        </div>
+
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="spVerifyAssertionSig"
+             type="checkbox"
+             id="for-sp-verify-assertion-sig">
+          <label for="for-sp-verify-assertion-sig">Validate assertion signature</label>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="spVerifyAssertionEnvelopSig"
+             type="checkbox"
+             id="for-sp-verify-assertion-envelop-sig">
+          <label for="for-sp-verify-assertion-envelop-sig">Validate assertion envelope signature</label>
+        </div>
+
+        <span
+           *ngIf="(hasSignatureWarning | async)"
+           class="error inline margin-bottom-1">
+          <span class="icon-info-warning">
+            <span class="icon fa-warning"></span>
+          </span>
+          Both signature validations are off.
+        </span>
+
+        <div class="formrow fix-width-5 margin-bottom-2">
+            <label for="idpUrl_field">NameID format* </label>
+            <input
+                type="text"
+                id="idpUrl_field"
+                formControlName="authnNameIDFormat"
+                autocorrect="off"
+                spellcheck="false"
+                autocapitalize="off">
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.authnNameIDFormat">
+                {{(httpError | async)?.errors?.authnNameIDFormat}}
+          </div>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="usernameAttributeFlag"
+             type="checkbox"
+             id="for-username-attribute-flag">
+          <label for="for-username-attribute-flag">Username attribute</label>
+        </div>
+
+        <div class="formrow fix-width-5 margin-bottom-2">
+            <label for="usernameAttribute">Username attribute</label>
+            <input
+                type="text"
+                id="usernameAttribute"
+                formControlName="usernameAttribute"
+                autocorrect="off"
+                spellcheck="false"
+                autocapitalize="off">
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.usernameAttribute">
+                {{(httpError | async)?.errors?.usernameAttribute}}
+          </div>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="groupsAttributeFlag"
+             type="checkbox"
+             id="groups-attribute-flag">
+          <label for="groups-attribute-flag">Groups attribute</label>
+        </div>
+
+        <div class="formrow fix-width-5">
+            <label for="groups-attribute">Groups attribute</label>
+            <input
+                type="text"
+                id="groups-attribute"
+                formControlName="groupsAttribute"
+                autocorrect="off"
+                spellcheck="false"
+                autocapitalize="off">
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.groupsAttribute">
+                {{(httpError | async)?.errors?.groupsAttribute}}
+          </div>
+        </div>
+
+        <div class="formrow fix-width-5">
+            <label for="groups-attribute-sep">Groups separator</label>
+            <input
+                type="text"
+                id="groups-attribute-sep"
+                formControlName="groupsAttributeSep"
+                autocorrect="off"
+                spellcheck="false"
+                autocapitalize="off">
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.groupsAttributeSep">
+                {{(httpError | async)?.errors?.groupsAttributeSep}}
+          </div>
+        </div>
+
+        <div class="formrow fix-width-5 margin-bottom-2">
+            <label for="groups-filter">Groups filter</label>
+            <input
+                type="text"
+                id="groups-filter"
+                formControlName="groupsFilterRE"
+                autocorrect="off"
+                spellcheck="false"
+                autocapitalize="off">
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.groupsFilterRE">
+                {{(httpError | async)?.errors?.groupsFilterRE}}
+          </div>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="rolesAttributeFlag"
+             type="checkbox"
+             id="roles-attribute-flag">
+          <label for="roles-attribute-flag">Roles attribute</label>
+        </div>
+
+        <div class="formrow fix-width-5">
+            <label for="roles-attribute">Roles attribute</label>
+            <input
+                type="text"
+                id="roles-attribute"
+                formControlName="rolesAttribute"
+                autocorrect="off"
+                spellcheck="false"
+                autocapitalize="off">
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.rolesAttribute">
+                {{(httpError | async)?.errors?.rolesAttribute}}
+          </div>
+        </div>
+
+        <div class="formrow fix-width-5">
+            <label for="roles-seperator">Roles separator</label>
+            <input
+                type="text"
+                id="roles-seperator"
+                formControlName="rolesAttributeSep"
+                autocorrect="off"
+                spellcheck="false"
+                autocapitalize="off">
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.rolesAttributeSep">
+                {{(httpError | async)?.errors?.rolesAttributeSep}}
+          </div>
+        </div>
+
+        <div class="formrow fix-width-5">
+            <label for="roles-filter">Roles filter</label>
+            <input
+                type="text"
+                id="roles-filter"
+                formControlName="rolesFilterRE"
+                autocorrect="off"
+                spellcheck="false"
+                autocapitalize="off">
+            <div
+                class="error"
+                [hidden]="!(httpError | async)?.errors?.rolesFilterRE">
+                {{(httpError | async)?.errors?.rolesFilterRE}}
+          </div>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="singleLogoutEnabled"
+             type="checkbox"
+             id="for-enable-single-logout">
+          <label for="for-enable-single-logout">Enable Single Log-Out</label>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="formrow margin-bottom-5">
+      <span
+          class="disclosure inline line-height-2"
+          [ngClass]="{'disclosed': (showAdvanced.state | async)}"
+          (click)="showAdvanced.click.next()">
+          Advanced
+      </span>
+
+      <span
+         *ngIf="(showAdvancedHasErrors | async)"
+         class="error inline">
+        <span class="icon-info-warning">
+          <span class="icon fa-warning"></span>
+        </span>
+        Requires attention
+      </span>
+
+      <div [hidden]="!(showAdvanced.state | async)" class="margin-top-half margin-bottom-half indent-1-5 margin-bottom-1">
+
+        <div class="formrow form-inline">
+          <div class="row flex-left">
+          Metadata connect timeout
+          <input
+              type="text"
+              formControlName="idpMetadataHttpTimeoutMs"
+              class="fix-width-1 margin-right-half margin-left-half"
+              autocorrect="off"
+              spellcheck="false"
+              autocapitalize="off">
+              ms
+          </div>
+        </div>
+
+        <div
+            class="error"
+            [hidden]="!(httpError | async)?.errors?.idpMetadataHttpTimeoutMs">
+            {{(httpError | async)?.errors?.idpMetadataHttpTimeoutMs}}
+        </div>
+
+        <div class="formrow">
+          <label>Metadata connect address family</label>
+          <div class="formrow checkbox-list">
+            <input
+                type="radio"
+                id="for-idp-metadata-connect-address-family-auto"
+                formControlName="idpMetadataConnectAddressFamily"
+                value="undefined">
+            <label for="for-idp-metadata-connect-address-family-auto">Auto</label>
+            <input
+                type="radio"
+                id="for-idp-metadata-connect-address-family-inet"
+                formControlName="idpMetadataConnectAddressFamily"
+                value="inet">
+            <label for="for-idp-metadata-connect-address-family-inet">Inet</label>
+            <input
+                type="radio"
+                id="for-idp-metadata-connect-address-family-inet6"
+                formControlName="idpMetadataConnectAddressFamily"
+                value="inet6">
+            <label for="for-idp-metadata-connect-address-family-inet6">Inet6</label>
+          </div>
+        </div>
+
+        <div class="formrow form-inline">
+          <div class="row flex-left">
+            Value of SP metadata cacheDuration attribute
+            <input
+                type="text"
+                formControlName="spMetadataCacheDuration"
+                class="fix-width-1 margin-right-half margin-left-half"
+                autocorrect="off"
+                spellcheck="false"
+                autocapitalize="off">
+                (ISO8601 duration)
+            </div>
+          <div
+             class="error"
+             [hidden]="!(httpError | async)?.errors?.spMetadataCacheDuration">
+             {{(httpError | async)?.errors?.spMetadataCacheDuration}}
+          </div>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="spSignRequests"
+             type="checkbox"
+             id="for-sp-sign-requests">
+          <label for="for-sp-sign-requests">Sign authentication requests</label>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="spSessionExpire"
+             type="checkbox"
+             id="for-sp-session-expire">
+          <label for="for-sp-session-expire">Respect "SessionNotOnOrAfter" (expire UI session with respect to "SessionNotOnOrAfter" attribute set by IDP)</label>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="spVerifyIssuer"
+             type="checkbox"
+             id="for-sp-verify-issuer">
+          <label for="for-sp-verify-issuer">Validate assertion issuer (should match IDP entity id)</label>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="spVerifyRecipientFlag"
+             type="checkbox"
+             id="for-sp-verify-recipient">
+          <label for="for-sp-verify-recipient">Validate recipient in SAML response</label>
+        </div>
+
+        <div [hidden]="!(form.group.get('spVerifyRecipientFlag').valueChanges | async)" class="formrow fix-width-8-1">
+          <div class="formrow checkbox-list margin-left-2">
+            <input
+                type="radio"
+                id="sp-verify-recipient-acs"
+                formControlName="spVerifyRecipient"
+                value="consumeURL">
+            <label for="sp-verify-recipient-acs">Must be equal to ACS URL</label>
+            <input
+                type="radio"
+                id="sp-verify-recipient-custom"
+                formControlName="spVerifyRecipient"
+                value="custom">
+            <label for="sp-verify-recipient-custom">Must be equal to custom recipient</label>
+          </div>
+
+          <div [hidden]="!((form.group.get('spVerifyRecipient').valueChanges | async) === 'custom')" class="formrow fix-width-8-1">
+            <label for="customRecipient">Custom Recipient</label>
+            <input
+               type="text"
+               id="customRecipient"
+               formControlName="spVerifyRecipientValue"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off">
+            <p class="desc">
+              Custom URL should contain scheme host and optionally port.
+            </p>
+            <div
+               class="error"
+               [hidden]="!(httpError | async)?.errors?.spVerifyRecipientValue">
+              {{(httpError | async)?.errors?.spVerifyRecipientValue}}
+            </div>
+          </div>
+        </div>
+
+        <div class="formrow checkbox-list">
+          <input
+             formControlName="spVerifyLogoutReqSig"
+             type="checkbox"
+             id="for-sp-verify-logout-request">
+          <label for="for-sp-verify-logout-request">Validate logout request signature</label>
+        </div>
+
+        <div class="formrow">
+          <label>SP Assertion Dupe Check</label>
+          <p>Maintain Global or Local cache of used assertions in order to prevent using the same assertion twice</p>
+          <div class="formrow checkbox-list">
+            <input
+               formControlName="spAssertionDupeCheckFlag"
+               type="checkbox"
+               id="for-sp-assertion-dupe-check-flag">
+            <label for="for-sp-assertion-dupe-check-flag">Enable Dupe Check</label>
+          </div>
+          <div [hidden]="!(form.group.get('spAssertionDupeCheckFlag').valueChanges | async)" class="formrow checkbox-list margin-left-2">
+            <input
+                type="radio"
+                id="for-sp-assertion-dupe-check-global"
+                formControlName="spAssertionDupeCheck"
+                value="global">
+            <label for="for-sp-assertion-dupe-check-global">Global</label>
+            <input
+                type="radio"
+                id="for-sp-assertion-dupe-check-local"
+                formControlName="spAssertionDupeCheck"
+                value="local">
+            <label for="for-sp-assertion-dupe-check-local">Local</label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer
+       class="footer-save"
+       [hidden]="!(permissionsAdminSecurityWrite | async)">
+      <button
+         [disabled]="((httpError | async)?.errors | mnObjectKeys).length"
+         type="submit"
+         class="margin-right-2">
+        Save
+      </button>
+      <a
+         class="text-medium"
+         (click)="cancel()">
+        Cancel/Reset
+      </a>
+    </footer>
+  </form>
+</div>

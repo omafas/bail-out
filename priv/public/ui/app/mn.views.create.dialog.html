@@ -1,0 +1,93 @@
+<!--
+Copyright 2021-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="dialog-med">
+  <div class="panel-header">
+    <h2>
+      <span>
+        {{ isViewsEditingSection ? 'Copy View' : 'Add Development View' }}
+      </span>
+    </h2>
+  </div>
+  <form
+      [formGroup]="form.group"
+      (ngSubmit)="form.submit.next()"
+     name="ddocForm"
+     novalidate>
+    <div
+      formGroupName="ddoc"
+      class="panel-content forms">
+      <span
+        class="error"
+        [hidden]="!(postDdoc.error | async)?.error?.reason">
+        {{(postDdoc.error | async)?.error?.reason}}
+      </span>
+      <div
+        [hidden]="!form.group.get('ddoc.name').dirty"
+        class="error">
+        <div
+          [hidden]="!form.group.get('ddoc.name').errors?.required">
+          Design Document cannot be empty
+        </div>
+        <div
+          [hidden]="!form.group.get('ddoc.name').errors?.alreadyExists">
+          Design Document already exists
+        </div>
+      </div>
+      <div
+        [hidden]="!form.group.get('ddoc.view').dirty"
+        class="error">
+        <div
+          [hidden]="!form.group.get('ddoc.view').errors?.required">
+          View names cannot be empty
+        </div>
+        <div
+          [hidden]="!form.group.get('ddoc.view').errors?.alreadyExists">
+          View already exists
+        </div>
+      </div>
+      <label for="copy_view_ddoc_name">Design Document Name</label>
+      <div class="formrow form-inline">
+        <label class="checkbox" for="copy_view_ddoc_name">
+          _design/dev_
+        </label>
+        <input
+           autocapitalize="off"
+           autocorrect="off"
+           formControlName="name"
+           id="copy_view_ddoc_name"
+           name="designdoc_name"
+           spellcheck="false"
+           type="text"
+           required>
+      </div>
+      <div class="formrow">
+        <label for="copy_view_name">View Name</label>
+        <input
+           autocapitalize="off"
+           autocorrect="off"
+           formControlName="view"
+           id="copy_view_name"
+           name="view_name"
+           spellcheck="false"
+           type="text"
+           required>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <a (click)="activeModal.dismiss()">Cancel</a>
+      <button
+        [disabled]="form.group.invalid"
+        type="submit">
+        Save
+      </button>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,31 @@
+
+Here's what log files we have with information what gets into those files:
+
+* couchdb - log message with category couchdb with severity info and above
+
+* debug - all categories except couchdb, xdcr, stats and ns_doctor
+with messages of severity debug and above (i.e. all messages). That's
+my team's main log file.
+
+* info - all categories except couchdb, xdcr, stats and ns_doctor with
+messages of severity info and above
+
+* error - all categories except xdcr with severity error
+
+* xdcr_error - category xdcr and severity error
+
+* xdcr - category xdcr and any severity
+
+* mapreduce_errors - category mapreduce (our views will send js errors from
+map/reduce functions here)
+
+* views - category views. We log ns_server's interaction with indexes
+here. Initially, to enable Filipe to see what we do without parsing
+lots of 'irrelevant' stuff in our logs. We've considered killing it,
+but decided to keep for now.
+
+* stats - categories stats and ns_doctor. Stats & ns_doctor states are
+  logged here periodically.
+
+All files are set to rotate after 10M. And there's limit of 20 files
+per log. So in total thats 200M per log.

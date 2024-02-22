@@ -1,0 +1,61 @@
+In 2.0.2 we're shipping so called "babysitting vm" feature and this
+text is going to explain how it works and why.
+
+Here's how process tree looks now:
+
+ 6293 pts/1    Sl+    0:00  |   \_ /usr/lib/erlang/erts-5.8.5/bin/beam.smp -A 16 -- -root /usr/lib/erlang -progname erl -- -home /root -- -smp enable -kernel inet_dist_listen_min 21100 inet_dist_listen_max 21299 error_logger false -sasl sasl_error_logger false -hidden -name babysitter_of_ns_1@127.0.0.1 -setcookie nocookie -run ns_babysitter_bootstrap -- -couch_ini /root/src/altoros/moxi/repo20/install/etc/couchdb/default.ini /root/src/altoros/moxi/repo20/install/etc/couchdb/default.d/capi.ini /root/src/altoros/moxi/repo20/install/etc/couchdb/default.d/geocouch.ini /root/src/altoros/moxi/repo20/install/etc/couchdb/local.ini -ns_babysitter cookiefile "/root/src/altoros/moxi/repo20/install/var/lib/couchbase/couchbase-server.cookie" -ns_server config_path "/root/src/altoros/moxi/repo20/install/etc/couchbase/static_config" -ns_server pidfile "/root/src/altoros/moxi/repo20/install/var/lib/couchbase/couchbase-server.pid" -ns_server cookiefile "/root/src/altoros/moxi/repo20/install/var/lib/couchbase/couchbase-server.cookie-ns-server" -ns_server enable_mlockall true
+ 6351 ?        SLsl   0:02  |       \_ /usr/lib/erlang/erts-5.8.5/bin/beam.smp -A 16 -sbt u -P 327680 -K true -MMmcs 30 -- -root /usr/lib/erlang -progname erl -- -home /root -- -smp enable -setcookie nocookie -kernel inet_dist_listen_min 21100 inet_dist_listen_max 21299 error_logger false -sasl sasl_error_logger false -nouser -run child_erlang child_start ns_bootstrap -- -smp enable -kernel inet_dist_listen_min 21100 inet_dist_listen_max 21299 error_logger false -sasl sasl_error_logger false -couch_ini /root/src/altoros/moxi/repo20/install/etc/couchdb/default.ini /root/src/altoros/moxi/repo20/install/etc/couchdb/default.d/capi.ini /root/src/altoros/moxi/repo20/install/etc/couchdb/default.d/geocouch.ini /root/src/altoros/moxi/repo20/install/etc/couchdb/local.ini -ns_babysitter cookiefile "/root/src/altoros/moxi/repo20/install/var/lib/couchbase/couchbase-server.cookie" -ns_server config_path "/root/src/altoros/moxi/repo20/install/etc/couchbase/static_config" -ns_server pidfile "/root/src/altoros/moxi/repo20/install/var/lib/couchbase/couchbase-server.pid" -ns_server cookiefile "/root/src/altoros/moxi/repo20/install/var/lib/couchbase/couchbase-server.cookie-ns-server" -ns_server enable_mlockall true
+ 6383 ?        Ss     0:00  |       |   \_ sh -s disksup
+ 6384 ?        Ss     0:00  |       |   \_ /usr/lib/erlang/lib/os_mon-2.2.7/priv/bin/memsup
+ 6386 ?        Ss     0:00  |       |   \_ /usr/lib/erlang/lib/os_mon-2.2.7/priv/bin/cpu_sup
+ 6387 ?        Ss     0:00  |       |   \_ /usr/lib/erlang/lib/ssl-4.1.6/priv/bin/ssl_esock
+ 6389 ?        Ss     0:00  |       |   \_ inet_gethost 4
+ 6390 ?        S      0:00  |       |   |   \_ inet_gethost 4
+ 6391 ?        Ssl    0:00  |       |   \_ /root/src/altoros/moxi/repo20/install/lib/ns_server/erlang/lib/ns_server/priv/i386-linux-godu
+ 6408 ?        Ss     0:00  |       |   \_ portsigar for ns_1@127.0.0.1
+ 6393 ?        Ss     0:00  |       \_ /root/src/altoros/moxi/repo20/install/bin/moxi -Z port_listen=11211,default_bucket_name=default,downstream_max=1024,downstream_conn_max=4,connect_max_errors=5,connect_retry_interval=30000,connect_timeout=400,auth_timeout=100,cycle=200,downstream_conn_queue_timeout=200,downstream_timeout=5000,wait_queue_timeout=200 -z url=http://127.0.0.1:8091/pools/default/saslBucketsStreaming -p 0 -Y y -O stderr 
+ 6394 ?        Ssl    0:00  |       \_ /root/src/altoros/moxi/repo20/install/bin/memcached -X /root/src/altoros/moxi/repo20/install/lib/memcached/stdin_term_handler.so -X /root/src/altoros/moxi/repo20/install/lib/memcached/file_logger.so,cyclesize=104857600;sleeptime=19;filename=/root/src/altoros/moxi/repo20/install/var/lib/couchbase/logs/memcached.log -l 0.0.0.0:11210,0.0.0.0:11209:1000 -p 11210 -E /root/src/altoros/moxi/repo20/install/lib/memcached/bucket_engine.so -B binary -r -c 10000 -e admin=_admin;default_bucket_name=default;auto_create=false 
+
+Observe how there are 2 erlang VMs spawned. And how moxi and memcached
+and second beam.smp are all childs of this VM. That "top" VM is
+"babysitting VM".
+
+Previously we had just one erlang VM that did cluster management,
+couch-style views _and_ babysitting (spawning and re-spawning when
+necessary) of moxi and memcached. The problem was that if, say due to
+memory usage blowup, ns_server died, it's childs and most importantly
+memcached died with it (they're programmed to exit if their parent
+terminates).
+
+Now responsibility of starting and re-spawning of memcached and moxi
+are separated into small independend erlang VM which has far far
+lesser chance of hitting any issues. And as good side effect we've got
+automatic respawning of ns_server VM should it crash for any
+reason. I.e. because babysitter can easily monitor and respawn
+ns_server as well.
+
+Also people used to complain that ns_server timeouts should not cause
+it to restart memcached. Which is now automagically fixed because
+managing running memcached is completely separate OS process. So
+failures are should be better isolated now.
+
+You can find ns_server VM by it's ppid field pointing at another
+erlang VM. Or do ps with --forest option for some visual clues.
+
+And kill -9 of ns_server VM is now mostly harmless.
+
+Another positive effect of this change is on windows. On windows
+because we run erlang as service, there's limitation of "top" erlang
+vm being unable to rename itself. Which in previous versions caused
+very different and broken hostname management on windows.
+
+Because now top vm is babysitter and we don't need to rename it we and
+ns_server is not top vm but more normal erlang VM, we have
+functional host renaming (merged together with proper REST API for
+hostname management) on windows at last.
+
+As before babysitter logs all output of it's childs. Given now it's
+separate VM, there's separate set of log files available in
+cbcollect_info as ns_server.babysitter.log. You can see some output of
+memcached there as well as details of how exactly memcached, moxi and
+ns_server VM are spawned.

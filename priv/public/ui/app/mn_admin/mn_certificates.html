@@ -1,0 +1,240 @@
+<!--
+     Copyright 2020-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included
+     in the file licenses/BSL-Couchbase.txt.  As of the Change Date specified
+     in that file, in accordance with the Business Source License, use of this
+     software will be governed by the Apache License, Version 2.0, included in
+     the file licenses/APL2.txt.
+-->
+
+<mn-main-spinner
+   mn-spinner-value="!certCtl.rootCertificate || !certCtl.clientCertSettings">
+</mn-main-spinner>
+
+<div class="row flex-left items-stretch resp-flex-column-med margin-bottom-2">
+  <div class="width-7">
+    <label class="margin-bottom-half">Trusted Root Certificates</label>
+    <div ng-repeat="cert in certCtl.rootCertificate track by $index" class="margin-bottom-2">
+      <div class="row items-top flex-left resp-flex-column-med">
+        <div class="column certificate-props" style="flex:1">
+          <h5>
+            {{cert.subjectParsed.cn}}
+          </h5>
+          <div class="nowrap">
+            <strong>ID:</strong> {{cert.id}}
+          </div>
+          <div ng-show="cert.loadTimestamp">
+            <strong>Time Loaded:</strong> {{cert.loadTimestamp | date:'d MMM, y':'UTC'}}
+          </div>
+          <div ng-show="cert.subject">
+            <strong>Subject:</strong> {{cert.subject}}
+          </div>
+          <div ng-show="cert.notBefore">
+            <strong>Not Before:</strong> {{cert.notBefore | date:'d MMM, y':'UTC'}}
+          </div>
+          <div ng-show="cert.notAfter">
+            <strong>Not After:</strong> {{cert.notAfter | date:'d MMM, y':'UTC'}}
+          </div>
+          <div ng-show="cert.type">
+            <strong>Type:</strong> {{cert.type}}
+          </div>
+          <div ng-show="cert.nodes.length">
+            <strong>Certs Issued For Nodes:</strong> {{cert.nodes.join("; ")}}
+          </div>
+          <div ng-show="rbac.cluster.admin.security.write && adminCtl.poolDefault.compat.atLeast71" class="margin-top-1 margin-bottom-1">
+            <button
+               class="outline"
+               ng-click="certCtl.showDeleteConfirmation(cert.id)">Delete</button>
+          </div>
+          <div
+             class="error margin-top-half text-smaller line-height-1-5"
+             ng-show="cert.warnings.length">
+            Warnings:
+            <div ng-repeat="warn in cert.warnings">
+              <span ng-show="warn.node">{{warn.node}}:</span>
+              {{warn.message}}
+              <span ng-show="warn.expires">{{warn.expires}}</span>
+            </div>
+          </div>
+        </div>
+        <textarea
+           style="flex:2"
+           class="monospaced certificate-props"
+           rows="15"
+           autocorrect="off"
+           autocapitalize="off"
+           spellcheck="false"
+           readonly="readonly">{{cert.pem}}</textarea>
+      </div>
+    </div>
+
+    <label class="margin-bottom-half">Node Certificates</label>
+    <div ng-repeat="cert in certCtl.nodeCertSettings track by $index" class="margin-bottom-2">
+      <div class="row items-top flex-left resp-flex-column-med">
+        <div class="column certificate-props" style="flex:1">
+          <h5>
+            {{cert.node}}
+          </h5>
+          <div ng-show="cert.subject">
+            <strong>Subject:</strong> {{cert.subject}}
+          </div>
+          <div ng-show="cert.type">
+            <strong>Type:</strong> {{cert.type}}
+          </div>
+          <div ng-show="cert.expires">
+            <strong>Expires:</strong> {{cert.expires}}
+          </div>
+          <div
+             class="error margin-top-half text-smaller line-height-1-5"
+             ng-show="cert.warnings.length">
+            Warnings:
+            <div ng-repeat="warn in cert.warnings">
+              <span ng-show="warn.node">{{warn.node}}:</span>
+              {{warn.message}}
+              <span ng-show="warn.expires">{{warn.expires}}</span>
+            </div>
+          </div>
+        </div>
+        <textarea
+           style="flex:2"
+           class="monospaced certificate-props"
+           rows="15"
+           autocorrect="off"
+           autocapitalize="off"
+           spellcheck="false"
+           readonly="readonly">{{cert.pem}}</textarea>
+      </div>
+    </div>
+    <div
+       ng-if="rbac.cluster.settings.read"
+       ui-view="notifications"
+       class="margin-top-1-5">
+    </div>
+  </div>
+
+  <div class="vertical-page-splitter resp-hide-med">&nbsp;</div>
+
+  <div class="width-4">
+    <form ng-submit="certCtl.onSubmit()">
+      <div class="formrow">
+        <label>Require Client Certificate</label>
+        <input
+           type="radio"
+           value="disable"
+           ng-disabled="!rbac.cluster.admin.security.write"
+           name="client_cert_state"
+           id="client_cert_disabled"
+           ng-model="certCtl.clientCertSettings.state">
+        <label
+           for="client_cert_disabled"
+           class="checkbox">
+          Disable
+        </label>
+        <br>
+        <input
+           type="radio"
+           value="enable"
+           ng-disabled="!rbac.cluster.admin.security.write"
+           name="client_cert_state"
+           id="client_cert_enabled"
+           ng-model="certCtl.clientCertSettings.state">
+        <label for="client_cert_enabled" class="checkbox">
+          Enable
+        </label>
+        <br>
+        <input
+           type="radio"
+           value="mandatory"
+           ng-disabled="!rbac.cluster.admin.security.write"
+           name="client_cert_state"
+           id="client_cert_mandatory"
+           ng-model="certCtl.clientCertSettings.state">
+        <label for="client_cert_mandatory" class="checkbox">
+          Mandatory
+        </label>
+      </div>
+
+      <div
+         class="error error-field"
+         ng-show="('isString' | lodash:certCtl.errors) && certCtl.clientCertSettings.state != 'disable'">
+        <span>{{certCtl.errors}}</span>
+      </div>
+      <div class="forms"
+         ng-repeat="prefix in certCtl.clientCertSettings.prefixes track by $index">
+        <div class="row fix-width-5 resp-sml">
+          <div class="width-5 margin-right-half">
+            <label for="client_cert_path_{{$index}}">Path</label>
+            <mn-select
+               id="client_cert_path_{{$index}}"
+               mn-disabled="!rbac.cluster.admin.security.write || certCtl.clientCertSettings.state == 'disable'"
+               ng-model="prefix.path"
+               values="['subject.cn', 'san.dnsname', 'san.email', 'san.uri']">
+            </mn-select>
+          </div>
+          <div class="width-5 margin-right-half">
+            <label for="client_cert_prefix_{{$index}}">Prefix</label>
+            <input
+               placeholder="e.g.  couchbase."
+               ng-model="prefix.prefix"
+               ng-disabled="!rbac.cluster.admin.security.write || certCtl.clientCertSettings.state == 'disable'"
+               type="text"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off"
+               id="client_cert_prefix_{{$index}}">
+          </div>
+          <div class="width-2">
+            <label for="client_cert_delimiter_{{$index}}">Delimiter</label>
+            <input
+               placeholder="e.g.  ."
+               ng-model="prefix.delimiter"
+               ng-disabled="!rbac.cluster.admin.security.write || certCtl.clientCertSettings.state == 'disable'"
+               type="text"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off"
+               id="client_cert_delimiter_{{$index}}">
+          </div>
+        </div>
+        <div
+           class="error error-field"
+           ng-show="certCtl.errors[$index] &&
+                  certCtl.clientCertSettings.state != 'disable' &&
+                  !('isString' | lodash:certCtl.errors)">
+          <span>{{certCtl.errors[$index]}}</span>
+        </div>
+      </div>
+
+      <div class="row flex-right fix-width-5 resp-sml margin-top-half margin-bottom-2">
+        <button
+           class="outline btn-small"
+           title="Add a prefix"
+           ng-show="adminCtl.poolDefault.compat.atLeast51"
+           ng-disabled="!rbac.cluster.admin.security.write || certCtl.clientCertSettings.state == 'disable'"
+           ng-click="certCtl.clientCertSettings.prefixes.push({delimiter: '', prefix: '', path: 'subject.cn'});"
+           type="button">+</button>
+        &nbsp;
+        <button
+           class="outline btn-small"
+           ng-show="adminCtl.poolDefault.compat.atLeast51"
+           ng-disabled="!rbac.cluster.admin.security.write || (certCtl.clientCertSettings.prefixes.length == 1) || (certCtl.clientCertSettings.state == 'disable')"
+           title="Remove a prefix"
+           ng-click="certCtl.clientCertSettings.prefixes.pop();"
+           type="button">-</button>
+      </div>
+      <footer class="footer-save"
+         ng-show="rbac.cluster.admin.security.write">
+        <button
+           type="submit"
+           class="margin-right-2">
+          Save
+        </button>
+        <a
+           class="text-medium"
+           ng-click="certCtl.reloadState()">
+          Cancel/Reset</a>
+      </footer>
+    </form>
+  </div>
+</div>

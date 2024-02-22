@@ -1,0 +1,111 @@
+#!/bin/bash
+
+# Copyright 2022-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+
+set -e
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+function abs_path() {
+    echo "$( cd $1 >/dev/null 2>&1 && pwd )"
+}
+
+function ensure_doesnt_exist() {
+    _dir=$1
+    if [ -d "$_dir" ]; then
+        echo "Directory ${_dir} already exists"
+        exit 1
+    fi
+}
+
+while true; do
+    read -e -p "Should it be internal client certificate? y/[n]: " internal
+    internal="${internal:-"n"}"
+    if [[ "$internal" == "y" ]]; then
+        extentions=internal_cert
+        break
+    elif [[ "$internal" == "n" ]]; then
+        extentions=usr_cert
+        break
+    fi
+    echo "invalid input: $internal"
+done
+
+read -e -p "Enter directory to put generated node certificates to [./clients]:" out_dir
+out_dir="${out_dir:-"./clients"}"
+mkdir -p "$out_dir"
+out_dir_abs=$(abs_path "${out_dir}")
+
+
+read -p "Enter username: " username
+
+if [ -z "$username" ]; then
+    echo "Username can't be empty"
+    exit 1
+fi
+
+out_node_dir="${out_dir_abs}/${username}"
+[ ! -d "${out_node_dir}" ] || { echo "Dir $out_node_dir already exists"; exit 1; }
+mkdir -p "$out_node_dir"
+
+read -e -p "Enter directory where intermediate certificate is located [./intermediate]:" intermediate_dir
+intermediate_dir="${intermediate_dir:-"./intermediate"}"
+[ -d "${intermediate_dir}" ] || { echo "Dir $intermediate_dir doesn't exist"; exit 1; }
+intermediate_dir_abs=$(abs_path "${intermediate_dir}")
+
+echo "Creating a key..."
+mkdir "${out_node_dir}/private"
+keyfile="${out_node_dir}/private/${username}.key.pem"
+
+while true; do
+    read -e -p "Should user private key be encrypted? y/[n]: " pkey_encrypted
+    pkey_encrypted="${pkey_encrypted:-"n"}"
+    if [[ "$pkey_encrypted" == "y" ]]; then
+        echo "Enter passphrase: "
+        openssl genrsa -aes256 -passout stdin  -out "${keyfile}" 2048
+        break
+    elif [[ "$pkey_encrypted" == "n" ]]; then
+        openssl genrsa  -out "${keyfile}" 2048
+        break
+    else
+        echo "invalid input: $pkey_encrypted"
+    fi
+done
+
+chmod 400 "${keyfile}"
+
+echo "Creating a certificate signing request..."
+csrfile="${out_node_dir}/${username}.csr.pem"
+openssl req -config "${intermediate_dir_abs}/intermediate_conf.cnf" \
+      -key "${keyfile}" \
+      -new -sha256 -out "${csrfile}"
+
+echo "Creating a certificate..."
+certfile="${out_node_dir}/${username}.cert.pem"
+openssl ca -config "${intermediate_dir_abs}/intermediate_conf.cnf" \
+      -extensions "$extentions" -days 3375 -notext -md sha256 \
+      -in "$csrfile" \
+      -out "$certfile"
+
+chmod 444 "$certfile"
+
+inboxdir="${out_node_dir}/output"
+mkdir "${inboxdir}"
+cp "$keyfile" "${inboxdir}/pkey.key"
+cat "${certfile}" "${intermediate_dir_abs}/certs/intermediate.cert.pem" > "${inboxdir}/chain.pem"
+
+echo "Please verify the certificate:"
+openssl x509 -noout -text -in "$certfile"
+
+echo "Validating chain of trust..."
+openssl verify -CAfile ${intermediate_dir_abs}/certs/ca-chain.cert.pem "$certfile"
+
+echo ""
+echo "User key:  ${keyfile}"
+echo "User cert: ${certfile}"
+

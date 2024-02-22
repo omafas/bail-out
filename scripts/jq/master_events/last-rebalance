@@ -1,0 +1,27 @@
+#!/bin/sh
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2016-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+#
+# Filter only events relevant to last rebalance.
+#
+
+exec jq '
+(length as $size |
+ to_entries |
+ map({key: .key, type: .value.type} |
+     select(.type == "rebalanceStart" or
+            .type == "rebalanceEnd")) |
+ (length - 1) as $last |
+ if .[$last].type == "rebalanceEnd" then
+   [.[$last-1].key, .[$last].key+1]
+ else
+   [.[$last].key, $size]
+ end) as [$a,$b] | .[$a:$b]
+' "$@"

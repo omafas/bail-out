@@ -1,0 +1,30 @@
+#!/bin/bash
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2018-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+
+TAG="$1"
+COMMIT="$2"
+
+DATE=$(git show -s --pretty=format:%cD "$COMMIT" 2>/dev/null)
+if [ $? -ne 0 ]; then
+    echo "Failed to get commit's '$COMMIT' date" >&2
+    exit 1
+fi
+
+echo "Tagging '$COMMIT' with tag '$TAG'. Tag date: $DATE"
+
+export GIT_COMMITTER_DATE="$DATE"
+TAG_OUTPUT=$(git tag -a -m "tagging $TAG" "$TAG" "$COMMIT" 2>&1)
+
+if [ $? -ne 0 ]; then
+    echo "FAILED: $TAG_OUTPUT"
+else
+    echo "OK"
+fi

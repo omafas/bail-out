@@ -1,0 +1,150 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<mn-element-cargo depot="actions">
+  <div class="header-controls resp-sml">
+    <a
+       uiSref="app.admin.replications"
+       class="resp-hide-sml">
+      <span class="icon fa-arrow-left"></span> BACK
+    </a>
+  </div>
+</mn-element-cargo>
+
+<div
+   [formGroup]="form.group"
+   class="forms">
+  <div class="row flex-left items-stretch resp-sml margin-bottom-4">
+    <div class="width-10">
+      <div
+         class="error"
+         [hidden]="!(error | async)?._">
+        {{(error | async)?._}}
+      </div>
+      <div
+         class="error error-field"
+         [hidden]="!(error | async)?.fromBucket">
+        {{(error | async)?.fromBucket}}
+      </div>
+      <div
+         class="error error-field"
+         [hidden]="!(error | async)?.toCluster">
+        {{(error | async)?.toCluster}}
+      </div>
+      <div
+         class="error error-field"
+         [hidden]="!(error | async)?.toBucket">
+        {{(error | async)?.toBucket}}
+      </div>
+
+      <form
+         [formGroup]="form.group"
+         (submit)="form.submit.next()"
+         class="formrow row flex-left items-stretch resp-flex-column-s">
+        <div class="column flex-grow-1">
+          <label for="replication_from_bucket" class="nowrap">Replicate From Bucket</label>
+          <mn-select
+             [values]="bucketsMembaseEphemeral | async"
+             [group]="form.group"
+             mnPlaceholder="select bucket"
+             mnFormControlName="fromBucket"
+             hasSearch="true">
+          </mn-select>
+        </div>
+        <div class="column row resp-hide-sml">
+          <span class="icon fa-angle-right text-superbig grayblack-2"></span>
+        </div>
+        <div class="column flex-grow-1">
+          <label for="replication_to_bucket">Remote Bucket</label>
+          <input
+             id="replication_to_bucket"
+             formControlName="toBucket"
+             type="text"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             placeholder="type remote bucket name (required)">
+        </div>
+        <div class="flex-grow-1 max-width-30">
+          <label for="replication_to_cluster" class="nowrap">Remote Cluster</label>
+          <mn-select
+             [values]="remoteClusters | async"
+             [group]="form.group"
+             mnPlaceholder="select remote cluster"
+             mnFormControlName="toCluster">
+          </mn-select>
+        </div>
+        <input type="submit" [hidden]="true">
+      </form>
+
+      <mn-xdcr-rep-message
+         [fromBucket]="form.group.get('fromBucket').value"
+         [toCluster]="form.group.get('toCluster').value"
+         [toBucket]="form.group.get('toBucket').value"></mn-xdcr-rep-message>
+
+      <mn-xdcr-filter
+         [xdcrGroup]="form.group"
+         [bucket]="form.group.get('fromBucket').value"
+         [settingsPipe]="getSettingsReplications"
+         [group]="filterRegexpGroup"
+         [formHelper]="filterFormHelper"
+         class="block"
+         *ngIf="(isEnterprise | async)"></mn-xdcr-filter>
+
+      <mn-xdcr-mapping
+         *ngIf="(isEnterprise | async) && (compatVersion70 | async)"
+         [explicitMappingRules]="explicitMappingRules"
+         [explicitMappingMigrationRules]="explicitMappingMigrationRules"
+         [explicitMappingGroup]="explicitMappingGroup"
+         class="block"
+         [group]="form.group"></mn-xdcr-mapping>
+
+      <mn-xdcr-settings
+         [form]="form"
+         [validationRequest]="postCreateReplicationValidation"
+         class="block"></mn-xdcr-settings>
+    </div>
+
+    <div
+       [ngClass]="{'border-1': (isEnterprise | async) && (compatVersion70 | async)}"
+       style="flex-basis: 1; margin: 0 16px;"
+       class="resp-hide-sml">&nbsp;</div>
+
+    <div class="width-2"
+       *ngIf="(isEnterprise | async) && (compatVersion70 | async)">
+      <h4
+         class="inline margin-right-1">
+        Mapping Rules
+      </h4>
+      <mn-xdcr-mapping-rules
+         class="block"
+         [isEditMode]="true"
+         [isMigrationMode]="isMigrationMode"
+         [isExplicitMappingMode]="isExplicitMappingMode"
+         [explicitMappingRules]="explicitMappingRules"
+         [explicitMappingMigrationRules]="explicitMappingMigrationRules"
+         [explicitMappingGroup]="explicitMappingGroup">
+      </mn-xdcr-mapping-rules>
+    </div>
+  </div>
+
+  <footer class="footer-save">
+    <button
+       type="button"
+       class="margin-right-2"
+       (click)="form.submit.next()"
+       [disabled]="(isSaveButtonDisabled | async)">
+      Save Replication
+    </button>
+    <a class="text-medium" uiSref="app.admin.replications">
+      Cancel/Reset
+    </a>
+  </footer>
+</div>

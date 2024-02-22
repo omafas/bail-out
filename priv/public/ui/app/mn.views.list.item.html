@@ -1,0 +1,105 @@
+<!--
+Copyright 2021-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+          <hr class="margin-bottom-half margin-top-1">
+          <div class="cbui-tablerow">
+            <span class="cbui-table-cell flex-grow-2 cbui-tablerow-title">
+              {{row.doc.meta.id}}
+              <span
+                class="label lt-blue"
+                [hidden]="!(showAddView | async)">
+                {{(row.doc.json.spatial | mnObjectKeys).length ? 'spatial' : 'views'}}
+              </span>
+              <span
+                  class="label red"
+                  [hidden]="!(row.doc.json.spatial | mnObjectKeys).length">
+                is not supported
+              </span>
+            </span>
+            <span class="cbui-table-cell flex-grow-1">
+              <div *ngIf="hasProgressAndTasksReadPermission | async">
+                <span>{{(compactionTask | async)?.type == 'indexer' ? "Indexing" : "Compacting"}} {{compactionProgress | async}}</span>
+              </div>
+            </span>
+            <span class="cbui-table-cell flex-grow-2 wrap text-right">
+              <button
+                  type="button"
+                  class="outline tight"
+                  [hidden]="!(hasWritePermission | async)"
+                  (click)="deleteDdocDialog.next(row)">Delete</button>
+              <button
+                  type="button"
+                  class="outline tight"
+                  [hidden]="!(showCompactBtn | async)"
+                  [disabled]="(disableCompactBtn | async) || !(row.doc.json.views | mnObjectKeys).length"
+                  (click)="clickCompact.next(row)">
+                Compact
+              </button>
+              <button
+                class="orange"
+                [hidden]="!(showCancelCompactBtn | async)"
+                [disabled]="disableCancelCompactBtn | async"
+                (click)="clickCancelCompact.next()">
+                Cancel Compaction
+              </button>
+              <button
+                  type="button"
+                  class="outline tight"
+                  [hidden]="!(hasWritePermission | async) || !(isDevelopmentViews | async)"
+                  (click)="addViewDialog.next(row)">
+                Add View
+              </button>
+              <button
+                  type="button"
+                  [hidden]="(isDevelopmentViews | async)"
+                  [disabled]="!(hasWritePermission | async)"
+                  (click)="copyDialog.next(row)">
+                Copy to Dev
+              </button>
+              <button
+                  type="button"
+                  [disabled]="!(hasWritePermission | async)"
+                  [hidden]="showPublishButton(row) || !(isDevelopmentViews | async)"
+                  (click)="clickPublish.next(row)">
+                Publish
+              </button>
+            </span>
+          </div>
+
+          <div
+              [hidden]="(row.doc.json.views | mnObjectKeys).length"
+              class="zero-content">
+            No views defined!<span class="when-in-dev"> Click "Create View" above to create one.</span>
+          </div>
+
+          <div
+              class="cbui-tablerow row-min has-hover"
+              *ngFor="let view of row.doc.json.views | keyvalue"
+              [uiParams]="{ ddocumentId: row.doc.meta.id, viewId: view.key, type: (type | async)}"
+              uiSref="app.admin.views.editing.result">
+            <span class="cbui-table-cell">
+              <span class="semi-bold indent-1">{{view.key}}</span>
+            </span>
+            <span class="cbui-table-cell flex-grow-2 wrap text-right">
+              <button
+                  class="outline tight"
+                  [hidden]="!(hasWritePermission | async) || !(isDevelopmentViews | async)"
+                  (click)="$event.stopPropagation(); deleteViewDialog.next({ doc: row.doc, key: view.key })">
+                Delete
+              </button>
+              <button
+                  class="outline tight"
+                  [uiParams]="{ ddocumentId: row.doc.meta.id, viewId: view.key, type: (type | async)}"
+                  [disabled]="!(hasWritePermission | async)"
+                  uiSref="app.admin.views.editing.result">
+                {{(showEditOrShow | async)}}
+              </button>
+            </span>
+          </div>

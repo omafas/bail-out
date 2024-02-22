@@ -1,0 +1,83 @@
+ns_server logging guidelines
+=============================
+
+
+1. Pick proper log category
+
+ns_server's logger support various categories (rebalance, views, xdcr,
+etc..) make sure you're using category that's appropriate for your
+piece of code.
+
+
+2. Pick proper log level
+
+Here's rule of thumb:
+
+* pick error level if your message is about some error that just
+  happened. That message should provide enough details about error and
+  guide further diagnostics
+
+* pick warning level if something weird or dangerous has
+  happened. Especially if it may lead to error soon/later. Provide
+  details.
+
+* pick info level is something very notable from the perspective of
+  support people happened. Very notable. Logging message needs to make
+  sense to anybody who is familiar with high-level architecture of our
+  product. Most notably, support folks.
+
+* pick debug level if it's something that may help debugging some
+  weird condition or bug. Debug messages don't have to be
+  non-developer friendly. Everything above it (info+), should be
+  understandable to non-developers.
+
+
+3. Verboseness and frequency
+
+Don't log random crap.
+
+Definition of levels above should imply that under normal conditions
+logs traffic for info level and above should be small. Ideally
+non-existent.
+
+But that doesn't mean you should log random "crap" to debug level.
+
+Our logs are rotated based on size. We're maintaining separate log
+files for error level, info + error level and debug + info + error
+(aka everything). This was implemented so that lots of info and debug
+messages don't cause important errors messages to be forgotten due to
+log rotation.
+
+But that, again, doesn't mean you can just spam logs. Debug level is
+extremely valuable tool in diagnosing problems in production. So do
+log, but be careful of avoiding spamming debug logs. Because excessive
+logging will cause premature log rotation, thus limiting usefulness of
+debug messages.
+
+Don't use debug level as a debugging tool. If/when you're hunting some
+particular bug(s), feel free to add any logging you may want, but
+don't leave arbitrary "crap" in product.
+
+Try to minimize logging of periodic activity. Especially if that
+activity really does nothing at all normally. As pointed above, idle
+system should be close to really idle w.r.t. logs as well.
+
+
+4. Do log, please
+
+Logging discipline and culture is important. Anything notable needs to
+be logged. Any unexpected condition, or notable event.
+
+No exception (unless 100% expected) can be just eaten without
+logging. Thats a big sin.
+
+
+5. API
+
+We're using our own logger library: ale. Thus you can use
+ale:{warn,error,...}. But there's a bunch of macros defined in
+ns_common.hrl. And using macros are preferrable.
+
+When logging user-visible message (something you want to be replicated
+and shown in Log section of UI) use this: ale:warn(?USER_LOGGER, "My
+message").
