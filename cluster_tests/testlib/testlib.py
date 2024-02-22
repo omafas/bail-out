@@ -472,6 +472,11 @@ def assert_gt(got, lower_bound, name='value'):
 def assert_in(what, where):
     assert what in where, f'"{what}" is missing in "{where}"'
 
+
+def assert_not_in(what, where):
+    assert what not in where, f'"{what}" is in "{where}"'
+
+
 def random_str(n):
     return ''.join(random.choices(string.ascii_lowercase +
                                   string.digits, k=n))
