@@ -74,6 +74,7 @@ is_interesting({node, _, membership}) -> true;
 is_interesting(cluster_compat_version) -> true;
 is_interesting(developer_preview_enabled) -> true;
 is_interesting({node, _, services}) -> true;
+is_interesting(server_groups) -> true;
 is_interesting({service_map, _}) -> true;
 is_interesting(counters) -> true;
 is_interesting(Key) ->
@@ -148,8 +149,11 @@ build_nodes_ext([Node | RestNodes], Config, Snapshot, NodesExtAcc) ->
     PortInfo = lists:usort(service_ports:get_ports_for_services(Node,
                                                                 Config,
                                                                 Services)),
-
-    NodeInfo = {[{services, {PortInfo}} | NI3]},
+    ServerGroup =
+        ns_cluster_membership:get_node_server_group(Node, Snapshot),
+    NI4 = NI3 ++ [{serverGroup, ServerGroup} ||
+                     cluster_compat_mode:is_enterprise()],
+    NodeInfo = {[{services, {PortInfo}} | NI4]},
     build_nodes_ext(RestNodes, Config, Snapshot, [NodeInfo | NodesExtAcc]).
 
 do_compute_bucket_info(Bucket, Config) ->
