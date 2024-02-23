@@ -394,7 +394,8 @@ ssl_auth_options() ->
         disable ->
             [];
         enable ->
-            [{verify, verify_peer}, {depth, ?ALLOWED_CERT_CHAIN_LENGTH}];
+            [{fail_if_no_peer_cert, false},
+             {verify, verify_peer}, {depth, ?ALLOWED_CERT_CHAIN_LENGTH}];
         mandatory ->
             [{fail_if_no_peer_cert, true},
              {verify, verify_peer}, {depth, ?ALLOWED_CERT_CHAIN_LENGTH}]
