@@ -866,6 +866,14 @@ handle_info({connect_done, WorkersCount, RV}, #state{bucket = Bucket,
                                  "key ~p", [Key]),
                               Self ! check_config_soon
                       end),
+                    %% The bucket cluster map must be updated after it is
+                    %% created. This was previously handled in ns_memcached_sup
+                    %% when terse_bucket_info_uploader started up again after
+                    %% ns_memcached restarted (in 7.2). It is no longer the
+                    %% case that terse_bucket_info_uploader restarts (as it is
+                    %% not supervised by ns_memcached_sup but by ns_bucket_sup)
+                    %% so the refresh must be explicitly requested.
+                    terse_bucket_info_uploader:refresh(Bucket),
 
                     {noreply, InitialState#state{worker_pids = WorkerPids}};
                 {error, {bucket_create_error,

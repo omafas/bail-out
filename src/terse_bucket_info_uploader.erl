@@ -19,7 +19,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+         refresh/1, terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
 -define(SET_CLUSTER_CONFIG_RETRY_TIME, 1000).
@@ -96,6 +96,9 @@ flush_refresh_msgs(BucketName) ->
             ok
     end.
 
+refresh(BucketName) ->
+    server_name(BucketName) ! {refresh, BucketName}.
+
 refresh_cluster_config(BucketName) ->
     case bucket_info_cache:terse_bucket_info(BucketName) of
         {ok, Rev, RevEpoch, Blob} ->
@@ -116,10 +119,6 @@ refresh_cluster_config(BucketName) ->
                                "config", [BucketName]),
                     erlang:send_after(?SET_CLUSTER_CONFIG_RETRY_TIME,
                                       self(), {refresh, BucketName}),
-                    ok;
-                {memcached_error,key_enoent,undefined} ->
-                    %% XXX: memcached currently doesn't create config-only
-                    %% buckets for non-serverless.
                     ok
             end;
         not_present ->
