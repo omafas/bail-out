@@ -86,6 +86,20 @@ class CertLoadTests(testlib.BaseTestSet):
         self.generate_and_load_cert('ec', is_client=True, pkcs8=True,
                                     passphrase=testlib.random_str(8))
 
+    def client_pkcs12_with_rsa_key_test(self):
+        self.generate_and_load_pkcs12_cert('rsa', is_client=True)
+
+    def client_pkcs12_with_ec_key_test(self):
+        self.generate_and_load_pkcs12_cert('ec', is_client=True)
+
+    def client_pkcs12_with_encrypted_rsa_key_test(self):
+        self.generate_and_load_pkcs12_cert('rsa', is_client=True,
+                                           passphrase=testlib.random_str(8))
+
+    def client_pkcs12_with_encrypted_ec_key_test(self):
+        self.generate_and_load_pkcs12_cert('ec', is_client=True,
+                                           passphrase=testlib.random_str(8))
+
     def generate_and_load_cert(self, key_type, is_client=False,
                                pkcs8=False, passphrase=None):
         if is_client:
@@ -117,22 +131,30 @@ class CertLoadTests(testlib.BaseTestSet):
         self.generate_and_load_pkcs12_cert('ec',
                                            passphrase=testlib.random_str(8))
 
-    def generate_and_load_pkcs12_cert(self, key_type, passphrase=None):
-        cert, key = generate_node_certs(self.node_addr,
-                                        self.ca_pem, self.ca_key,
-                                        key_type=key_type)
+    def generate_and_load_pkcs12_cert(self, key_type, passphrase=None,
+                                      is_client=False):
+        if is_client:
+            cert, key = generate_internal_client_cert(self.ca_pem, self.ca_key,
+                                                      'test_name')
+        else:
+            cert, key = generate_node_certs(self.node_addr,
+                                            self.ca_pem, self.ca_key,
+                                            key_type=key_type)
+
         node_data_path = self.cluster.connected_nodes[0].data_path()
         inbox_dir = os.path.join(node_data_path, 'inbox')
         os.makedirs(inbox_dir, exist_ok=True)
-        pkcs12_path = os.path.join(inbox_dir, 'couchbase.p12')
+        filename = 'couchbase_client.p12' if is_client else 'couchbase.p12'
+        pkcs12_path = os.path.join(inbox_dir, filename)
         try:
             write_pkcs12(cert, key, pkcs12_path,
                          passphrase=passphrase)
             data = {'privateKeyPassphrase': {'type': 'plain',
                                              'password': passphrase}} \
                    if passphrase is not None else None
-            testlib.post_succ(self.cluster,
-                              '/node/controller/reloadCertificate',
+            endpoint = 'reloadClientCertificate' if is_client \
+                       else 'reloadCertificate'
+            testlib.post_succ(self.cluster, f'/node/controller/{endpoint}',
                               json=data)
         finally:
             if os.path.exists(pkcs12_path):
