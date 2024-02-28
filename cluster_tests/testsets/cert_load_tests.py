@@ -46,44 +46,83 @@ class CertLoadTests(testlib.BaseTestSet):
                                 f'/pools/default/trustedCAs/{ca_id}',
                                 expected_code=204)
 
-    def rsa_private_key_test(self):
+    def rsa_private_key_pkcs1_test(self):
         self.generate_and_load_node_cert('rsa')
+
+    def rsa_private_key_pkcs8_test(self):
+        self.generate_and_load_node_cert('rsa', pkcs8=True)
+
+    def rsa_private_key_pkcs8_encrypted_test(self):
+        self.generate_and_load_node_cert('rsa', pkcs8=True,
+                                         passphrase=testlib.random_str(8))
 
     def ec_private_key_test(self):
         self.generate_and_load_node_cert('ec')
 
-    def generate_and_load_node_cert(self, key_type):
+    def ec_private_key_pkcs8_test(self):
+        self.generate_and_load_node_cert('ec', pkcs8=True)
+
+    def ec_private_key_pkcs8_encrypted_test(self):
+        self.generate_and_load_node_cert('ec', pkcs8=True,
+                                         passphrase=testlib.random_str(8))
+
+    def generate_and_load_node_cert(self, key_type,
+                                    pkcs8=False, passphrase=None):
         cert, key = generate_node_certs(self.node_addr,
                                         self.ca_pem, self.ca_key,
                                         key_type=key_type)
-        load_node_cert(self.cluster.connected_nodes[0], cert, key)
+        if pkcs8 == False:
+            assert passphrase is None, \
+                   'encryption is supported only for pkcs8 keys'
+        if pkcs8:
+            key = to_pkcs8(key, passphrase)
+        load_node_cert(self.cluster.connected_nodes[0], cert, key, passphrase)
 
-    def pkcs12_certs_test(self):
+    def pkcs12_rsa_key_test(self):
+        self.generate_and_load_pkcs12_cert('rsa')
+
+    def pkcs12_ec_key_test(self):
+        self.generate_and_load_pkcs12_cert('ec')
+
+    def pkcs12_encrypted_rsa_key_test(self):
+        self.generate_and_load_pkcs12_cert('rsa',
+                                           passphrase=testlib.random_str(8))
+
+    def pkcs12_encrypted_ec_key_test(self):
+        self.generate_and_load_pkcs12_cert('ec',
+                                           passphrase=testlib.random_str(8))
+
+    def generate_and_load_pkcs12_cert(self, key_type, passphrase=None):
         cert, key = generate_node_certs(self.node_addr,
                                         self.ca_pem, self.ca_key,
-                                        key_type='rsa')
+                                        key_type=key_type)
         node_data_path = self.cluster.connected_nodes[0].data_path()
         inbox_dir = os.path.join(node_data_path, 'inbox')
         os.makedirs(inbox_dir, exist_ok=True)
         pkcs12_path = os.path.join(inbox_dir, 'couchbase.p12')
         try:
-            write_pkcs12(cert, key, pkcs12_path)
+            write_pkcs12(cert, key, pkcs12_path,
+                         passphrase=passphrase)
+            data = {'privateKeyPassphrase': {'type': 'plain',
+                                             'password': passphrase}} \
+                   if passphrase is not None else None
             testlib.post_succ(self.cluster,
-                              '/node/controller/reloadCertificate')
+                              '/node/controller/reloadCertificate',
+                              json=data)
         finally:
             if os.path.exists(pkcs12_path):
                 os.remove(pkcs12_path)
 
 
-def load_node_cert(node, cert, key):
-    load_cert(node, cert, key, is_client=False)
+def load_node_cert(node, cert, key, passphrase=None):
+    load_cert(node, cert, key, passphrase, is_client=False)
 
 
-def load_client_cert(node, cert, key):
-    load_cert(node, cert, key, is_client=True)
+def load_client_cert(node, cert, key, passphrase=None):
+    load_cert(node, cert, key, passphrase, is_client=True)
 
 
-def load_cert(node, cert, key, is_client):
+def load_cert(node, cert, key, passphrase, is_client):
     inbox_dir = os.path.join(node.data_path(), 'inbox')
     chain_file_name = 'client_chain.pem' if is_client else 'chain.pem'
     chain_path = os.path.join(inbox_dir, chain_file_name)
@@ -97,7 +136,11 @@ def load_cert(node, cert, key, is_client):
             f.write(key)
         endpoint = 'reloadClientCertificate' if is_client \
                    else 'reloadCertificate'
-        testlib.post_succ(node, f'/node/controller/{endpoint}')
+        data = None
+        if passphrase is not None:
+            data = {'privateKeyPassphrase': {'type': 'plain',
+                                             'password': passphrase}}
+        testlib.post_succ(node, f'/node/controller/{endpoint}', json=data)
     finally:
         if os.path.exists(chain_path):
             os.remove(chain_path)
@@ -165,7 +208,19 @@ def generate_node_certs(node_addr, CA, CAKey, key_type='rsa'):
     return run_generate_cert(args, {'CACERT': CA, 'CAPKEY': CAKey})
 
 
-def write_pkcs12(cert, key, out_file):
+def to_pkcs8(key, passphrase):
+    args = ['pkcs8', '-topk8']
+    encr_args = ['-v2', 'aes256', '-passout', f'pass:{passphrase}'] \
+                if passphrase is not None else ['-nocrypt']
+    r = subprocess.run([openssl_path] + args + encr_args, capture_output=True,
+                       input=key.encode("utf-8"))
+    assert r.returncode == 0, f'openssl pkcs8 returned {r.returncode}\n' \
+                              f'stdout: {r.stdout.decode()}\n' \
+                              f'stderr: {r.stderr.decode()}'
+    return r.stdout.decode()
+
+
+def write_pkcs12(cert, key, out_file, passphrase=None):
     s = testlib.random_str(8)
     in_key_path = os.path.join(os.path.dirname(out_file), f"temp_key_{s}.pem")
     in_crt_path = os.path.join(os.path.dirname(out_file), f"temp_cert_{s}.pem")
@@ -174,10 +229,17 @@ def write_pkcs12(cert, key, out_file):
             f.write(key)
         with open(in_crt_path, 'w') as f:
             f.write(cert)
-        args = ['pkcs12', '-export', '-keypbe',  'NONE', '-certpbe', 'NONE',
-                '-nomaciter', '-out', out_file, '-inkey', in_key_path, '-in',
-                in_crt_path, '-passout', 'pass:']
-        r = subprocess.run([openssl_path] + args, capture_output=True)
+
+        args = ['pkcs12', '-export', '-out', out_file, '-inkey', in_key_path,
+                '-in', in_crt_path]
+
+        encr_args = ['-aes128', '-passout', f'pass:{passphrase}'] \
+                    if passphrase is not None else \
+                    ['-keypbe',  'NONE', '-certpbe', 'NONE', '-nomaciter',
+                     '-passout', 'pass:']
+
+        r = subprocess.run([openssl_path] + args + encr_args,
+                           capture_output=True)
         assert r.returncode == 0, f'openssl pkcs12 returned {r.returncode}\n' \
                                   f'stdout: {r.stdout.decode()}\n' \
                                   f'stderr: {r.stderr.decode()}'
