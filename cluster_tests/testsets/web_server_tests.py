@@ -11,6 +11,11 @@ import http.client
 import contextlib
 import base64
 
+REDIRECT_RESPONSE = "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\
+<html><head><title>301 Moved Permanently</title></head><body>\
+<h1>Moved Permanently</h1>\
+<p>The document has moved <a href=\"/ui/index.html\">here</a>.\
+</p></body></html>"
 
 class WebServerTests(testlib.BaseTestSet):
 
@@ -51,6 +56,41 @@ class WebServerTests(testlib.BaseTestSet):
         request = '/_prometheus/federate?match={__name__="up"}'
         with low_level_http_get(node, request, auth=basic_auth) as response:
             testlib.assert_eq(response.status, 200)
+
+    # Want to first use vulnerability, then enable flag, and test that it
+    # dissallows header injection.
+    def malicious_hostname_redirect_test(self):
+        response = testlib.get_fail(self.cluster, "/", 301,
+                                    headers={"Host": "example"},
+                                    allow_redirects=False)
+        testlib.assert_eq(response.headers["Location"],
+                          "http://example/ui/index.html")
+        testlib.post_succ(self.cluster, "/internalSettings",
+                          data={"useRelativeWebRedirects": "true"})
+        response = testlib.get_fail(self.cluster, "/", 301,
+                                    headers={"Host": "example"},
+                                    allow_redirects=False)
+        testlib.assert_eq(response.text.strip(), REDIRECT_RESPONSE)
+        testlib.assert_eq(response.headers["Location"], "/ui/index.html")
+
+        # But even with the flag set, if we use sane headers, it will always
+        # succeed.
+        testlib.get_succ(self.cluster, "/")
+
+        # disable it again, to bring us back to default state
+        testlib.post_succ(self.cluster, "/internalSettings",
+                          data={"useRelativeWebRedirects": "false"})
+
+    # make sure we aren't vulnerable to web cache poisoning attacks
+    def ensure_correct_cache_control_redirect_test(self):
+        response = testlib.get_fail(self.cluster, "/", 301,
+                                    headers={"Host": "example"},
+                                    allow_redirects=False)
+        testlib.assert_eq(response.headers["cache-control"],
+                          "no-cache,no-store,must-revalidate")
+        testlib.assert_eq(response.headers["expires"],
+                          "Thu, 01 Jan 1970 00:00:00 GMT")
+        testlib.assert_eq(response.headers["pragma"], "no-cache")
 
 
 @contextlib.contextmanager
