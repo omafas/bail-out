@@ -47,36 +47,61 @@ class CertLoadTests(testlib.BaseTestSet):
                                 expected_code=204)
 
     def rsa_private_key_pkcs1_test(self):
-        self.generate_and_load_node_cert('rsa')
+        self.generate_and_load_cert('rsa')
 
     def rsa_private_key_pkcs8_test(self):
-        self.generate_and_load_node_cert('rsa', pkcs8=True)
+        self.generate_and_load_cert('rsa', pkcs8=True)
 
     def rsa_private_key_pkcs8_encrypted_test(self):
-        self.generate_and_load_node_cert('rsa', pkcs8=True,
+        self.generate_and_load_cert('rsa', pkcs8=True,
                                          passphrase=testlib.random_str(8))
 
     def ec_private_key_test(self):
-        self.generate_and_load_node_cert('ec')
+        self.generate_and_load_cert('ec')
 
     def ec_private_key_pkcs8_test(self):
-        self.generate_and_load_node_cert('ec', pkcs8=True)
+        self.generate_and_load_cert('ec', pkcs8=True)
 
     def ec_private_key_pkcs8_encrypted_test(self):
-        self.generate_and_load_node_cert('ec', pkcs8=True,
+        self.generate_and_load_cert('ec', pkcs8=True,
                                          passphrase=testlib.random_str(8))
 
-    def generate_and_load_node_cert(self, key_type,
-                                    pkcs8=False, passphrase=None):
-        cert, key = generate_node_certs(self.node_addr,
-                                        self.ca_pem, self.ca_key,
-                                        key_type=key_type)
+    def client_cert_with_rsa_key_test(self):
+        self.generate_and_load_cert('rsa', is_client=True)
+
+    def client_cert_with_ec_key_test(self):
+        self.generate_and_load_cert('ec', is_client=True)
+
+    def client_cert_with_rsa_pkcs8_key_test(self):
+        self.generate_and_load_cert('rsa', is_client=True, pkcs8=True)
+
+    def client_cert_with_ec_pkcs8_key_test(self):
+        self.generate_and_load_cert('ec', is_client=True, pkcs8=True)
+
+    def client_cert_with_rsa_pkcs8_encrypted_key_test(self):
+        self.generate_and_load_cert('rsa', is_client=True, pkcs8=True,
+                                    passphrase=testlib.random_str(8))
+
+    def client_cert_with_ec_pkcs8_encrypted_key_test(self):
+        self.generate_and_load_cert('ec', is_client=True, pkcs8=True,
+                                    passphrase=testlib.random_str(8))
+
+    def generate_and_load_cert(self, key_type, is_client=False,
+                               pkcs8=False, passphrase=None):
+        if is_client:
+            cert, key = generate_internal_client_cert(self.ca_pem, self.ca_key,
+                                                      'test_name')
+        else:
+            cert, key = generate_node_certs(self.node_addr,
+                                            self.ca_pem, self.ca_key,
+                                            key_type=key_type)
         if pkcs8 == False:
             assert passphrase is None, \
                    'encryption is supported only for pkcs8 keys'
         if pkcs8:
             key = to_pkcs8(key, passphrase)
-        load_node_cert(self.cluster.connected_nodes[0], cert, key, passphrase)
+        load_cert(self.cluster.connected_nodes[0], cert, key, passphrase,
+                  is_client=is_client)
 
     def pkcs12_rsa_key_test(self):
         self.generate_and_load_pkcs12_cert('rsa')
