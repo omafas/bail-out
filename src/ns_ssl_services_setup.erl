@@ -554,8 +554,17 @@ tls_client_opts(Config, PresetOpts) ->
     merge_ns_config_tls_options(client, ?MODULE, RawTLSOptions3).
 
 tls_client_certs_opts() ->
+    PassphraseFun =
+        case ns_node_disco:couchdb_node() == node() of
+            true ->
+                rpc:call(ns_node_disco:ns_server_node(), ns_secrets,
+                         get_pkey_pass, [client_cert]);
+            false ->
+                ns_secrets:get_pkey_pass(client_cert)
+        end,
     [{certfile, chain_file_path(client_cert)},
-     {keyfile, pkey_file_path(client_cert)}].
+     {keyfile, pkey_file_path(client_cert)},
+     {password, PassphraseFun}].
 
 tls_peer_verification_client_opts() ->
     [{cacertfile, ca_file_path()},

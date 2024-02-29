@@ -16,7 +16,8 @@ import testlib
 import os
 from testlib import ClusterRequirements
 from testsets.cert_load_tests import read_cert_file, generate_node_certs, \
-     load_ca, load_node_cert, load_client_cert, generate_internal_client_cert
+     load_ca, load_node_cert, load_client_cert, generate_internal_client_cert, \
+     to_pkcs8
 
 
 class NodeAdditionTests(testlib.BaseTestSet):
@@ -101,20 +102,37 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
         self.cluster_ca_key = read_cert_file('test_CA.pkey')
         self.new_node_ca_key = read_cert_file('test_CA2.pkey')
         afamily = self.cluster_node().afamily()
+
+        self.cluster_node_passphrase = testlib.random_str(8)
         self.cluster_node_cert, self.cluster_node_key = \
             generate_node_certs(self.cluster_node().addr(afamily=afamily),
                                 self.cluster_ca, self.cluster_ca_key)
+        self.cluster_node_key = to_pkcs8(self.cluster_node_key,
+                                         self.cluster_node_passphrase)
+
+        self.new_node_passphrase = testlib.random_str(8)
         self.new_node_cert, self.new_node_key = \
             generate_node_certs(self.new_node().addr(afamily=afamily),
                                 self.new_node_ca, self.new_node_ca_key)
+        self.new_node_key = to_pkcs8(self.new_node_key,
+                                     self.new_node_passphrase)
+
+        self.cluster_client_passphrase = testlib.random_str(8)
         self.cluster_client_cert, self.cluster_client_key = \
             generate_internal_client_cert(self.cluster_ca,
                                           self.cluster_ca_key,
                                           'test_client_name1')
+        self.cluster_client_key = to_pkcs8(self.cluster_client_key,
+                                           self.cluster_client_passphrase)
+
+        self.new_node_client_passphrase = testlib.random_str(8)
         self.new_node_client_cert, self.new_node_client_key = \
             generate_internal_client_cert(self.new_node_ca,
                                           self.new_node_ca_key,
                                           'test_client_name2')
+        self.new_node_client_key = to_pkcs8(self.new_node_client_key,
+                                            self.new_node_client_passphrase)
+
         toggle_node_n2n(self.new_node(), enable=False)
 
     def teardown(self):
@@ -436,18 +454,22 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
         cluster_node = self.cluster_node()
         load_ca(cluster_node, self.cluster_ca)
         load_node_cert(cluster_node, self.cluster_node_cert,
-                       self.cluster_node_key)
+                       self.cluster_node_key,
+                       passphrase=self.cluster_node_passphrase)
         if should_load_client_cert:
             load_client_cert(cluster_node, self.cluster_client_cert,
-                             self.cluster_client_key)
+                             self.cluster_client_key,
+                             passphrase=self.cluster_client_passphrase)
 
     def provision_new_node(self, should_load_client_cert=False):
         new_node = self.new_node()
         load_ca(new_node, self.new_node_ca)
-        load_node_cert(new_node, self.new_node_cert, self.new_node_key)
+        load_node_cert(new_node, self.new_node_cert, self.new_node_key,
+                       passphrase=self.new_node_passphrase)
         if should_load_client_cert:
             load_client_cert(new_node, self.new_node_client_cert,
-                             self.new_node_client_key)
+                             self.new_node_client_key,
+                             passphrase=self.new_node_client_passphrase)
 
     def cluster_node(self):
         return self.cluster.connected_nodes[0]
