@@ -428,23 +428,17 @@ check_stored_key(Sha, ClientProofBase64, StoredKey, AuthMessage) ->
     ReStoredKey = stored_key(Sha, ClientKey),
     misc:compare_secure(ReStoredKey, StoredKey).
 
-pbkdf2(Sha, Password, Salt, Iterations) ->
-    Initial = crypto:mac(hmac, Sha, Password, <<Salt/binary, 1:32/integer>>),
-    pbkdf2_iter(Sha, Password, Iterations - 1, Initial, Initial).
+sha_digest_size(sha) -> ?SHA_DIGEST_SIZE;
+sha_digest_size(sha256) -> ?SHA256_DIGEST_SIZE;
+sha_digest_size(sha512) -> ?SHA512_DIGEST_SIZE.
 
-pbkdf2_iter(_Sha, _Password, 0, _Prev, Acc) ->
-    Acc;
-pbkdf2_iter(Sha, Password, Iteration, Prev, Acc) ->
-    Next = crypto:mac(hmac, Sha, Password, Prev),
-    pbkdf2_iter(Sha, Password, Iteration - 1, Next, crypto:exor(Next, Acc)).
+pbkdf2(Sha, Password, Salt, Iterations) ->
+    Len = sha_digest_size(Sha),
+    crypto:pbkdf2_hmac(Sha, iolist_to_binary(Password), Salt, Iterations, Len).
 
 hash_passwords(Type, Passwords, AuthType) ->
     Iterations = iterations(AuthType),
-    Len = case Type of
-              sha -> ?SHA_DIGEST_SIZE;
-              sha256 -> ?SHA256_DIGEST_SIZE;
-              sha512 -> ?SHA512_DIGEST_SIZE
-          end,
+    Len = sha_digest_size(Type),
     Salt = crypto:strong_rand_bytes(Len),
     SaltedPasswords = [salted_password(Type, P, Salt, Iterations)
                        || P <- Passwords],
