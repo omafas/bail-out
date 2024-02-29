@@ -97,7 +97,11 @@ flush_refresh_msgs(BucketName) ->
     end.
 
 refresh(BucketName) ->
-    server_name(BucketName) ! {refresh, BucketName}.
+    ns_bucket_sup:ignore_if_not_couchbase_bucket(
+      BucketName,
+      fun (_) ->
+              server_name(BucketName) ! {refresh, BucketName}
+      end).
 
 refresh_cluster_config(BucketName) ->
     case bucket_info_cache:terse_bucket_info(BucketName) of
