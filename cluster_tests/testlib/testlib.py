@@ -189,11 +189,15 @@ def safe_test_function_call(testset, testfunction, args, testiter,
             if not dry_run:
                 res = apply_with_seed(testset, testfunction, args, seed)
     except Exception as e:
-        cscheme = None if config['colors'] else traceback.ColorSchemes.none
-        traceback.print_exc(fmt=traceback.Format(color_scheme=cscheme),
-                            file_=sys.stdout)
+        print_traceback()
         error = (testname, e)
     return res, error
+
+
+def print_traceback():
+    cscheme = None if config['colors'] else traceback.ColorSchemes.none
+    traceback.print_exc(fmt=traceback.Format(color_scheme=cscheme),
+                        file_=sys.stdout)
 
 
 def apply_with_seed(obj, func, args, seed):

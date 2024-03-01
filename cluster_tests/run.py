@@ -614,13 +614,23 @@ def run_testsets(cluster, testsets, total_num,
                               'testsets)')
             continue
 
-        res = testlib.run_testset(testset, cluster, total_num,
-                                  intercept_output=intercept_output,
-                                  seed=seed,
-                                  stop_after_first_error=stop_after_first_error)
-        executed += res[0]
-        testset_errors = res[1]
-        not_ran += res[2]
+        testset_errors = []
+        try:
+            res = testlib.run_testset(
+                testset, cluster, total_num,
+                intercept_output=intercept_output,
+                seed=seed,
+                stop_after_first_error=stop_after_first_error)
+            executed += res[0]
+            testset_errors = res[1]
+            not_ran += res[2]
+        # We use a catch-all here because if we hit any errors while running
+        # a testset, but not in a test, then it is likely an issue with the
+        # cluster, so we should keep running more tests
+        except Exception as e:
+            testlib.print_traceback()
+            testset_errors.append((testset["name"], e))
+            cluster_is_unusable = True
 
         try:
             unmet = cluster.maybe_repair_cluster_requirements()
