@@ -1891,10 +1891,12 @@ class BucketTestSetBase(testlib.BaseTestSet):
 
             if good and not just_validate:
                 if endpoint == BUCKETS_ENDPOINT and r.status_code == 202:
-                    # If we are testing bucket creation then we will not reuse
-                    # this bucket - delete the bucket if it was created
-                    # successfully.
-                    self.test_delete(f"{endpoint}/{test_data['name']}")
+                    name = test_data['name']
+                    # Test that the bucket was properly created
+                    self.cluster.wait_for_bucket(name)
+                    # Since we are testing bucket creation then we will not
+                    # reuse this bucket, so we need to delete it.
+                    self.test_delete(f"{endpoint}/{name}")
                 elif self.is_enterprise and self.is_76 \
                         and test_data['bucketType'] != "memcached":
                     pitr_reset = {'pitrGranularity': 600,

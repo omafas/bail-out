@@ -407,11 +407,13 @@ class Cluster:
         # bucket to be ready on all nodes
         if sync and response.status_code == 202:
             name = data["name"]
-
-            testlib.poll_for_condition(
-                lambda: self.is_bucket_healthy_on_all_nodes(name),
-                sleep_time=0.5, timeout=60)
+            self.wait_for_bucket(name)
         return response
+
+    def wait_for_bucket(self, name):
+        testlib.poll_for_condition(
+            lambda: self.is_bucket_healthy_on_all_nodes(name),
+            sleep_time=0.5, timeout=60)
 
     def update_bucket(self, data, verbose=False, expected_code=200):
         self.wait_for_rebalance(verbose=verbose)
