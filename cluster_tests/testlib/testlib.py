@@ -640,8 +640,7 @@ def maybe_print(s, verbose=None, print_fun=print):
 
 def log_at_all_nodes(cluster, msg):
     for n in cluster._nodes:
-        diag_eval(n, f'ale:debug(ns_server, "{msg}", []).',
-                  verbose=config['verbose']).text
+        diag_eval(n, f'\"{msg}\".', verbose=config['verbose'])
 
 
 def maybe_add_brackets(addr):
