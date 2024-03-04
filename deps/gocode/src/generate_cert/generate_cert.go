@@ -129,6 +129,10 @@ func main() {
 			BasicConstraintsValid: true,
 		}
 
+                if pkeyType == "ec" {
+                    leafTemplate.KeyUsage |= x509.KeyUsageKeyAgreement
+                }
+
 		if sanIPAddrsArg != "" {
 			ips := []net.IP{}
 			ipStrings := strings.Split(sanIPAddrsArg, ",")
