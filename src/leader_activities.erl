@@ -296,7 +296,7 @@ handle_cast(Msg, State) ->
 handle_info({'DOWN', MRef, process, Pid, Reason}, State) ->
     {noreply, handle_down(MRef, Pid, Reason, State)};
 handle_info({'EXIT', _Pid, _Reason} = Exit, State) ->
-    ?log_error("Received unexpected exit message ~p. Exiting"),
+    ?log_error("Received unexpected exit message ~p. Exiting", [Exit]),
     {stop, {unexpected_exit, Exit}, State};
 handle_info(Info, State) ->
     ?log_error("Received unexpected message ~p when state is~n~p",

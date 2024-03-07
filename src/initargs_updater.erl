@@ -44,7 +44,7 @@ handle_info(notify_change, State) ->
     save_initargs(),
     {noreply, State, hibernate};
 handle_info(Info, State) ->
-    ?log_warning("Unexpected message(~p, ~p)", [Info]),
+    ?log_warning("Unexpected message(~p)", [Info]),
     {noreply, State, hibernate}.
 
 %% Internal functions.

@@ -79,7 +79,7 @@ handle_call(Request, From, State) ->
 handle_info(quorum_nodes_updated, State) ->
     {noreply, handle_quorum_nodes_updated(State)};
 handle_info({'EXIT', _Pid, _Reason} = Exit, State) ->
-    ?log_error("Received unexpected exit message ~p. Exiting"),
+    ?log_error("Received unexpected exit message ~p. Exiting", [Exit]),
     {stop, {unexpected_exit, Exit}, State};
 handle_info({'DOWN', _MRef, process, Pid, Reason}, State) ->
     {stop, {leader_activities_died, Pid, Reason}, State};

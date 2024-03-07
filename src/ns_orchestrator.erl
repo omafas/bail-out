@@ -1950,7 +1950,7 @@ handle_info_in_bucket_hibernation(
     maybe_try_autofailover_in_idle_state(StopReason);
 
 handle_info_in_bucket_hibernation(Msg, State) ->
-    ?log_debug("Message ~p ignored in State: ", [Msg, State]),
+    ?log_debug("Message ~p ignored in State: ~p", [Msg, State]),
     keep_state_and_data.
 
 -spec handle_hibernation_manager_exit(Reason, Bucket, Op) -> ok
