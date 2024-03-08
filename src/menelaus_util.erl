@@ -235,6 +235,11 @@ handle_request(Req, Fun) ->
     catch
         exit:normal ->
             erlang:exit(normal);
+        exit:{timeout,_}:Stack ->
+            {_Msg, Report} = server_error_report(Req, exit, timeout, Stack),
+            ?log_error("Server error during processing: ~p", [Report]),
+            reply_text(Req, "Service is temporarily unavailable", 503),
+            erlang:exit(normal);
         throw:{web_json_exception, StatusCode, Json} ->
             reply_json(Req, Json, StatusCode);
         throw:{web_exception, StatusCode, Message, ExtraHeaders} ->
