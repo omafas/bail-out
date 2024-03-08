@@ -4849,7 +4849,10 @@ test_num_replicas_guardrail_validation(#{disk_usage := DiskUsage,
                                          new_num_replicas := NewNumReplicas}) ->
     meck:expect(rpc, call,
                 fun (_Node, ns_disksup, get_disk_data, [], _Timeout) ->
-                        [{"/", 1, DiskUsage}]
+                        case DiskUsage of
+                            error -> [];
+                            _ -> [{"/", 1, DiskUsage}]
+                        end
                 end),
     Servers = [node1, node2],
     {New, BucketConfig} =
@@ -4868,10 +4871,14 @@ test_num_replicas_guardrail_validation(#{disk_usage := DiskUsage,
     additional_bucket_params_validation(Params, Ctx).
 
 num_replicas_guardrail_validation_test_() ->
-    ExpectedError = [{num_replicas,
-                      <<"The following data node(s) have insufficient disk "
-                        "space to safely increase the number of replicas: "
-                        "node1, node2">>}],
+    ExpectedError1 = [{num_replicas,
+                       <<"The following data node(s) have insufficient disk "
+                         "space to safely increase the number of replicas: "
+                         "node1, node2">>}],
+    ExpectedError2 = [{num_replicas,
+                       <<"Couldn't determine safety of increasing number of "
+                         "replicas as there were errors getting disk usage on "
+                         "the following nodes: node1, node2">>}],
     {setup,
      fun () ->
              %% We need unstick, so that we can meck rpc
@@ -4886,7 +4893,8 @@ num_replicas_guardrail_validation_test_() ->
              meck:expect(ns_storage_conf, this_node_dbdir,
                          fun () -> {ok, ""} end),
              meck:expect(ns_storage_conf, extract_disk_stats_for_path,
-                         fun ([Stats], _) -> {ok, Stats} end),
+                         fun ([Stats], _) -> {ok, Stats};
+                             ([], _) -> none end),
              meck:expect(ns_config, get_timeout,
                          fun (_, Default) -> Default end)
      end,
@@ -4894,9 +4902,15 @@ num_replicas_guardrail_validation_test_() ->
              meck:unload()
      end,
      [{"num_replicas can't be increased after disk usage guardrail hit",
-       ?_assertEqual(ExpectedError,
+       ?_assertEqual(ExpectedError1,
                      test_num_replicas_guardrail_validation(
                        #{disk_usage => 91,
+                         old_num_replicas => 1,
+                         new_num_replicas => 2}))},
+      {"num_replicas can't be increased when disk usage is giving an error",
+       ?_assertEqual(ExpectedError2,
+                     test_num_replicas_guardrail_validation(
+                       #{disk_usage => error,
                          old_num_replicas => 1,
                          new_num_replicas => 2}))},
       {"num_replicas can be increased if disk usage guardrail not hit",

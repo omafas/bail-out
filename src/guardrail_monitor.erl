@@ -528,8 +528,8 @@ check_num_replicas_change(OldNumReplicas, NewNumReplicas, Nodes) ->
                          "the following nodes: ~s",
                          [lists:join(
                             ", ",
-                            lists:map(?cut(atom_to_list(element(2, _))),
-                                      HighDiskNodes))]))}
+                            lists:map(?cut(atom_to_list(element(1, _))),
+                                      ErrorDiskNodes))]))}
             end
     end.
 
