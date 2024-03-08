@@ -160,6 +160,7 @@ is_interesting({node, _, memcached}) -> true;
 is_interesting({node, _, capi_port}) -> true;
 is_interesting({node, _, ssl_capi_port}) -> true;
 is_interesting({node, _, ssl_rest_port}) -> true;
+is_interesting({node, _, local_resource_statuses}) -> true;
 is_interesting(rest) -> true;
 is_interesting(rest_creds) -> true;
 is_interesting(cluster_compat_version) -> true;
@@ -377,11 +378,21 @@ personalize_info(Label, Info) ->
                           {lists:keydelete(other_users, 1, NewNode)}
                   end, Nodes),
 
+    %% Only report statuses applicable to the service
+    GuardrailStatuses =
+        lists:flatmap(
+          fun ({Service, Statuses}) when Service =:= Label ->
+                  Statuses;
+              (_) ->
+                  []
+          end, proplists:get_value(guardrailStatuses, Info)),
+
     misc:update_proplist(Info,
                          [{specialUser, erlang:list_to_binary(MemcachedUser)},
                           {nodes, NewNodes},
                           {tlsConfig, TLSConfig},
-                          {cacheConfig, CacheConfig}]).
+                          {cacheConfig, CacheConfig},
+                          {guardrailStatuses, GuardrailStatuses}]).
 
 notify_cbauth(Label, internal, Pid, Info) ->
     invoke_method(Label, "AuthCacheSvc.UpdateDB", Pid,
@@ -573,7 +584,8 @@ build_auth_info(internal, {AuthVersion, PermissionsVersion, CcaState, Config,
                                  {disableNonSSLPorts, DisableNonSSLPorts}]}},
      {specialPasswords, SpecialPasswordsBin},
      {tlsConfig, [tls_config(S, Config) || S <- TLSServices]},
-     {cacheConfig, build_cache_size_overrides(Config)}].
+     {cacheConfig, build_cache_size_overrides(Config)},
+     {guardrailStatuses, build_guardrail_statuses(Config)}].
 
 tls_config(Service, Config) ->
     Label = service_to_label(Service),
@@ -712,6 +724,28 @@ cache_size_defaults() ->
      {up_cache_size, upCacheSize, 1024},
      {auth_cache_size, authCacheSize, 256},
      {client_cert_cache_size, clientCertCacheSize, 256}].
+
+build_guardrail_statuses(Config) ->
+    lists:map(
+      fun (Service) ->
+              {service_to_label(Service),
+               build_guardrail_statuses(Service, Config)}
+      end,
+      [index]).
+
+build_guardrail_statuses(index, Config) ->
+    lists:filtermap(
+      fun (Resource) ->
+              case guardrail_monitor:get_local_status(
+                     {index, Resource}, Config, ok) of
+                  ok ->
+                      false;
+                  Severity ->
+                      {true,
+                       {[{resource, Resource},
+                         {severity, Severity}]}}
+              end
+      end, [disk_usage]).
 
 strip_cbauth_suffix(Label) ->
     "htuabc-" ++ ReversedTrimmedLabel = lists:reverse(Label),

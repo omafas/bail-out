@@ -18,7 +18,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/0, get_status/1]).
+-export([start_link/0, get_status/1, priority_order/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -199,8 +199,10 @@ get_aggregated_status(Resource, NodeStatuses) ->
                                                 NodeStatuses)).
 
 -spec priority_order(resource()) -> [status()].
-priority_order(_) ->
-    [resident_ratio, data_size, disk_usage].
+priority_order({bucket, _}) ->
+    [resident_ratio, data_size, disk_usage];
+priority_order(index) ->
+    [maximum, critical, serious, warning].
 
 -spec resolve_status_conflict([status()] | resource(), [status()]) ->
           status().

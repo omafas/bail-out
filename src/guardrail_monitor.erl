@@ -20,7 +20,7 @@
 
 -export([is_enabled/0, get_config/0, get/1, get/2, start_link/0,
          validate_topology_change/2, validate_storage_migration/3,
-         check_num_replicas_change/3]).
+         check_num_replicas_change/3, get_local_status/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
@@ -41,9 +41,11 @@
                 timer_ref = undefined :: undefined | reference()
                }).
 
--type resource() :: {bucket, bucket_name()}.
+-type resource() :: {bucket, bucket_name()} | index.
 -export_type([resource/0]).
--type status() :: ok | data_ingress_status().
+
+-type disk_severity() :: serious | critical | maximum.
+-type status() :: ok | data_ingress_status() | disk_severity().
 -export_type([status/0]).
 
 -type disk_stats_error() :: no_dbdir
@@ -67,7 +69,7 @@ get_config() ->
     ns_config:read_key_fast(resource_management, []).
 
 -spec get(cores_per_bucket | collections_per_quota | disk_usage) ->
-    undefined | number().
+    undefined | number() | [{atom(), number()}].
 get(cores_per_bucket) ->
     case proplists:get_value(cores_per_bucket, get_config()) of
         undefined -> undefined;
@@ -88,12 +90,10 @@ get(collections_per_quota) ->
     end;
 get(disk_usage) ->
     case proplists:get_value(disk_usage, get_config()) of
-        undefined -> undefined;
-        Config ->
-            case proplists:get_value(enabled, Config) of
-                true -> proplists:get_value(maximum, Config);
-                false -> undefined
-            end
+        undefined ->
+            undefined;
+        DiskUsageConfig ->
+            get_thresholds(DiskUsageConfig)
     end.
 
 get(bucket, Key) ->
@@ -113,6 +113,11 @@ get(bucket, Key) ->
                     end
             end
     end.
+
+get_local_status(Resource, Config, Default) ->
+    ns_config:search_node_prop(Config, local_resource_statuses, Resource,
+                               Default).
+
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
@@ -347,20 +352,26 @@ validate_topology_change_disk_usage(AddedNodes, EjectedNodes, KeepNodes) ->
     case guardrail_monitor:get(disk_usage) of
         undefined ->
             ok;
-        Maximum ->
+        Thresholds ->
             %% Fetch disk stats for all nodes, so that we will be able to catch
             %% if an existing or added node has got high disk usage
             NodeDiskStats = get_disk_stats_from_nodes(
                               KeepNodes ++ EjectedNodes),
-            BadNodes = get_high_disk_usage_from_stats(
-                         Maximum, NodeDiskStats),
-
+            PossiblyBadNodes = get_high_disk_usage_from_stats(
+                         Thresholds, NodeDiskStats),
+            %% Exclude nodes that only cross the serious/critical thresholds,
+            %% as these thresholds are ignored for topology change
+            BadNodes = lists:filter(
+                fun ({_Node, critical}) ->  false;
+                    ({_Node, serious}) ->  false;
+                    (_) -> true
+                end, PossiblyBadNodes),
             %% Split the bad nodes into those that have high disk usage and
             %% those that we failed to get disk usage stats for, in order to
             %% give appropriate error messages
             {HighDiskNodes, ErrorDiskNodes} =
                 lists:partition(
-                  fun ({_Node, high_disk}) -> true;
+                  fun ({_Node, maximum}) -> true;
                       (_) -> false
                   end, BadNodes),
             case {HighDiskNodes, ErrorDiskNodes} of
@@ -452,37 +463,38 @@ get_disk_stats_from_nodes(Nodes) ->
               end
       end, Nodes, ?PARALLEL_RPC_TIMEOUT).
 
--spec get_high_disk_usage_from_nodes(number(), [node()]) ->
-          [{node(), high_disk | disk_stats_error() | any()}].
-get_high_disk_usage_from_nodes(Maximum, Nodes) ->
+-spec get_high_disk_usage_from_nodes([{atom(), number()}],
+                                     [node()]) ->
+          [{node(), disk_severity() | {error, any()} | any()}].
+get_high_disk_usage_from_nodes(Thresholds, Nodes) ->
     NodeDiskStats = get_disk_stats_from_nodes(Nodes),
-    get_high_disk_usage_from_stats(Maximum, NodeDiskStats).
+    get_high_disk_usage_from_stats(Thresholds, NodeDiskStats).
 
 -spec get_high_disk_usage_from_stats(
-        number(),
+        [{atom(), number()}],
         [{node(),
           {ok, ns_disksup:disk_stat()}
          | {badrpc, any()}
          | {error, disk_stats_error()}}]) ->
-          [{node(), high_disk | disk_stats_error() | any()}].
-get_high_disk_usage_from_stats(Maximum, NodeDiskStats) ->
+          [{node(), disk_severity() | {error, any()}}].
+get_high_disk_usage_from_stats(Thresholds, NodeDiskStats) ->
     lists:filtermap(
       fun ({Node, {ok, DiskData}}) ->
-              case check_disk_usage(Maximum, DiskData) of
-                  false ->
+              case check_disk_usage(Thresholds, DiskData) of
+                  ok ->
                       false;
-                  true ->
-                      {true, {Node, high_disk}}
+                  Severity ->
+                      {true, {Node, Severity}}
               end;
-          ({Node, {badrpc, Error}}) ->
+          ({Node, {badrpc, Error} = E}) ->
               %% If there is a communication issue, or an error getting
               %% the disk stats, we want to bubble up a clear error,
               %% rather than letting it fail later in a less clear way
               ?log_error("Couldn't get disk stats for node ~p. Instead got ~w.",
                          [Node, Error]),
-              {true, {Node, Error}};
-          ({Node, {error, Error}}) ->
-              {true, {Node, Error}}
+              {true, {Node, {error, E}}};
+          ({Node, {error, _} = E}) ->
+              {true, {Node, E}}
       end, NodeDiskStats).
 
 -spec check_num_replicas_change(pos_integer(), pos_integer(), [node()]) ->
@@ -491,19 +503,27 @@ check_num_replicas_change(OldNumReplicas, NewNumReplicas, Nodes) ->
     case {guardrail_monitor:get(disk_usage), OldNumReplicas < NewNumReplicas} of
         {undefined, _} ->
             ok;
-        {_Maximum, false} ->
+        {_Thresholds, false} ->
             %% The number of replicas is not being increased so no guardrail
             %% needs to be checked, to ensure the change is safe to perform
             ok;
-        {Maximum, true} ->
+        {Thresholds, true} ->
             %% The number of replicas is being increased so we need to check
             %% the disk usage, to ensure the change is safe to perform
-            BadNodes = get_high_disk_usage_from_nodes(Maximum, Nodes),
-            %% Split the bad nodes into those with an error and those with high
-            %% disk usage
+            PossiblyBadNodes = get_high_disk_usage_from_nodes(Thresholds,
+                                                              Nodes),
+            %% Exclude nodes that only cross the serious/critical thresholds,
+            %% as these thresholds are ignored for num_replicas
+            BadNodes = lists:filter(
+                fun ({_Node, critical}) ->  false;
+                    ({_Node, serious}) ->  false;
+                    (_) -> true
+                end, PossiblyBadNodes),
+            %% Split the bad nodes into those with an error and those with
+            %% critical disk usage
             {HighDiskNodes, ErrorDiskNodes} =
                 lists:partition(
-                  fun ({_Node, high_disk}) -> true;
+                  fun ({_Node, maximum}) -> true;
                       (_) -> false
                   end, BadNodes),
             case {HighDiskNodes, ErrorDiskNodes} of
@@ -619,8 +639,19 @@ handle_info(check, #state{statuses = OldStatuses} = State) ->
                     false ->
                         ?log_info("Resource statuses changed from ~p to ~p",
                                   [OldStatuses, NewStatuses]),
+                        %% Report local and global statuses separately, to avoid
+                        %% guardrail_enforcer trying to handle local statuses
+                        {LocalStatuses, GlobalStatuses} =
+                            lists:partition(
+                              fun ({{index, _Resource}, _Status}) ->
+                                      true;
+                                  (_) ->
+                                      false
+                              end, NewStatuses),
                         ns_config:set({node, node(), resource_statuses},
-                                      NewStatuses),
+                                      GlobalStatuses),
+                        ns_config:set({node, node(), local_resource_statuses},
+                                      LocalStatuses),
                         State1#state{statuses = NewStatuses}
                 end;
             false ->
@@ -671,39 +702,61 @@ check({bucket, Config}, Stats) ->
                 end
         end, ns_bucket:get_buckets()));
 check({disk_usage = Resource, Config}, _Stats) ->
-    case proplists:get_value(enabled, Config) of
-        false ->
+    case get_thresholds(Config) of
+        undefined ->
             [];
-        true ->
-            Maximum = proplists:get_value(maximum, Config),
-
+        Thresholds ->
             %% Get the live disk stats, which we do for consistency as we must
             %% get live stats for node addition, to avoid waiting for stats to
             %% be scraped on the new node
             Node = node(),
-            {Gauge, Statuses} =
-                case get_high_disk_usage_from_nodes(Maximum, [Node]) of
-                    [{Node, high_disk}] ->
-                        %% For now if we see disk usage reach the limit we apply
-                        %% the guard for all buckets. In future we should allow
-                        %% this to apply on a per-service and per-bucket level,
-                        %% when these are mapped to different disk partitions
-                        {1, [{{bucket, BucketName}, disk_usage}
-                             || BucketName <- ns_bucket:get_bucket_names()]};
-                    [{Node, _Error}] ->
+            {Severity, Statuses} =
+                case get_high_disk_usage_from_nodes(Thresholds, [Node]) of
+                    [{Node, {error, _Error}}] ->
                         %% If we fail to get disk stats then we assume the disk
                         %% usage is safe, rather than disabling data ingress.
                         %% We do this because disabling data ingress is an
                         %% extreme action that we do not want to take unless we
                         %% are sure that we have to.
-                        {0, []};
+                        {ok, []};
+                    [{Node, maximum = S}] ->
+                        %% For now if we see disk usage reach the limit we apply
+                        %% the guard for all buckets. In future we should allow
+                        %% this to apply on a per-service and per-bucket level,
+                        %% when these are mapped to different disk partitions
+                        {S,
+                         [{{bucket, BucketName}, disk_usage}
+                          || BucketName <- ns_bucket:get_bucket_names()] ++
+                             [{{index, disk_usage}, S}]};
+                    [{Node, S}] when S =/= ok ->
+                        %% For now if we see disk usage reach the limit we apply
+                        %% the guard for all buckets. In future we should allow
+                        %% this to apply on a per-service and per-bucket level,
+                        %% when these are mapped to different disk partitions
+                        {S, [{{index, disk_usage}, S}]};
                     [] ->
-                        {0, []}
+                        {ok, []}
                 end,
-            ns_server_stats:notify_gauge(
-              {<<"resource_limit_reached">>,
-               [{resource, Resource}]},
-              Gauge),
+            lists:foreach(
+              fun (SeverityToReport) ->
+                      Gauge =
+                          case Severity of
+                              serious when SeverityToReport =:= serious ->
+                                  1;
+                              critical when SeverityToReport =/= maximum ->
+                                  1;
+                              maximum ->
+                                  1;
+                              _ ->
+                                  0
+                          end,
+                      ns_server_stats:notify_gauge(
+                        {<<"resource_limit_reached">>,
+                         [{resource, Resource},
+                          {severity, SeverityToReport}]},
+                        Gauge)
+              end,
+              [maximum, critical, serious]),
             Statuses
     end;
 check({_Resource, _Config}, _Stats) ->
@@ -856,9 +909,30 @@ get_data_size_maximum_on_nodes(ResourceConfig, BucketConfig, Nodes) ->
         Limits -> lists:min(Limits)
     end.
 
--spec check_disk_usage(number(), ns_disksup:disk_stat()) -> boolean().
-check_disk_usage(Maximum, {_Disk, _Cap, Used}) ->
-    Used > Maximum.
+get_severity_for_thresholds(Resource, Thresholds, Metric) ->
+    %% Sort thresholds in descending order, such that we check the
+    %% most severe threshold first
+    ThresholdsSorted = lists:filtermap(
+        fun (Severity) ->
+            case proplists:get_value(Severity, Thresholds) of
+                undefined -> false;
+                Threshold -> {true, {Severity, Threshold}}
+            end
+        end, guardrail_enforcer:priority_order(Resource)),
+    lists:foldl(
+      fun ({Severity, Threshold}, ok) ->
+              case Metric > Threshold of
+                  true -> Severity;
+                  false -> ok
+              end;
+          (_, NotOk) ->
+              NotOk
+      end, ok, ThresholdsSorted).
+
+-spec check_disk_usage([{atom(), number()}], ns_disksup:disk_stat()) ->
+    ok | disk_severity().
+check_disk_usage(Thresholds, {_Disk, _Cap, Used}) ->
+    get_severity_for_thresholds(index, Thresholds, Used).
 
 -spec get_disk_data(ns_disksup:disk_stats()) ->
           {ok, ns_disksup:disk_stat()} | {error, disk_stats_error()}.
@@ -886,6 +960,15 @@ get_disk_data(Mounts) ->
         {error, not_found} ->
             ?log_error("Couldn't check disk usage as node db dir is missing"),
             {error, no_dbdir}
+    end.
+
+get_thresholds(Config) ->
+    case proplists:get_value(enabled, Config) of
+        true ->
+            %% Just return the rest of the config
+            lists:keydelete(enabled, 1, Config);
+        false ->
+            undefined
     end.
 
 -ifdef(TEST).
@@ -1362,7 +1445,9 @@ check_resources_t() ->
                 fun (resource_management, _) ->
                         [{disk_usage,
                           [{enabled, true},
-                           {maximum, 85}]}]
+                           {maximum, 96},
+                           {critical, 85},
+                           {serious, 80}]}]
                 end),
     pretend_disk_data(#{node() => [{"/", 1, 50}]}),
 
@@ -1389,10 +1474,22 @@ check_resources_t() ->
                 fun ([Value], _) -> {ok, Value} end),
 
     ?assertEqual([], check_resources()),
-    pretend_disk_data(#{node() => [{"/", 1, 90}]}),
+
+    pretend_disk_data(#{node() => [{"/", 1, 97}]}),
 
     ?assertEqual([{{bucket, "couchstore_bucket"}, disk_usage},
-                  {{bucket, "magma_bucket"}, disk_usage}],
+                  {{bucket, "magma_bucket"}, disk_usage},
+                  {{index, disk_usage}, maximum}],
+                 check_resources()),
+
+    pretend_disk_data(#{node() => [{"/", 1, 86}]}),
+
+    ?assertEqual([{{index, disk_usage}, critical}],
+                 check_resources()),
+
+    pretend_disk_data(#{node() => [{"/", 1, 81}]}),
+
+    ?assertEqual([{{index, disk_usage}, serious}],
                  check_resources()).
 
 validate_bucket_topology_change_t() ->
@@ -1791,7 +1888,9 @@ validate_topology_change_disk_usage_t() ->
                 fun (resource_management, _) ->
                         [{disk_usage,
                           [{enabled, true},
-                           {maximum, 50}]}]
+                           {maximum, 50},
+                           {critical, 40},
+                           {serious, 30}]}]
                 end),
     meck:expect(ns_config, get_timeout,
                 fun (_, Default) -> Default end),
@@ -1927,6 +2026,15 @@ validate_topology_change_disk_usage_t() ->
                    #{active_nodes => [node1],
                      keep_nodes => [node2],
                      kv_nodes => [node1, node2, node3]})),
+
+    %% Permit rebalance when only serious threshold is crossed
+    pretend_disk_data(#{node1 => [{"/", 1, 40}],
+                        node2 => [{"/", 1, 40}]}),
+    ?assertMatch(ok,
+                 test_validate_topology_change(
+                   #{active_nodes => [node1, node2],
+                     keep_nodes => [node1],
+                     kv_nodes => [node1, node2]})),
 
     meck:expect(config_profile, get_bool,
                 fun ({resource_management, enabled}) -> false end),
@@ -2077,7 +2185,7 @@ regular_checks_t() ->
                         1
                 end),
     meck:expect(ns_config, set,
-                fun ({node, _, resource_statuses}, _) -> ok end),
+                fun ({node, _, _}, _) -> ok end),
 
     meck:expect(cluster_compat_mode, is_cluster_76, ?cut(true)),
     meck:expect(config_profile, get_bool,
