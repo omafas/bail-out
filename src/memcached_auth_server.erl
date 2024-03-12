@@ -29,7 +29,7 @@
 -record(s, {
     mcd_socket = undefined,
     data = <<>>,
-    buckets = [],
+    snapshot = #{},
     rbac_updater_ref = undefined,
     enabled = false
 }).
@@ -55,28 +55,30 @@ init([]) ->
 
     chronicle_compat_events:subscribe(
       fun (cluster_compat_version) ->
-              gen_server:cast(Self, update_bucket_names);
+              gen_server:cast(Self, update_snapshot);
           (ldap_settings) ->
               gen_server:cast(Self, check_enabled);
           (saslauthd_auth_settings) ->
               gen_server:cast(Self, check_enabled);
           (Key) ->
-              case ns_bucket:names_change(Key) of
+              case collections:key_match(Key) =/= false orelse
+                  ns_bucket:names_change(Key) of
                   true ->
-                      gen_server:cast(Self, update_bucket_names);
+                      gen_server:cast(Self, update_snapshot);
                   false ->
                       ok
               end
       end),
 
-    {ok, #s{buckets = ns_bucket:get_bucket_names(),
+    {ok, #s{snapshot = ns_bucket:get_snapshot(all, [collections, uuid]),
             enabled = memcached_config_mgr:is_external_auth_service_enabled()}}.
 
 handle_call(_Request, _From, State) ->
    {reply, unhandled, State}.
 
-handle_cast(update_bucket_names, State) ->
-    {noreply, State#s{buckets = ns_bucket:get_bucket_names()}};
+handle_cast(update_snapshot, State) ->
+    {noreply, State#s{snapshot = ns_bucket:get_snapshot(all,
+                                                        [collections, uuid])}};
 
 handle_cast(check_enabled, #s{enabled = Enabled} = State) ->
     NewEnabled = memcached_config_mgr:is_external_auth_service_enabled(),
@@ -133,13 +135,14 @@ process_data(#s{mcd_socket = Sock, data = Data} = State) ->
     end.
 
 process_req(#mc_header{opcode = ?MC_AUTH_REQUEST} = Header,
-            #mc_entry{data = Data}, #s{buckets = Buckets} = State) ->
+            #mc_entry{data = Data}, #s{snapshot = Snapshot} = State) ->
     {AuthReq} = ejson:decode(Data),
     Mechanism = proplists:get_value(<<"mechanism">>, AuthReq),
     NeedRBAC = not proplists:get_bool(<<"authentication-only">>, AuthReq),
     case authenticate(Mechanism, AuthReq) of
         {ok, Id} ->
-            Resp = [{rbac, get_user_rbac_record_json(Id, Buckets)} || NeedRBAC],
+            Resp = [{rbac, get_user_rbac_record_json(Id, Snapshot)} ||
+                       NeedRBAC],
             {Header#mc_header{status = ?SUCCESS},
              #mc_entry{data = ejson:encode({Resp})},
              State};
@@ -155,20 +158,21 @@ process_req(#mc_header{opcode = ?MC_AUTH_REQUEST} = Header,
     end;
 
 process_req(#mc_header{opcode = ?MC_AUTHORIZATION_REQUEST} = Header,
-            #mc_entry{key = UserBin}, #s{buckets = Buckets} = State) ->
+            #mc_entry{key = UserBin}, #s{snapshot = Snapshot} = State) ->
     User = binary_to_list(UserBin),
-    Resp = [{rbac, get_user_rbac_record_json({User, external}, Buckets)}],
+    Resp = [{rbac, get_user_rbac_record_json({User, external}, Snapshot)}],
     {Header#mc_header{status = ?SUCCESS},
      #mc_entry{data = ejson:encode({Resp})},
      State};
 
 process_req(#mc_header{opcode = ?MC_ACTIVE_EXTERNAL_USERS} = Header,
-            #mc_entry{data = Data},
-            #s{buckets = Buckets, rbac_updater_ref = undefined} = State) ->
+            #mc_entry{data = Data}, #s{snapshot = Snapshot,
+                                       rbac_updater_ref = undefined} = State) ->
     ?log_debug("Received active external users: ~p", [Data]),
     Ids = [{binary_to_list(User), external} || User <- ejson:decode(Data)],
     Ref = spawn_opt(
-            fun () -> update_mcd_rbac(Ids, Buckets) end, [link, monitor]),
+            fun () -> update_mcd_rbac(Ids, Snapshot) end,
+            [link, monitor]),
     {Header#mc_header{status = ?SUCCESS}, #mc_entry{},
      State#s{rbac_updater_ref = Ref}};
 
@@ -205,8 +209,9 @@ authenticate(<<"PLAIN">>, AuthReq) ->
 authenticate(Unknown, _) ->
     {error, io_lib:format("Unknown mechanism: ~p", [Unknown])}.
 
-get_user_rbac_record_json(Identity, Buckets) ->
-    {[memcached_permissions:jsonify_user_with_cache(Identity, Buckets)]}.
+get_user_rbac_record_json(Identity, Snapshot) ->
+    {[memcached_permissions:jsonify_user_with_cache(
+        Identity, ns_bucket:get_bucket_names(Snapshot))]}.
 
 cmd_auth_provider(Sock) ->
     Resp = mc_client_binary:cmd_vocal(?MC_AUTH_PROVIDER, Sock,
@@ -276,8 +281,8 @@ sasl_decode_plain_challenge(Challenge) ->
     end.
 
 update_mcd_rbac([], _) -> ok;
-update_mcd_rbac([Id|Tail], Buckets) ->
-    RBACJson = get_user_rbac_record_json(Id, Buckets),
+update_mcd_rbac([Id|Tail], Snapshot) ->
+    RBACJson = get_user_rbac_record_json(Id, Snapshot),
     ?log_debug("Updating rbac record for user ~p",
                [ns_config_log:tag_user_data(Id)]),
     case mcd_update_user_permissions(RBACJson) of
@@ -285,7 +290,7 @@ update_mcd_rbac([Id|Tail], Buckets) ->
         Error -> ?log_error("Failed to update permissions for ~p: ~p",
                             [ns_config_log:tag_user_data(Id), Error])
     end,
-    update_mcd_rbac(Tail, Buckets).
+    update_mcd_rbac(Tail, Snapshot).
 
 mcd_update_user_permissions(RBACJson) ->
     ns_memcached_sockets_pool:executing_on_socket(
@@ -367,7 +372,9 @@ test_process_data(InputMessages, Validator) when is_list(InputMessages) ->
     ?assertMatch(#s{data = <<"rest">>},
                  process_data(#s{mcd_socket = my_socket,
                                  data = <<Bin/binary, "rest">>,
-                                 buckets = ["b1"]}));
+                                 snapshot = ns_bucket:toy_buckets(
+                                              [{"b1",
+                                                [{uuid, <<"b1id">>}]}])}));
 test_process_data(InputMessage, Validator) ->
     test_process_data([InputMessage], Validator).
 
