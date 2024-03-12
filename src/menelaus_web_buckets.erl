@@ -1416,7 +1416,14 @@ validate_bucket_type_specific_params(CommonParams, Params,
 validate_memcached_params(Params) ->
     case proplists:get_value("replicaNumber", Params) of
         undefined ->
-            ignore;
+            case proplists:get_value("enableCrossClusterVersioning", Params) of
+                undefined ->
+                    ignore;
+                _ ->
+                    {error, enableCrossClusterVersioning,
+                     <<"enableCrossClusterVersioning is not valid for "
+                       "memcached buckets">>}
+            end;
         _ ->
             {error, replicaNumber,
              <<"replicaNumber is not valid for memcached buckets">>}
@@ -1934,8 +1941,8 @@ parse_validate_cross_cluster_versioning_enabled(Params, true = IsNew, _Allow,
                                                 _IsEnterprise) ->
     case validate_cross_cluster_versioning_enabled(Params, IsNew) of
         {ok, _Key, true} ->
-            {error, "enableCrossClusterVersioning",
-             <<"Cross Cluster Versioning can not be enabled on bucket "
+            {error, enableCrossClusterVersioning,
+             <<"Cross Cluster Versioning cannot be enabled on bucket "
                "create">>};
         Res ->
             Res
@@ -3240,6 +3247,8 @@ basic_bucket_params_screening_setup() ->
                 fun (_, Default) -> Default end),
     meck:expect(cluster_compat_mode, is_cluster_76,
                 fun () -> true end),
+    meck:expect(cluster_compat_mode, is_enterprise,
+                fun () -> true end),
     meck:expect(ns_config, search_node_with_default,
                 fun (_, Default) ->
                         Default
@@ -3738,6 +3747,29 @@ basic_bucket_params_screening_t() ->
         AllBuckets),
     ?assertEqual([], E29),
     ?assertEqual({num_replicas, 2}, proplists:lookup(num_replicas, OK29)),
+
+    %% Cannot create a bucket with enableCrossClusterVersioning specified
+    {_OK30, E30} = basic_bucket_params_screening(
+                     true,
+                     "bucket30",
+                     [{"bucketType", "membase"},
+                      {"ramQuota", "1024"},
+                      {"enableCrossClusterVersioning", "true"}],
+                     AllBuckets),
+    ?assertEqual([{enableCrossClusterVersioning,
+                   <<"Cross Cluster Versioning cannot be enabled on bucket "
+                     "create">>}],
+                 E30),
+
+    %% Cannot enable enableCrossClusterVersioning on a memcached bucket.
+    {_OK31, E31} = basic_bucket_params_screening(
+                     false, "mcd",
+                     [{"enableCrossClusterVersioning", "true"}],
+                     AllBuckets),
+    ?assertEqual([{enableCrossClusterVersioning,
+                   <<"enableCrossClusterVersioning is not valid for memcached "
+                     "buckets">>}],
+                 E31),
 
     %% Back to default action
     meck:expect(ns_config, read_key_fast,

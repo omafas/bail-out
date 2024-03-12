@@ -971,7 +971,12 @@ get_num_vbuckets(BucketConfig) ->
     proplists:get_value(num_vbuckets, BucketConfig).
 
 get_cc_versioning_enabled(BucketConfig) ->
-    proplists:get_value(cross_cluster_versioning_enabled, BucketConfig).
+    case bucket_type(BucketConfig) of
+        memcached ->
+            undefined;
+        membase ->
+            proplists:get_value(cross_cluster_versioning_enabled, BucketConfig)
+    end.
 
 get_vbuckets_max_cas(BucketConfig) ->
     proplists:get_value(vbuckets_max_cas, BucketConfig).
