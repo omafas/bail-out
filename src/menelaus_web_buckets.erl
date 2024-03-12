@@ -1377,7 +1377,8 @@ validate_common_params(#bv_ctx{bucket_name = BucketName,
     [{ok, name, BucketName},
      parse_validate_flush_enabled(Params, IsNew),
      parse_validate_cross_cluster_versioning_enabled(Params, IsNew,
-                                                     Is76, IsEnterprise),
+                                                     Is76, IsEnterprise,
+                                                     BucketConfig),
      parse_validate_version_pruning_window(Params, IsNew,
                                            Is76, IsEnterprise),
      validate_bucket_name(IsNew, BucketConfig, BucketName, AllBuckets),
@@ -1930,15 +1931,16 @@ parse_validate_param_not_enterprise(Key, Params) ->
     end.
 
 parse_validate_cross_cluster_versioning_enabled(Params, _IsNew, _Allow,
-                                                false = _IsEnterprise) ->
+                                                false = _IsEnterprise,
+                                                _BucketConfig) ->
     parse_validate_param_not_enterprise("enableCrossClusterVersioning", Params);
 parse_validate_cross_cluster_versioning_enabled(Params, _IsNew, false = _Allow,
-                                                _IsEnterprise) ->
+                                                _IsEnterprise, _BucketConfig) ->
     parse_validate_param_not_supported(
       "enableCrossClusterVersioning", Params,
       fun cross_cluster_versioning_not_supported_error/1);
 parse_validate_cross_cluster_versioning_enabled(Params, true = IsNew, _Allow,
-                                                _IsEnterprise) ->
+                                                _IsEnterprise, _BucketConfig) ->
     case validate_cross_cluster_versioning_enabled(Params, IsNew) of
         {ok, _Key, true} ->
             {error, enableCrossClusterVersioning,
@@ -1948,8 +1950,17 @@ parse_validate_cross_cluster_versioning_enabled(Params, true = IsNew, _Allow,
             Res
     end;
 parse_validate_cross_cluster_versioning_enabled(Params, IsNew, _Allow,
-                                                _IsEnterprise) ->
-    validate_cross_cluster_versioning_enabled(Params, IsNew).
+                                                _IsEnterprise, BucketConfig) ->
+    Current = proplists:get_value(cross_cluster_versioning_enabled,
+                                  BucketConfig),
+    case validate_cross_cluster_versioning_enabled(Params, IsNew) of
+        {ok, cross_cluster_versioning_enabled, false} when Current ->
+            {error, enableCrossClusterVersioning,
+             <<"Cross Cluster Versioning cannot be disabled once it has been "
+               "enabled">>};
+        Other ->
+            Other
+    end.
 
 process_boolean_param_validation(Param, Key, Result, IsNew) ->
     case {Result, IsNew} of
@@ -3277,6 +3288,8 @@ basic_bucket_params_screening_t() ->
                     {num_vbuckets, 16},
                     {num_replicas, 1},
                     {servers, [node1, node2]},
+                    %% Used for test to verify this cannot be disabled
+                    {cross_cluster_versioning_enabled, true},
                     {ram_quota, 768 * ?MIB}]},
                   {"fourth",
                    [{type, membase},
@@ -3770,6 +3783,17 @@ basic_bucket_params_screening_t() ->
                    <<"enableCrossClusterVersioning is not valid for memcached "
                      "buckets">>}],
                  E31),
+
+    %% Cannot disable enableCrossClusterVersioning once it has been enabled.
+    {_OK32, E32} = basic_bucket_params_screening(
+                     false,
+                     "third",
+                     [{"enableCrossClusterVersioning", "false"}],
+                     AllBuckets),
+    ?assertEqual([{enableCrossClusterVersioning,
+                   <<"Cross Cluster Versioning cannot be disabled once "
+                     "it has been enabled">>}],
+                 E32),
 
     %% Back to default action
     meck:expect(ns_config, read_key_fast,
