@@ -1443,11 +1443,37 @@ handle_check_permission_for_cbauth(Req) ->
         true ->
             menelaus_util:reply_text(Req, "", 200);
         false ->
-            ns_audit:access_forbidden(Req),
+            maybe_audit_access_forbidden(Req, Params),
             ns_server_stats:notify_counter(<<"rest_request_access_forbidden">>),
             %% This should have been 403 as the caller is authenticated but
             %% doesn't have necessary permissions.
             menelaus_util:reply_text(Req, "", 401)
+    end.
+
+
+maybe_audit_access_forbidden(Req, Params) ->
+    %% User must be properly authenticated as an admin user that starts with an
+    %% '@' symbol. Ensures a malicious admin cannot hide from auditing.
+    case menelaus_auth:get_authenticated_identity(Req) of
+        {"@" ++ _InternalUsername, admin} ->
+            ShouldAudit =
+                case proplists:get_value("audit", Params) of
+                    undefined ->
+                        true;
+                    RawAuditValue ->
+                        case (catch misc:convert_to_boolean(RawAuditValue)) of
+                            Bool when is_boolean(Bool) -> Bool;
+                            _ -> true
+                        end
+                end,
+            case ShouldAudit of
+                true ->
+                    ns_audit:access_forbidden(Req);
+                false ->
+                    ok
+            end;
+        _ ->
+            ns_audit:access_forbidden(Req)
     end.
 
 vertex_param_to_list(all) ->
