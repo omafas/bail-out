@@ -745,7 +745,7 @@ build_guardrail_statuses(index, Config) ->
                        {[{resource, Resource},
                          {severity, Severity}]}}
               end
-      end, [disk_usage]).
+      end, [disk_usage, resident_ratio]).
 
 strip_cbauth_suffix(Label) ->
     "htuabc-" ++ ReversedTrimmedLabel = lists:reverse(Label),

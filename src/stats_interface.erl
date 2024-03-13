@@ -188,7 +188,9 @@ for_alerts() ->
 for_resource_management() ->
     List = [{<<"kv_resident_ratio">>,
              promQL:preformatted(?KvResidentRatioQuery)},
-            {<<"kv_data_size">>, promQL:preformatted(?KvDataSizeTBQuery)}],
+            {<<"kv_data_size">>, promQL:preformatted(?KvDataSizeTBQuery)},
+            {<<"index_resident_ratio">>,
+             promQL:preformatted(?IndexResidentRatioQuery)}],
     QueryAsts = lists:map(
                   fun({NewName, Query}) ->
                           promQL:named(NewName, Query)
@@ -202,6 +204,8 @@ for_resource_management() ->
                                B = proplists:get_value(<<"bucket">>, Props),
                                {true, {{bucket, binary_to_list(B)},
                                        binary_to_atom(N, latin1)}};
+                           <<"index_", N/binary>> ->
+                               {true, {index, binary_to_atom(N, latin1)}};
                            _ ->
                                false
                        end

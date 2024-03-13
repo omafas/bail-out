@@ -45,7 +45,9 @@
 -export_type([resource/0]).
 
 -type disk_severity() :: serious | critical | maximum.
--type status() :: ok | data_ingress_status() | disk_severity().
+-type index_severity() :: warning | serious | critical.
+-type status() :: ok | data_ingress_status() | disk_severity() |
+                  index_severity().
 -export_type([status/0]).
 
 -type disk_stats_error() :: no_dbdir
@@ -280,14 +282,14 @@ validate_bucket_topology_change(data_size, KeepKVNodes, TotalDataSize,
     ExpDataSizePerNode = TotalDataSize / (NumNodes * math:pow(10, 12)),
     DataSizeLimit = get_data_size_maximum_on_nodes(
                       ResourceConfig, BCfg, KeepKVNodes),
-    validate_bucket_resource_max(ExpDataSizePerNode, DataSizeLimit);
+    validate_resource_max(ExpDataSizePerNode, DataSizeLimit);
 validate_bucket_topology_change(resident_ratio, KeepKVNodes, TotalDataSize,
                                 ResourceConfig, BCfg, NumNodes) ->
     Quota = ns_bucket:raw_ram_quota(BCfg),
     ExpResidentRatio = 100 * NumNodes * Quota / TotalDataSize,
     ResidentRatioLimit = get_resident_ratio_minimum_on_nodes(
                            ResourceConfig, BCfg, KeepKVNodes),
-    validate_bucket_resource_min(ExpResidentRatio, ResidentRatioLimit).
+    validate_resource_min(ExpResidentRatio, ResidentRatioLimit).
 
 validate_topology_change_cores_per_bucket(NewKVNodes) ->
     case guardrail_monitor:get(cores_per_bucket) of
@@ -582,7 +584,7 @@ validate_storage_migration_data_size(Stats, StorageMode) ->
                 DataSize ->
                     Limit = get_data_size_maximum(ResourceConfig, StorageMode,
                                                   true),
-                    case validate_bucket_resource_max(DataSize, Limit) of
+                    case validate_resource_max(DataSize, Limit) of
                         false ->
                             ok;
                         true ->
@@ -602,7 +604,7 @@ validate_storage_migration_resident_ratio(Stats, StorageMode) ->
                 ResidentRatio ->
                     Minimum = get_resident_ratio_minimum(ResourceConfig,
                                                          StorageMode, true),
-                    case validate_bucket_resource_min(ResidentRatio, Minimum) of
+                    case validate_resource_min(ResidentRatio, Minimum) of
                         false ->
                             ok;
                         true ->
@@ -759,6 +761,18 @@ check({disk_usage = Resource, Config}, _Stats) ->
               [maximum, critical, serious]),
             Statuses
     end;
+check({index, IndexConfig}, Stats) ->
+    case proplists:get_value(index, Stats) of
+        undefined ->
+            [];
+        IndexStats ->
+            lists:flatmap(
+              fun ({index_growth_rr, ResourceConfig}) ->
+                      check_index_resident_ratio(ResourceConfig, IndexStats);
+                  (_) ->
+                      []
+              end, IndexConfig)
+    end;
 check({_Resource, _Config}, _Stats) ->
     %% Other resources do not need regular checks
     [].
@@ -801,14 +815,14 @@ check_bucket_guard_rail(Resource, ResourceConfig, BucketConfig, BucketStats) ->
                 resident_ratio ->
                     Limit = get_resident_ratio_minimum(ResourceConfig,
                                                        BucketConfig),
-                    validate_bucket_resource_min(Metric, Limit);
+                    validate_resource_min(Metric, Limit);
                 data_size ->
                     Limit = get_data_size_maximum(ResourceConfig, BucketConfig),
-                    validate_bucket_resource_max(Metric, Limit)
+                    validate_resource_max(Metric, Limit)
             end
     end.
 
-validate_bucket_resource_min(Metric, Limit) ->
+validate_resource_min(Metric, Limit) ->
     case Metric of
         %% Ignore infinity/neg_infinity as these are not meaningful here
         infinity ->
@@ -819,7 +833,7 @@ validate_bucket_resource_min(Metric, Limit) ->
             Value < Limit
     end.
 
-validate_bucket_resource_max(Metric, Limit) ->
+validate_resource_max(Metric, Limit) ->
     case Metric of
         %% Ignore infinity/neg_infinity as these are not meaningful here
         infinity ->
@@ -909,9 +923,13 @@ get_data_size_maximum_on_nodes(ResourceConfig, BucketConfig, Nodes) ->
         Limits -> lists:min(Limits)
     end.
 
-get_severity_for_thresholds(Resource, Thresholds, Metric) ->
-    %% Sort thresholds in descending order, such that we check the
+get_severity_for_thresholds(Resource, Thresholds, Metric, Order) ->
+    %% Sort thresholds in ascending/descending order, such that we check the
     %% most severe threshold first
+    Compare = case Order of
+                  ascending -> fun(A, B) -> A < B end;
+                  descending -> fun(A, B) -> A > B end
+              end,
     ThresholdsSorted = lists:filtermap(
         fun (Severity) ->
             case proplists:get_value(Severity, Thresholds) of
@@ -921,7 +939,7 @@ get_severity_for_thresholds(Resource, Thresholds, Metric) ->
         end, guardrail_enforcer:priority_order(Resource)),
     lists:foldl(
       fun ({Severity, Threshold}, ok) ->
-              case Metric > Threshold of
+              case Compare(Metric, Threshold) of
                   true -> Severity;
                   false -> ok
               end;
@@ -932,7 +950,7 @@ get_severity_for_thresholds(Resource, Thresholds, Metric) ->
 -spec check_disk_usage([{atom(), number()}], ns_disksup:disk_stat()) ->
     ok | disk_severity().
 check_disk_usage(Thresholds, {_Disk, _Cap, Used}) ->
-    get_severity_for_thresholds(index, Thresholds, Used).
+    get_severity_for_thresholds(index, Thresholds, Used, descending).
 
 -spec get_disk_data(ns_disksup:disk_stats()) ->
           {ok, ns_disksup:disk_stat()} | {error, disk_stats_error()}.
@@ -969,6 +987,48 @@ get_thresholds(Config) ->
             lists:keydelete(enabled, 1, Config);
         false ->
             undefined
+    end.
+
+check_index_resident_ratio(Config, Stats) ->
+    case get_thresholds(Config) of
+        undefined ->
+            [];
+        Thresholds ->
+            Severity = get_index_resident_ratio_severity(Thresholds, Stats),
+            lists:foreach(
+              fun (SeverityToReport) ->
+                      Gauge =
+                          case Severity of
+                              serious when SeverityToReport =:= serious ->
+                                  1;
+                              critical when SeverityToReport =/= maximum ->
+                                  1;
+                              maximum ->
+                                  1;
+                              _ ->
+                                  0
+                          end,
+                      ns_server_stats:notify_gauge(
+                        {<<"resource_limit_reached">>,
+                         [{resource, index_resident_ratio},
+                          {severity, SeverityToReport}]},
+                        Gauge)
+              end,
+              [critical, serious, warning]),
+            case Severity of
+                ok ->
+                    [];
+                _ ->
+                    [{{index, resident_ratio}, Severity}]
+            end
+    end.
+
+get_index_resident_ratio_severity(Thresholds, Stats) ->
+    case proplists:get_value(resident_ratio, Stats) of
+        undefined ->
+            ok;
+        Metric ->
+            get_severity_for_thresholds(index, Thresholds, Metric, ascending)
     end.
 
 -ifdef(TEST).
@@ -1490,6 +1550,45 @@ check_resources_t() ->
     pretend_disk_data(#{node() => [{"/", 1, 81}]}),
 
     ?assertEqual([{{index, disk_usage}, serious}],
+                 check_resources()),
+
+    meck:expect(ns_config, read_key_fast,
+                fun (resource_management, _) ->
+                        [{index,
+                          [{index_growth_rr,
+                            [{enabled, true},
+                             {critical, 1},
+                             {serious, 5},
+                             {warning, 10}]}]
+                         }]
+                end),
+
+    PretendIndexRR =
+        fun (RR) ->
+                meck:expect(stats_interface, for_resource_management,
+                            fun () ->
+                                    [{index,
+                                      [{resident_ratio, RR}]}]
+                            end)
+        end,
+
+    PretendIndexRR(10),
+
+    ?assertEqual([], check_resources()),
+
+    PretendIndexRR(9),
+
+    ?assertEqual([{{index, resident_ratio}, warning}],
+                 check_resources()),
+
+    PretendIndexRR(4),
+
+    ?assertEqual([{{index, resident_ratio}, serious}],
+                 check_resources()),
+
+    PretendIndexRR(0.5),
+
+    ?assertEqual([{{index, resident_ratio}, critical}],
                  check_resources()).
 
 validate_bucket_topology_change_t() ->

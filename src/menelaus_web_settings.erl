@@ -654,6 +654,10 @@ conf(internal) ->
        %% Data size in bytes query - requires label "bucket"
        %% This is for resident ratio calculation to check rebalance safeness
        {kv_data_size_raw, dataSizePerNodeBytes, ?KvDataSizeRawQuery,
+        fun get_string/1},
+       %% Index resident ratio query - node level percentage, scaled for 0-100%
+       %% This is for notifying index resident ratio issue from index growth
+       {index_resident_ratio, indexResidentRatio, ?IndexResidentRatioQuery,
         fun get_string/1}
       ]
      },

@@ -421,6 +421,12 @@
           ns_config:latest(), resource_promql_override, kv_data_size_tb,
           <<"kv_logical_data_size_bytes{state=`active`} / 10^12">>)).
 
+-define(IndexResidentRatioQuery,
+        ns_config:search_node_prop(
+          ns_config:latest(), resource_promql_override, index_resident_ratio,
+          <<"index_avg_resident_percent{} AND ignoring(name) (
+          (index_memory_rss / ignoring(name) index_memory_quota) > 0.9)">>)).
+
 -define(REPLICATED_DETS_NORMAL_PRIORITY, 0).
 -define(REPLICATED_DETS_HIGH_PRIORITY, 1).
 -define(QUERY_NODE_QUOTA_DEFAULT, 0).
