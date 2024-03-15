@@ -85,8 +85,11 @@ get_metric(<<"kv_hit_ratio">>) ->
                                     _({[{eq, <<"name">>, <<"kv_ops">>},
                                         {eq, <<"op">>, <<"get">>}]}))), 100);
 get_metric(<<"kv_ep_cache_miss_ratio">>) ->
-    percent(_(<<"kv_ep_bg_fetched">>),
-            ?cut(promQL:sum_without([<<"op">>, <<"result">>],
+    percent(?cut(promQL:sum_without([<<"name">>, <<"op">>, <<"result">>],
+                                    _({[{eq, <<"name">>, <<"kv_ops">>},
+                                        {eq, <<"op">>, <<"get">>},
+                                        {eq, <<"result">>, <<"miss">>}]}))),
+            ?cut(promQL:sum_without([<<"name">>, <<"op">>, <<"result">>],
                                     _({[{eq, <<"name">>, <<"kv_ops">>},
                                         {eq, <<"op">>, <<"get">>}]}))), 0);
 get_metric(<<"kv_ep_resident_items_ratio">>) ->
