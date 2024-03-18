@@ -178,26 +178,24 @@ basic_test_setup() ->
 default_config_t() ->
     assert_config_equal([{resource_management, raw_default_config()}],
                         default_config()),
-    SetConfigProfile =
-        fun (Config) ->
-                meck:expect(config_profile, get_value,
-                            fun (Key, Default) ->
-                                    proplists:get_value(Key, Config, Default)
-                            end)
-        end,
 
-    SetConfigProfile([{resource_management,
-                       [{[bucket, resident_ratio, enabled], true},
-                        {[bucket, resident_ratio, couchstore_minimum], 10},
-                        {[bucket, resident_ratio, magma_minimum], 1},
-                        {[cores_per_bucket, enabled], true},
-                        {[bucket, data_size, enabled], true},
-                        {[bucket, data_size, couchstore_maximum], 1.6},
-                        {[bucket, data_size, magma_maximum], 16},
-                        {[disk_usage, enabled], true},
-                        {[disk_usage, maximum], 85},
-                        {[collections_per_quota, enabled], true}]
-                      }]),
+    ConfigProfile = [{resource_management,
+                      [{[bucket, resident_ratio, enabled], true},
+                       {[bucket, resident_ratio, couchstore_minimum], 10},
+                       {[bucket, resident_ratio, magma_minimum], 1},
+                       {[cores_per_bucket, enabled], true},
+                       {[bucket, data_size, enabled], true},
+                       {[bucket, data_size, couchstore_maximum], 1.6},
+                       {[bucket, data_size, magma_maximum], 16},
+                       {[disk_usage, enabled], true},
+                       {[disk_usage, maximum], 85},
+                       {[collections_per_quota, enabled], true}]
+                     }],
+    meck:expect(config_profile, get_value,
+                fun (Key, Default) ->
+                        proplists:get_value(Key, ConfigProfile, Default)
+                end),
+
     assert_config_equal([{resource_management,
                           [{bucket,
                             [{resident_ratio,
