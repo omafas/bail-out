@@ -110,6 +110,12 @@ params() ->
      {"diskUsage.maximum",
       #{type => {num, 0, 100},
         cfg_key => [disk_usage, maximum]}},
+     {"diskUsage.critical",
+      #{type => {num, 0, 100},
+        cfg_key => [disk_usage, critical]}},
+     {"diskUsage.serious",
+      #{type => {num, 0, 100},
+        cfg_key => [disk_usage, serious]}},
      %% Min number of cores per node per bucket
      {"coresPerBucket.enabled",
       #{type => bool,
@@ -157,7 +163,9 @@ raw_default_for_ns_config() ->
      %% Max disk usage % per node
      {disk_usage,
       [{enabled, false},
-       {maximum, 96}]},
+       {maximum, 96},
+       {critical, 85},
+       {serious, 80}]},
      %% Max no. of collections per bucket quota in MB
      {collections_per_quota,
       [{enabled, false},
@@ -265,6 +273,8 @@ default_config_t() ->
                        {[bucket, data_size, magma_maximum], 16},
                        {[disk_usage, enabled], true},
                        {[disk_usage, maximum], 85},
+                       {[disk_usage, critical], 80},
+                       {[disk_usage, serious], 75},
                        {[collections_per_quota, enabled], true}]
                      },
                      {resource_management_metakv,
@@ -280,26 +290,28 @@ default_config_t() ->
                 end),
 
     assert_config_equal(
-      [{bucket,
-        [{resident_ratio,
-          [{enabled, true},
-           {couchstore_minimum, 10},
-           {magma_minimum, 1}]
-         },
-         {data_size,
-          [{enabled, true},
-           {couchstore_maximum, 1.6},
-           {magma_maximum, 16}]}]
-       },
-       {cores_per_bucket,
-        [{enabled, true},
-         {minimum, 0.4}]},
-       {disk_usage,
-        [{enabled, true},
-         {maximum, 85}]},
-       {collections_per_quota,
-        [{enabled, true},
-         {maximum, 1}]}],
+       [{bucket,
+         [{resident_ratio,
+           [{enabled, true},
+            {couchstore_minimum, 10},
+            {magma_minimum, 1}]
+          },
+          {data_size,
+           [{enabled, true},
+            {couchstore_maximum, 1.6},
+            {magma_maximum, 16}]}]
+        },
+        {cores_per_bucket,
+         [{enabled, true},
+          {minimum, 0.4}]},
+        {disk_usage,
+         [{enabled, true},
+          {maximum, 85},
+          {critical, 80},
+          {serious, 75}]},
+        {collections_per_quota,
+         [{enabled, true},
+          {maximum, 1}]}],
       default_for_ns_config()),
 
     assert_config_equal(

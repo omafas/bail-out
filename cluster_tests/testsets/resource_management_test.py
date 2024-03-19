@@ -73,6 +73,8 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
             self.cluster, "/settings/resourceManagement/diskUsage")
         get("enabled", disk_usage_config)
         get("maximum", disk_usage_config)
+        get("critical", disk_usage_config)
+        get("serious", disk_usage_config)
 
     def set_guard_rails_json_test(self):
         # Set guard rails with json
@@ -115,7 +117,9 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
                                   },
                                   "diskUsage": {
                                       "enabled": True,
-                                      "maximum": 90
+                                      "maximum": 90,
+                                      "critical": 85,
+                                      "serious": 80
                                   }
                               })
 
@@ -152,6 +156,8 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
         data_disk_usage_config = get("diskUsage", r)
         assert data_disk_usage_config.get("enabled") is True
         assert data_disk_usage_config.get("maximum") == 90
+        assert data_disk_usage_config.get("critical") == 85
+        assert data_disk_usage_config.get("serious") == 80
 
         cores_per_bucket_config = get("coresPerBucket", r)
         assert cores_per_bucket_config.get("enabled") is True
@@ -180,7 +186,9 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
                 "coresPerBucket.enabled": "false",
                 "coresPerBucket.minimum": 0.3,
                 "diskUsage.enabled": "false",
-                "diskUsage.maximum": 91
+                "diskUsage.maximum": 91,
+                "diskUsage.critical": 86,
+                "diskUsage.serious": 81
             })
 
         bucket_config = get("bucket", r)
@@ -218,6 +226,8 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
 
         assert get("diskUsage", r).get("enabled") is False
         assert get("diskUsage", r).get("maximum") == 91
+        assert get("diskUsage", r).get("critical") == 86
+        assert get("diskUsage", r).get("serious") == 81
 
     def set_guard_rails_path_test(self):
         # Set residentRatio guard rail using path
@@ -258,11 +268,15 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
             self.cluster, "/settings/resourceManagement/diskUsage",
             data={
                 "enabled": "true",
-                "maximum": 92
+                "maximum": 92,
+                "critical": 87,
+                "serious": 82
             })
 
         assert get("enabled", r) is True
         assert get("maximum", r) == 92
+        assert get("critical", r) == 87
+        assert get("serious", r) == 82
 
         r = testlib.post_succ(
             self.cluster, "/settings/resourceManagement/index/indexCreationRR",
