@@ -83,6 +83,7 @@
 -define(TLS_KEY_LOG_FILENAME, "key.log").
 
 -define(NS_SERVER_LOGGER, ns_server).
+-define(NS_SERVER_TRACE_LOGGER, ns_server_trace).
 -define(COUCHDB_LOGGER, couchdb).
 -define(USER_LOGGER, user).
 -define(MENELAUS_LOGGER, menelaus).
@@ -192,6 +193,13 @@
 
 -define(metakv_debug(Format, Args), ale:debug(?METAKV_LOGGER, Format, Args)).
 -define(metakv_debug(Msg), ale:debug(?METAKV_LOGGER, Msg)).
+
+%% Log important but potentially spammy info into trace.log
+-define(log_trace(Format, Args, Opts),
+        ale:debug(?NS_SERVER_TRACE_LOGGER, Format, Args, Opts)).
+-define(log_trace(Format, Args),
+        ale:debug(?NS_SERVER_TRACE_LOGGER, Format, Args)).
+-define(log_trace(Msg), ale:debug(?NS_SERVER_TRACE_LOGGER, Msg)).
 
 -define(tls_key_log(Msg), ale:debug(?TLS_KEY_LOGGER, Msg)).
 

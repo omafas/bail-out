@@ -564,7 +564,9 @@ docs_left_updater_loop(Parent) ->
         undefined ->
             ok;
         _ ->
-            ?log_debug("Starting docs_left_updater_loop:~p~n~p",
+            %% This log can get spammy if the rebalance is slow to make
+            %% progress. So log the info into the trace.log file.
+            ?log_trace("Starting docs_left_updater_loop:~p~n~p",
                        [BucketName, Moves], [{chars_limit, -1}])
     end,
     [update_docs_left_for_move(Parent, BucketName, VB, VBInfo)
