@@ -210,8 +210,7 @@ authenticate(Unknown, _) ->
     {error, io_lib:format("Unknown mechanism: ~p", [Unknown])}.
 
 get_user_rbac_record_json(Identity, Snapshot) ->
-    {[memcached_permissions:jsonify_user_with_cache(
-        Identity, ns_bucket:get_bucket_names(Snapshot))]}.
+    {[memcached_permissions:jsonify_user_with_cache(Identity, Snapshot)]}.
 
 cmd_auth_provider(Sock) ->
     Resp = mc_client_binary:cmd_vocal(?MC_AUTH_PROVIDER, Sock,

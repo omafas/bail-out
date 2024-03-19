@@ -270,6 +270,8 @@ get_priv_object_key([Bucket | Rest]) ->
              Bucket
      end | [Id || {_, Id} <- Rest]].
 
+%% Params is a collection param [bucket_name, scope_name, collection_name]
+%% where bucket_name cannot be any.
 collection_permissions(Params, CompiledRoles, Acc) ->
     ToCheck = lists:map(
                 fun (any) ->
@@ -300,33 +302,126 @@ global_permissions(CompiledRoles) ->
           {Permission, MemcachedPermission} <- global_permissions_to_check(),
           menelaus_roles:is_allowed(Permission, CompiledRoles)]).
 
-check_permissions(BucketNames, Roles, CompiledRoles, RoleDefinitions) ->
+remove_trailing_any([any, any, any]) ->
+    [];
+remove_trailing_any([B, any, any]) ->
+    [B];
+remove_trailing_any([B, S, any]) ->
+    [B, S];
+remove_trailing_any([B, S, C]) ->
+    [B, S, C].
+
+fixup_collection_params(CollectionParams, Snapshot) ->
+    %% memcached permissions are specified for a [bucket_name, scope uid,
+    %% collection uid]. If either scope or collection uid are not specified, the
+    %% permissions apply to all scopes and collections in the bucket (or all
+    %% collections in the scope).
+    %%
+    %% CollectionParams is of the form [bucket_name, scope_name,
+    %% collection_name] where (bucket|scope|collection)_name may be "any".
+    %%
+    %% A wildcard "any" that is not trailing must be expanded to enumerate all
+    %% buckets (scopes) to which it applies.
+    %% e.g. [any, "_system", "_mobile"] must be expanded to:
+    %% [["b1", "_system", "_mobile"], ["b2", "_system", "_mobile"]...]
+    %% for every bucket in the system.
+    %%
+    %% Why?
+    %% (1) The uids of a scope (like "_system") or a collection (like "_mobile")
+    %%     are not constant across all buckets or collections.
+    %% (2) MB-61241: memcached doesn't allow specifying a permission with a
+    %%     wildcard * bucket_name and a specific scope or collection uid.
+    %%
+    %% Why do we need this now?
+    %% For all parameterized roles (except mobile_sync_gateway), setting a * for
+    %% bucket automatically sets * for scopes and collections and setting a
+    %% wildcard * for scope sets * for collection. They exclusively use trailing
+    %% wildcards, so we omit the scope and/or collection uids when set to *.
+    %%
+    %% mobile_sync_gateway introduces a bucket-parameterized permission:
+    %% [{bucket, bucket_name}, "_system", "_mobile"] where a wildcard * can be
+    %% specified by the user for bucket_name. [any, "_system", _mobile"] is the
+    %% only case that has a non-trailing wildcard which needs to be expanded.
+    Params = remove_trailing_any(CollectionParams),
+    case lists:member(any, Params) of
+        true ->
+            Expanded = split_and_expand_collection_params(Params, Snapshot),
+            lists:map(misc:align_list(_, length(?RBAC_COLLECTION_PARAMS), any),
+                      Expanded);
+        false -> [CollectionParams]
+    end.
+
+split_and_expand_collection_params(CollectionParams, Snapshot) ->
+    split_and_expand_collection_params(bucket, CollectionParams, Snapshot).
+split_and_expand_collection_params(bucket, CollectionParams, Snapshot) ->
+    Buckets =
+        case hd(CollectionParams) of
+            any -> ns_bucket:get_bucket_names(Snapshot);
+            Bucket -> [Bucket]
+        end,
+    Rest = tl(CollectionParams),
+    [[B | R] || B <- Buckets,
+                (Manifest = collections:get_manifest(B, Snapshot))
+                    =/= undefined,
+                R <- split_and_expand_collection_params(scope, Rest, Manifest)];
+
+split_and_expand_collection_params(scope, RemainingParams, Manifest) ->
+    Scopes =
+        case hd(RemainingParams) of
+            any -> [Scope || {Scope, _} <- collections:get_scopes(Manifest)];
+            Scope -> [Scope]
+        end,
+    Rest = tl(RemainingParams),
+    [[Scope | Rest] || Scope <- Scopes].
+
+check_permissions(Snapshot, CompiledRoles) ->
+    Params = menelaus_roles:get_params_from_permissions(CompiledRoles),
+    ExpandedParams = lists:flatmap(fixup_collection_params(_, Snapshot),
+                                   Params),
+    FinalParams =
+        %% TODO: memcached allows specifying a wildcard * for bucket_name but we
+        %% don't use it. collection_permissions() doesn't handle bucket "any".
+        lists:usort(lists:flatmap(
+                      fun([any, any, any]) ->
+                              [[B, any, any] ||
+                                  B <- ns_bucket:get_bucket_names(Snapshot)];
+                         (X) -> [X]
+                      end, ExpandedParams)),
+
+    %% Use compile_params to get uids of scopes/collections (required by
+    %% memcached).
     CollectionParams =
-        [[N, any, any] || N <- BucketNames] ++
-        [Params || {RoleName, Params} <- Roles, Params =/= [any, any, any],
-                   menelaus_roles:get_param_defs(RoleName, RoleDefinitions) =:=
-                       ?RBAC_COLLECTION_PARAMS],
+        lists:filtermap(
+          fun(P) ->
+                  %% TODO: The collection need not be found (and isn't checked
+                  %% for during compilation of roles nor is it accounted for in
+                  %% fixup_collection_params). So compile_params can return
+                  %% false. Should probably check (and cache) these while
+                  %% compiling roles.
+                  case menelaus_roles:compile_params(?RBAC_COLLECTION_PARAMS, P,
+                                                     Snapshot) of
+                      false -> false;
+                      NewParams -> {true, NewParams}
+                  end
+          end, FinalParams),
+
     BucketPrivileges =
         lists:foldl(bucket_permissions(_, CompiledRoles, _), #{},
-                    BucketNames),
+                    ns_bucket:get_bucket_names(Snapshot)),
     {global_permissions(CompiledRoles),
-     lists:foldl(collection_permissions(_, CompiledRoles, _),
-                 BucketPrivileges, CollectionParams)}.
+     lists:foldl(collection_permissions(_, CompiledRoles, _), BucketPrivileges,
+                 CollectionParams)}.
 
 permissions_for_user(Roles, Snapshot, RoleDefinitions) ->
     CompiledRoles = menelaus_roles:compile_roles(Roles, RoleDefinitions,
                                                  Snapshot),
-    check_permissions(ns_bucket:get_bucket_names(Snapshot), Roles,
-                      CompiledRoles, RoleDefinitions).
+    check_permissions(Snapshot, CompiledRoles).
 
-jsonify_user_with_cache(Identity, BucketNames) ->
-    %% TODO: consider caching collection parameters too so get_roles call
-    %% doesn't have to be made here
+jsonify_user_with_cache(Identity, Snapshot) ->
     jsonify_user(Identity,
-                 check_permissions(BucketNames,
-                                   menelaus_roles:get_roles(Identity),
-                                   menelaus_roles:get_compiled_roles(Identity),
-                                   menelaus_roles:get_definitions(all))).
+                 check_permissions(
+                   Snapshot,
+                   menelaus_roles:get_compiled_roles(Identity))).
 
 jsonify_key(String) when is_list(String) ->
     list_to_binary(String);
@@ -473,12 +568,83 @@ priv_object_test() ->
                        {[b1, s2], p2},
                        {[b1], p3}], flatten_priv_object(PrivObject)).
 
+fixup_collection_params_test() ->
+    Manifest1 =
+        [{uid,3},
+         {scopes,[{"_default",
+                   [{uid,0},{collections,[{"_default",[{uid,0}]}]}]},
+                  {"def",
+                   [{uid,8},{collections,[{"xyz",[{uid,10}]}]}]},
+                  {"_system",
+                   [{uid,9},
+                    {collections,
+                     [{"_query",[{uid,11}]},
+                      {"_mobile",[{uid,12}]}]}]}]}],
+    Manifest2 =
+        [{uid,3},
+         {scopes,[{"_default",
+                   [{uid,0},{collections,[{"_default",[{uid,0}]}]}]},
+                  {"ghi",
+                   [{uid,7},{collections,[{"xyz",[{uid,10}]}]}]},
+                  {"_system",
+                   [{uid,8},
+                    {collections,
+                     [{"_query",[{uid,8}]},
+                      {"_mobile",[{uid,9}]}]}]}]}],
+    Snapshot =
+        ns_bucket:toy_buckets(
+          [{"test", [{uuid, <<"test_id">>}]},
+           {"default", [{uuid, <<"default_id">>}, {collections, Manifest1}]},
+           {"abc", [{uuid, <<"abc_id">>}, {collections, Manifest2}]}]),
+
+    ?assertEqual(fixup_collection_params([any, any, any], Snapshot),
+                 [[any, any, any]]),
+    ?assertEqual(fixup_collection_params(["default", any, any], Snapshot),
+                 [["default", any, any]]),
+    ?assertEqual(fixup_collection_params(["default", "def", any], Snapshot),
+                 [["default", "def", any]]),
+    ?assertEqual(fixup_collection_params(["default", "_system", "_mobile"],
+                                        Snapshot),
+                 [["default", "_system", "_mobile"]]),
+
+    Result1 = [["default", "_system", "_mobile"],
+               ["abc", "_system", "_mobile"]],
+    ?assertEqual(fixup_collection_params([any, "_system", "_mobile"], Snapshot),
+                 Result1),
+
+    Result2 = [["default", "_system", any],
+               ["abc", "_system", any]],
+    ?assertEqual(fixup_collection_params([any, "_system", any], Snapshot),
+                 Result2),
+
+    Result3 = [["default", "_default", "_mobile"],
+               ["default", "def", "_mobile"],
+               ["default", "_system", "_mobile"]],
+    ?assertEqual(fixup_collection_params(["default", any, "_mobile"], Snapshot),
+                 Result3),
+
+    %% Note the expansion populates all combinations, although _mobile doesn't
+    %% exist in any scope other than "_system". Non-existent combinations are
+    %% weeded out when compile_params returns false.
+    Result4 = [["default", "_default", "_mobile"],
+               ["default", "def", "_mobile"],
+               ["default", "_system", "_mobile"],
+               ["abc", "_default", "_mobile"],
+               ["abc", "ghi", "_mobile"],
+               ["abc", "_system", "_mobile"]],
+    ?assertEqual(fixup_collection_params([any, any, "_mobile"], Snapshot),
+                 Result4).
+
 permissions_for_user_test_() ->
     Manifest =
         [{uid, 2},
          {scopes, [{"s",  [{uid, 1}, {collections, [{"_c",  [{uid, 1}]},
                                                     {"c1", [{uid, 2}]}]}]},
-                   {"s1", [{uid, 2}, {collections, [{"_c",  [{uid, 3}]}]}]}]}],
+                   {"s1", [{uid, 2}, {collections, [{"_c",  [{uid, 3}]}]}]},
+                   {?SYSTEM_SCOPE_NAME, [{uid, 3},
+                                         {collections,
+                                          [{"_mobile", [{uid, 4}]},
+                                           {"_query", [{uid, 5}]}]}]}]}],
     Snapshot =
         ns_bucket:toy_buckets(
           [{"test", [{uuid, <<"test_id">>}]},
@@ -527,10 +693,13 @@ permissions_for_user_test_() ->
              meck:expect(cluster_compat_mode, get_compat_version,
                          fun () -> ?LATEST_VERSION_NUM end),
              meck:expect(cluster_compat_mode, is_developer_preview,
-                         fun () -> false end)
+                         fun () -> false end),
+             meck:new(ns_bucket, [passthrough]),
+             meck:expect(ns_bucket, get_snapshot,
+                         fun (_, _) -> Snapshot end)
      end,
      fun (_) ->
-             meck:unload(cluster_compat_mode)
+             meck:unload()
      end,
      [Test([admin],
            All(global_permissions_to_check()),
@@ -596,10 +765,22 @@ permissions_for_user_test_() ->
            ['SystemSettings'],
            [{["default"], ['SimpleStats']},
             {["test"], AllBucketPermissions}]),
-      %% See MB-60778.
       Test([{mobile_sync_gateway, [{"test", <<"test_id">>}]}],
            ['IdleConnection','SystemSettings'],
-           [{["test"], AllBucketPermissions}]),
+           [{["test"],
+             AllBucketPermissions -- SysWrite(BucketsPlusCollections)}]),
+      Test([{mobile_sync_gateway, [{"default", <<"default_id">>}]}],
+           ['IdleConnection','SystemSettings'],
+           [{["default"],
+             AllBucketPermissions -- SysWrite(BucketsPlusCollections)},
+           {["default", 3, 4], ['SystemCollectionMutation']}]),
+      Test([{mobile_sync_gateway, [any]}],
+           ['IdleConnection','SystemSettings'],
+           [{["default"],
+             AllBucketPermissions -- SysWrite(BucketsPlusCollections)},
+           {["default", 3, 4], ['SystemCollectionMutation']},
+            {["test"],
+             AllBucketPermissions -- SysWrite(BucketsPlusCollections)}]),
       Test([{data_writer, [{"test", <<"test_id">>}, any, any]}],
            ['SystemSettings'],
            [{["test"], ['Delete', 'Insert', 'Upsert']}]),

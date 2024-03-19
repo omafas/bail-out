@@ -53,6 +53,8 @@
          is_allowed/2,
          get_roles/1,
          get_compiled_roles/1,
+         get_params_from_permissions/1,
+         compile_params/3,
          compile_roles/3,
          validate_roles/1,
          validate_roles/2,
@@ -606,7 +608,10 @@ roles() ->
                 "only for use by Sync Gateway. This user can read and "
                 "write data, manage indexes and views, and read some "
                 "cluster information.">>}],
-      [%% See MB-60778
+      [{[{collection, [bucket_name, ?SYSTEM_SCOPE_NAME, "_mobile"]}, data],
+        all},
+       {[{bucket, bucket_name}, data, docs], [read, insert, delete, upsert,
+                                              range_scan, sread]},
        {[{bucket, bucket_name}, data], all},
        {[{bucket, bucket_name}, views], all},
        {[{bucket, bucket_name}, n1ql, index], all},
@@ -1171,6 +1176,37 @@ get_compiled_roles(#authn_res{identity = Identity,
 get_compiled_roles({_, _} = Identity) ->
     get_compiled_roles(#authn_res{identity = Identity}).
 
+-spec get_params_from_permission(rbac_permission_pattern()) ->
+          false | {true, [rbac_permission_pattern_vertex_param(),...]}.
+get_params_from_permission({ObjectPattern, _}) ->
+    case ObjectPattern of
+        [{collection, [B, S, C]}|_] ->
+            {true, [B, S, C]};
+        [{scope, [B, S]}|_]  ->
+            {true, [B, S, any]};
+        [{bucket, B}|_] ->
+            {true, [B, any, any]};
+        [] ->
+            {true, [any, any, any]};
+        _ ->
+            false
+    end.
+
+%% Extract the set of bucket, scope and collection params from the list of roles
+%% in compiled roles. These are iterated over to set memcached privileges.
+-spec get_params_from_permissions([rbac_compiled_role()]) ->
+          [[rbac_permission_pattern_vertex_param(),...]].
+get_params_from_permissions(CompiledRoles) ->
+    %% TODO: It's possible to exclude certain buckets, scopes or collections -
+    %% and grant them permissions. This does not iterate over proper subsets
+    %% that are excluded (or covered by the catch-all []), which must still be
+    %% granted permissions.
+    lists:usort(
+      lists:flatmap(
+        fun(Perms) ->
+                lists:filtermap(get_params_from_permission(_), Perms)
+        end, CompiledRoles)).
+
 build_compiled_roles(#authn_res{identity = Identity} = AuthnRes) ->
     case ns_node_disco:couchdb_node() == node() of
         false ->
@@ -1618,7 +1654,7 @@ admin_event_metakv_permissions_test() ->
     ?assertEqual(false, is_allowed({[admin, metakv], write}, Roles)).
 
 roles_bucket_sys_write_permissions() ->
-    [admin, eventing_admin, backup_admin, data_backup, mobile_sync_gateway].
+    [admin, eventing_admin, backup_admin, data_backup].
 
 system_collections_write_permissions_test() ->
     AllRoles = roles() ++ add_serverless_roles(true),
@@ -1631,7 +1667,6 @@ system_collections_write_permissions_test() ->
           end, AllNames),
 
     %% Ensure that all roles in SysWrite can write to all system collections.
-    %% Include mobile_sync_gateway until MB-60778 is addressed.
     lists:foreach(
       fun(Name) ->
               Roles = compile_roles([Name], AllRoles),
@@ -1647,7 +1682,20 @@ system_collections_write_permissions_test() ->
     ?assertEqual(false, is_allowed({[{bucket, "default"}, data, docs], swrite},
                                    Roles0)),
     ?assertEqual(false, is_allowed({[{collection, ["default", "s", "c"]},
-                                     data, docs], swrite}, Roles0)).
+                                     data, docs], swrite}, Roles0)),
+
+    %% Ensure that mobile_sync_gateway can write only to _mobile and not to
+    %% other system collections.
+    Roles1 = compile_roles([{mobile_sync_gateway, ["default"]}], AllRoles),
+    ?assertEqual(true, is_allowed({[{collection, ["default",
+                                                  ?SYSTEM_SCOPE_NAME,
+                                                  "_mobile"]},
+                                    data, docs], swrite}, Roles1)),
+
+    ?assertEqual(false, is_allowed({[{collection, ["default",
+                                                   ?SYSTEM_SCOPE_NAME,
+                                                   "_query"]},
+                                     data, docs], swrite}, Roles1)).
 
 system_collections_read_permissions_test() ->
     AllRoles = roles() ++ add_serverless_roles(true),
@@ -2155,5 +2203,33 @@ roles_format_test() ->
     ?assert(validate_test_roles(menelaus_old_roles:roles_pre_76())),
 
     teardown_meck().
+
+params_from_permissions_test() ->
+    CompiledRoles =
+        [[{[{collection,["ab","_default","_default"]},data,docs],
+           [read,range_scan,sread]},
+          {[{bucket,"ab"},settings],[read]},
+          {[pools],[read]}],
+         [{[{collection,["bc","_system","_mobile"]},data],all},
+          {[{bucket,"bc"},data,docs],
+           [read,insert,delete,upsert,range_scan,sread]},
+          {[{bucket,"bc"},data],all},
+          {[{bucket,"bc"},views],all},
+          {[{bucket,"bc"},n1ql,index],all},
+          {[{bucket,"bc"},n1ql],[execute]},
+          {[{bucket,"bc"}],[read,flush]},
+          {[{bucket,"bc"},settings],[read]},
+          {[admin,memcached,idle],[write]},
+          {[settings,autocompaction],[read]},
+          {[pools],[read]}],
+         [{[{scope,["ab","_system"]},collections],all}]],
+    Expected =
+        [["ab", any, any],
+         ["ab","_default","_default"],
+         ["ab","_system", any],
+         ["bc", any, any],
+         ["bc","_system","_mobile"]],
+
+    ?assertEqual(Expected, get_params_from_permissions(CompiledRoles)).
 
 -endif.
