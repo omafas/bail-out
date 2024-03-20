@@ -18,6 +18,7 @@
          fetch_settings_json/2,
          decode_settings_json/1,
          id_lens/1,
+         allow_missing_lens/1,
          props_lens/1,
          update/2,
          update_txn/2,
@@ -173,6 +174,15 @@ do_populate_ets_table(M, JSON, Settings) ->
 id_lens(Key) ->
     Get = fun (Map) ->
                   maps:get(Key, Map)
+          end,
+    Set = fun (Value, Map) ->
+                  maps:put(Key, Value, Map)
+          end,
+    {Get, Set}.
+
+allow_missing_lens(Key) ->
+    Get = fun (Map) ->
+                  maps:get(Key, Map, undefined)
           end,
     Set = fun (Value, Map) ->
                   maps:put(Key, Value, Map)

@@ -24,16 +24,16 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
         # Set the promQL queries to default values to ensure that they are
         # triggered consistently
         set_promql_queries(self.cluster)
+        self.original_settings = testlib.get_succ(
+            self.cluster, "/settings/resourceManagement").json()
 
     def teardown(self):
         pass
 
     def test_teardown(self):
         # Reset guard rail config
-        testlib.diag_eval(self.cluster,
-                          "[{resource_management, Cfg}] = "
-                          "  menelaus_web_guardrails:default_config(),"
-                          "ns_config:set(resource_management, Cfg).")
+        testlib.post_succ(self.cluster, "/settings/resourceManagement",
+                          json=self.original_settings)
 
     def get_guard_rails_test(self):
         resident_ratio_config = testlib.get_succ(

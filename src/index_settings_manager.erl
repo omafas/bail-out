@@ -34,7 +34,7 @@
          config_upgrade_to_76/1]).
 
 -import(json_settings_manager,
-        [id_lens/1]).
+        [id_lens/1, allow_missing_lens/1]).
 
 -define(INDEX_CONFIG_KEY, {metakv, <<"/indexing/settings/config">>}).
 -define(SHARD_AFFINITY_SECRET_KEY,
@@ -83,7 +83,8 @@ default_settings() ->
      {compaction, compaction_defaults()},
      {storageMode, <<"">>},
      {compactionMode, <<"circular">>},
-     {circularCompaction, CircDefaults}].
+     {circularCompaction, CircDefaults},
+     {guardrails, guardrail_defaults()}].
 
 known_settings() ->
     %% Currently chronicle and ns_config upgrades are
@@ -102,7 +103,8 @@ known_settings(ClusterVersion) ->
      {storageMode, id_lens(<<"indexer.settings.storage_mode">>)},
      {compactionMode,
       id_lens(<<"indexer.settings.compaction.compaction_mode">>)},
-     {circularCompaction, circular_compaction_lens()}].
+     {circularCompaction, circular_compaction_lens()},
+     {guardrails, guardrails_lens()}].
 
 %% settings manager populates settings per version. For each online upgrade,
 %% it computes the delta between adjacent supported versions to update only the
@@ -282,6 +284,32 @@ compaction_defaults() ->
 
 compaction_lens() ->
     json_settings_manager:props_lens(compaction_lens_props()).
+
+guardrail_defaults() ->
+    proplists:get_value(
+      index,
+      menelaus_web_guardrails:default_for_metakv()).
+
+guardrails_lens() ->
+    json_settings_manager:props_lens(
+      lists:map(
+        fun ({Key, Config}) ->
+                Path = "indexer.settings.guardrails."
+                    ++ atom_to_list(Key) ++ ".",
+
+                %% Each field needs allow_missing_lens, since we are
+                %% introducing this in a patch release, so we can't make cluster
+                %% compat mode checks to avoid fetching the fields early
+                Lenses =
+                    lists:map(
+                      fun({SubKey, _Value}) ->
+                              {SubKey,
+                               allow_missing_lens(
+                                 iolist_to_binary([Path,
+                                                   atom_to_list(SubKey)]))}
+                      end, Config),
+                {Key, json_settings_manager:props_lens(Lenses)}
+        end, guardrail_defaults())).
 
 config_upgrade_to_76(Config) ->
     config_upgrade_settings(Config, ?MIN_SUPPORTED_VERSION,

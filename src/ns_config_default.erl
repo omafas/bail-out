@@ -386,7 +386,8 @@ default(Vsn) ->
         auto_rebalance_settings:default_config() ++
         menelaus_web_auto_failover:default_config(IsEnterprise) ++
         ns_storage_conf:default_config() ++
-        menelaus_web_guardrails:default_config().
+        [{resource_management,
+          menelaus_web_guardrails:default_for_ns_config()}].
 
 %% returns list of changes to config to upgrade it to current version.
 %% This will be invoked repeatedly by ns_config until list is empty.

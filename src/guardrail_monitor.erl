@@ -1229,6 +1229,15 @@ check_resources_t() ->
                         [{"couchstore_bucket", CouchstoreBucket},
                          {"magma_bucket", MagmaBucket}]
                 end),
+    meck:expect(index_settings_manager, get,
+                fun (guardrails) ->
+                        [{index_creation_rr,
+                          [{enabled, false},
+                           {minimum, 10}]},
+                         {topology_change_rr,
+                          [{enabled, false},
+                           {minimum, 10}]}]
+                end),
 
     meck:expect(stats_interface, for_resource_management,
                 fun () ->

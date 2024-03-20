@@ -18,7 +18,9 @@
 
 -export([handle_get/2, handle_post/2]).
 
--export([default_config/0, config_upgrade_to_76/1,
+-export([default_for_ns_config/0,
+         default_for_metakv/0,
+         config_upgrade_to_76/1,
          build_json_for_audit/1]).
 
 %% ------------------------------------------------------------------
@@ -30,7 +32,7 @@ handle_get(Path, Req) ->
     menelaus_util:assert_config_profile_flag({resource_management, enabled}),
 
     menelaus_web_settings2:handle_get(Path, params(), undefined,
-                                      guardrail_monitor:get_config(), Req).
+                                      get_full_config(), Req).
 
 handle_post(Path, Req) ->
     menelaus_util:assert_is_76(),
@@ -45,7 +47,12 @@ handle_post(Path, Req) ->
                       ns_audit:resource_management(Req, Values)
               end,
               handle_get(Path, Req2)
-      end, Path, params(), undefined, guardrail_monitor:get_config(), [], Req).
+      end, Path, params(), undefined, get_full_config(), [], Req).
+
+get_full_config() ->
+    IndexConfig = index_settings_manager:get(guardrails),
+    MetakvConfig = [{index, IndexConfig} || IndexConfig =/= undefined],
+    [{metakv, MetakvConfig} | guardrail_monitor:get_config()].
 
 params() ->
     [
@@ -79,16 +86,16 @@ params() ->
      %% Index service resident ratio configuration
      {"index.indexCreationRR.enabled",
       #{type => bool,
-        cfg_key => [index, index_creation_rr, enabled]}},
+        cfg_key => [metakv, index, index_creation_rr, enabled]}},
      {"index.indexCreationRR.minimum",
       #{type => {num, 0, 100},
-        cfg_key => [index, index_creation_rr, minimum]}},
+        cfg_key => [metakv, index, index_creation_rr, minimum]}},
      {"index.topologyChangeRR.enabled",
       #{type => bool,
-        cfg_key => [index, topology_change_rr, enabled]}},
+        cfg_key => [metakv, index, topology_change_rr, enabled]}},
      {"index.topologyChangeRR.minimum",
       #{type => {num, 0, 100},
-        cfg_key => [index, topology_change_rr, minimum]}},
+        cfg_key => [metakv, index, topology_change_rr, minimum]}},
      %% Max disk usage % per node
      {"diskUsage.enabled",
       #{type => bool,
@@ -107,16 +114,21 @@ params() ->
 
 %% Gets resource management configuration from the config profile, using default
 %% values specified below
--spec default_config() -> proplists:proplist().
-default_config() ->
+-spec default_for_ns_config() -> proplists:proplist().
+default_for_ns_config() ->
     %% Override defaults with any values specified in the config profile
-    [{resource_management,
-      lists:foldl(
-        fun update_sub_config/2, raw_default_config(),
-        config_profile:get_value(resource_management, []))}].
+    lists:foldl(
+        fun update_sub_config/2, raw_default_for_ns_config(),
+        config_profile:get_value(resource_management, [])).
 
-%% Default config, without being overriden by config profile
-raw_default_config() ->
+default_for_metakv() ->
+    %% Override defaults with any values specified in the config profile
+    lists:foldl(
+      fun update_sub_config/2, raw_default_for_metakv(),
+      config_profile:get_value(resource_management_metakv, [])).
+
+%% Default config for ns_config, without being overriden by config profile
+raw_default_for_ns_config() ->
     [
      %% Bucket level resources
      {bucket,
@@ -131,17 +143,6 @@ raw_default_config() ->
          {couchstore_maximum, 2},
          {magma_maximum, 16}]}
       ]},
-     %% Index service resources
-     {index,
-      %% Minimum estimated resident ratio percentage to permit index creation
-      [{index_creation_rr,
-        [{enabled, false},
-         {minimum, 10}]},
-       %% Minimum resident ratio that a topology change must not breach
-       {topology_change_rr,
-        [{enabled, false},
-         {minimum, 10}]}
-      ]},
      %% Minimum cores required per bucket
      {cores_per_bucket,
       [{enabled, false},
@@ -154,6 +155,23 @@ raw_default_config() ->
      {collections_per_quota,
       [{enabled, false},
        {maximum, 1}]}
+    ].
+
+
+%% Default config for metakv, without being overriden by config profile
+raw_default_for_metakv() ->
+    [
+     %% Index service resources
+     {index,
+      %% Minimum estimated resident ratio percentage to permit index creation
+      [{index_creation_rr,
+        [{enabled, false},
+         {minimum, 10}]},
+       %% Minimum resident ratio that a topology change must not breach
+       {topology_change_rr,
+        [{enabled, false},
+         {minimum, 10}]}
+      ]}
     ].
 
 update_sub_config({[], Value}, _) ->
@@ -170,16 +188,33 @@ update_sub_config({[Key | Keys], Value}, SubConfig) ->
                                                           []))}).
 
 update_config(Changes) ->
-    OldConfig = guardrail_monitor:get_config(),
+    OldConfig = get_full_config(),
 
     NewConfig = lists:foldl(fun update_sub_config/2, OldConfig, Changes),
 
-    ns_config:set(resource_management, NewConfig),
+    set_services_configs(OldConfig, NewConfig),
+    OtherConfig = proplists:delete(metakv, NewConfig),
+    ns_config:set(resource_management, OtherConfig),
     NewConfig.
 
+set_services_configs(OldConfigAll, NewConfigAll) ->
+    OldConfig = proplists:get_value(metakv, OldConfigAll),
+    NewConfig = proplists:get_value(metakv, NewConfigAll),
+    lists:foreach(
+      fun ({index, NewIndexConfig}) ->
+              case proplists:get_value(index, OldConfig, []) of
+                  NewIndexConfig ->
+                      ok;
+                  _ ->
+                      %% Config has changed, so we update metakv
+                      index_settings_manager:update(guardrails, NewIndexConfig)
+              end;
+          (_) ->
+              ok
+      end, NewConfig).
+
 config_upgrade_to_76(_Config) ->
-    [{set, resource_management,
-      proplists:get_value(resource_management, default_config())}].
+    [{set, resource_management, default_for_ns_config()}].
 
 -spec build_json_for_audit(proplists:proplist()) -> proplists:proplist().
 build_json_for_audit(Settings) ->
@@ -202,8 +237,12 @@ basic_test_setup() ->
     meck:new(meck_modules(), [passthrough]).
 
 default_config_t() ->
-    assert_config_equal([{resource_management, raw_default_config()}],
-                        default_config()),
+    assert_config_equal(
+      raw_default_for_ns_config(),
+      default_for_ns_config()),
+    assert_config_equal(
+      raw_default_for_metakv(),
+      default_for_metakv()),
 
     ConfigProfile = [{resource_management,
                       [{[bucket, resident_ratio, enabled], true},
@@ -213,49 +252,53 @@ default_config_t() ->
                        {[bucket, data_size, enabled], true},
                        {[bucket, data_size, couchstore_maximum], 1.6},
                        {[bucket, data_size, magma_maximum], 16},
-                       {[index, index_creation_rr, enabled], true},
-                       {[index, index_creation_rr, minimum], 10},
-                       {[index, topology_change_rr, enabled], true},
-                       {[index, topology_change_rr, minimum], 10},
                        {[disk_usage, enabled], true},
                        {[disk_usage, maximum], 85},
                        {[collections_per_quota, enabled], true}]
-                     }],
+                     },
+                     {resource_management_metakv,
+                      [{[index, index_creation_rr, enabled], true},
+                       {[index, index_creation_rr, minimum], 10},
+                       {[index, topology_change_rr, enabled], true},
+                       {[index, topology_change_rr, minimum], 10}]}],
     meck:expect(config_profile, get_value,
                 fun (Key, Default) ->
                         proplists:get_value(Key, ConfigProfile, Default)
                 end),
 
-    assert_config_equal([{resource_management,
-                          [{bucket,
-                            [{resident_ratio,
-                              [{enabled, true},
-                               {couchstore_minimum, 10},
-                               {magma_minimum, 1}]
-                             },
-                             {data_size,
-                              [{enabled, true},
-                               {couchstore_maximum, 1.6},
-                               {magma_maximum, 16}]}]
-                           },
-                           {index,
-                            [{index_creation_rr,
-                              [{enabled, true},
-                               {minimum, 10}]},
-                             {topology_change_rr,
-                              [{enabled, true},
-                               {minimum, 10}]}]
-                           },
-                           {cores_per_bucket,
-                            [{enabled, true},
-                             {minimum, 0.4}]},
-                           {disk_usage,
-                            [{enabled, true},
-                             {maximum, 85}]},
-                           {collections_per_quota,
-                            [{enabled, true},
-                             {maximum, 1}]}]
-                         }], default_config()).
+    assert_config_equal(
+      [{bucket,
+        [{resident_ratio,
+          [{enabled, true},
+           {couchstore_minimum, 10},
+           {magma_minimum, 1}]
+         },
+         {data_size,
+          [{enabled, true},
+           {couchstore_maximum, 1.6},
+           {magma_maximum, 16}]}]
+       },
+       {cores_per_bucket,
+        [{enabled, true},
+         {minimum, 0.4}]},
+       {disk_usage,
+        [{enabled, true},
+         {maximum, 85}]},
+       {collections_per_quota,
+        [{enabled, true},
+         {maximum, 1}]}],
+      default_for_ns_config()),
+
+    assert_config_equal(
+      [{index,
+        [{index_creation_rr,
+          [{enabled, true},
+           {minimum, 10}]},
+         {topology_change_rr,
+          [{enabled, true},
+           {minimum, 10}]}]
+       }],
+      default_for_metakv()).
 
 assert_config_equal(Expected, Found) when is_list(Expected)->
     ?assert(is_list(Found)),
@@ -273,19 +316,50 @@ assert_config_equal(Expected, Found) when is_list(Expected)->
       end, proplists:get_keys(Expected)).
 
 assert_config_update(Expected, Update, Initial) ->
+    InitialServiceConfig = proplists:get_value(metakv, Initial, []),
+    InitialIndexConfig = proplists:get_value(index, InitialServiceConfig, []),
+    meck:expect(
+      index_settings_manager, get,
+      fun (guardrails) ->
+              InitialIndexConfig
+      end),
+
+    InitialOtherConfig = proplists:delete(metakv, Initial),
     meck:expect(ns_config, read_key_fast,
                 fun (resource_management, []) ->
-                        Initial
+                        InitialOtherConfig
                 end),
 
+    ExpectedMetakvConfig = proplists:get_value(metakv, Expected, []),
+    ExpectedOtherConfig = proplists:delete(metakv, Expected),
     meck:expect(ns_config, set,
                 fun (resource_management, Found) ->
-                        assert_config_equal(Expected, Found)
+                        assert_config_equal(ExpectedOtherConfig, Found)
                 end),
+
+    ExpectedIndexConfig = proplists:get_value(index, ExpectedMetakvConfig, []),
+    meck:expect(
+      index_settings_manager, update,
+      fun (guardrails, Found) ->
+              assert_config_equal(ExpectedIndexConfig, Found)
+      end),
     assert_config_equal(Expected, update_config(Update)),
 
-    %% Make sure we call the assertion in with mock of ns_config:set/2
-    ?assert(meck:called(ns_config, set, [resource_management, '_'])).
+    %% Make sure we call the assertions in the mocks
+    ?assert(meck:called(ns_config, set, [resource_management, '_'])),
+    case ExpectedIndexConfig of
+        InitialIndexConfig ->
+
+            %% Since the index config did not change, we expect the settings
+            %% manager not to be updated
+            ?assertNot(meck:called(index_settings_manager, update,
+                                   [guardrails, '_']));
+        _ ->
+            %% Since the index config changed, we expect the settings manager
+            %% to be updated
+            ?assert(meck:called(index_settings_manager, update,
+                                [guardrails, '_']))
+    end.
 
 update_configs_t() ->
     %% Test update_sub_config alone
@@ -305,21 +379,36 @@ update_configs_t() ->
                                            {key3, [{key4, value4}]}])),
 
     %% Test update_configs
-    assert_config_update([{bucket, [{resident_ratio, [{enabled, true}]}]}],
+    assert_config_update([{bucket, [{resident_ratio, [{enabled, true}]}]},
+                          {metakv, [{index, []}]}],
                          [{[bucket, resident_ratio, enabled], true}],
                          []),
 
-    assert_config_update([{bucket, [{resident_ratio, [{enabled, true}]}]}],
+    assert_config_update([{bucket, [{resident_ratio, [{enabled, true}]}]},
+                          {metakv, [{index, []}]}],
                          [{[bucket, resident_ratio, enabled], true}],
                          [{bucket, [{resident_ratio, [{enabled, false}]}]}]),
 
     assert_config_update([{bucket, [{resident_ratio,
                                      [{enabled, true},
-                                      {couchstore_minimum, 10}]}]}],
+                                      {couchstore_minimum, 10}]}]},
+                          {metakv, [{index, []}]}],
                          [{[bucket, resident_ratio, enabled], true}],
                          [{bucket, [{resident_ratio,
                                      [{enabled, false},
-                                      {couchstore_minimum, 10}]}]}]).
+                                      {couchstore_minimum, 10}]}]}]),
+
+    assert_config_update([{metakv,
+                           [{index,
+                             [{index_creation_rr,
+                               [{enabled, true},
+                                {minimum, 5}]}]}]}],
+                         [{[metakv, index, index_creation_rr, enabled], true}],
+                         [{metakv,
+                           [{index,
+                             [{index_creation_rr,
+                               [{enabled, false},
+                                {minimum, 5}]}]}]}]).
 
 basic_test_teardown() ->
     meck:unload(meck_modules()).
