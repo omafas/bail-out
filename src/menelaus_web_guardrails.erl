@@ -275,10 +275,10 @@ basic_test_setup() ->
     meck:new(meck_modules(), [passthrough]).
 
 default_config_t() ->
-    assert_config_equal(
+    ?assertProplistsEqualRecursively(
       raw_default_for_ns_config(),
       default_for_ns_config()),
-    assert_config_equal(
+    ?assertProplistsEqualRecursively(
       raw_default_for_metakv(),
       default_for_metakv()),
 
@@ -312,7 +312,7 @@ default_config_t() ->
                         proplists:get_value(Key, ConfigProfile, Default)
                 end),
 
-    assert_config_equal(
+    ?assertProplistsEqualRecursively(
        [{bucket,
          [{resident_ratio,
            [{enabled, true},
@@ -343,7 +343,7 @@ default_config_t() ->
           {maximum, 1}]}],
       default_for_ns_config()),
 
-    assert_config_equal(
+    ?assertProplistsEqualRecursively(
       [{index,
         [{index_creation_rr,
           [{enabled, true},
@@ -356,21 +356,6 @@ default_config_t() ->
             {maximum, 2}]}]
        }],
       default_for_metakv()).
-
-assert_config_equal(Expected, Found) when is_list(Expected)->
-    ?assert(is_list(Found)),
-    ?assertListsEqual(proplists:get_keys(Expected), proplists:get_keys(Found)),
-    lists:foreach(
-      fun (Key) ->
-              case proplists:get_value(Key, Expected) of
-                  ExpectedList when is_list(ExpectedList) ->
-                      FoundList = proplists:get_value(Key, Found),
-                      ?assert(is_list(FoundList)),
-                      assert_config_equal(ExpectedList, FoundList);
-                  Value ->
-                      ?assertEqual(Value, proplists:get_value(Key, Found))
-              end
-      end, proplists:get_keys(Expected)).
 
 assert_config_update(Expected, Update, Initial) ->
     InitialServiceConfig = proplists:get_value(metakv, Initial, []),
@@ -391,16 +376,17 @@ assert_config_update(Expected, Update, Initial) ->
     ExpectedOtherConfig = proplists:delete(metakv, Expected),
     meck:expect(ns_config, set,
                 fun (resource_management, Found) ->
-                        assert_config_equal(ExpectedOtherConfig, Found)
+                        ?assertProplistsEqualRecursively(ExpectedOtherConfig,
+                                                         Found)
                 end),
 
     ExpectedIndexConfig = proplists:get_value(index, ExpectedMetakvConfig, []),
     meck:expect(
       index_settings_manager, update,
       fun (guardrails, Found) ->
-              assert_config_equal(ExpectedIndexConfig, Found)
+              ?assertProplistsEqualRecursively(ExpectedIndexConfig, Found)
       end),
-    assert_config_equal(Expected, update_config(Update)),
+    ?assertProplistsEqualRecursively(Expected, update_config(Update)),
 
     %% Make sure we call the assertions in the mocks
     ?assert(meck:called(ns_config, set, [resource_management, '_'])),
@@ -422,18 +408,20 @@ update_configs_t() ->
     %% Test update_sub_config alone
     ?assertEqual(value1,
                  update_sub_config({[], value1}, [])),
-    assert_config_equal([{key1, value1}],
-                        update_sub_config({[key1], value1}, [])),
-    assert_config_equal([{key1, [{key2, value2}]}],
-                        update_sub_config({[key1, key2], value2}, [])),
-    assert_config_equal([{key1, [{key2, value2}]}],
-                        update_sub_config({[key1, key2], value2},
-                                          [{key1, []}])),
-    assert_config_equal([{key1, [{key2, value2}]},
-                         {key3, [{key4, value4}]}],
-                        update_sub_config({[key1, key2], value2},
-                                          [{key1, []},
-                                           {key3, [{key4, value4}]}])),
+    ?assertProplistsEqualRecursively([{key1, value1}],
+                                     update_sub_config({[key1], value1}, [])),
+    ?assertProplistsEqualRecursively([{key1, [{key2, value2}]}],
+                                     update_sub_config({[key1, key2], value2},
+                                                       [])),
+    ?assertProplistsEqualRecursively([{key1, [{key2, value2}]}],
+                                     update_sub_config({[key1, key2], value2},
+                                                       [{key1, []}])),
+    ?assertProplistsEqualRecursively(
+       [{key1, [{key2, value2}]},
+        {key3, [{key4, value4}]}],
+       update_sub_config({[key1, key2], value2},
+                         [{key1, []},
+                          {key3, [{key4, value4}]}])),
 
     %% Test update_configs
     assert_config_update([{bucket, [{resident_ratio, [{enabled, true}]}]},
