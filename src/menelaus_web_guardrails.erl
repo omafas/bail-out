@@ -240,9 +240,14 @@ assert_config_update(Expected, Update, Initial) ->
                         Initial
                 end),
 
+    meck:expect(ns_config, set,
+                fun (resource_management, Found) ->
+                        assert_config_equal(Expected, Found)
+                end),
     assert_config_equal(Expected, update_config(Update)),
 
-    meck:called(ns_config, set, [{resource_management, Expected}]).
+    %% Make sure we call the assertion in with mock of ns_config:set/2
+    ?assert(meck:called(ns_config, set, [resource_management, '_'])).
 
 update_configs_t() ->
     %% Test update_sub_config alone
@@ -260,8 +265,6 @@ update_configs_t() ->
                         update_sub_config({[key1, key2], value2},
                                           [{key1, []},
                                            {key3, [{key4, value4}]}])),
-
-    meck:expect(ns_config, set, fun (_Key, _Config) -> ok end),
 
     %% Test update_configs
     assert_config_update([{bucket, [{resident_ratio, [{enabled, true}]}]}],
