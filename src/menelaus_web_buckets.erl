@@ -738,7 +738,7 @@ handle_bucket_update_inner(BucketId, Req, Params, Limit) ->
     end.
 
 update_props_with_cas(_NodeCasVals, [] = _Map, _Props) ->
-    {error, max_cas_vbucket_retrieval};
+    {error, max_cas_vbucket_retrieval_no_map};
 update_props_with_cas(NodeCasVals, Map, Props) ->
     try
         CasValues =
@@ -844,6 +844,9 @@ update_bucket(Ctx, BucketId, BucketType, UpdatedProps, Req) ->
         {ok, UpdateProps1} ->
             update_via_orchestrator(Req, BucketId, StorageMode, BucketType,
                                     UpdateProps1);
+        {error, max_cas_vbucket_retrieval_no_map} ->
+            reply_text(Req, "Unable to retrieve max_cas due to no vBucket map",
+                            503);
         {error, max_cas_vbucket_retrieval} ->
             reply_text(Req, "Unable to retrieve max_cas for all vbuckets",
                             503);
