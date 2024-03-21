@@ -140,6 +140,16 @@ tag_user_tuples_fun({UName, Type}) when Type =:= local orelse
         {ok, Val} ->
             {stop, {Val, Type}}
     end;
+tag_user_tuples_fun({<<"spContactEmail">>, ContactEmail}) ->
+    {stop, {<<"spContactEmail">>, tag_misc_item(ContactEmail)}};
+tag_user_tuples_fun({<<"spContactName">>, ContactName}) ->
+    {stop, {<<"spContactName">>, tag_misc_item(ContactName)}};
+tag_user_tuples_fun({<<"spOrgDisplayName">>, DisplayName}) ->
+    {stop, {<<"spOrgDisplayName">>, tag_misc_item(DisplayName)}};
+tag_user_tuples_fun({<<"spOrgName">>, OrgName}) ->
+    {stop, {<<"spOrgName">>, tag_misc_item(OrgName)}};
+tag_user_tuples_fun({<<"spOrgURL">>, OrgURL}) ->
+    {stop, {<<"spOrgURL">>, tag_misc_item(OrgURL)}};
 tag_user_tuples_fun(_Other) ->
     continue.
 
@@ -239,6 +249,16 @@ sanitize(Config, TagUserTuples) ->
               {stop, {Key, TaggedUsers}};
           ({newURL, _URLBin}) ->
               {stop, {newURL, "<sanitized>"}};
+          ({contact_name, ContactName}) ->
+              {stop, {contact_name, tag_misc_item(ContactName)}};
+          ({contact_email, ContactEmail}) ->
+              {stop, {contact_email, tag_misc_item(ContactEmail)}};
+          ({org_display_name, OrgDisplayName}) ->
+              {stop, {org_display_name, tag_misc_item(OrgDisplayName)}};
+          ({org_name, OrgName}) ->
+              {stop, {org_name, tag_misc_item(OrgName)}};
+          ({org_url, OrgURL}) ->
+              {stop, {org_url, tag_misc_item(OrgURL)}};
           (Other) ->
               Continue(Other)
       end, Config).
