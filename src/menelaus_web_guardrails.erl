@@ -76,6 +76,19 @@ params() ->
      {"bucket.collectionsPerQuota.maximum",
       #{type => {num, 0, infinity},
         cfg_key => [collections_per_quota, maximum]}},
+     %% Index service resident ratio configuration
+     {"index.indexCreationRR.enabled",
+      #{type => bool,
+        cfg_key => [index, index_creation_rr, enabled]}},
+     {"index.indexCreationRR.minimum",
+      #{type => {num, 0, 100},
+        cfg_key => [index, index_creation_rr, minimum]}},
+     {"index.topologyChangeRR.enabled",
+      #{type => bool,
+        cfg_key => [index, topology_change_rr, enabled]}},
+     {"index.topologyChangeRR.minimum",
+      #{type => {num, 0, 100},
+        cfg_key => [index, topology_change_rr, minimum]}},
      %% Max disk usage % per node
      {"diskUsage.enabled",
       #{type => bool,
@@ -118,6 +131,17 @@ raw_default_config() ->
          {couchstore_maximum, 2},
          {magma_maximum, 16}]}
       ]},
+     %% Index service resources
+     {index,
+      %% Minimum estimated resident ratio percentage to permit index creation
+      [{index_creation_rr,
+        [{enabled, false},
+         {minimum, 10}]},
+       %% Minimum resident ratio that a topology change must not breach
+       {topology_change_rr,
+        [{enabled, false},
+         {minimum, 10}]}
+      ]},
      %% Minimum cores required per bucket
      {cores_per_bucket,
       [{enabled, false},
@@ -137,11 +161,13 @@ update_sub_config({[], Value}, _) ->
 update_sub_config({[Key | Keys], Value}, []) ->
     [{Key, update_sub_config({Keys, Value}, [])}];
 update_sub_config({[Key | Keys], Value}, SubConfig) ->
-    lists:keyreplace(Key, 1, SubConfig,
-                     {Key,
-                      update_sub_config({Keys, Value},
-                                        proplists:get_value(Key, SubConfig,
-                                                            []))}).
+    %% To support additions of guardrails, we need to store new keys that
+    %% were not previously in the config
+    lists:keystore(Key, 1, SubConfig,
+                   {Key,
+                    update_sub_config({Keys, Value},
+                                      proplists:get_value(Key, SubConfig,
+                                                          []))}).
 
 update_config(Changes) ->
     OldConfig = guardrail_monitor:get_config(),
@@ -187,6 +213,10 @@ default_config_t() ->
                        {[bucket, data_size, enabled], true},
                        {[bucket, data_size, couchstore_maximum], 1.6},
                        {[bucket, data_size, magma_maximum], 16},
+                       {[index, index_creation_rr, enabled], true},
+                       {[index, index_creation_rr, minimum], 10},
+                       {[index, topology_change_rr, enabled], true},
+                       {[index, topology_change_rr, minimum], 10},
                        {[disk_usage, enabled], true},
                        {[disk_usage, maximum], 85},
                        {[collections_per_quota, enabled], true}]
@@ -207,6 +237,14 @@ default_config_t() ->
                               [{enabled, true},
                                {couchstore_maximum, 1.6},
                                {magma_maximum, 16}]}]
+                           },
+                           {index,
+                            [{index_creation_rr,
+                              [{enabled, true},
+                               {minimum, 10}]},
+                             {topology_change_rr,
+                              [{enabled, true},
+                               {minimum, 10}]}]
                            },
                            {cores_per_bucket,
                             [{enabled, true},
