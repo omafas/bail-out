@@ -45,8 +45,6 @@ time_offset_status() ->
 
 %% callbacks
 init([]) ->
-    Master = mb_master:master_node(),
-
     Self = self(),
     ns_pubsub:subscribe_link(leader_events,
                              case _ of
@@ -55,6 +53,10 @@ init([]) ->
                                  _ ->
                                      ok
                              end),
+
+    %% This must be done after subscribing to leader_events so as to not
+    %% miss a new leader notification.
+    Master = mb_master:master_node(),
 
     Interval = time_offset_interval(),
     InitialIntervalSlop = rand:uniform(?INITIAL_INTERVAL_MAX_SLOP_MSEC),
