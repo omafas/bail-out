@@ -459,9 +459,9 @@ get_raw_counter_inner(Stat, Counters, Divisor) ->
 compute_cgroups_counters(Cores,
                          #{<<"supported">> := true} = New)
                                         when is_number(Cores), Cores > 0 ->
-    %% The "usage" stat includes the time for "user" and "system" so the
-    %% exposed stat be included in the "cpu_cgroup_seconds_total_*"
-    %% family.
+    %% The "usage" stat includes "user" and "system" time so the
+    %% exposed stat should not be included in the "cpu_cgroup_seconds_total_*"
+    %% family to avoid double counting.
     RawCpuUsage = get_raw_counter_usec_to_sec(<<"usage_usec">>, New),
     RawCpuUser = get_raw_counter_usec_to_sec(<<"user_usec">>, New),
     RawCpuSys = get_raw_counter_usec_to_sec(<<"system_usec">>, New),
