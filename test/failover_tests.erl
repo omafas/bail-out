@@ -467,20 +467,17 @@ auto_failover_t(_SetupConfig, PidMap) ->
       end,
       lists:seq(0, 3)),
 
-    %% Failover is async to the auto_failover module. Poll for the failover
-    %% counter to get set (it is the only counter that should get set by this
-    %% test) to determine completion.
+    %% Failover is async to the auto_failover module, poll til it is completed
     misc:poll_for_condition(
       fun() ->
-              chronicle_compat:get(counters, #{}) =/= {error, not_found}
+              case chronicle_compat:get(counters, #{}) of
+                  {error, not_found} -> false;
+                  {ok, Value} ->
+                      proplists:is_defined(failover_complete, Value)
+              end
       end, 5000, 100),
 
-    %% We should have completed the failover.
-    Counters = chronicle_compat:get(counters, #{required => true}),
-    ?assertNotEqual(undefined,
-                    proplists:get_value(failover_complete, Counters)),
-
-    %% Without any auto-failover errors
+    %% Should not see any auto-failover errors
     ?assertEqual([],
                  get_auto_failover_reported_errors(AutoFailoverPid)).
 
