@@ -153,12 +153,9 @@ class AuthnTests(testlib.BaseTestSet):
         node = self.cluster.connected_nodes[0]
         with client_cert_auth(node, user, True, mandatory) as client_cert_file:
             if mandatory: # cert auth is mandatory, regular auth is not allowed
-                try:
-                    testlib.get(self.cluster, self.testEndpoint,
-                                https=True, auth=self.creds)
-                    assert False, f'TLS alert {CERT_REQUIRED_ALERT} is expected'
-                except requests.exceptions.SSLError as e:
-                    testlib.assert_in(CERT_REQUIRED_ALERT, str(e))
+                assert_tls_cert_required_alert(
+                    lambda: testlib.get(self.cluster, self.testEndpoint,
+                                        https=True, auth=self.creds))
 
                 r = testlib.get_succ(self.cluster, '/whoami', https=True,
                                      auth=self.creds,
@@ -195,42 +192,34 @@ class AuthnTests(testlib.BaseTestSet):
         node = self.cluster.connected_nodes[0]
         server_ca_file = os.path.join(node.data_path(),
                                       'config', 'certs', 'ca.pem')
+
+        def uilogin(**kwargs):
+            self.uilogin_test_base(node, https=True, verify=server_ca_file,
+                                   **kwargs)
+
         with client_cert_auth(node, cert_user,
                               True, mandatory) as client_cert_file:
-            self.uilogin_test_base(node,
-                                   params={'use_cert_for_auth': '1'},
-                                   expected_username=cert_user,
-                                   https=True,
-                                   cert=client_cert_file,
-                                   verify=server_ca_file)
-            try:
-                # Try using (User, Password) instead of certificate
-                self.uilogin_test_base(self.cluster.connected_nodes[0],
-                                       expected_username=user,
-                                       https=True,
-                                       verify=server_ca_file,
-                                       data={'user': user,
-                                             'password': password})
-                if mandatory:
-                    assert False, 'The UI login is expected to fail because ' \
-                                  'client cert authentication is mandatory'
-            except requests.exceptions.SSLError as e:
-                if mandatory:
-                    testlib.assert_in(CERT_REQUIRED_ALERT, str(e))
-                else:
-                    raise
+            uilogin(params={'use_cert_for_auth': '1'},
+                    expected_username=cert_user,
+                    cert=client_cert_file)
+
+            # Try using (User, Password) instead of certificate,
+            if mandatory:
+                assert_tls_cert_required_alert(
+                  lambda: uilogin(expected_username=user,
+                                  data={'user': user, 'password': password}))
+            else:
+                uilogin(expected_username=user, data={'user': user,
+                                                      'password': password})
 
             # Provide client certificate but try using username and password
             # explicitly
             expected_code = 400 if mandatory else 200
-            self.uilogin_test_base(self.cluster.connected_nodes[0],
-                                   expected_code=expected_code,
-                                   expected_username=user,
-                                   https=True,
-                                   verify=server_ca_file,
-                                   cert=client_cert_file,
-                                   data={'user': user,
-                                         'password': password})
+            uilogin(expected_code=expected_code,
+                    expected_username=user,
+                    cert=client_cert_file,
+                    data={'user': user,
+                          'password': password})
 
 
     def ui_auth_methods_api_test(self):
@@ -258,11 +247,9 @@ class AuthnTests(testlib.BaseTestSet):
         with client_cert_auth(node, self.cert_user, True, True) as cert:
             assert_client_cert_UI_login_availability(
                 node, https=True, cert=cert, expected="must_use")
-            try:
-                assert_client_cert_UI_login_availability(
-                    node, https=True, expected="impossible")
-            except requests.exceptions.SSLError as e:
-                testlib.assert_in(CERT_REQUIRED_ALERT, str(e))
+            assert_tls_cert_required_alert(
+                lambda: assert_client_cert_UI_login_availability(
+                          node, https=True, expected="impossible"))
             assert_client_cert_UI_login_availability(
                 node, https=False, expected="cannot_use")
 
@@ -349,3 +336,22 @@ def scram_sha_auth(mech, testEndpoint, creds, cluster):
         ssignature = base64.b64decode(authInfoDict['data'].encode('ascii')).decode()
         c.set_server_final(ssignature)
     return r
+
+
+def assert_tls_cert_required_alert(fun):
+    def do():
+        try:
+            fun()
+            assert False, f'TLS alert {CERT_REQUIRED_ALERT} is expected'
+        except requests.exceptions.SSLError as e:
+            print(f'Received {e}')
+            # This error may appear intermittently for unknown reason.
+            # As a workaround we just retry until CERT_REQUIRED_ALERT
+            # is received.
+            if 'EOF occurred in violation of protocol' in str(e):
+                return False
+            testlib.assert_in(CERT_REQUIRED_ALERT, str(e))
+        return True
+
+    testlib.poll_for_condition(do, 0.1, attempts=10,
+                               msg="getting CERT REQUIRED ALERT")
