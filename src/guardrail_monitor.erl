@@ -1032,21 +1032,20 @@ get_index_resident_ratio_severity(Thresholds, Stats) ->
     end.
 
 -ifdef(TEST).
-modules() ->
-    [ns_config, leader_registry, chronicle_compat, stats_interface,
-     janitor_agent, ns_bucket, cluster_compat_mode, config_profile,
-     ns_cluster_membership, ns_storage_conf, rpc].
 
 basic_test_setup() ->
-    %% We need unstick, so that we can meck rpc
-    meck:new(modules(), [passthrough, unstick]),
+    %% We need unstick to be able to meck rpc
+    meck:new([rpc], [unstick]),
+    meck:new([ns_server_stats], [passthrough]),
 
     meck:expect(cluster_compat_mode, is_cluster_76, ?cut(true)),
     meck:expect(config_profile, get_bool,
-                fun ({resource_management, enabled}) -> true end).
+                fun ({resource_management, enabled}) -> true end),
+    meck:expect(ns_config, get_timeout,
+                fun (_, Default) -> Default end).
 
 basic_test_teardown() ->
-    meck:unload(modules()).
+    meck:unload().
 
 check_bucket_t() ->
     %% Resource level check
@@ -1354,6 +1353,21 @@ dont_check_memcached_or_ephemeral_t() ->
                      RRConfig)),
     ok.
 
+-define(assertResourceMetrics(ResourceMap),
+        begin
+            maps:foreach(
+              fun (__Labels, __Gauge) ->
+                      ?assertEqual(1,
+                                   meck:num_calls(
+                                     ns_server_stats, notify_gauge,
+                                     [{<<"resource_limit_reached">>, __Labels},
+                                      __Gauge]),
+                                   [{labels, __Labels},
+                                    {gauge, __Gauge}])
+              end, ResourceMap),
+            meck:reset(ns_server_stats)
+        end).
+
 check_resources_t() ->
     meck:expect(ns_config, read_key_fast,
                 fun (resource_management, _) ->
@@ -1403,8 +1417,13 @@ check_resources_t() ->
                          {{bucket, "magma_bucket"},
                           [{resident_ratio, 2}]}]
                 end),
+    %% Reset meck history for ns_server_stats so we can track calls from now on
+    meck:reset(ns_server_stats),
     ?assertEqual([],
                  check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, resident_ratio}, {bucket, "couchstore_bucket"}] => 0,
+         [{resource, resident_ratio}, {bucket, "magma_bucket"}] => 0}),
 
     meck:expect(stats_interface, for_resource_management,
                 fun () ->
@@ -1417,6 +1436,9 @@ check_resources_t() ->
                 end),
     ?assertEqual([],
                  check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, resident_ratio}, {bucket, "couchstore_bucket"}] => 0,
+         [{resource, resident_ratio}, {bucket, "magma_bucket"}] => 0}),
 
     meck:expect(ns_config, read_key_fast,
                 fun (resource_management, _) ->
@@ -1440,6 +1462,11 @@ check_resources_t() ->
                 end),
     ?assertEqual([{{bucket, "couchstore_bucket"}, resident_ratio}],
                  check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, resident_ratio}, {bucket, "couchstore_bucket"}] => 1,
+         [{resource, data_size}, {bucket, "couchstore_bucket"}] => 0,
+         [{resource, resident_ratio}, {bucket, "magma_bucket"}] => 0,
+         [{resource, data_size}, {bucket, "magma_bucket"}] => 0}),
 
     meck:expect(stats_interface, for_resource_management,
                 fun () ->
@@ -1450,6 +1477,11 @@ check_resources_t() ->
                 end),
     ?assertEqual([{{bucket, "magma_bucket"}, resident_ratio}],
                  check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, resident_ratio}, {bucket, "couchstore_bucket"}] => 0,
+         [{resource, data_size}, {bucket, "couchstore_bucket"}] => 0,
+         [{resource, resident_ratio}, {bucket, "magma_bucket"}] => 1,
+         [{resource, data_size}, {bucket, "magma_bucket"}] => 0}),
 
     meck:expect(stats_interface, for_resource_management,
                 fun () ->
@@ -1461,6 +1493,11 @@ check_resources_t() ->
     ?assertEqual([{{bucket, "couchstore_bucket"}, resident_ratio},
                   {{bucket, "magma_bucket"}, resident_ratio}],
                  check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, resident_ratio}, {bucket, "couchstore_bucket"}] => 1,
+         [{resource, data_size}, {bucket, "couchstore_bucket"}] => 0,
+         [{resource, resident_ratio}, {bucket, "magma_bucket"}] => 1,
+         [{resource, data_size}, {bucket, "magma_bucket"}] => 0}),
 
     meck:expect(stats_interface, for_resource_management,
                 fun () ->
@@ -1472,6 +1509,11 @@ check_resources_t() ->
     ?assertEqual([{{bucket, "couchstore_bucket"}, data_size},
                   {{bucket, "magma_bucket"}, data_size}],
                  check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, resident_ratio}, {bucket, "couchstore_bucket"}] => 0,
+         [{resource, data_size}, {bucket, "couchstore_bucket"}] => 1,
+         [{resource, resident_ratio}, {bucket, "magma_bucket"}] => 0,
+         [{resource, data_size}, {bucket, "magma_bucket"}] => 1}),
 
     meck:expect(stats_interface, for_resource_management,
                 fun () ->
@@ -1485,6 +1527,11 @@ check_resources_t() ->
     ?assertEqual([{{bucket, "couchstore_bucket"}, data_size},
                   {{bucket, "magma_bucket"}, data_size}],
                  check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, resident_ratio}, {bucket, "couchstore_bucket"}] => 0,
+         [{resource, data_size}, {bucket, "couchstore_bucket"}] => 1,
+         [{resource, resident_ratio}, {bucket, "magma_bucket"}] => 0,
+         [{resource, data_size}, {bucket, "magma_bucket"}] => 1}),
 
     meck:expect(stats_interface, for_resource_management,
                 fun () ->
@@ -1500,6 +1547,11 @@ check_resources_t() ->
                        {{bucket, "magma_bucket"}, resident_ratio},
                        {{bucket, "magma_bucket"}, data_size}],
                       check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, resident_ratio}, {bucket, "couchstore_bucket"}] => 1,
+         [{resource, data_size}, {bucket, "couchstore_bucket"}] => 1,
+         [{resource, resident_ratio}, {bucket, "magma_bucket"}] => 1,
+         [{resource, data_size}, {bucket, "magma_bucket"}] => 1}),
 
     meck:expect(ns_config, read_key_fast,
                 fun (resource_management, _) ->
@@ -1511,9 +1563,6 @@ check_resources_t() ->
                 end),
     pretend_disk_data(#{node() => [{"/", 1, 50}]}),
 
-    meck:expect(ns_config, get_timeout,
-                fun (_, Default) -> Default end),
-
     meck:expect(ns_storage_conf, this_node_dbdir,
                 fun () -> {ok, "invalid_file"} end),
 
@@ -1524,16 +1573,37 @@ check_resources_t() ->
                 fun () -> ["couchstore_bucket", "magma_bucket"] end),
 
     ?assertEqual([], check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, disk_usage},
+          {severity, serious}] => 0,
+         [{resource, disk_usage},
+          {severity, critical}] => 0,
+         [{resource, disk_usage},
+          {severity, maximum}] => 0}),
 
     meck:expect(ns_storage_conf, this_node_dbdir,
                 fun () -> {ok, ""} end),
 
     ?assertEqual([], check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, disk_usage},
+          {severity, serious}] => 0,
+         [{resource, disk_usage},
+          {severity, critical}] => 0,
+         [{resource, disk_usage},
+          {severity, maximum}] => 0}),
 
     meck:expect(ns_storage_conf, extract_disk_stats_for_path,
                 fun ([Value], _) -> {ok, Value} end),
 
     ?assertEqual([], check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, disk_usage},
+          {severity, serious}] => 0,
+         [{resource, disk_usage},
+          {severity, critical}] => 0,
+         [{resource, disk_usage},
+          {severity, maximum}] => 0}),
 
     pretend_disk_data(#{node() => [{"/", 1, 97}]}),
 
@@ -1541,16 +1611,37 @@ check_resources_t() ->
                   {{bucket, "magma_bucket"}, disk_usage},
                   {{index, disk_usage}, maximum}],
                  check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, disk_usage},
+          {severity, serious}] => 1,
+         [{resource, disk_usage},
+          {severity, critical}] => 1,
+         [{resource, disk_usage},
+          {severity, maximum}] => 1}),
 
     pretend_disk_data(#{node() => [{"/", 1, 86}]}),
 
     ?assertEqual([{{index, disk_usage}, critical}],
                  check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, disk_usage},
+          {severity, serious}] => 1,
+         [{resource, disk_usage},
+          {severity, critical}] => 1,
+         [{resource, disk_usage},
+          {severity, maximum}] => 0}),
 
     pretend_disk_data(#{node() => [{"/", 1, 81}]}),
 
     ?assertEqual([{{index, disk_usage}, serious}],
                  check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, disk_usage},
+          {severity, serious}] => 1,
+         [{resource, disk_usage},
+          {severity, critical}] => 0,
+         [{resource, disk_usage},
+          {severity, maximum}] => 0}),
 
     meck:expect(ns_config, read_key_fast,
                 fun (resource_management, _) ->
@@ -1575,21 +1666,53 @@ check_resources_t() ->
     PretendIndexRR(10),
 
     ?assertEqual([], check_resources()),
+    ?assertResourceMetrics(
+       #{[{resource, index_resident_ratio},
+          {severity, warning}] => 0,
+         [{resource, index_resident_ratio},
+          {severity, serious}] => 0,
+         [{resource, index_resident_ratio},
+          {severity, critical}] => 0}),
 
     PretendIndexRR(9),
 
     ?assertEqual([{{index, resident_ratio}, warning}],
                  check_resources()),
+    %%    TODO: Add back once fixed
+    %%    ?assertResourceMetrics(
+    %%       #{[{resource, index_resident_ratio},
+    %%          {severity, warning}] => 1,
+    %%         [{resource, index_resident_ratio},
+    %%          {severity, serious}] => 0,
+    %%         [{resource, index_resident_ratio},
+    %%          {severity, critical}] => 0}),
 
     PretendIndexRR(4),
 
     ?assertEqual([{{index, resident_ratio}, serious}],
                  check_resources()),
+    %%    TODO: Add back once fixed
+    %%    ?assertResourceMetrics(
+    %%       #{[{resource, index_resident_ratio},
+    %%          {severity, warning}] => 1,
+    %%         [{resource, index_resident_ratio},
+    %%          {severity, serious}] => 1,
+    %%         [{resource, index_resident_ratio},
+    %%          {severity, critical}] => 0}),
 
     PretendIndexRR(0.5),
 
     ?assertEqual([{{index, resident_ratio}, critical}],
-                 check_resources()).
+                 check_resources()),
+    %%    TODO: Add back once fixed
+    %%    ?assertResourceMetrics(
+    %%       #{[{resource, index_resident_ratio},
+    %%          {severity, warning}] => 1,
+    %%         [{resource, index_resident_ratio},
+    %%          {severity, serious}] => 1,
+    %%         [{resource, index_resident_ratio},
+    %%          {severity, critical}] => 1}),
+    ok.
 
 validate_bucket_topology_change_t() ->
 
