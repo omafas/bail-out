@@ -999,11 +999,11 @@ check_index_resident_ratio(Config, Stats) ->
               fun (SeverityToReport) ->
                       Gauge =
                           case Severity of
-                              serious when SeverityToReport =:= serious ->
+                              warning when SeverityToReport =:= warning ->
                                   1;
-                              critical when SeverityToReport =/= maximum ->
+                              serious when SeverityToReport =/= critical ->
                                   1;
-                              maximum ->
+                              critical ->
                                   1;
                               _ ->
                                   0
@@ -1678,40 +1678,37 @@ check_resources_t() ->
 
     ?assertEqual([{{index, resident_ratio}, warning}],
                  check_resources()),
-    %%    TODO: Add back once fixed
-    %%    ?assertResourceMetrics(
-    %%       #{[{resource, index_resident_ratio},
-    %%          {severity, warning}] => 1,
-    %%         [{resource, index_resident_ratio},
-    %%          {severity, serious}] => 0,
-    %%         [{resource, index_resident_ratio},
-    %%          {severity, critical}] => 0}),
+    ?assertResourceMetrics(
+       #{[{resource, index_resident_ratio},
+          {severity, warning}] => 1,
+         [{resource, index_resident_ratio},
+          {severity, serious}] => 0,
+         [{resource, index_resident_ratio},
+          {severity, critical}] => 0}),
 
     PretendIndexRR(4),
 
     ?assertEqual([{{index, resident_ratio}, serious}],
                  check_resources()),
-    %%    TODO: Add back once fixed
-    %%    ?assertResourceMetrics(
-    %%       #{[{resource, index_resident_ratio},
-    %%          {severity, warning}] => 1,
-    %%         [{resource, index_resident_ratio},
-    %%          {severity, serious}] => 1,
-    %%         [{resource, index_resident_ratio},
-    %%          {severity, critical}] => 0}),
+    ?assertResourceMetrics(
+       #{[{resource, index_resident_ratio},
+          {severity, warning}] => 1,
+         [{resource, index_resident_ratio},
+          {severity, serious}] => 1,
+         [{resource, index_resident_ratio},
+          {severity, critical}] => 0}),
 
     PretendIndexRR(0.5),
 
     ?assertEqual([{{index, resident_ratio}, critical}],
                  check_resources()),
-    %%    TODO: Add back once fixed
-    %%    ?assertResourceMetrics(
-    %%       #{[{resource, index_resident_ratio},
-    %%          {severity, warning}] => 1,
-    %%         [{resource, index_resident_ratio},
-    %%          {severity, serious}] => 1,
-    %%         [{resource, index_resident_ratio},
-    %%          {severity, critical}] => 1}),
+    ?assertResourceMetrics(
+       #{[{resource, index_resident_ratio},
+          {severity, warning}] => 1,
+         [{resource, index_resident_ratio},
+          {severity, serious}] => 1,
+         [{resource, index_resident_ratio},
+          {severity, critical}] => 1}),
     ok.
 
 validate_bucket_topology_change_t() ->
