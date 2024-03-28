@@ -93,7 +93,7 @@ handle_call({get_gauges, Items}, _From, State) ->
 handle_call(get_cgroups_info, _From, State) ->
     NewState = maybe_update_stats(State),
     {_, _, CGroupsInfo} = NewState#state.most_recent_unpacked,
-    {reply, CGroupsInfo, State};
+    {reply, CGroupsInfo, NewState};
 
 handle_call(stop, _From, #state{port = Port} = State) ->
     catch port_close(Port),
