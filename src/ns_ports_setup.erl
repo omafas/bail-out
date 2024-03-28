@@ -361,7 +361,8 @@ get_rpc_prefix(Service) ->
 should_run(goxdcr, _Snapshot) ->
     true;
 should_run(projector, Snapshot) ->
-    ns_cluster_membership:should_run_service(Snapshot, kv, node());
+    ns_cluster_membership:should_run_service(Snapshot, kv, node()) andalso
+        not config_profile:search({indexer, projector_disabled}, false);
 should_run(Service, Snapshot) ->
     ns_cluster_membership:should_run_service(Snapshot, Service, node()).
 
