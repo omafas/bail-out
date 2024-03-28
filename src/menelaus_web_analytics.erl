@@ -18,12 +18,14 @@ handle_settings_get(Req) ->
     Settings = get_settings(),
     menelaus_util:reply_json(Req, {Settings}).
 
-serverless_only_settings() ->
+blob_storage_settings() ->
     blob_storage_params().
 
 maybe_filter_settings(Settings) ->
-    FilterOutSettings = lists:flatten([serverless_only_settings() ||
-                                          not config_profile:is_serverless()]),
+    FilterOutSettings =
+        lists:flatten([blob_storage_settings() ||
+                       not config_profile:search({cbas, enable_blob_storage},
+                                                 false)]),
     maybe_filter_settings(Settings, FilterOutSettings).
 
 maybe_filter_settings(Settings, []) ->
@@ -73,7 +75,7 @@ settings_post_validators() ->
     [validator:has_params(_),
      validator:integer(numReplicas, 0, 3, _)] ++
         case cluster_compat_mode:is_cluster_76() andalso
-            config_profile:is_serverless() of
+            config_profile:search({cbas, enable_blob_storage}, false) of
             true ->
                 blob_storage_params_validator();
             false ->

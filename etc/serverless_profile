@@ -26,3 +26,4 @@
 {{couchdb, disabled}, true}.
 {failover_disable_max_count, true}.
 {enable_metered_collections, true}.
+{{cbas, enable_blob_storage}, true}.
