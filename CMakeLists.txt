@@ -303,6 +303,9 @@ CONFIGURE_FILE (etc/static_config.in "${_etcdir}/couchbase/static_config" @ONLY)
 CONFIGURE_FILE (etc/default_profile "${_etcdir}/couchbase/default_profile" @ONLY)
 CONFIGURE_FILE (etc/serverless_profile "${_etcdir}/couchbase/serverless_profile" @ONLY)
 CONFIGURE_FILE (etc/provisioned_profile "${_etcdir}/couchbase/provisioned_profile" @ONLY)
+IF (BUILD_COLUMNAR)
+  CONFIGURE_FILE (etc/columnar_profile "${_etcdir}/couchbase/columnar_profile" @ONLY)
+ENDIF (BUILD_COLUMNAR)
 
 INSTALL (FILES etc/hosts.cfg DESTINATION "${_etcdir}/couchbase")
 

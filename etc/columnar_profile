@@ -1,0 +1,5 @@
+{name, "columnar"}.
+{{couchdb, disabled}, true}.
+{failover_disable_max_count, true}.
+{{cbas, enable_blob_storage}, true}.
+{{indexer, projector_disabled}, true}.
