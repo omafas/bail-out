@@ -106,6 +106,20 @@ refresh(BucketName) ->
 refresh_cluster_config(BucketName) ->
     case bucket_info_cache:terse_bucket_info(BucketName) of
         {ok, Rev, RevEpoch, Blob} ->
+            maybe_set_cluster_config(BucketName, Rev, RevEpoch, Blob);
+        not_present ->
+            ?log_debug("Bucket ~s is dead", [BucketName]),
+            ok;
+        {T, E, Stack} = Exception ->
+            ?log_error("Got exception trying to get terse bucket info: ~p",
+                       [Exception]),
+            timer:sleep(10000),
+            erlang:raise(T, E, Stack)
+    end.
+
+maybe_set_cluster_config(BucketName, Rev, RevEpoch, Blob) ->
+    case bucket_info_cache:contains_empty_vbmap(Blob) of
+        false ->
             case ns_memcached_sockets_pool:executing_on_socket(
                    fun (Sock) ->
                            mc_client_binary:set_cluster_config(Sock,
@@ -125,14 +139,13 @@ refresh_cluster_config(BucketName) ->
                                       self(), {refresh, BucketName}),
                     ok
             end;
-        not_present ->
-            ?log_debug("Bucket ~s is dead", [BucketName]),
-            ok;
-        {T, E, Stack} = Exception ->
-            ?log_error("Got exception trying to get terse bucket info: ~p",
-                       [Exception]),
-            timer:sleep(10000),
-            erlang:raise(T, E, Stack)
+        true ->
+            %% Retry after bucket has initialized vbmap
+            ?log_debug("Bucket '~s' needs vbmap before setting cluster config",
+                       [BucketName]),
+            erlang:send_after(?SET_CLUSTER_CONFIG_RETRY_TIME,
+                              self(), {refresh, BucketName}),
+            ok
     end.
 
 submit_refresh(BucketName, Process) ->

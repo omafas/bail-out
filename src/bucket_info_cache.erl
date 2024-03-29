@@ -20,7 +20,8 @@
 -endif.
 
 -export([start_link/0,
-         terse_bucket_info/1]).
+         terse_bucket_info/1,
+         contains_empty_vbmap/1]).
 
 -export([build_node_services/0,
          build_pools_uri/1,
@@ -382,6 +383,22 @@ compute_bucket_info_with_config(Id, Config, Snapshot, BucketConfig,
             build_cluster_capabilities()])},
     {ok, Rev, RevEpoch, ejson:encode(Json), BucketConfig}.
 
+%% Examines the bucket info returned by compute_bucket_info_with_config to
+%% determine if it contains an empty vbmap.
+contains_empty_vbmap(BucketInfo) ->
+    {BucketInfo1} = ejson:decode(BucketInfo),
+    case proplists:get_value(<<"vBucketServerMap">>, BucketInfo1) of
+        {ServerMap} ->
+            case proplists:get_value(<<"vBucketMap">>, ServerMap, []) of
+                [] ->
+                    true;
+                _ ->
+                    false
+            end;
+        _ ->
+            true
+    end.
+
 compute_bucket_info(Bucket) ->
     try do_compute_bucket_info(Bucket, ns_config:get())
     catch T:E:S ->
@@ -596,4 +613,48 @@ membase_bucket_capabilities_test_() ->
         end,
         [{Test, TestFun} || Test <- Tests]}.
 
+%% This test verifies the dependency "contains_empty_vbmap" has on
+%% the output (bucket info blob) of "compute_bucket_info_with_config".
+verify_compatibility_test() ->
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:expect(cluster_compat_mode, is_cluster_72, fun () -> true end),
+    meck:expect(cluster_compat_mode, is_cluster_76, fun () -> true end),
+    meck:expect(cluster_compat_mode, is_enterprise, fun () -> true end),
+    meck:expect(cluster_compat_mode, get_cluster_capabilities,
+                fun () -> [{n1ql, [costBasedOptimizer, indexAdvisor]}] end),
+    meck:new(ns_bucket, [passthrough]),
+    meck:expect(ns_bucket, uuid, fun (_,_) -> 456 end),
+    meck:new(ns_config, [passthrough]),
+    meck:expect(ns_config, compute_global_rev, fun (_) -> 111 end),
+    meck:new(service_ports, [passthrough]),
+    meck:expect(service_ports, get_port, fun (_,_,_) -> 12000 end),
+    meck:new(capi_utils, [passthrough]),
+    meck:expect(capi_utils, capi_bucket_url_bin,
+                fun (_,_,_,_) -> <<"http://$HOST:9500/bucket%2Buuid">> end),
+    meck:new(ns_cluster_membership, [passthrough]),
+    meck:expect(ns_cluster_membership, get_node_server_group,
+                fun (_,_) -> undefined end),
+
+    BC = [{servers, [node()]},
+          {type, membase},
+          {num_replicas, 1}],
+    Snap = #{{bucket, "testBucket",uuid} => 157},
+    SnapRev = {hello, 77},
+
+    try
+        %% The bucket config has no vbucket map
+        {ok, _, _, Blob, _} =
+            compute_bucket_info_with_config("testBucket", [], Snap, BC,
+                                            SnapRev),
+        ?assert(contains_empty_vbmap(Blob)),
+
+        %% Add the vbucket map and ensure it is found.
+        BC2 = BC ++ [{map, [['n_0@127.0.0.1','n_1@127.0.0.1']]}],
+        {ok, _, _, Blob2, _} =
+            compute_bucket_info_with_config("testBucket", [], Snap, BC2,
+                                            SnapRev),
+        ?assertNot(contains_empty_vbmap(Blob2))
+    after
+        meck:unload()
+    end.
 -endif.
