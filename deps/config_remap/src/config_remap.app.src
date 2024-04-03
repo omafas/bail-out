@@ -1,0 +1,6 @@
+{application,config_remap,
+  [{description,"Config Remap"},
+    {vsn,"0.0.1"},
+    {modules,[]},
+    {registered,[]},
+    {applications,[kernel,stdlib]}]}.

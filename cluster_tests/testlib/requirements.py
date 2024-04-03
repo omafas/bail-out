@@ -104,7 +104,7 @@ class ClusterRequirements:
 
     @testlib.no_output_decorator
     def create_cluster(self, auth, cluster_index, tmp_cluster_dir,
-                       first_node_index):
+                       first_node_index, connect=True):
         start_args = {'start_index': first_node_index,
                       'root_dir': f"{tmp_cluster_dir}-{cluster_index}"}
         start_args.update(self.get_default_start_args())
@@ -119,7 +119,8 @@ class ClusterRequirements:
         cluster = build_cluster(auth=auth,
                                 cluster_index=cluster_index,
                                 start_args=start_args,
-                                connect_args=connect_args)
+                                connect_args=connect_args,
+                                connect=connect)
 
         cluster.set_requirements(self)
         # should not really repair anything, just checking that all

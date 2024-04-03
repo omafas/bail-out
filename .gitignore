@@ -51,3 +51,4 @@ tmp
 /src/kv_stats_mappings.erl
 /cluster_tests/test_cluster_data*
 **/__pycache__/
+/deps/config_remap/config_remap

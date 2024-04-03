@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2024-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+
+import argparse
+import node_remap
+
+from installed_script_helpers import get_initargs_variants
+
+# Note, most of the work performed by this script lives in node_remap.py. The
+# code there is re-used, and as such, needs to have a '.py' suffix to be
+# imported (for re-use). That doesn't look great in the install/bin dir though
+# so this wrapper exists in a file without that prefix such that we can invoke
+# ./node_remap ...
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--initargs',
+                    type=str,
+                    dest='initargs',
+                    help='Server "initargs" path')
+parser.add_argument('--output-path',
+                    type=str,
+                    help='Path to write to')
+parser.add_argument('--remap',
+                    type=str,
+                    action='append',
+                    nargs=2)
+parser.add_argument('--log-level',
+                    type=str,
+                    default='info')
+args = parser.parse_args()
+
+if args.initargs is not None:
+    args.initargs = [args.initargs]
+else:
+    args.initargs = get_initargs_variants()
+
+node_remap.run_config_remap_via_escript_wrapper(initargs=args.initargs,
+                                                output_path=args.output_path,
+                                                remap=args.remap,
+                                                log_level=args.log_level,)

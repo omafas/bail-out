@@ -281,8 +281,10 @@ INSTALL (DIRECTORY ebin DESTINATION "${INST_LIBDIR}/ns_server")
 
 INSTALL(FILES
         pylib/installed_script_helpers.py
+        scripts/node_remap.py
         DESTINATION lib/python)
 PyWrapper (SCRIPTS cbcollect_info)
+PyWrapper (SCRIPTS scripts/node_remap)
 
 INSTALL (PROGRAMS cbbrowse_logs DESTINATION bin)
 INSTALL (PROGRAMS scripts/cbdump-config scripts/dump-guts DESTINATION bin)

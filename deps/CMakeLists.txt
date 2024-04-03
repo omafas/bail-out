@@ -8,6 +8,8 @@ ADD_SUBDIRECTORY (meck)
 
 ADD_SUBDIRECTORY (ns_babysitter)
 ADD_SUBDIRECTORY (ns_couchdb)
+ADD_SUBDIRECTORY (config_remap)
+
 ADD_SUBDIRECTORY (gocode)
 ADD_SUBDIRECTORY (gomodules)
 ADD_SUBDIRECTORY (chronicle)

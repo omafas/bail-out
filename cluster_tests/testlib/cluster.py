@@ -45,7 +45,7 @@ def get_node_urls(nodes):
     return [node.url for node in nodes]
 
 
-def build_cluster(auth, cluster_index, start_args, connect_args):
+def build_cluster(auth, cluster_index, start_args, connect, connect_args):
     # We use the raw ip address instead of 'localhost', as it isn't accepted by
     # the addNode or doJoinCluster endpoints
     # IPV6 uses [::1] instead of 127.0.0.1
@@ -62,20 +62,22 @@ def build_cluster(auth, cluster_index, start_args, connect_args):
     print(f"Starting cluster with start args:\n{start_args}")
     processes = cluster_run_lib.start_cluster(**start_args)
 
-    try:
-        # Connect the nodes
-        print(f"Connecting cluster with connect args:\n{connect_args}")
-        error = cluster_run_lib.connect(**connect_args)
-        if error:
-            sys.exit(f"Failed to connect node(s). Status: {error}")
-    except URLError as e:
-        sys.exit(f"Failed to connect node(s). {e}\n"
-                 f"Perhaps a node has already been started at "
-                 f"{address}:{port}?\n")
-    finally:
-        # If anything goes wrong after starting the clusters, we want to kill
-        # the nodes, otherwise we end up with processes hanging around
-        atexit.register(kill_nodes, processes, urls, get_terminal_attrs())
+    if connect:
+        try:
+            # Connect the nodes
+            print(f"Connecting cluster with connect args:\n{connect_args}")
+            error = cluster_run_lib.connect(**connect_args)
+            if error:
+                sys.exit(f"Failed to connect node(s). Status: {error}")
+        except URLError as e:
+            sys.exit(f"Failed to connect node(s). {e}\n"
+                     f"Perhaps a node has already been started at "
+                     f"{address}:{port}?\n")
+        finally:
+            # If anything goes wrong after starting the clusters, we want to
+            # kill the nodes, otherwise we end up with processes hanging around
+            atexit.register(kill_nodes, processes, urls,
+                            get_terminal_attrs())
     return get_cluster(cluster_index, port, auth, processes, nodes)
 
 
@@ -413,6 +415,20 @@ class Cluster:
             self.wait_for_bucket(name)
         return response
 
+    def wait_for_nodes_to_be_healthy(self):
+        testlib.poll_for_condition(
+            lambda: self.are_nodes_healthy(),
+            sleep_time=0.5,
+            timeout=60)
+
+    def are_nodes_healthy(self):
+        resp_json = testlib.get_succ(self, "/pools/default/").json()
+        nodes_json = resp_json["nodes"]
+        for node in nodes_json:
+            if node["status"] != "healthy":
+                return False
+        return True
+
     def wait_for_bucket(self, name):
         testlib.poll_for_condition(
             lambda: self.is_bucket_healthy_on_all_nodes(name),
@@ -598,6 +614,18 @@ class Cluster:
     def memory_quota(self):
         r = testlib.get_succ(self, '/pools/default')
         return r.json()['memoryQuota']
+
+    def get_cluster_uuid(self):
+        r = testlib.get_succ(self, '/pools/default/terseClusterInfo')
+        return r.json()['clusterUUID']
+
+    def get_cookie(self):
+        return testlib.post_succ(self, "/diag/eval",
+                                 data="erlang:get_cookie()").text
+
+    def get_bucket_uuid(self, bucket):
+        r = testlib.get_succ(self, f'/pools/default/b/{bucket}')
+        return r.json()['uuid']
 
 
 def get_services_string(services: List[Service]):

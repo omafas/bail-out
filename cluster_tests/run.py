@@ -29,6 +29,8 @@ from traceback_with_variables import activate_by_import
 
 scriptdir = sys.path[0]
 pylib = os.path.join(scriptdir, "..", "pylib")
+rootdir = os.path.join(scriptdir, '..', '..', 'install')
+bindir = os.path.join(rootdir, 'bin')
 sys.path.append(pylib)
 
 import cluster_run_lib
@@ -65,7 +67,8 @@ from testsets import \
     settings_managers_tests, \
     users_tests, \
     web_settings_tests, \
-    rest_eject_test
+    rest_eject_test, \
+    node_remap_tests
 
 tmp_cluster_dir = os.path.join(scriptdir, "test_cluster_data")
 
