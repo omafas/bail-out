@@ -275,8 +275,7 @@ report_system_stats(ReportFun) ->
 
     DiskStats = proplists:get_value("@system-disks", Stats, []),
     lists:foreach(
-      fun({Key, Val}) ->
-              [Disk, Name] = binary:split(Key, <<"/">>),
+      fun({{Disk, Name}, Val}) ->
               {MappedName, MappedValue} =
                   case binary:split(Name, <<"_ms">>) of
                       [Start, <<>>] ->

@@ -355,10 +355,13 @@ fix_stat_name(Stat) ->
 stats_to_convert() ->
     [<<"cpu_seconds_total_user">>, <<"cpu_seconds_total_sys">>].
 
+disk_stat_name(ProcName, Stat) ->
+    {ProcName, Stat}.
+
 populate_disk_stat(DiskName, StatName, Value) ->
     case Value of
         X when is_number(X) ->
-            {true, {proc_stat_name(DiskName, StatName), X}};
+            {true, {disk_stat_name(DiskName, StatName), X}};
         _ -> false
     end.
 
@@ -605,6 +608,18 @@ sigar_json_test() ->
                   \"write_bytes\": \"25794304000\",
                   \"write_time_ms\": \"2672373\",
                   \"writes\": \"356261\"
+                },
+                {
+                  \"name\": \"pxd/pxd0\",
+                  \"queue\": \"0\",
+                  \"queue_depth\": \"25\",
+                  \"read_bytes\": \"19476732416\",
+                  \"read_time_ms\": \"6911980\",
+                  \"reads\": \"1845269\",
+                  \"time_ms\": \"2807312\",
+                  \"write_bytes\": \"25794304000\",
+                  \"write_time_ms\": \"2672373\",
+                  \"writes\": \"356261\"
                 }
               ]
            }">>,
@@ -665,15 +680,24 @@ sigar_json_test() ->
              {<<"Process0/minor_faults_raw">>,19},
              {<<"Process0/major_faults_raw">>,3},
              {<<"Process0/cpu_utilization">>,4}],
-    Disks0 = [{<<"sdb/queue">>,0},
-              {<<"sdb/queue_depth">>,25},
-              {<<"sdb/read_bytes">>,19476732416},
-              {<<"sdb/read_time_ms">>,6911980},
-              {<<"sdb/reads">>,1845269},
-              {<<"sdb/time_ms">>,2807312},
-              {<<"sdb/write_bytes">>,25794304000},
-              {<<"sdb/write_time_ms">>,2672373},
-              {<<"sdb/writes">>,356261}],
+    Disks0 = [{{<<"sdb">>,<<"queue">>},0},
+              {{<<"sdb">>,<<"queue_depth">>},25},
+              {{<<"sdb">>,<<"read_bytes">>},19476732416},
+              {{<<"sdb">>,<<"read_time_ms">>},6911980},
+              {{<<"sdb">>,<<"reads">>},1845269},
+              {{<<"sdb">>,<<"time_ms">>},2807312},
+              {{<<"sdb">>,<<"write_bytes">>},25794304000},
+              {{<<"sdb">>,<<"write_time_ms">>},2672373},
+              {{<<"sdb">>,<<"writes">>},356261},
+              {{<<"pxd/pxd0">>,<<"queue">>},0},
+              {{<<"pxd/pxd0">>,<<"queue_depth">>},25},
+              {{<<"pxd/pxd0">>,<<"read_bytes">>},19476732416},
+              {{<<"pxd/pxd0">>,<<"read_time_ms">>},6911980},
+              {{<<"pxd/pxd0">>,<<"reads">>},1845269},
+              {{<<"pxd/pxd0">>,<<"time_ms">>},2807312},
+              {{<<"pxd/pxd0">>,<<"write_bytes">>},25794304000},
+              {{<<"pxd/pxd0">>,<<"write_time_ms">>},2672373},
+              {{<<"pxd/pxd0">>,<<"writes">>},356261}],
     validate_results(Acc0, CountersExpected0, GaugesExpected0, Cgroups0, Proc0,
                      PNames0, Disks0),
     Acc1 = <<"{\n\"allocstall\": \"1\",\n\"control_group_info\": {\n\""
