@@ -57,7 +57,7 @@ get_port(Node, AFamily, Encryption, Timeout) ->
     {Name, Host} = misc:node_name_host(Node),
     get_port(Name, Host, AFamily, Encryption, Timeout).
 
-get_port(NodeName, NodeHost, AFamily, Encryption, Timeout) ->
+get_port(NodeName, NodeHost, AFamily, Encryption, _Timeout) ->
     Module = cb_dist:netsettings2proto({AFamily, Encryption}),
     try {node_type(NodeName), Encryption} of
         %% needed for backward compat: old ns_server nodes use dynamic
@@ -68,7 +68,7 @@ get_port(NodeName, NodeHost, AFamily, Encryption, Timeout) ->
         {ns_server, false} ->
             case inet:getaddr(NodeHost, AFamily) of
                 {ok, IpAddr} ->
-                    case erl_epmd:port_please(NodeName, IpAddr, Timeout) of
+                    case erl_epmd:port_please(NodeName, IpAddr, 2000) of
                         {port, _, _} = R -> R;
                         _ ->
                             case port_for_node(Module, NodeName) of
