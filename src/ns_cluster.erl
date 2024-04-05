@@ -1243,14 +1243,8 @@ check_can_add_node(NodeKVList) ->
 
     MyCompatVersion = cluster_compat_mode:effective_cluster_compat_version(),
     case JoineeClusterCompatVersion =:= MyCompatVersion of
-        true -> case expect_json_property_binary(<<"version">>, NodeKVList) of
-                    <<"1.",_/binary>> = Version ->
-                        {error, incompatible_cluster_version,
-                         ns_error_messages:too_old_version_error(JoineeNode,
-                                                                 Version)};
-                    _ ->
-                        ok
-                end;
+        true ->
+            ok;
         false ->
             {error, incompatible_cluster_version,
              ns_error_messages:incompatible_cluster_version_error(
@@ -1351,11 +1345,20 @@ do_engage_cluster(NodeKVList) ->
 do_engage_cluster_check_compatibility(NodeKVList) ->
     Version = expect_json_property_binary(<<"version">>, NodeKVList),
     Node = expect_json_property_atom(<<"otpNode">>, NodeKVList),
-
-    case Version of
-        <<"1.",_/binary>> ->
-            {error, incompatible_cluster_version,
-             ns_error_messages:too_old_version_error(Node, Version)};
+    %% Prior to 7.6.2, this used to reject on a version of 1.* as too old, but
+    %% since the initial version of Columnar is 1.0.0, update this validation
+    %% to only fail if a the clusterCompatibility property is absent, to allow
+    %% Columnar nodes to join.
+    case lists:keyfind(<<"clusterCompatibility">>, 1, NodeKVList) of
+        false ->
+            case Version of
+                <<"1.",_/binary>> ->
+                    {error, incompatible_cluster_version,
+                     ns_error_messages:too_old_version_error(Node, Version)};
+                _ ->
+                    erlang:exit({unexpected_json, missing_property,
+                                 <<"clusterCompatibility">>})
+            end;
         _ ->
             do_engage_cluster_check_compat_version(Node, Version, NodeKVList)
     end.

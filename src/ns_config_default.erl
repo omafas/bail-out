@@ -46,7 +46,7 @@ get_data_dir() ->
     end.
 
 detect_enterprise_version(NsServerVersion) ->
-    case re:run(NsServerVersion, <<"-enterprise$">>) of
+    case re:run(NsServerVersion, <<"-(columnar|enterprise)$">>) of
         nomatch ->
             false;
         _ ->
@@ -565,5 +565,6 @@ test_all_upgrades() ->
 %% path if I use ?assert... Sucker
 detect_enterprise_version_test() ->
     true = detect_enterprise_version(<<"1.8.0r-9-ga083a1e-enterprise">>),
-    true = not detect_enterprise_version(<<"1.8.0r-9-ga083a1e-comm">>).
+    true = not detect_enterprise_version(<<"1.8.0r-9-ga083a1e-comm">>),
+    true = detect_enterprise_version(<<"1.8.0r-9-ga083a1e-columnar">>).
 -endif.

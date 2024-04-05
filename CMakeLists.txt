@@ -25,11 +25,13 @@ ELSE ("${PRODUCT_VERSION}" STREQUAL "")
   SET(_product_version "${PRODUCT_VERSION}")
 ENDIF ("${PRODUCT_VERSION}" STREQUAL "")
 
-IF (BUILD_ENTERPRISE)
+IF (BUILD_COLUMNAR)
+  SET (_ns_version "${COLUMNAR_PRODUCT_VERSION}-columnar")
+ELSEIF (BUILD_ENTERPRISE)
   SET (_ns_version "${_product_version}-enterprise")
-ELSE (BUILD_ENTERPRISE)
+ELSE ()
   SET (_ns_version "${_product_version}-community")
-ENDIF (BUILD_ENTERPRISE)
+ENDIF ()
 
 SET (NS_SERVER_VERSION "${_ns_version}" CACHE STRING
      "Couchbase server version" FORCE)
