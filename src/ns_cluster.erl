@@ -867,7 +867,7 @@ do_add_node_allowed(Scheme, RemoteAddr, RestPort, HiddenAuth, GroupUUID, Service
         {error, Reason} ->
             M = case ns_error_messages:connection_error_message(
                        Reason, RemoteAddr, RestPort) of
-                    undefined -> io:format("~p", [Reason]);
+                    undefined -> io_lib:format("~p", [Reason]);
                     Msg -> Msg
                 end,
             URL = menelaus_rest:rest_url(RemoteAddr, RestPort, "", Scheme),

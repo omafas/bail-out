@@ -436,7 +436,7 @@ handle_join_tail(Req, OtherScheme, OtherHost, OtherPort, HiddenAuth,
              {error, Reason} ->
                     M = case ns_error_messages:connection_error_message(
                                Reason, OtherHost, OtherPort) of
-                            undefined -> io:format("~p", [Reason]);
+                            undefined -> io_lib:format("~p", [Reason]);
                             Msg -> Msg
                         end,
                     URL = menelaus_rest:rest_url(OtherHost, OtherPort, "",
