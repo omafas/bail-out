@@ -857,7 +857,7 @@ do_add_node_allowed(Scheme, RemoteAddr, RestPort, HiddenAuth, GroupUUID, Service
         {error, Reason} ->
             M1 = case ns_error_messages:connection_error_message(
                         Reason, RemoteAddr, RestPort) of
-                    undefined -> io:format("~p", [Reason]);
+                    undefined -> io_lib:format("~p", [Reason]);
                     Msg -> Msg
                 end,
             M2 = ns_error_messages:engage_cluster_error({engage_cluster_failed,
