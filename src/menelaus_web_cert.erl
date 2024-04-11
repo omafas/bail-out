@@ -314,13 +314,24 @@ handle_load_ca_certs(Req) ->
 
 handle_upload_cluster_ca(Req) ->
     menelaus_util:assert_is_enterprise(),
-    case ns_config:read_key_fast(allow_non_local_ca_upload, false) of
-        true -> ok;
+
+    case ns_config_auth:is_system_provisioned() of
+        true ->
+            ok;
         false ->
-            Msg = "this behavior can be changed by means of "
-                  "POST /settings/security/allowNonLocalCACertUpload, "
-                  "see documentation for details",
-            menelaus_util:ensure_local(Req, Msg)
+            %% Anyone could upload to an unprovisioned system so...
+            case ns_config:read_key_fast(allow_non_local_ca_upload, false) of
+                true ->
+                    %% ...allow if the user has specified the override
+                    ok;
+                false ->
+                    %% ...or it's a local user (assumes they know what they
+                    %% are doing).
+                    Msg = "this behavior can be changed by means of "
+                    "POST /settings/security/allowNonLocalCACertUpload, "
+                    "see documentation for details",
+                    menelaus_util:ensure_local(Req, Msg)
+            end
     end,
 
     case mochiweb_request:recv_body(Req) of
