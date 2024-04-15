@@ -97,7 +97,7 @@ roles() ->
        {[admin], none},
        {[eventing], none},
        {[analytics], none},
-       {[backup], none},
+       {[backup], [read]},
        {[], [read, list]}]},
      {security_admin_local, [],
       [{name, <<"Local User Security Admin">>},
@@ -1593,6 +1593,7 @@ ro_admin_test() ->
     ?assertEqual(false, is_allowed({[settings, metrics], write}, Roles)),
     ?assertEqual(true, is_allowed({[settings, metrics], read}, Roles)),
     ?assertEqual(true, is_allowed({[anything], read}, Roles)),
+    ?assertEqual(true, is_allowed({[backup], read}, Roles)),
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
 regulator_access_test() ->
