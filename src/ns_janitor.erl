@@ -551,6 +551,19 @@ check_server_list(Bucket, BucketConfig, Snapshot, Options) ->
                         proplists:get_value(failover_nodes, Options, []),
     do_check_server_list(Bucket, BucketConfig, Servers, ActiveKVNodes).
 
+ephemeral_bucket_fixup_needed(BucketConfig) ->
+    %% If we allow failover even when there are no remaining replicas for
+    %% ephemeral buckets, we may need to provision a new active in some chains.
+    case ns_bucket:kv_bucket_type(BucketConfig) of
+        persistent -> false;
+        ephemeral ->
+            Map = proplists:get_value(map, BucketConfig, []),
+            lists:any(fun ([undefined|_]) ->
+                              true;
+                          (_) -> false
+                      end,  Map)
+    end.
+
 do_check_server_list(_Bucket, BucketConfig, [], ActiveKVNodes) ->
     DesiredServers = case ns_bucket:get_desired_servers(BucketConfig) of
                          undefined ->
@@ -559,22 +572,32 @@ do_check_server_list(_Bucket, BucketConfig, [], ActiveKVNodes) ->
                              Servers
                      end,
     {update_servers, DesiredServers};
-do_check_server_list(Bucket, _, Servers, ActiveKVNodes) when is_list(Servers) ->
-    %% We don't expect for buckets to refer to servers that are not active. We
-    %% can't guarantee this though due to weaknesses of ns_config. The best we
-    %% can do if we detect a mismatch is to complain and have a human
-    %% intervene.
-    UnexpectedServers = Servers -- ActiveKVNodes,
-    case UnexpectedServers of
-        [] ->
-            ok;
+do_check_server_list(Bucket, BucketConfig, Servers, ActiveKVNodes) when
+      is_list(Servers) ->
+    case ephemeral_bucket_fixup_needed(BucketConfig) of
+        true ->
+            case lists:sort(Servers) =/= lists:sort(ActiveKVNodes) of
+                true -> {update_servers, ActiveKVNodes};
+                false -> ok
+            end;
         _ ->
-            ?log_error("Found a corrupt server list in bucket ~p.~n"
-                       "Server list: ~p~n"
-                       "Active KV nodes: ~p~n"
-                       "Unexpected servers: ~p",
-                       [Bucket, Servers, ActiveKVNodes, UnexpectedServers]),
-            {error, {corrupted_server_list, Servers, ActiveKVNodes}}
+            %% We don't expect for buckets to refer to servers that are not
+            %% active. We can't guarantee this though due to weaknesses of
+            %% ns_config. The best we can do if we detect a mismatch is to
+            %% complain and have a human intervene.
+            UnexpectedServers = Servers -- ActiveKVNodes,
+            case UnexpectedServers of
+                [] ->
+                    ok;
+                _ ->
+                    ?log_error("Found a corrupt server list in bucket ~p.~n"
+                               "Server list: ~p~n"
+                               "Active KV nodes: ~p~n"
+                               "Unexpected servers: ~p",
+                               [Bucket, Servers, ActiveKVNodes,
+                                UnexpectedServers]),
+                    {error, {corrupted_server_list, Servers, ActiveKVNodes}}
+            end
     end.
 
 compute_vbucket_map_fixup(Bucket, BucketConfig, States) ->
@@ -583,8 +606,16 @@ compute_vbucket_map_fixup(Bucket, BucketConfig, States) ->
     FFMap = proplists:get_value(fastForwardMap, BucketConfig),
 
     EnumeratedChains = mb_map:enumerate_chains(Map, FFMap),
-    MapUpdates = [sanify_chain(Bucket, States, Chain, FutureChain, VBucket)
-                  || {VBucket, Chain, FutureChain} <- EnumeratedChains],
+
+    NewMasterCandidates =
+        case ephemeral_bucket_fixup_needed(BucketConfig) of
+            true -> ns_bucket:get_servers(BucketConfig);
+            false -> []
+        end,
+    MapUpdates =
+        [sanify_chain(Bucket, States, Chain, FutureChain, VBucket,
+                      NewMasterCandidates)
+         || {VBucket, Chain, FutureChain} <- EnumeratedChains],
 
     MapLen = length(Map),
     IgnoredVBuckets = [VBucket || {VBucket, ignore} <-
@@ -606,13 +637,28 @@ compute_vbucket_map_fixup(Bucket, BucketConfig, States) ->
 
 %% this will decide what vbucket map chain is right for this vbucket
 sanify_chain(_Bucket, _States,
-             [CurrentMaster | _] = CurrentChain,
-             _FutureChain, _VBucket) when CurrentMaster =:= undefined ->
+             [undefined | _] = CurrentChain,
+             _FutureChain, _VBucket,
+             []) ->
     %% We can get here on a hard-failover case.
     CurrentChain;
+%% This case is specific to ephemeral buckets after failover. Assign a new
+%% active if there is at least one active KV Node.
+sanify_chain(Bucket, _States,
+             [undefined | Rest],
+             _FutureChain, VBucket,
+             NewMasterCandidates) ->
+    NewMaster = lists:nth(rand:uniform(length(NewMasterCandidates)),
+                          NewMasterCandidates),
+    true = NewMaster =/= undefined,
+    ?log_info("Ephemeral bucket provisioning new active.~n"
+              "Setting vbucket ~p in ~p on ~p to active.",
+              [VBucket, Bucket, NewMaster]),
+    [NewMaster | Rest];
 sanify_chain(Bucket, States,
              [CurrentMaster | _] = CurrentChain,
-             FutureChain, VBucket) ->
+             FutureChain, VBucket,
+             _NewMasterCandidates) ->
     NodeStates = janitor_agent:fetch_vbucket_states(VBucket, States),
     Actives = [N || {N, active, _} <- NodeStates],
 
@@ -763,78 +809,115 @@ chain_matches_states_exactly(Chain0, NodeStates) ->
     end.
 
 -ifdef(TEST).
-sanify_chain_t(States, CurrentChain, FutureChain) ->
+sanify_chain_t(States, CurrentChain, FutureChain, NewMasterCandidates) ->
     sanify_chain("B",
                  dict:from_list(
                    [{0, [{N, S, []} || {N, S} <- States]}]),
-                 CurrentChain, FutureChain, 0).
+                 CurrentChain, FutureChain, 0, NewMasterCandidates).
 
 sanify_basic_test() ->
+    meck:new([ns_config], [passthrough]),
+    meck:expect(ns_config, read_key_fast,
+                fun (failover_ephemeral_no_replicas, false) ->
+                        false
+                end),
+
     %% normal case when everything matches vb map
-    [a, b] = sanify_chain_t([{a, active}, {b, replica}], [a, b], []),
+    [a, b] = sanify_chain_t([{a, active}, {b, replica}], [a, b], [], []),
 
     %% yes, the code will keep both masters as long as expected master
     %% is there. Possibly something to fix in future
-    [a, b] = sanify_chain_t([{a, active}, {b, active}], [a, b], []),
+    [a, b] = sanify_chain_t([{a, active}, {b, active}], [a, b], [], []),
 
     %% main chain doesn't match but fast-forward chain does
     [b, c] = sanify_chain_t([{a, dead}, {b, active}, {c, replica}],
-                            [a, b], [b, c]),
+                            [a, b], [b, c], []),
 
     %% main chain doesn't match but ff chain does. And old master is already
     %% deleted
-    [b, c] = sanify_chain_t([{b, active}, {c, replica}], [a, b], [b, c]),
+    [b, c] = sanify_chain_t([{b, active}, {c, replica}], [a, b], [b, c], []),
 
     %% lets make sure we touch all paths just in case
     %% this runs "there are >1 unexpected master" case
-    ignore = sanify_chain_t([{a, active}, {b, active}], [c, a, b], []),
+    ignore = sanify_chain_t([{a, active}, {b, active}], [c, a, b], [], []),
 
     %% this runs "master is one of replicas" case
-    [b, undefined] = sanify_chain_t([{b, active}, {c, replica}], [a, b], []),
+    [b, undefined] = sanify_chain_t([{b, active}, {c, replica}], [a, b], [],
+                                    []),
 
     %% and this runs "master is some non-chain member node" case
-    [c, undefined] = sanify_chain_t([{c, active}], [a, b], []),
+    [c, undefined] = sanify_chain_t([{c, active}], [a, b], [], []),
 
     %% lets also test rebalance stopped prior to complete takeover
     [a, b] = sanify_chain_t([{a, dead}, {b, replica}, {c, pending},
-                             {d, replica}], [a, b], [c, d]),
+                             {d, replica}], [a, b], [c, d], []),
+
+    [undefined] = sanify_chain_t([], [undefined], [a, b, c], []),
+    [undefined, undefined] = sanify_chain_t([], [undefined, undefined],
+                                            [a, b, c], []),
+
+    meck:expect(ns_config, read_key_fast,
+                fun (failover_ephemeral_no_replicas, false) ->
+                        true
+                end),
+    [X] = sanify_chain_t([], [undefined], [], [a, b, c]),
+    ?assertEqual(lists:member(X, [a, b, c]), true),
+
+    [a, undefined] = sanify_chain_t([], [undefined, undefined], [], [a]),
+    [undefined, undefined] = sanify_chain_t([], [undefined, undefined], [], []),
+
+    meck:unload([ns_config]),
     ok.
 
 sanify_doesnt_lose_replicas_on_stopped_rebalance_test() ->
+    meck:new([ns_config], [passthrough]),
+    meck:expect(ns_config, read_key_fast,
+                fun (failover_ephemeral_no_replicas, false) ->
+                        false
+                end),
+
     %% simulates the following: We've completed move that switches
     %% replica and active but rebalance was stopped before we updated
     %% vbmap. We have code in sanify to detect this condition using
     %% fast-forward map and is supposed to recover perfectly from this
     %% condition.
-    [a, b] = sanify_chain_t([{a, active}, {b, dead}], [b, a], [a, b]),
+    [a, b] = sanify_chain_t([{a, active}, {b, dead}], [b, a], [a, b], []),
 
     %% rebalance can be stopped after updating vbucket states but
     %% before vbucket map update
-    [a, b] = sanify_chain_t([{a, active}, {b, replica}], [b, a], [a, b]),
+    [a, b] = sanify_chain_t([{a, active}, {b, replica}], [b, a], [a, b], []),
     %% same stuff but prior to takeover
-    [a, b] = sanify_chain_t([{a, dead}, {b, pending}], [a, b], [b, a]),
+    [a, b] = sanify_chain_t([{a, dead}, {b, pending}], [a, b], [b, a], []),
 
     %% lets test more usual case too
     [c, d] = sanify_chain_t([{a, dead}, {b, replica}, {c, active},
-                             {d, replica}], [a, b], [c, d]),
+                             {d, replica}], [a, b], [c, d], []),
 
     %% but without FF map we're (too) conservative (should be fixable
     %% someday)
     [c, undefined] = sanify_chain_t([{a, dead}, {b, replica}, {c, active},
-                                     {d, replica}], [a, b], []).
+                                     {d, replica}], [a, b], [], []),
+    meck:unload([ns_config]).
 
 sanify_addition_of_replicas_test() ->
-    [a, b] = sanify_chain_t([{a, active}, {b, replica}], [a, b], [a, b, c]),
+    meck:new([ns_config], [passthrough]),
+    meck:expect(ns_config, read_key_fast,
+                fun (failover_ephemeral_no_replicas, false) ->
+                        false
+                end),
+
+    [a, b] = sanify_chain_t([{a, active}, {b, replica}], [a, b], [a, b, c], []),
     [a, b] = sanify_chain_t([{a, active}, {b, replica}, {c, replica}],
-                            [a, b], [a, b, c]),
+                            [a, b], [a, b, c], []),
 
     %% replica addition with possible move.
     [a, b] = sanify_chain_t([{a, dead}, {b, replica}, {c, pending}],
-                            [a, b], [c, a, b]),
+                            [a, b], [c, a, b], []),
     [c, d, a] = sanify_chain_t([{a, dead}, {b, replica}, {c, active},
-                                {d, replica}], [a, b], [c, d, a]),
+                                {d, replica}], [a, b], [c, d, a], []),
     [c, d, a] = sanify_chain_t([{a, replica}, {b, replica}, {c, active},
-                                {d, replica}], [a, b], [c, d, a]).
+                                {d, replica}], [a, b], [c, d, a], []),
+    meck:unload([ns_config]).
 
 chain_matches_states_exactly_test() ->
     ?assert(chain_matches_states_exactly([a, b],
@@ -928,6 +1011,10 @@ load_apply_config_prep_common_modules() ->
     meck:expect(ns_config, get_timeout,
                 fun (_, Default) ->
                         Default
+                end),
+    meck:expect(ns_config, read_key_fast,
+                fun (failover_ephemeral_no_replicas, false) ->
+                        false
                 end),
     meck:expect(cluster_compat_mode, preserve_durable_mutations,
                 fun () ->
@@ -1245,10 +1332,17 @@ data_loss_possible_test() ->
     ?assertNot(data_loss_possible_t([a, b], [{c, replica}])).
 
 check_server_list_test() ->
+    meck:new([ns_config], [passthrough]),
+    meck:expect(ns_config, read_key_fast,
+                fun (failover_ephemeral_no_replicas, false) ->
+                        false
+                end),
+
     ?assertEqual({update_servers, [a, b, c]},
                  do_check_server_list("bucket", [], [], [a, b, c])),
     ?assertEqual(ok, do_check_server_list("bucket", [], [a, b], [a, b, c])),
     ?assertEqual(ok, do_check_server_list("bucket", [], [a, b], [a, c, b])),
     ?assertMatch({error, _}, do_check_server_list("bucket", [], [a, b, c],
-                                                  [a, b])).
+                                                  [a, b])),
+    meck:unload([ns_config]).
 -endif.

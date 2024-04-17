@@ -925,6 +925,19 @@ validate_bucket_safety(_BucketName, Map, Nodes) ->
               end, mb_map:promote_replicas(Map, Nodes)).
 
 validate_membase_buckets(Snapshot, ValidateFun) ->
+    AllowEphemeralFailover =
+        case ns_config:read_key_fast(failover_ephemeral_no_replicas,
+                                     undefined) of
+            undefined ->
+                config_profile:get_bool(failover_ephemeral_no_replicas);
+            X when is_boolean(X) -> X;
+            _ -> false
+        end,
+    ValidateEphemeral =
+        case AllowEphemeralFailover of
+            true -> fun(_, _) -> false end;
+            false -> ValidateFun
+        end,
     lists:filtermap(
       fun ({BucketName, BucketConfig}) ->
               case ns_bucket:bucket_type(BucketConfig) of
@@ -933,7 +946,11 @@ validate_membase_buckets(Snapshot, ValidateFun) ->
                           undefined ->
                               false;
                           Map ->
-                              ValidateFun(BucketName, Map)
+                              case ns_bucket:kv_bucket_type(BucketConfig) of
+                                  persistent -> ValidateFun(BucketName, Map);
+                                  ephemeral ->
+                                      ValidateEphemeral(BucketName, Map)
+                              end
                       end;
                   memcached ->
                       false

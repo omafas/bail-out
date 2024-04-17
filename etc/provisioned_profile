@@ -12,5 +12,6 @@
  [{[index, index_creation_rr, enabled], true},
   {[index, topology_change_rr, enabled], true},
   {[index, index_overhead_per_node, enabled], true}]}.
+{failover_ephemeral_no_replicas, true}.
 {{n1ql, sequential_scan_disabled}, true}.
 {allow_hash_migration_during_auth, true}.
