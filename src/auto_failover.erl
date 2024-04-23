@@ -312,7 +312,7 @@ handle_info(tick_period_updated, #state{timeout = Timeout} = State) ->
      NewState#state{auto_failover_logic_state = init_logic_state(NewState)}};
 
 %% @doc Check if nodes should/could be auto-failovered on every tick
-handle_info(tick, State0) ->
+handle_info(tick, #state{auto_failover_ref = AutoFailoverRef} = State0) ->
     Ref = send_tick_msg(State0),
     Config = ns_config:get(),
     Snapshot = ns_cluster_membership:get_snapshot(#{ns_config => Config}),
@@ -346,16 +346,28 @@ handle_info(tick, State0) ->
           ns_cluster_membership:attach_node_uuids(CurrentlyDown, NodeUUIDs),
           State#state.auto_failover_logic_state,
           ServicesConfig),
-    NewState = lists:foldl(
-                 fun(Action, S) ->
-                         process_action(Action, S, DownNodes, NodeStatuses,
-                                        Snapshot)
-                 end, State#state{auto_failover_logic_state = LogicState},
-                 Actions),
 
-    NewState1 = update_reported_flags_by_actions(Actions, NewState),
+    %% Short circuit any actions that we may have taken if a failover is already
+    %% in progress. Failovers could not complete and we could prematurely send
+    %% failure emails if we found that we could not auto-failover anyways.
+    NewState = case AutoFailoverRef of
+                   undefined ->
+                       %% Time to take action
+                       PostActionState =
+                           lists:foldl(
+                             fun(Action, S) ->
+                                     process_action(Action, S, DownNodes,
+                                                    NodeStatuses, Snapshot)
+                             end, State#state{
+                                    auto_failover_logic_state = LogicState},
+                             Actions),
+                       update_reported_flags_by_actions(Actions,
+                                                        PostActionState);
+                   _ ->
+                       State#state{auto_failover_logic_state = LogicState}
+                end,
 
-    {noreply, NewState1#state{tick_ref = Ref}};
+    {noreply, NewState#state{tick_ref = Ref}};
 
 handle_info({auto_failover_complete, Nodes, DownNodes, NodeStatuses, Result},
             State) ->
@@ -626,9 +638,8 @@ try_autofailover(Nodes, DownNodeNames, DownNodes, NodeStatuses,
                                  DownNodes, #{}, State)
     end.
 
-%% Failover not in progress, we can start one
 trigger_autofailover(Nodes, NodeStatuses, DownNodeNames, DownNodes, Opts,
-                     #state{auto_failover_ref = undefined} = State) ->
+                     State) ->
     FailoverReasons = failover_reasons(Nodes, DownNodes, NodeStatuses),
     Self = self(),
     Pid = erlang:spawn_link(
@@ -642,15 +653,7 @@ trigger_autofailover(Nodes, NodeStatuses, DownNodeNames, DownNodes, Opts,
                     Self ! {auto_failover_complete, Nodes, DownNodes,
                             NodeStatuses, R}
             end),
-    State#state{auto_failover_ref = Pid};
-%% Failover in progress already
-trigger_autofailover(_Nodes, _NodeStatuses, _DownNodeNames, _DownNodes, _Opts,
-                     #state{auto_failover_ref = _} = State) ->
-    ?log_debug("Skipping failover request, one already in progress"),
-    %% Note that the return value is essentially the same here as it is for the
-    %% clause in which a failover is not already in progress. This is because we
-    %% rely on the next tick to "retry" the auto-failover if still relevant.
-    State.
+    State#state{auto_failover_ref = Pid}.
 
 log_failover_success(Node, DownNodes, NodeStatuses) ->
     case failover_reason(Node, DownNodes, NodeStatuses) of
