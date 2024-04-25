@@ -21,52 +21,11 @@ CBIMPORT_TIMEOUT = 60
 # Typically, this takes <50ms, but it has sometimes taken more than 1s
 START_TASK_TIMEOUT = 10
 
-
-class SampleBucketTestSet(testlib.BaseTestSet, TasksBase):
-
-    def __init__(self, cluster):
-        super().__init__(cluster)
-        self.addr_buckets = None
-        self.addr_post = None
-        self.addr_get = None
-
-    @staticmethod
-    def requirements():
-        return [testlib.ClusterRequirements(edition="Enterprise",
-                                            min_num_nodes=2,
-                                            min_memsize=600),
-                testlib.ClusterRequirements(edition="Serverless",
-                                            min_num_nodes=2,
-                                            min_memsize=600)]
-
-    def setup(self):
+class SampleBucketTasksBase(TasksBase):
+    def __init__(self):
         self.addr_get = "/sampleBuckets"
         self.addr_post = self.addr_get + "/install"
         self.addr_tasks = "/pools/default/tasks"
-
-    def teardown(self):
-        pass
-
-    def test_teardown(self):
-        # Kill any remaining sample loads
-        testlib.post_succ(self.cluster, "/diag/eval",
-                          data="gen_server:stop(samples_loader_tasks).")
-        # Deleting any remaining buckets
-        testlib.delete_all_buckets(self.cluster)
-
-    # Create a bucket with name and ram_quota specified
-    def create_bucket(self, name, ram_quota=200):
-        bucket = {"name": name, "ramQuota": ram_quota}
-        self.cluster.create_bucket(bucket)
-
-    # Test the /sampleBuckets endpoint for fetching the list of sample buckets
-    def get_test(self):
-        response = testlib.get_succ(self.cluster, self.addr_get)
-        samples = testlib.json_response(response,
-                                        "/sampleBuckets returned invalid json")
-        for sample in samples:
-            for key in ["name", "installed", "quotaNeeded"]:
-                testlib.assert_json_key(key, sample, self.addr_get)
 
     # Extract the task descriptions from the response to a request to the
     # /sampleBuckets/install endpoint
@@ -151,6 +110,60 @@ class SampleBucketTestSet(testlib.BaseTestSet, TasksBase):
         # Assert that the final task is as expected
         self.assert_tasks_equal(fetched_task, expected_task)
 
+    def load_sample_bucket(self, cluster, sample_bucket):
+        payload = [sample_bucket]
+        return testlib.post_succ(cluster, self.addr_post, 202,
+                                     json=payload)
+
+    def load_and_assert_sample_bucket(self, cluster, sample_bucket):
+        response = self.load_sample_bucket(cluster, sample_bucket)
+
+        # Double the timeout to allow for bucket creation
+        self.assert_loaded_sample(response, CBIMPORT_TIMEOUT * 2)
+
+class SampleBucketTestSet(testlib.BaseTestSet, SampleBucketTasksBase):
+
+    def __init__(self, cluster):
+        super().__init__(cluster)
+        SampleBucketTasksBase.__init__(self)
+        self.addr_buckets = None
+
+    @staticmethod
+    def requirements():
+        return [testlib.ClusterRequirements(edition="Enterprise",
+                                            min_num_nodes=2,
+                                            min_memsize=600),
+                testlib.ClusterRequirements(edition="Serverless",
+                                            min_num_nodes=2,
+                                            min_memsize=600)]
+
+    def setup(self):
+        pass
+
+    def teardown(self):
+        pass
+
+    def test_teardown(self):
+        # Kill any remaining sample loads
+        testlib.post_succ(self.cluster, "/diag/eval",
+                          data="gen_server:stop(samples_loader_tasks).")
+        # Deleting any remaining buckets
+        testlib.delete_all_buckets(self.cluster)
+
+    # Create a bucket with name and ram_quota specified
+    def create_bucket(self, name, ram_quota=200):
+        bucket = {"name": name, "ramQuota": ram_quota}
+        self.cluster.create_bucket(bucket)
+
+    # Test the /sampleBuckets endpoint for fetching the list of sample buckets
+    def get_test(self):
+        response = testlib.get_succ(self.cluster, self.addr_get)
+        samples = testlib.json_response(response,
+                                        "/sampleBuckets returned invalid json")
+        for sample in samples:
+            for key in ["name", "installed", "quotaNeeded"]:
+                testlib.assert_json_key(key, sample, self.addr_get)
+
     # Set the concurrency limit
     def set_concurrency(self, concurrency):
         testlib.post_succ(self.cluster, "/settings/serverless",
@@ -159,13 +172,7 @@ class SampleBucketTestSet(testlib.BaseTestSet, TasksBase):
     # Test that we can load into a new bucket, which will have the same name as
     # the specified sample
     def post_without_existing_bucket_test(self):
-        sample_bucket = "travel-sample"
-        payload = [sample_bucket]
-        response = testlib.post_succ(self.cluster, self.addr_post, 202,
-                                     json=payload)
-
-        # Double the timeout to allow for bucket creation
-        self.assert_loaded_sample(response, CBIMPORT_TIMEOUT * 2)
+        self.load_and_assert_sample_bucket(self.cluster, "travel-sample")
 
     # Test loading into an existing bucket
     def post_with_existing_bucket_test(self):
