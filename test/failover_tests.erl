@@ -556,6 +556,7 @@ auto_failover_async_t(_SetupConfig, PidMap) ->
 
     %% And auto_failover should still be disabled
     Cfg = auto_failover:get_cfg(),
+    ?assertEqual(proplists:get_value(count, Cfg), 3),
     ?assertNot(proplists:get_value(enabled, Cfg)).
 
 %% Test post-network partition that we do not auto-failover nodes due to a stale

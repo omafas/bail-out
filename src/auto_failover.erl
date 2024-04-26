@@ -355,12 +355,6 @@ handle_info(tick, State0) ->
 
     NewState1 = update_reported_flags_by_actions(Actions, NewState),
 
-    if
-        NewState1#state.count =/= State#state.count ->
-            make_state_persistent(NewState1);
-        true -> ok
-    end,
-
     {noreply, NewState1#state{tick_ref = Ref}};
 
 handle_info({auto_failover_complete, Nodes, DownNodes, NodeStatuses, Result},
@@ -368,9 +362,8 @@ handle_info({auto_failover_complete, Nodes, DownNodes, NodeStatuses, Result},
     %% Process a message sent when auto_failover completes.
     %%
     %% It could be the case that we have disabled auto-failover between an
-    %% auto-failover starting and now. The only part of the state that we touch
-    %% here is the reported_errors and the auto_failover_ref. We may reset
-    %% reported_errors if we reset the auto failover count. An additional error
+    %% auto-failover starting and now. We may reset reported_errors if we
+    %% reset the auto failover count. An additional error
     %% message is not a big deal.
     %%
     %% Logs may look slightly odd as a result of the asynchronicity of the
@@ -398,6 +391,13 @@ handle_info({auto_failover_complete, Nodes, DownNodes, NodeStatuses, Result},
                    Error ->
                        process_failover_error(Error, Nodes, State)
                end,
+
+    if
+        NewState#state.count =/= State#state.count ->
+            make_state_persistent(NewState);
+        true -> ok
+    end,
+
     {noreply, NewState#state{auto_failover_ref = undefined}};
 
 handle_info(_Info, State) ->
