@@ -356,6 +356,13 @@ preflight_lhttpc_request(Type, URL, Options) ->
             ?log_debug("~p url check received '~p' from '~s'",
                        [Type, Result, URL]),
             ok;
+        {error, {{tls_alert, {handshake_failure, Details0}}, Stack}} ->
+            Details = lists:flatten(string:replace(Details0, "\n", ".")),
+            ?log_debug("~p url check unable to access '~s' (~p): ~p",
+                       [Type, URL, Details, Stack]),
+            Msg = io_lib:format("Unable to access '~s' : (~p)",
+                                [URL, Details]),
+            {error, iolist_to_binary(Msg)};
         {error, {Reason, Stack}} ->
             ?log_debug("~p url check unable to access '~s' (~p): ~p",
                        [Type, URL, Reason, Stack]),
