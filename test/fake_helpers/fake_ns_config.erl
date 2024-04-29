@@ -173,10 +173,16 @@ meck_setup_getters() ->
 
 meck_setup_setters() ->
     meck:expect(ns_config, update_key,
-        fun(_Key, Fun) ->
-            update_snapshot(Fun(get_ets_snapshot())),
-            ok
-        end),
+                fun(Key, Fun) ->
+                        Snapshot = get_ets_snapshot(),
+                        OldValue = proplists:get_value(Key, Snapshot),
+                        true = (OldValue =/= undefined),
+                        NewSnapshot =
+                            misc:update_proplist(Snapshot,
+                                                 [{Key, Fun(OldValue)}]),
+                        update_snapshot(NewSnapshot),
+                        ok
+                end),
 
 
     meck:expect(ns_config, set,
