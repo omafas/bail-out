@@ -19,7 +19,7 @@ handle_settings_get(Req) ->
     menelaus_util:reply_json(Req, {Settings}).
 
 blob_storage_settings() ->
-    blob_storage_params().
+    blob_storage_required_params() ++ blob_storage_optional_params().
 
 maybe_filter_settings(Settings) ->
     FilterOutSettings =
@@ -40,16 +40,21 @@ get_settings() ->
     Settings = analytics_settings_manager:get(generalSettings),
     maybe_filter_settings(Settings).
 
-blob_storage_params() ->
+blob_storage_required_params() ->
     [blobStorageScheme, blobStorageBucket, blobStoragePrefix, blobStorageRegion].
 
+blob_storage_optional_params() ->
+    [blobStorageEndpoint, blobStorageAnonymousAuth, numStoragePartitions].
+
 valid_blob_storage_param(blobStorageScheme, State) ->
-    validator:one_of(blobStorageScheme, ["s3"], State);
+    validator:one_of(blobStorageScheme, ["s3", "gs", "azblob"], State);
 valid_blob_storage_param(_Param, State) ->
     State.
 
 blob_storage_params_validator() ->
-    Params = blob_storage_params(),
+    Params = blob_storage_required_params(),
+    MaxStoragePartitions =
+        config_profile:get_value({cbas, max_storage_partitions}, infinity),
 
     % Validation should pass if:
     % 1. None of the blobStorage params are present.
@@ -69,7 +74,21 @@ blob_storage_params_validator() ->
                             | Acc]
                     end, [], Params)),
             {ok, NewState}
-        end, Params, _)].
+        end, Params, _),
+        validator:string(blobStorageEndpoint, _),
+        validator:convert(blobStorageEndpoint, fun list_to_binary/1, _),
+        validator:boolean(blobStorageAnonymousAuth, _),
+        fun (State) ->
+            %% blobStorageEndpoint is required when blobStorageScheme is azblob
+            case validator:get_value(blobStorageScheme, State) of
+                <<"azblob">> -> validator:required(blobStorageEndpoint, State);
+                _ -> State
+            end
+        end,
+        %% TODO(MB-61761): we don't currently support changing the number of
+        %% storage partitions once Columnar has bootstrapped- ideally we can
+        %% catch this here, but that requires context we don't have at present.
+        validator:integer(numStoragePartitions, 1, MaxStoragePartitions, _)].
 
 settings_post_validators() ->
     [validator:has_params(_),

@@ -90,7 +90,10 @@ general_settings_defaults(ClusterVersion) ->
                  {blobStorageScheme, <<"">>},
                  {blobStorageBucket, <<"">>},
                  {blobStoragePrefix, <<"">>},
-                 {blobStorageRegion, <<"">>}];
+                 {blobStorageRegion, <<"">>}] ++
+                 [{Key, Default} || {Key, _, Default} <-
+                     config_profile:search({cbas, extra_settings_version_76},
+                                           [])];
             false ->
                 []
         end.
@@ -110,7 +113,10 @@ general_settings_lens_props(ClusterVersion) ->
                  {blobStoragePrefix,
                   id_lens(<<"analytics.settings.blob_storage_prefix">>)},
                  {blobStorageRegion,
-                  id_lens(<<"analytics.settings.blob_storage_region">>)}];
+                  id_lens(<<"analytics.settings.blob_storage_region">>)}] ++
+                [{Key, id_lens(Option)} || {Key, Option, _} <-
+                    config_profile:search({cbas, extra_settings_version_76},
+                                          [])];
             false ->
                 []
         end.
@@ -149,4 +155,5 @@ config_upgrade_test() ->
                    "\"analytics.settings.blob_storage_region\":\"\","
                    "\"analytics.settings.blob_storage_scheme\":\"\"}">>,
                  Data).
+    %% TODO: add upgrade test w/ columnar profile
 -endif.

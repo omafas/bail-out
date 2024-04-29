@@ -315,6 +315,7 @@
 -define(SERVERLESS_PROFILE, serverless).
 -define(SERVERLESS_PROFILE_STR, "serverless").
 -define(PROVISIONED_PROFILE_STR, "provisioned").
+-define(COLUMNAR_PROFILE_STR, "columnar").
 
 %% Default profile macros/constants
 -define(DEFAULT_PROFILE_STR, "default").

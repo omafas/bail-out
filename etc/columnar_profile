@@ -3,3 +3,14 @@
 {failover_disable_max_count, true}.
 {{cbas, enable_blob_storage}, true}.
 {{indexer, projector_disabled}, true}.
+{{cbas, max_storage_partitions}, 1024}.
+{{cbas, extra_settings_version_76},
+    [{blobStorageEndpoint,
+      <<"analytics.settings.blob_storage_endpoint">>,
+      <<"">>},
+     {blobStorageAnonymousAuth,
+      <<"analytics.settings.blob_storage_anonymous_auth">>,
+      false},
+     {numStoragePartitions,
+      <<"analytics.settings.num_storage_partitions">>,
+      128}]}.
