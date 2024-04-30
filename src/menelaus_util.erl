@@ -667,13 +667,19 @@ handle_streaming(Req, DataBody, HTTPRes, LastRes, {NotifyTag, _} = Update,
     {Res, NewTimer} =
         try streaming_inner(DataBody, HTTPRes, LastRes, Update, Heartbeat,
                             Timer)
-        catch exit:normal ->
+        catch exit:Type:Stack ->
+                maybe_log_exit(Type),
                 mochiweb_response:write_chunk("", HTTPRes),
-                exit(normal)
+                erlang:raise(exit, Type, Stack)
         end,
     request_tracker:hibernate(Req, ?MODULE, handle_streaming_wakeup,
                               [Req, DataBody, HTTPRes, Res, NotifyTag,
                                Heartbeat, NewTimer]).
+
+maybe_log_exit(normal) ->
+    ok;
+maybe_log_exit(Type) ->
+    ?log_warning("Received abnormal 'EXIT' message of type: ~p", [Type]).
 
 send_data(Data, HTTPRes) ->
     mochiweb_response:write_chunk(Data, HTTPRes),

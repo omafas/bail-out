@@ -12,6 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from subprocess import Popen
+from testlib.util import Service
 import testlib
 import os
 from testlib import ClusterRequirements
@@ -560,3 +562,51 @@ def toggle_node_n2n(node, enable=True):
     # Disable any unused listeners
     testlib.post_succ(node,
                       "/node/controller/disableUnusedExternalListeners")
+
+
+BUCKET_NAME = "dummy-bucket"
+
+class NodeRemovalStreamingChunked(testlib.BaseTestSet):
+
+    def setup(self):
+        # create default bucket
+        data = {"name": BUCKET_NAME,
+                "storageBackend": "couchstore",
+                "ramQuotaMB": "256"}
+        self.cluster.create_bucket(data, sync=True)
+
+    def teardown(self):
+        self.cluster.add_node(self.cluster.disconnected_nodes()[0],
+                              do_rebalance=True)
+        self.cluster.delete_bucket(BUCKET_NAME)
+
+    @staticmethod
+    def requirements():
+        return [ClusterRequirements(edition="Enterprise",
+                                    min_num_nodes=2, num_connected=2,
+                                    services=[Service.KV, Service.CBAS])]
+
+    def basic_node_removal_test(self):
+        # listen to the poolStreaming endpoint node A
+        port = self.cluster.connected_nodes[0].port
+        _, password = self.cluster.connected_nodes[0].auth
+        cwd = os.getcwd()
+
+        # Use a bunch of different relative paths to make it easier to run
+        # cluster_tests without forcing you to launch it from the same
+        # directory as they do in CI.
+        path = {"PATH": f"{cwd}/../../../install/bin/priv:" \
+                f"{cwd}/../../install/bin/priv:" \
+                f"{cwd}/../install/bin/priv:{cwd}/install/bin/priv/"}
+        proc = Popen(["chunked_reader", f"{port}", password], env=path)
+
+        # remove node A from the cluster
+        self.cluster.failover_node(self.cluster.connected_nodes[0],
+                                   graceful=True)
+        self.cluster.eject_node(self.cluster.connected_nodes[0],
+                                self.cluster.connected_nodes[1])
+
+        # Verify that chunked stream is closed correctly using
+        # chunked_reader.go binary.
+        return_code = proc.wait()
+        assert return_code == 0
