@@ -172,6 +172,8 @@ orchestrate(Nodes, Options) when Nodes =/= [] ->
     ale:info(?USER_LOGGER, "Starting failing over ~p", [Nodes]),
     master_activity_events:note_failover(Nodes),
 
+    ok = testconditions:check_test_condition(failover_start),
+
     Res =
         case config_sync_and_orchestrate(Nodes, Options) of
             {done, ErrorNodes, UnsafeNodes} ->
