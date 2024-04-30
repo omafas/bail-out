@@ -1244,7 +1244,7 @@ wait_for_bucket_shutdown(BucketName, Nodes0, Timeout) ->
                 LeftoverNodes0
         end,
 
-    check_test_condition({wait_for_bucket_shutdown, BucketName}),
+    testconditions:check_test_condition({wait_for_bucket_shutdown, BucketName}),
 
     case LeftoverNodes of
         [] ->
@@ -2254,16 +2254,6 @@ get_desired_servers(Props) ->
 update_desired_servers(DesiredServers, BucketConfig) ->
     lists:keystore(desired_servers, 1, BucketConfig,
                    {desired_servers, DesiredServers}).
-
-check_test_condition(Step) ->
-    case testconditions:get(Step) of
-        {delay, MSecs} = Val ->
-            ?log_debug("Executing testcondition - ~p", [{Step, Val}]),
-            testconditions:delete(Step),
-            timer:sleep(MSecs);
-        _ ->
-            ok
-    end.
 
 -spec get_expected_servers(proplists:proplist()) -> [node()].
 %% Use this to get the list of servers that the bucket will be on after creation

@@ -1404,28 +1404,14 @@ check_test_condition(Step) ->
     check_test_condition(Step, []).
 
 check_test_condition(Step, Kind) ->
-    case testconditions:get(Step) of
-        fail ->
-            %% E.g. fail rebalance at the start.
-            %% Triggered by: testconditions:set(rebalance_start, fail)
-            trigger_failure(Step, []);
-        {delay, Sleep} ->
-            %% E.g. delay rebalance by 60s at the start.
-            %% Triggered by:
-            %%  testconditions:set(rebalance_start, {delay, 60000})
-            trigger_delay(Step, [], Sleep);
-        {fail, Kind} ->
-            %% E.g. fail verify_replication for bucket "test".
-            %% Triggered by:
-            %%  testconditions:set(verify_replication, {fail, “test”})
-            trigger_failure(Step, Kind);
-        {delay, Kind, Sleep} ->
-            %% E.g. delay service_rebalance_start by 1s for index service.
-            %% Triggered by:
-            %%  testconditions:set(service_rebalance_start,
-            %%                     {delay, index, 1000})
-            trigger_delay(Step, Kind, Sleep);
-        {for_vb_move, Kind, N, Condition} ->
+    testconditions:check_test_condition(?REBALANCE_LOGGER, Step, Kind,
+        fun(Condition) ->
+            extended_check_test_condition(Condition, Step, Kind)
+        end).
+
+extended_check_test_condition(Condition, Step, Kind) ->
+    case Condition of
+        {for_vb_move, Kind, N, Type} ->
             %% Trigger the test condition for Nth vBucket move.
             %% Note it is NOT vBucket #N, but rather the Nth vBucket
             %% that is being moved. The actual vBucket # may be anything.
@@ -1441,42 +1427,17 @@ check_test_condition(Step, Kind) ->
             %% Triggered by:
             %%  testconditions:set(backfill_done,
             %%                     {for_vb_move, "test", 5, fail}).
-            trigger_condition_for_Nth_move(Step, Kind, N, Condition);
+            trigger_condition_for_Nth_move(Step, Kind, N, Type);
         _ ->
             ok
     end.
 
-trigger_failure(Step, Kind) ->
-    Msg = case Kind of
-              [] ->
-                  io_lib:format("Failure triggered by test during ~p", [Step]);
-              _ ->
-                  io_lib:format("Failure triggered by test during ~p for ~p",
-                                [Step, Kind])
-          end,
-    ?rebalance_error("~s", [lists:flatten(Msg)]),
-    testconditions:delete(Step),
-    fail_by_test_condition.
-
-trigger_delay(Step, Kind, Sleep) ->
-    Msg = case Kind of
-              [] ->
-                  io_lib:format("Delay triggered by test during ~p. "
-                                "Sleeping for ~p ms", [Step, Sleep]);
-              _ ->
-                  io_lib:format("Delay triggered by test during ~p for ~p. "
-                                "Sleeping for ~p ms", [Step, Kind, Sleep])
-          end,
-    ?rebalance_error("~s", [lists:flatten(Msg)]),
-    testconditions:delete(Step),
-    timer:sleep(Sleep).
-
 trigger_condition_for_Nth_move(Step, Kind, 1, Condition) ->
     case Condition of
         fail ->
-            trigger_failure(Step, Kind);
+            testconditions:trigger_failure(?REBALANCE_LOGGER, Step, Kind);
         {delay, Sleep} ->
-            trigger_delay(Step, Kind, Sleep)
+            testconditions:trigger_delay(?REBALANCE_LOGGER, Step, Kind, Sleep)
     end;
 trigger_condition_for_Nth_move(Step, Kind, N, Condition) ->
     testconditions:set(Step, {for_vb_move, Kind, N - 1, Condition}).

@@ -346,7 +346,7 @@ pause_bucket_op(#state{service = Service,
                        service_manager = Manager},
                 {#bucket_hibernation_op_args{} = Args, _ExtraArgs},
                 Id, Leader, _NodesInfo) ->
-    ok = hibernation_utils:check_test_condition({pause_bucket, Service}),
+    ok = testconditions:check_test_condition({pause_bucket, Service}),
     ok = service_agent:prepare_pause_bucket(Service, Nodes, Id, Args, Manager),
     ok = service_agent:pause_bucket(Service, Leader, Id, Args, Manager).
 
@@ -356,7 +356,7 @@ resume_bucket_op(#state{service = Service,
                  {#bucket_hibernation_op_args{} = Args,
                   {DryRun, _ServerMapping}},
                  Id, Leader, _NodesInfo) ->
-    ok = hibernation_utils:check_test_condition({{resume_bucket, DryRun},
+    ok = testconditions:check_test_condition({{resume_bucket, DryRun},
                                                  Service}),
     ok = service_agent:prepare_resume_bucket(
            Service, Nodes, Id, Args, DryRun, Manager),

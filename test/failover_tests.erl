@@ -103,7 +103,7 @@ manual_failover_test_setup(SetupConfig) ->
     meck:new(chronicle),
     meck:expect(chronicle, check_quorum, fun() -> true end),
 
-    meck:new(testconditions),
+    meck:new(testconditions, [passthrough]),
     meck:expect(testconditions, get, fun(_) -> ok end),
 
     meck:new(chronicle_master, [passthrough]),

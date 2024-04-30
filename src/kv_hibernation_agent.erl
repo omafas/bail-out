@@ -307,7 +307,7 @@ do_pause_bucket(#bucket_hibernation_op_args{
               [Bucket, LocalPath, RemotePath, BlobStorageRegion,
                RateLimit / ?MIB]),
 
-    ok = hibernation_utils:check_test_condition(node_pause_before_data_sync),
+    ok = testconditions:check_test_condition(node_pause_before_data_sync),
     ok = hibernation_utils:sync_s3(
            Args#bucket_hibernation_op_args{remote_path = RemotePath}, LocalPath,
            to),
@@ -332,7 +332,7 @@ do_resume_bucket(#bucket_hibernation_op_args{
               [Bucket, RemotePath, LocalPath, BlobStorageRegion,
                RateLimit / ?MIB]),
 
-    ok = hibernation_utils:check_test_condition(node_resume_before_data_sync),
+    ok = testconditions:check_test_condition(node_resume_before_data_sync),
 
     ok = hibernation_utils:sync_s3(Args#bucket_hibernation_op_args{
                                      remote_path = RemotePath}, LocalPath,

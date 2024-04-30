@@ -1964,7 +1964,7 @@ handle_hibernation_manager_exit(normal, Bucket, Op) ->
     ale:debug(?USER_LOGGER, "~p done for Bucket ~p.",
               [Op, Bucket]),
 
-    ok = hibernation_utils:check_test_condition(
+    ok = testconditions:check_test_condition(
            exit_ns_orchestrator_after_hibernation_op_done),
 
     hibernation_utils:update_hibernation_status(completed),

@@ -106,7 +106,7 @@ pause_bucket(#bucket_hibernation_op_args{
 
     {ok, _BucketConfig} = ns_bucket:remove_bucket(Bucket),
 
-    ok = hibernation_utils:check_test_condition(pause_after_node_ops_run),
+    ok = testconditions:check_test_condition(pause_after_node_ops_run),
     kv_hibernation_agent:unprepare_pause_bucket(Bucket, KvNodes).
 
 -spec pause_bucket_body(For, Args, Snapshot, Nodes) -> ok
@@ -186,7 +186,7 @@ resume_bucket(#bucket_hibernation_op_args{
     %% status
     ok = restore_bucket_in_resuming(Bucket, NewBucketConfig, Metadata),
 
-    ok = hibernation_utils:check_test_condition(resume_before_node_ops_run),
+    ok = testconditions:check_test_condition(resume_before_node_ops_run),
 
     WorkersParams = build_workers_params(RemotePath, DesiredServers, Snapshot),
     ok = hibernation_utils:run_hibernation_op(
@@ -198,7 +198,7 @@ resume_bucket(#bucket_hibernation_op_args{
                      ServerMapping, false, Nodes)
            end, WorkersParams, ?RESUME_BUCKET_TIMEOUT),
 
-    ok = hibernation_utils:check_test_condition(resume_after_node_ops_run),
+    ok = testconditions:check_test_condition(resume_after_node_ops_run),
 
     %% At this point the bucket will go live with the appropriate map and server
     %% list
@@ -225,7 +225,7 @@ resume_bucket_body(For, Args, ServerMapping, DryRun, Nodes) ->
 
 meck_base_modules() ->
     [ns_cluster_membership, bucket_placer, hibernation_utils, ns_config,
-     ns_bucket, kv_hibernation_agent, service_manager].
+     ns_bucket, kv_hibernation_agent, service_manager, testconditions].
 
 meck_expect_base() ->
     meck:new(meck_base_modules(), [passthrough]),
@@ -252,7 +252,7 @@ meck_expect_base() ->
                          {version, ?VERSION_76}, {bucket_manifest, []},
                          {bucket_uuid, 1}]
                 end),
-    meck:expect(hibernation_utils, check_test_condition,
+    meck:expect(testconditions, check_test_condition,
                 fun (_) ->
                         ok
                 end),
@@ -486,7 +486,7 @@ force_unpause_via_process_failure_body(ProcessType) ->
                         Self ! unpause_issued,
                         ok
                 end),
-    meck:expect(hibernation_utils, check_test_condition,
+    meck:expect(testconditions, check_test_condition,
                 fun (_) ->
                         ok
                 end),

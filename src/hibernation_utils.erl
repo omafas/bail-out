@@ -32,7 +32,6 @@
          get_data_remote_path/1,
          get_node_data_remote_path/2,
          get_bucket_data_remote_path/3,
-         check_test_condition/1,
          log_hibernation_event/3]).
 
 supported_services() ->
@@ -466,22 +465,6 @@ get_version_from_s3(Args) ->
                                   {ok, decode_version(Data)}
                           end),
     Version.
-
-check_test_condition(undefined) ->
-    ok;
-check_test_condition(Step) ->
-    case testconditions:get(Step) of
-        fail ->
-            ?log_debug("Failing at step: ~p due to test condition", [Step]),
-            testconditions:delete(Step),
-            fail_by_test_condition;
-        {delay, Sleep} ->
-            ?log_debug("Delaying step ~p by ~p ms", [Step, Sleep]),
-            testconditions:delete(Step),
-            timer:sleep(Sleep);
-        _ ->
-            ok
-    end.
 
 get_event_id(initiated, pause_bucket) ->
     pause_bucket_initiated;
