@@ -173,7 +173,8 @@ report_prom_stats(ReportFun, IsHighCard) ->
           end,
     case IsHighCard of
         true ->
-            Try(ns_server, fun () -> report_ns_server_hc_stats(ReportFun) end);
+            Try(ns_server, fun () -> report_ns_server_hc_stats(ReportFun) end),
+            Try(cluster, fun () -> report_cluster_stats(ReportFun) end);
         false ->
             Try(ns_server, fun () -> report_ns_server_lc_stats(ReportFun) end),
             Try(audit, fun () -> report_audit_stats(ReportFun) end),
@@ -357,6 +358,28 @@ report_ns_server_hc_stats(ReportFun) ->
           ok
       end, [], ?MODULE),
     ok.
+
+convert_to_reported_event(<<"start">>) -> <<"initiated">>;
+convert_to_reported_event(<<"success">>) -> <<"completed">>;
+convert_to_reported_event(<<"fail">>) -> <<"failed">>;
+convert_to_reported_event(<<"interrupted">>) -> <<"interrupted">>;
+convert_to_reported_event(<<"stop">>) -> <<"stopped">>;
+convert_to_reported_event(Other) -> Other.
+
+%% Report cluster-wide stats (stored in chronicle).
+report_cluster_stats(ReportFun) ->
+    Counters = ns_cluster:counters(),
+    lists:foreach(
+      fun ({Key, Val}) ->
+              KeyBin = key_to_binary(Key),
+              case KeyBin of
+                  <<"rebalance_", Event/binary>> ->
+                      Label = [{<<"event">>, convert_to_reported_event(Event)}],
+                      ReportFun({<<"cm">>, <<"rebalance_total">>, Label, Val});
+                  _ ->
+                      ok
+              end
+      end, Counters).
 
 %% Derived stats are those where ns_server has instructed prometheus to
 %% do the calculations. The result of this is the stat resides in the local

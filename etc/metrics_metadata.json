@@ -878,6 +878,17 @@
             }
         ]
     },
+    "cm_rebalance_total": {
+        "type": "counter",
+        "help": "Number of rebalance results",
+        "added": "7.2.6",
+        "labels": [
+            {
+                "name": "event",
+                "help": "rebalance result (initiated/completed/failed/interrupted/stopped)"
+            }
+        ]
+    },
     "cm_request_hibernates_total": {
         "type": "counter",
         "help": "Number of times requests were hibernated",
