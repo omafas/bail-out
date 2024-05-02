@@ -1703,6 +1703,8 @@ rebalance_type2text(service_upgrade) ->
     <<"Service upgrade">>.
 
 update_rebalance_counters(Reason, #rebalancing_state{type = Type}) ->
+    %% If any new counter is added a corresponding convert_to_reported_event
+    %% must be added to ns_server_stats.erl.
     Counter =
         case Reason of
             normal ->

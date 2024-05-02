@@ -117,11 +117,33 @@
             }
         ]
     },
+    "cm_failover_total": {
+        "type": "counter",
+        "help": "Number of non-graceful failover results",
+        "added": "7.6.2",
+        "labels": [
+            {
+                "name": "event",
+                "help": "failover result (initiated/completed/failed/stopped)"
+            }
+        ]
+    },
     "cm_gc_duration_seconds": {
         "type": "histogram",
         "help": "Time to perform erlang garbage collection",
         "added": "7.6.0",
         "stability": "committed"
+    },
+    "cm_graceful_failover_total": {
+        "type": "counter",
+        "help": "Number of graceful failover results",
+        "added": "7.6.2",
+        "labels": [
+            {
+                "name": "event",
+                "help": "graceful failover result (initiated/completed/failed/stopped)"
+            }
+        ]
     },
     "cm_http_requests_seconds": {
         "type": "histogram",
@@ -462,7 +484,7 @@
         "labels": [
             {
                 "name": "event",
-                "help": "rebalance result (initiated/completed/failed/interrupted/stopped)"
+                "help": "rebalance result (initiated/completed/failed/stopped)"
             }
         ]
     },
