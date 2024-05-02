@@ -27,6 +27,9 @@ sys.path.append(pylib)
 
 import cluster_run_lib
 
+def kill_nodes(processes, urls, terminal_attrs):
+    with testlib.no_output("kill nodes"):
+        cluster_run_lib.kill_nodes(processes, terminal_attrs, urls)
 
 # We attempt to fetch terminal_attrs when killing nodes, to override any changes
 # made by the nodes
@@ -42,7 +45,7 @@ def get_node_urls(nodes):
     return [node.url for node in nodes]
 
 
-def build_cluster(auth, cluster_index, start_args, connect_args, kill_nodes):
+def build_cluster(auth, cluster_index, start_args, connect_args):
     # We use the raw ip address instead of 'localhost', as it isn't accepted by
     # the addNode or doJoinCluster endpoints
     # IPV6 uses [::1] instead of 127.0.0.1
@@ -142,9 +145,9 @@ class Cluster:
     # Kill all associated nodes to avoid competing for resources with the active
     # cluster being tested against
     def teardown(self):
-        with testlib.no_output("kill nodes"):
-            cluster_run_lib.kill_nodes(self.processes, get_terminal_attrs(),
-                                       urls=get_node_urls(self._nodes))
+        kill_nodes(self.processes, get_node_urls(self._nodes),
+                   get_terminal_attrs())
+        atexit.unregister(kill_nodes)
 
     # Check every 0.5s until there is no rebalance running or 600s have passed
     def wait_for_rebalance(self, timeout_s=600, interval_s=0.5, verbose=False):

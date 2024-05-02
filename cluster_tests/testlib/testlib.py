@@ -55,7 +55,7 @@ def try_reuse_cluster(requirements, cluster):
 
 
 def get_appropriate_cluster(cluster, auth, requirements,
-                            tmp_cluster_dir, kill_nodes, reuse_clusters,
+                            tmp_cluster_dir, reuse_clusters,
                             first_node_index):
     cluster_index = 0
     if cluster is not None:
@@ -66,9 +66,6 @@ def get_appropriate_cluster(cluster, auth, requirements,
 
         # Teardown the old cluster
         cluster.teardown()
-        # We no longer need to kill these nodes. A new atexit function will
-        # be registered in requirements.create_cluster
-        atexit.unregister(kill_nodes)
 
         cluster_index = cluster.index + 1
         print()
@@ -78,7 +75,7 @@ def get_appropriate_cluster(cluster, auth, requirements,
           f"{requirements}")
     cluster = requirements.create_cluster(auth, cluster_index,
                                           tmp_cluster_dir,
-                                          kill_nodes, first_node_index)
+                                          first_node_index)
     maybe_print("\n======================================="
                 "=========================================\n")
     return cluster

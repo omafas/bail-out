@@ -14,7 +14,6 @@ import sys
 import getopt
 import shutil
 import inspect
-import atexit
 from datetime import datetime, timezone
 from math import floor
 
@@ -146,11 +145,6 @@ def remove_temp_cluster_directories():
     for dir in glob.glob(tmp_cluster_dir + "*"):
         testlib.maybe_print(f"Removing cluster dir {dir}...")
         shutil.rmtree(dir)
-
-
-def kill_nodes(processes, urls, terminal_attrs):
-    with testlib.no_output("kill nodes"):
-        cluster_run_lib.kill_nodes(processes, terminal_attrs, urls)
 
 
 def main():
@@ -328,7 +322,6 @@ def main():
                                                       (username, password),
                                                       configuration,
                                                       tmp_cluster_dir,
-                                                      kill_nodes,
                                                       reuse_clusters,
                                                       start_index)
         testset_start_ts = time.time_ns()
@@ -403,8 +396,6 @@ def main():
         # need to keep around data from successful tests
         cluster.teardown()
         remove_temp_cluster_directories()
-        # Unregister the kill nodes atexit handler as the nodes are now down
-        atexit.unregister(kill_nodes)
 
 
 # If there are core files, the tests may have passed but something went wrong in
