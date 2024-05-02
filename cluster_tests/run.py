@@ -326,7 +326,8 @@ def main():
                                                       start_index)
         testset_start_ts = time.time_ns()
         # Run the testsets on the cluster
-        tests_executed, testset_errors, testset_not_ran, log_collection_time = \
+        tests_executed, testset_errors, testset_not_ran, log_collection_time,\
+            cluster = \
             run_testsets(cluster, testsets, total_num,
                          seed=seed,
                          stop_after_first_error=stop_after_first_error,
@@ -611,6 +612,7 @@ def run_testsets(cluster, testsets, total_num, seed=None,
             executed += res[0]
             testset_errors = res[1]
             not_ran += res[2]
+            cluster = res[3]
         # We use a catch-all here because if we hit any errors while running
         # a testset, but not in a test, then it is likely an issue with the
         # cluster, so we should keep running more tests
@@ -668,7 +670,7 @@ def run_testsets(cluster, testsets, total_num, seed=None,
                 print(f"Collected logs for {node.url}: {path}")
 
         log_collection_time += (time.time_ns() - collect_start_time)
-    return executed, errors, not_ran, log_collection_time
+    return executed, errors, not_ran, log_collection_time, cluster
 
 
 if __name__ == '__main__':

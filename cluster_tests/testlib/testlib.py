@@ -123,6 +123,9 @@ def run_testset(testset, cluster, total_testsets_num, seed=None,
             _, err = safe_test_function_call(testset_instance, test,
                                              [], testiter, verbose=True,
                                              seed=test_seed)
+
+            cluster = testset_instance.cluster
+
             if err is not None:
                 errors.append(err)
 
@@ -154,7 +157,7 @@ def run_testset(testset, cluster, total_testsets_num, seed=None,
         if err is not None:
             errors.append(err)
 
-    return executed, errors, not_ran
+    return executed, errors, not_ran, cluster
 
 
 def test_name(testset, testname, testiter):
