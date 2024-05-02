@@ -182,7 +182,6 @@ def main():
     start_port = cluster_run_lib.base_api_port
     tests = None
     keep_tmp_dirs = False
-    intercept_output = True
     seed = testlib.random_str(16)
     reuse_clusters = True
     randomize_clusters = False
@@ -223,7 +222,7 @@ def main():
         elif o in ('--keep-tmp-dirs', '-k'):
             keep_tmp_dirs = True
         elif o in ('--dont-intercept-output', '-o'):
-            intercept_output = False
+            testlib.config['intercept_output'] = False
         elif o in ('--seed', '-s'):
             seed = a
         elif o == '--colors':
@@ -336,7 +335,6 @@ def main():
         # Run the testsets on the cluster
         tests_executed, testset_errors, testset_not_ran, log_collection_time = \
             run_testsets(cluster, testsets, total_num,
-                         intercept_output=intercept_output,
                          seed=seed,
                          stop_after_first_error=stop_after_first_error,
                          collect_logs=collect_logs)
@@ -569,8 +567,7 @@ def get_existing_cluster(address, start_port, auth, num_nodes):
 
 # Run each testset on the same cluster, counting how many individual tests were
 # ran, and keeping track of all errors
-def run_testsets(cluster, testsets, total_num,
-                 intercept_output=True, seed=None,
+def run_testsets(cluster, testsets, total_num, seed=None,
                  stop_after_first_error=False, collect_logs=False):
     executed = 0
     errors = {}
@@ -618,7 +615,6 @@ def run_testsets(cluster, testsets, total_num,
         try:
             res = testlib.run_testset(
                 testset, cluster, total_num,
-                intercept_output=intercept_output,
                 seed=seed,
                 stop_after_first_error=stop_after_first_error)
             executed += res[0]
