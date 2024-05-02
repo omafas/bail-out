@@ -564,6 +564,28 @@
             }
         ]
     },
+    "cm_failover_total": {
+        "type": "counter",
+        "help": "Number of non-graceful failover results",
+        "added": "7.2.6",
+        "labels": [
+            {
+                "name": "event",
+                "help": "failover result (initiated/completed/failed/stopped)"
+            }
+        ]
+    },
+    "cm_graceful_failover_total": {
+        "type": "counter",
+        "help": "Number of graceful failover results",
+        "added": "7.2.6",
+        "labels": [
+            {
+                "name": "event",
+                "help": "graceful failover result (initiated/completed/failed/stopped)"
+            }
+        ]
+    },
     "cm_http_requests_seconds": {
         "type": "histogram",
         "help": "Number of bucket HTTP requests",
@@ -885,7 +907,7 @@
         "labels": [
             {
                 "name": "event",
-                "help": "rebalance result (initiated/completed/failed/interrupted/stopped)"
+                "help": "rebalance result (initiated/completed/failed/stopped)"
             }
         ]
     },
