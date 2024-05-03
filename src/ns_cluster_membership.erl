@@ -532,7 +532,7 @@ supported_services() ->
 supported_services(IsEnterprise) ->
     supported_services_for_version(
       cluster_compat_mode:supported_compat_version(),
-      IsEnterprise).
+      IsEnterprise) -- config_profile:get_value(unsupportedServices, []).
 
 enterprise_only_services() ->
     [cbas, eventing, backup].
