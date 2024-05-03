@@ -83,38 +83,6 @@ params() ->
      {"bucket.collectionsPerQuota.maximum",
       #{type => {num, 0, infinity},
         cfg_key => [collections_per_quota, maximum]}},
-     %% Index service resident ratio configuration
-     {"index.indexCreationRR.enabled",
-      #{type => bool,
-        cfg_key => [metakv, index, index_creation_rr, enabled]}},
-     {"index.indexCreationRR.minimum",
-      #{type => {num, 0, 100},
-        cfg_key => [metakv, index, index_creation_rr, minimum]}},
-     {"index.topologyChangeRR.enabled",
-      #{type => bool,
-        cfg_key => [metakv, index, topology_change_rr, enabled]}},
-     {"index.topologyChangeRR.minimum",
-      #{type => {num, 0, 100},
-        cfg_key => [metakv, index, topology_change_rr, minimum]}},
-     {"index.indexGrowthRR.enabled",
-      #{type => bool,
-        cfg_key => [index, index_growth_rr, enabled]}},
-     {"index.indexGrowthRR.critical",
-      #{type => {num, 0, 100},
-        cfg_key => [index, index_growth_rr, critical]}},
-     {"index.indexGrowthRR.serious",
-      #{type => {num, 0, 100},
-        cfg_key => [index, index_growth_rr, serious]}},
-     {"index.indexGrowthRR.warning",
-      #{type => {num, 0, 100},
-        cfg_key => [index, index_growth_rr, warning]}},
-     %% Index service overhead configuration
-     {"index.indexOverheadPerNode.enabled",
-      #{type => bool,
-        cfg_key => [metakv, index, index_overhead_per_node, enabled]}},
-     {"index.indexOverheadPerNode.maximum",
-      #{type => {num, 0, infinity},
-        cfg_key => [metakv, index, index_overhead_per_node, maximum]}},
      %% Max disk usage % per node
      {"diskUsage.enabled",
       #{type => bool,
@@ -122,12 +90,6 @@ params() ->
      {"diskUsage.maximum",
       #{type => {num, 0, 100},
         cfg_key => [disk_usage, maximum]}},
-     {"diskUsage.critical",
-      #{type => {num, 0, 100},
-        cfg_key => [disk_usage, critical]}},
-     {"diskUsage.serious",
-      #{type => {num, 0, 100},
-        cfg_key => [disk_usage, serious]}},
      %% Min number of cores per node per bucket
      {"coresPerBucket.enabled",
       #{type => bool,
@@ -169,12 +131,7 @@ raw_default_for_ns_config() ->
          {magma_maximum, 16}]}
       ]},
      {index,
-      %% Resident ratio percentage minimum
-      [{index_growth_rr,
-        [{enabled, false},
-         {warning, 15},
-         {serious, 12.5},
-         {critical, 10}]}]},
+      []},
      %% Minimum cores required per bucket
      {cores_per_bucket,
       [{enabled, false},
@@ -182,9 +139,7 @@ raw_default_for_ns_config() ->
      %% Max disk usage % per node
      {disk_usage,
       [{enabled, false},
-       {maximum, 96},
-       {critical, 85},
-       {serious, 80}]},
+       {maximum, 96}]},
      %% Max no. of collections per bucket quota in MB
      {collections_per_quota,
       [{enabled, false},
@@ -197,19 +152,7 @@ raw_default_for_metakv() ->
     [
      %% Index service resources
      {index,
-      %% Minimum estimated resident ratio percentage to permit index creation
-      [{index_creation_rr,
-        [{enabled, false},
-         {minimum, 10}]},
-       %% Minimum resident ratio that a topology change must not breach
-       {topology_change_rr,
-        [{enabled, false},
-         {minimum, 10}]},
-       %% max index overhead per node
-       {index_overhead_per_node,
-        [{enabled, false},
-         {maximum, 1}]}
-      ]}
+      []}
     ].
 
 update_sub_config({[], Value}, _) ->

@@ -59,29 +59,10 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
         get("enabled", collections_per_quota_config)
         get("maximum", collections_per_quota_config)
 
-        index_create_rr_config = testlib.get_succ(
-            self.cluster, "/settings/resourceManagement/index/indexCreationRR")
-        get("enabled", index_create_rr_config)
-        get("minimum", index_create_rr_config)
-
-        topology_change_rr_config = testlib.get_succ(
-            self.cluster, "/settings/resourceManagement/index/topologyChangeRR")
-        get("enabled", topology_change_rr_config)
-        get("minimum", topology_change_rr_config)
-
-        index_growth_rr_config = testlib.get_succ(
-            self.cluster, "/settings/resourceManagement/index/indexGrowthRR")
-        get("enabled", index_growth_rr_config)
-        get("critical", index_growth_rr_config)
-        get("serious", index_growth_rr_config)
-        get("warning", index_growth_rr_config)
-
         disk_usage_config = testlib.get_succ(
             self.cluster, "/settings/resourceManagement/diskUsage")
         get("enabled", disk_usage_config)
         get("maximum", disk_usage_config)
-        get("critical", disk_usage_config)
-        get("serious", disk_usage_config)
 
     def set_guard_rails_json_test(self):
         # Set guard rails with json
@@ -104,35 +85,13 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
                                           "maximum": 2
                                       }
                                   },
-                                  "index": {
-                                      "indexCreationRR": {
-                                          "enabled": True,
-                                          "minimum": 6
-                                      },
-                                      "topologyChangeRR": {
-                                          "enabled": True,
-                                          "minimum": 5
-                                      },
-                                      "indexOverheadPerNode": {
-                                          "enabled": True,
-                                          "maximum": 11
-                                      },
-                                      "indexGrowthRR": {
-                                          "enabled": True,
-                                          "critical": 1,
-                                          "serious": 2,
-                                          "warning": 3
-                                      }
-                                  },
                                   "coresPerBucket": {
                                       "enabled": True,
                                       "minimum": 0.2
                                   },
                                   "diskUsage": {
                                       "enabled": True,
-                                      "maximum": 90,
-                                      "critical": 85,
-                                      "serious": 80
+                                      "maximum": 90
                                   }
                               })
 
@@ -152,31 +111,9 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
         assert collections_config.get("enabled") is True
         assert collections_config.get("maximum") == 2
 
-        index_config = get("index", r)
-
-        index_resident_ratio_config = index_config.get("indexCreationRR")
-        assert index_resident_ratio_config.get("enabled") is True
-        assert index_resident_ratio_config.get("minimum") == 6
-
-        topology_change_config = index_config.get("topologyChangeRR")
-        assert topology_change_config.get("enabled") is True
-        assert topology_change_config.get("minimum") == 5
-
-        index_overhead_config = index_config.get("indexOverheadPerNode")
-        assert index_overhead_config.get("enabled") is True
-        assert index_overhead_config.get("maximum") == 11
-
-        index_growth_rr_config = index_config.get("indexGrowthRR")
-        assert index_growth_rr_config.get("enabled") is True
-        assert index_growth_rr_config.get("critical") == 1
-        assert index_growth_rr_config.get("serious") == 2
-        assert index_growth_rr_config.get("warning") == 3
-
         data_disk_usage_config = get("diskUsage", r)
         assert data_disk_usage_config.get("enabled") is True
         assert data_disk_usage_config.get("maximum") == 90
-        assert data_disk_usage_config.get("critical") == 85
-        assert data_disk_usage_config.get("serious") == 80
 
         cores_per_bucket_config = get("coresPerBucket", r)
         assert cores_per_bucket_config.get("enabled") is True
@@ -196,22 +133,10 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
                 "bucket.dataSizePerNode.magmaMaximum": 65,
                 "bucket.collectionsPerQuota.enabled": "false",
                 "bucket.collectionsPerQuota.maximum": 3,
-                "index.indexCreationRR.enabled": "false",
-                "index.indexCreationRR.minimum": 7,
-                "index.topologyChangeRR.enabled": "false",
-                "index.topologyChangeRR.minimum": 6,
-                "index.indexOverheadPerNode.enabled": "false",
-                "index.indexOverheadPerNode.maximum": 12,
-                "index.indexGrowthRR.enabled": "false",
-                "index.indexGrowthRR.critical": 2,
-                "index.indexGrowthRR.serious": 3,
-                "index.indexGrowthRR.warning": 4,
                 "coresPerBucket.enabled": "false",
                 "coresPerBucket.minimum": 0.3,
                 "diskUsage.enabled": "false",
-                "diskUsage.maximum": 91,
-                "diskUsage.critical": 86,
-                "diskUsage.serious": 81
+                "diskUsage.maximum": 91
             })
 
         bucket_config = get("bucket", r)
@@ -230,33 +155,11 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
         assert collections_config.get("enabled") is False
         assert collections_config.get("maximum") == 3
 
-        index_config = get("index", r)
-
-        index_creation_rr_config = index_config.get("indexCreationRR")
-        assert index_creation_rr_config.get("enabled") is False
-        assert index_creation_rr_config.get("minimum") == 7
-
-        topology_change_rr_config = index_config.get("topologyChangeRR")
-        assert topology_change_rr_config.get("enabled") is False
-        assert topology_change_rr_config.get("minimum") == 6
-
-        index_overhead_config = index_config.get("indexOverheadPerNode")
-        assert index_overhead_config.get("enabled") is False
-        assert index_overhead_config.get("maximum") == 12
-
-        index_growth_rr_config = index_config.get("indexGrowthRR")
-        assert index_growth_rr_config.get("enabled") is False
-        assert index_growth_rr_config.get("critical") == 2
-        assert index_growth_rr_config.get("serious") == 3
-        assert index_growth_rr_config.get("warning") == 4
-
         assert get("coresPerBucket", r).get("enabled") is False
         assert get("coresPerBucket", r).get("minimum") == 0.3
 
         assert get("diskUsage", r).get("enabled") is False
         assert get("diskUsage", r).get("maximum") == 91
-        assert get("diskUsage", r).get("critical") == 86
-        assert get("diskUsage", r).get("serious") == 81
 
     def set_guard_rails_path_test(self):
         # Set residentRatio guard rail using path
@@ -298,55 +201,10 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
             data={
                 "enabled": "true",
                 "maximum": 92,
-                "critical": 87,
-                "serious": 82
             })
 
         assert get("enabled", r) is True
         assert get("maximum", r) == 92
-        assert get("critical", r) == 87
-        assert get("serious", r) == 82
-
-        r = testlib.post_succ(
-            self.cluster, "/settings/resourceManagement/index/indexCreationRR",
-            json={
-                "enabled": True,
-                "minimum": 8
-            })
-        assert get("enabled", r) is True
-        assert get("minimum", r) == 8
-
-        r = testlib.post_succ(
-            self.cluster, "/settings/resourceManagement/index/topologyChangeRR",
-            json={
-                "enabled": True,
-                "minimum": 7
-            })
-        assert get("enabled", r) is True
-        assert get("minimum", r) == 7
-
-        r = testlib.post_succ(
-            self.cluster, "/settings/resourceManagement/index/indexGrowthRR",
-            json={
-                "enabled": True,
-                "critical": 3,
-                "serious": 4,
-                "warning": 5
-            })
-        assert get("enabled", r) is True
-        assert get("critical", r) == 3
-        assert get("serious", r) == 4
-        assert get("warning", r) == 5
-
-        r = testlib.post_succ(
-            self.cluster,
-            "/settings/resourceManagement/index/indexOverheadPerNode",
-            json={
-                "enabled": True,
-                "maximum": 13
-            })
-        assert get("enabled", r) is True
-        assert get("maximum", r) == 13
 
 
 class GuardRailRestrictionTests(testlib.BaseTestSet):
