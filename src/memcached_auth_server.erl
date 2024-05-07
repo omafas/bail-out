@@ -152,7 +152,7 @@ process_req(#mc_header{opcode = ?MC_AUTH_REQUEST} = Header,
                       [ReasonStr, UUID]),
             Json = {[{error, {[{context, <<"Authentication failed">>},
                                {ref, UUID}]}}]},
-            {Header#mc_header{status = ?MC_AUTH_ERROR},
+            {Header#mc_header{status = ?KEY_ENOENT},
              #mc_entry{data = ejson:encode(Json)},
              State}
     end;
@@ -339,7 +339,7 @@ process_data_test() ->
           test_process_data(
             {?MC_AUTH_REQUEST, undefined,
              {[{mechanism, <<"PLAIN">>}, {challenge, <<"AGpvaG4AYmFy">>}]}},
-            fun (?MC_AUTH_REQUEST, ?MC_AUTH_ERROR, undefined,
+            fun (?MC_AUTH_REQUEST, ?KEY_ENOENT, undefined,
                  {[{<<"error">>, {[
                       {<<"context">>, <<"Authentication failed">>},
                       {<<"ref">>, _}]}}]}) -> ok
