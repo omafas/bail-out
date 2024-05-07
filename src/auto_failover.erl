@@ -928,8 +928,6 @@ validate_membase_buckets(Snapshot, ValidateFun) ->
     AllowEphemeralFailover =
         case ns_config:read_key_fast(failover_ephemeral_no_replicas,
                                      undefined) of
-            undefined ->
-                config_profile:get_bool(failover_ephemeral_no_replicas);
             X when is_boolean(X) -> X;
             _ -> false
         end,
