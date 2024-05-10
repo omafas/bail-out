@@ -39,6 +39,9 @@ from io import BytesIO, StringIO
 from abc import ABC, abstractmethod
 import gzip
 
+
+from installed_script_helpers import basedir, get_initargs_variants, find_binary
+
 """ Represents opaque 'data' from the C context """
 _CData = TypeVar("_CData")
 
@@ -1406,17 +1409,6 @@ def make_chronicle_logs_task(guts, initargs_path):
         log_file="chronicle_logs.log")
 
 
-def basedir():
-    # We are installed in $INSTALL_DIR/lib/python, so need to go up three
-    # levels
-    return os.path.normpath(
-        os.path.join(
-            os.path.abspath(__file__),
-            '..', '..', '..'
-        )
-    )
-
-
 def make_event_log_task():
     from datetime import datetime, timedelta
 
@@ -2207,7 +2199,7 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
 
 
 def find_script(name):
-    path = os.path.join(basedir(), "bin", name)
+    path = find_binary(name)
     if os.path.exists(path):
         log("Found %s: %s" % (name, path))
         return os.path.abspath(path)
@@ -2670,16 +2662,7 @@ def main():
     if not options.product_only:
         all_tasks.extend(make_os_tasks())
 
-    initargs_variants = [
-        os.path.abspath(
-            os.path.join(
-                options.root,
-                "var",
-                "lib",
-                "couchbase",
-                "initargs")),
-        "/opt/couchbase/var/lib/couchbase/initargs",
-        os.path.expanduser("~/Library/Application Support/Couchbase/var/lib/couchbase/initargs")]
+    initargs_variants = get_initargs_variants(options.root)
 
     if options.initargs is not None:
         initargs_variants = [options.initargs]

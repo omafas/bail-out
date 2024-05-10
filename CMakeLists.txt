@@ -279,6 +279,9 @@ ADD_DEPENDENCIES (ns_dialyzer ns_server_all)
 #
 INSTALL (DIRECTORY ebin DESTINATION "${INST_LIBDIR}/ns_server")
 
+INSTALL(FILES
+        pylib/installed_script_helpers.py
+        DESTINATION lib/python)
 PyWrapper (SCRIPTS cbcollect_info)
 
 INSTALL (PROGRAMS cbbrowse_logs DESTINATION bin)
