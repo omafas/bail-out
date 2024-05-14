@@ -3,6 +3,7 @@
 -behaviour(gen_server).
 
 -include("ns_common.hrl").
+-include("cut.hrl").
 
 %% API
 -export([start_link/0, rotate_password/0, extract_protection_sleep/0]).
@@ -273,11 +274,12 @@ rotate_password(Type, ProtectionSleep) ->
 
     ClientPasswordSync =
         fun () ->
-            ns_config:sync_announcements(),
-            chronicle_compat_events:sync(),
-            ns_config_rep:ensure_config_seen_by_nodes(
-              ns_node_disco:nodes_actual_other(), infinity),
-            [menelaus_cbauth:sync(N) || N <- ns_node_disco:nodes_actual()]
+                ns_config:sync_announcements(),
+                chronicle_compat_events:sync(),
+                ns_config_rep:ensure_config_seen_by_nodes(
+                  ns_node_disco:nodes_actual_other(), infinity),
+                misc:parallel_map(menelaus_cbauth:sync(_),
+                                  ns_node_disco:nodes_actual(), infinity)
         end,
 
     ?log_info("Start password rotation phase 0"),
