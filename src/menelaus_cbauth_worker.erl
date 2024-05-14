@@ -136,7 +136,7 @@ invoke_no_return_method(Label, Method, Pid, Info) ->
     end.
 
 perform_call(Label, Method, Pid, Params, Silent) ->
-    Opts = #{silent => Silent, timeout => infinity},
+    Opts = #{silent => Silent, timeout => ?get_timeout(perform_call, 60000)},
     try json_rpc_connection:perform_call(Label, Method, Params, Opts) of
         {error, method_not_found} ->
             ?log_error("Method ~p is not found", [Method]),
