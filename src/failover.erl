@@ -199,6 +199,8 @@ orchestrate(Nodes, Options) when Nodes =/= [] ->
         end,
     ns_cluster:counter_inc(failover),
     master_activity_events:note_failover_ended(),
+
+    ok = testconditions:check_test_condition(failover_end),
     Res.
 
 config_sync_and_orchestrate(Nodes, Options) ->
