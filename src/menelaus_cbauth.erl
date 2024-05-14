@@ -22,18 +22,17 @@
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
 
--record(rpc_process, {label :: string(),
-                      version :: string(),
-                      mref :: reference(),
-                      heartbeat_interval :: integer() | undefined,
-                      last_heartbeat :: integer()}).
+-record(worker, {pid :: pid(),
+                 label :: string(),
+                 version :: string(),
+                 mref :: reference(),
+                 connection :: pid()}).
 
 -record(state, {cbauth_info :: map(),
-                rpc_processes :: map(),
+                workers :: list(),
                 cert_version,
                 client_cert_version,
-                client_cert_auth_version,
-                timer :: misc:timer()}).
+                client_cert_auth_version}).
 
 -include("ns_common.hrl").
 -include("cut.hrl").
@@ -57,14 +56,14 @@ handle_rpc_connect(?VERSION_1, Label, Req) ->
                        validator:no_duplicates(_),
                        validator:unsupported(_)]);
                 Other ->
-                    ?log_debug(
+                    ?log_info(
                        "Reject the revrpc connection from ~s because node is "
                        "~p", [Label, Other]),
                     menelaus_util:reply_text(Req, "Node is not active", 503)
             end;
         false ->
-            ?log_debug("Reject the revrpc connection from ~s because the "
-                       "cluster is not provisioned", [Label]),
+            ?log_info("Reject the revrpc connection from ~s because the "
+                      "cluster is not provisioned", [Label]),
             menelaus_util:reply_text(Req, "Cluster is not provisioned", 503)
     end;
 handle_rpc_connect(_, _Label, Req) ->
@@ -77,10 +76,21 @@ sync() ->
     sync(node()).
 
 sync(Node) ->
-    gen_server:call({?MODULE, Node}, sync, infinity).
+    InternalConnections =
+        gen_server:call({?MODULE, Node}, get_internal_connections, infinity),
+    misc:parallel_map(?cut(catch(menelaus_cbauth_worker:sync(_))),
+                      InternalConnections, infinity).
 
 stats() ->
-    gen_server:call(?MODULE, collect_stats).
+    InternalConnections = gen_server:call(?MODULE, get_internal_connections),
+    Results =
+        misc:parallel_map(?cut(catch(menelaus_cbauth_worker:collect_stats(_))),
+                          InternalConnections, infinity),
+    lists:filtermap(fun({ok, Res}) ->
+                            {true, Res};
+                       (_) ->
+                            false
+                    end, Results).
 
 init([]) ->
     erlang:process_flag(trap_exit, true),
@@ -95,8 +105,7 @@ init([]) ->
                 client_cert_auth_version = client_cert_auth_version(),
                 client_cert_version = new_cert_version(),
                 cbauth_info = maps:new(),
-                rpc_processes = maps:new(),
-                timer = misc:create_timer(heartbeat)}}.
+                workers = []}}.
 
 new_cert_version() ->
     misc:rand_uniform(0, 16#100000000).
@@ -130,25 +139,24 @@ user_storage_event(_Event) ->
 ssl_service_event(Event) ->
     ?MODULE ! {ssl_service_event, Event}.
 
-terminate(_Reason, State) ->
-    terminate_external_connections(State),
-    ok.
+terminate(_Reason, State = #state{workers = Workers}) ->
+    WorkerPids = [Pid || #worker{pid = Pid} <- Workers],
 
-terminate_external_connections(State = #state{rpc_processes = Processes}) ->
-    {NewProcesses, ToWait} =
-        maps:fold(
-          fun (Pid, #rpc_process{version = internal} = P, {Acc, ToWaitAcc}) ->
-                  {maps:put(Pid, P, Acc), ToWaitAcc};
-              (Pid, #rpc_process{label = Label, mref = MRef},
-               {Acc, ToWaitAcc}) ->
-                  ?log_debug("Killing connection ~p with pid = ~p",
-                             [Label, Pid]),
-                  true = erlang:demonitor(MRef, [flush]),
-                  exit(Pid, shutdown),
-                  {Acc, [Pid | ToWaitAcc]}
-          end, {#{}, []}, Processes),
-    [misc:wait_for_process(P, infinity) || P <- ToWait],
-    State#state{rpc_processes = NewProcesses}.
+    [erlang:demonitor(MRef, [flush]) || #worker{mref = MRef} <- Workers],
+
+    misc:terminate_and_wait(WorkerPids, shutdown),
+
+    %% Terminate all external revrpc connections
+    %% This is needed because revrpc connections
+    %% survive ns_server restart and therefore it can happen that external
+    %% cbauth connection is still alive when users database is erased when
+    %% node leaves the cluster.
+    terminate_external_connections(State).
+
+terminate_external_connections(#state{workers = Workers}) ->
+    ToTerminate = [Pid || #worker{connection = Pid} <- Workers,
+                          Pid =/= internal],
+    misc:terminate_and_wait(ToTerminate, shutdown).
 
 code_change(_OldVsn, State, _) -> {ok, State}.
 
@@ -178,36 +186,21 @@ is_interesting({node, N, uuid}) when N =:= node() -> true;
 is_interesting(uuid) -> true;
 is_interesting(Key) -> collections:key_match(Key) =/= false.
 
-register_heartbeat(P) ->
-    P#rpc_process{last_heartbeat = erlang:monotonic_time(millisecond)}.
-
-new_process(Label, Version, Pid, Params) ->
-    MRef = erlang:monitor(process, Pid),
-    #rpc_process{
-       label = Label, version = Version, mref = MRef,
-       heartbeat_interval =
-           case proplists:get_value(heartbeat, Params) of
-               undefined -> undefined;
-               I -> I * 1000
-           end,
-       last_heartbeat = erlang:monotonic_time(millisecond)}.
-
-handle_call(sync, _From, State) ->
-    {reply, ok, State};
-
-handle_call(collect_stats, _From, State) ->
-    handle_collect_stats(State);
+handle_call(get_internal_connections, _From,
+            #state{workers = Workers} = State) ->
+    {reply, [Pid || #worker{version = internal, pid = Pid} <- Workers], State};
 
 handle_call(_Msg, _From, State) ->
     {reply, not_implemented, State}.
 
-handle_cast({Msg, Label, Params, Pid},
-            #state{rpc_processes = Processes,
+handle_cast({Msg, Label, Params, ConnectionPid},
+            #state{workers = Workers,
                    cbauth_info = CBAuthInfo} = State) ->
     Version = proplists:get_value(version, Params, internal),
     OldInfo = maps:get(Version, CBAuthInfo, undefined),
 
-    ?log_debug("Observed json rpc process ~p ~p", [{Label, Params, Pid}, Msg]),
+    ?log_debug("Observed json rpc process ~p ~p",
+               [{Label, Params, ConnectionPid}, Msg]),
     {Info, NewCBAuthInfo} =
         case OldInfo of
             undefined ->
@@ -216,23 +209,22 @@ handle_cast({Msg, Label, Params, Pid},
             _ ->
                 {OldInfo, CBAuthInfo}
         end,
-    NewProcesses =
-        case notify_cbauth(Label, Version, Pid, Info) of
-            error ->
-                Processes;
-            ok ->
-                case maps:find(Pid, Processes) of
-                    {ok, P = #rpc_process{label = L, version = V}} when
-                          L =:= Label andalso V =:= Version ->
-                        maps:update(Pid, register_heartbeat(P), Processes);
-                    error ->
-                        maps:put(Pid, new_process(Label, Version, Pid, Params),
-                                 Processes)
-                end
+    {WorkerPid, NewWorkers} =
+        case lists:keyfind(ConnectionPid, #worker.connection, Workers) of
+            false ->
+                {ok, {Pid, MRef}} =
+                    menelaus_cbauth_worker:start_monitor(
+                      Label, Version, ConnectionPid, Params),
+                {Pid, [#worker{label = Label, version = Version,
+                               mref = MRef, connection = ConnectionPid,
+                               pid = Pid} | Workers]};
+            #worker{pid = Pid, label = L, version = V} when
+                  L =:= Label andalso V =:= Version ->
+                {Pid, Workers}
         end,
-    NewState = State#state{rpc_processes = NewProcesses,
-                           cbauth_info = NewCBAuthInfo},
-    {noreply, process_heartbeats(NewState)}.
+    menelaus_cbauth_worker:notify(WorkerPid,
+                                  personalize_info(Version, Label, Info)),
+    {noreply, State#state{workers = NewWorkers, cbauth_info = NewCBAuthInfo}}.
 
 handle_info({ssl_service_event, client_cert_changed}, State) ->
     self() ! maybe_notify_cbauth,
@@ -250,106 +242,44 @@ handle_info(node_status_changed, State) ->
         active ->
             {noreply, State};
         Other ->
-            ?log_debug("Killing all external connections due to node status"
-                       " changing to ~p", [Other]),
+            ?log_info("Killing all external connections due to node status"
+                      " changing to ~p", [Other]),
             {noreply, terminate_external_connections(State)}
     end;
 handle_info(maybe_notify_cbauth, State) ->
     misc:flush(maybe_notify_cbauth),
     {noreply, maybe_notify_cbauth(State)};
 handle_info({'DOWN', MRef, _, Pid, Reason},
-            #state{rpc_processes = Processes} = State) ->
-    {#rpc_process{mref = MRef} = P, NewProcesses} = maps:take(Pid, Processes),
-    ?log_debug("Observed json rpc process ~p died with reason ~p",
-               [P,  Reason]),
-    {noreply, State#state{rpc_processes = NewProcesses}};
-handle_info(heartbeat, State) ->
-    {noreply, process_heartbeats(State)};
+            #state{workers = Workers} = State) ->
+    {value, #worker{mref = MRef} = W, NewWorkers} =
+        lists:keytake(Pid, #worker.pid, Workers),
+    ?log_debug("Observed worker process ~p died with reason ~p", [W,  Reason]),
+    {noreply, State#state{workers = NewWorkers}};
 handle_info({'EXIT', Pid, Reason}, State) ->
-    ?log_debug("Linked process ~p exited with ~p. Exiting.", [Pid, Reason]),
+    ?log_error("Linked process ~p exited with ~p. Exiting.", [Pid, Reason]),
     {stop, Reason, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
-process_heartbeats(#state{rpc_processes = Processes,
-                          timer = Timer} = State) ->
-    misc:flush(heartbeat),
-    Now = erlang:monotonic_time(millisecond),
-    {ToSend, NextTime} =
-        maps:fold(
-          fun (_, #rpc_process{heartbeat_interval = undefined}, Acc) ->
-                  Acc;
-              (Pid, #rpc_process{heartbeat_interval = I,
-                                 last_heartbeat = Last} = P,
-               {AccToSend, AccNextTime}) ->
-                  GetNextTime =
-                      fun (N) ->
-                              case AccNextTime of
-                                  undefined ->
-                                      N;
-                                  _ ->
-                                      min(N, AccNextTime)
-                              end
-                      end,
-
-                  case Last + I of
-                      T when T =< Now ->
-                          {[{Pid, P} | AccToSend], GetNextTime(I)};
-                      Future ->
-                          {AccToSend, GetNextTime(Future - Now)}
-                  end
-          end, {[], undefined}, Processes),
-
-    Results = async:map(fun ({Pid, #rpc_process{label = Label} = P}) ->
-                                {send_heartbeat(Label, Pid), Pid, P}
-                        end, ToSend),
-
-    NewProcesses =
-        lists:foldl(
-          fun ({ok, Pid, P}, AccProcesses) ->
-                  maps:update(Pid, register_heartbeat(P), AccProcesses);
-              ({error, _, _}, AccProcesses) ->
-                  AccProcesses
-          end, Processes, Results),
-
-    NextTimer = case NextTime of
-                    undefined ->
-                        Timer;
-                    _ ->
-                        misc:arm_timer(NextTime, Timer)
-                end,
-    State#state{rpc_processes = NewProcesses, timer = NextTimer}.
-
-maybe_notify_cbauth(#state{rpc_processes = Processes,
+maybe_notify_cbauth(#state{workers = Workers,
                            cbauth_info = OldInfo} = State) ->
     NewInfo = build_auth_infos(State),
-    NewProcesses =
-        maps:fold(
-          fun (Ver, I, Acc) ->
-                  case maps:get(Ver, OldInfo, default) of
-                      I ->
-                          Acc;
-                      _ ->
-                          notify_version(Ver, Acc, I)
-                  end
-          end, Processes, NewInfo),
-    State#state{cbauth_info = NewInfo, rpc_processes = NewProcesses}.
+    maps:foreach(
+      fun (Ver, Info) ->
+              case maps:get(Ver, OldInfo, default) of
+                  Info ->
+                      ok;
+                  _ ->
+                      [menelaus_cbauth_worker:notify(
+                         Pid, personalize_info(V, Label, Info)) ||
+                          #worker{label = Label, pid = Pid,
+                                  version = V} <- Workers]
+              end
+      end, NewInfo),
+    State#state{cbauth_info = NewInfo}.
 
-notify_version(Ver, Processes, Info) ->
-    maps:map(
-      fun (Pid, #rpc_process{label = Label, version = V} = P) when V =:= Ver ->
-              case notify_cbauth(Label, Ver, Pid, Info) of
-                  ok ->
-                      register_heartbeat(P);
-                  error ->
-                      P
-              end;
-          (_, P) ->
-              P
-      end, Processes).
-
-personalize_info(Label, Info) ->
-    MemcachedUser = [$@ | strip_cbauth_suffix(Label)],
+personalize_info(internal, Label, Info) ->
+    MemcachedUser = [$@ | menelaus_cbauth_worker:strip_cbauth_suffix(Label)],
 
     TlsConfigLabel =
         case Label of
@@ -392,70 +322,9 @@ personalize_info(Label, Info) ->
                           {nodes, NewNodes},
                           {tlsConfig, TLSConfig},
                           {cacheConfig, CacheConfig},
-                          {guardrailStatuses, GuardrailStatuses}]).
-
-notify_cbauth(Label, internal, Pid, Info) ->
-    invoke_method(Label, "AuthCacheSvc.UpdateDB", Pid,
-                  personalize_info(Label, Info));
-notify_cbauth(Label, _, Pid, Info) ->
-    invoke_method(Label, "AuthCacheSvc.UpdateDBExt", Pid, Info).
-
-send_heartbeat(Label, Pid) ->
-    TestCondition = list_to_atom(atom_to_list(?MODULE) ++ "_skip_heartbeats"),
-    case testconditions:get(TestCondition) of
-        false ->
-            invoke_method(Label, "AuthCacheSvc.Heartbeat", Pid, []);
-        true ->
-            ?log_debug("Skip heartbeat for label ~p", [Label])
-    end.
-
-invoke_method(Label, Method, Pid, Info) ->
-    case perform_call(Label, Method, Pid, {Info}, false) of
-        {ok, Res} when Res =:= true orelse Res =:= null -> ok;
-        Err -> Err
-    end.
-
-perform_call(Label, Method, Pid, Params, Silent) ->
-    Opts = #{silent => Silent, timeout => infinity},
-    try json_rpc_connection:perform_call(Label, Method, Params, Opts) of
-        {error, method_not_found} ->
-            error;
-        {error, {rpc_error, _}} ->
-            error;
-        {error, Error} ->
-            ?log_error("Error returned from go component ~p: ~p. "
-                       "This shouldn't happen but crash it just in case.",
-                       [{Label, Pid}, Error]),
-            exit(Pid, Error),
-            error;
-        {ok, Res} ->
-            {ok, Res}
-    catch exit:{noproc, _} ->
-            ?log_debug("Process ~p is already dead", [{Label, Pid}]),
-            error;
-          exit:{Reason, _} ->
-            ?log_debug("Process ~p has exited during the call with reason ~p",
-                       [{Label, Pid}, Reason]),
-            error
-    end.
-
-handle_collect_stats(#state{rpc_processes = Processes} = State) ->
-    Result = misc:parallel_map(
-              fun ({Pid, #rpc_process{label = Label, version = Version}}) ->
-                  collect_stats(Label, Pid, Version)
-              end,
-              maps:to_list(Processes), infinity),
-    Stats = lists:filtermap(fun(Res) -> Res end, Result),
-    {reply, Stats, State}.
-
-collect_stats(Label, Pid, internal) ->
-    Method = "AuthCacheSvc.GetStats",
-    case perform_call(Label, Method, Pid, {[]}, true) of
-        {ok, {[Res]}} -> {true, {atom_to_binary(label_to_service(Label)), Res}};
-        _Err -> false
-    end;
-collect_stats(_Label, _Pid, _Version) ->
-    false.
+                          {guardrailStatuses, GuardrailStatuses}]);
+personalize_info(_Version, _Label, Info) ->
+    Info.
 
 build_node_info(N, Config, Snapshot) ->
     build_node_info(N, ns_config:search_node_prop(
@@ -498,11 +367,9 @@ build_node_info(N, User, Config, Snapshot) ->
 versions() ->
     [internal, ?VERSION_1].
 
-build_auth_infos(State = #state{rpc_processes = Processes}) ->
+build_auth_infos(State = #state{workers = Workers}) ->
     Ctx = build_auth_info_ctx(),
-    Versions =
-        lists:usort(
-          [V || {_, #rpc_process{version = V}} <- maps:to_list(Processes)]),
+    Versions = lists:usort([V || #worker{version = V} <- Workers]),
     maps:from_list(
       [{V, build_auth_info(V, Ctx, State)} || V <- versions(),
                                               lists:member(V, Versions)]).
@@ -746,17 +613,6 @@ build_guardrail_statuses(index, Config) ->
                          {severity, Severity}]}}
               end
       end, [disk_usage, resident_ratio]).
-
-strip_cbauth_suffix(Label) ->
-    "htuabc-" ++ ReversedTrimmedLabel = lists:reverse(Label),
-    lists:reverse(ReversedTrimmedLabel).
-
-label_to_service("cbq-engine-cbauth") ->
-    n1ql;
-label_to_service("goxdcr-cbauth") ->
-    xdcr;
-label_to_service(Label) ->
-    list_to_atom(strip_cbauth_suffix(Label)).
 
 service_to_label(n1ql) ->
     "cbq-engine-cbauth";
