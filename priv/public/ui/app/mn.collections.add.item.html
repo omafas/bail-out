@@ -44,9 +44,9 @@ licenses/APL2.txt.
           If enabled and a document is mutated with no TTL or a TTL greater than the maximum,
           its TTL will be set to the collection TTL.
           <br/><br/>
-          The largest TTL allowed is 2147483647 seconds. A 0 value means TTL is disabled.
+          The largest TTL allowed is 2147483647 seconds. A 0 value means TTL is inherited from the bucket.
           <br/><br/>
-          NOTE: if collection-level TTL is blank, TTL will be inherited from the bucket.
+          NOTE: if collection-level TTL is blank or -1, TTL will be disabled.
         </ng-template>
         <span
            class="fa-stack icon-info"
