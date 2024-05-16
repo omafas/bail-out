@@ -509,7 +509,8 @@ def get_otp_nodes(cluster):
 
 def poll_for_condition(fun, sleep_time, attempts=None, timeout=None,
                        verbose=False, msg="poll for condition",
-                       retry_value=False):
+                       retry_value=False,
+                       retry_on_assert=False):
 
     assert (attempts is not None) or (timeout is not None)
     assert sleep_time > 0, "non-positive sleep_time specified"
@@ -517,11 +518,23 @@ def poll_for_condition(fun, sleep_time, attempts=None, timeout=None,
     sleep_time_str = f"{sleep_time:.2f}s"
 
     attempt_count = 0
+    exception_obj = None
     while (attempts is None) or (attempt_count < attempts):
-        if timeout is not None:
-            assert (time.time() - start_time) < timeout, \
-                   f"{msg}: timed-out (timeout: {timeout}s)"
-        value = fun()
+        if timeout is not None and ((time.time() - start_time) >= timeout):
+            error_msg = f"{msg}: timed-out (timeout: {timeout}s)"
+            if exception_obj is None:
+                assert False, error_msg
+            else:
+                maybe_print(error_msg, verbose=verbose)
+                raise exception_obj
+        if retry_on_assert:
+            try:
+                value = fun()
+            except AssertionError as e:
+                exception_obj = e
+                value = retry_value
+        else:
+            value = fun()
         if value is not retry_value:
             maybe_print(f"Time taken for condition to complete: "
                         f"{time.time() - start_time: .2f}s", verbose=verbose)
@@ -529,8 +542,14 @@ def poll_for_condition(fun, sleep_time, attempts=None, timeout=None,
         maybe_print(f"Sleeping for {sleep_time_str}", verbose=verbose)
         time.sleep(sleep_time)
         attempt_count += 1
-    assert False, f"{msg} didn't complete in: {attempts} attempts, " \
-                  f"sleep_time: {sleep_time_str}"
+
+    error_msg = f"{msg} didn't complete in: {attempts} attempts, " \
+                f"sleep_time: {sleep_time_str}"
+    if exception_obj is None:
+        assert False, error_msg
+    else:
+        maybe_print(error_msg, verbose=verbose)
+        raise exception_obj
 
 def metakv_get_succ(cluster, key, **kwargs):
     return get_succ(cluster, f"/_metakv{key}", **kwargs)
