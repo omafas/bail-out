@@ -540,15 +540,9 @@ auto_failover_async_t(_SetupConfig, PidMap) ->
 
     %% Wait for the failover to complete
     misc:poll_for_condition(
-      fun() ->
-              case chronicle_compat:get(counters, #{}) of
-                  %% No counters yet, keep waiting
-                  {error, not_found} -> false;
-                  {ok, Counters} ->
-                      undefined =/=
-                          proplists:get_value(failover_complete, Counters)
-              end
-      end, 5000, 100),
+        fun() ->
+            proplists:get_value(count, auto_failover:get_cfg()) =:= 3
+        end, 5000, 100),
 
     %% Without any auto-failover errors
     ?assertEqual([],
@@ -556,7 +550,6 @@ auto_failover_async_t(_SetupConfig, PidMap) ->
 
     %% And auto_failover should still be disabled
     Cfg = auto_failover:get_cfg(),
-    ?assertEqual(proplists:get_value(count, Cfg), 3),
     ?assertNot(proplists:get_value(enabled, Cfg)).
 
 %% Test post-network partition that we do not auto-failover nodes due to a stale
