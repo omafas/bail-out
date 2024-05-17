@@ -605,9 +605,17 @@ do_populate_stats(Count) ->
                     ok
             end;
         false ->
-            %% Reserved for non-heavyweight stats populated on all nodes.
             ok
-    end.
+    end,
+    %% Non-heavyweight stats populated on all nodes.
+    %% Auto-failover information
+    AutoFailoverStats = menelaus_web_auto_failover:get_stats(),
+    lists:foreach(
+      fun ({Key, Val}) ->
+              KeyBin0 = key_to_binary(Key),
+              KeyBin = <<"auto_failover_", KeyBin0/binary>>,
+              ns_server_stats:notify_gauge(KeyBin, Val)
+      end, AutoFailoverStats).
 
 log_system_stats(TS) ->
     NSServerStats = lists:sort(ets:tab2list(ns_server_system_stats)),

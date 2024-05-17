@@ -517,7 +517,24 @@
             }
         ]
     },
-
+    "cm_auto_failover_count": {
+        "type": "gauge",
+        "help": "Number of auto-failovers",
+        "added": "7.2.6",
+        "stability": "committed"
+    },
+    "cm_auto_failover_enabled": {
+        "type": "gauge",
+        "help": "Indicates if auto-failover is enabled (1 = true, 0 = false)",
+        "added": "7.2.6",
+        "stability": "committed"
+    },
+    "cm_auto_failover_max_count": {
+        "type": "gauge",
+        "help": "Maximum number of auto-failovers before being disabled",
+        "added": "7.2.6",
+        "stability": "committed"
+    },
     "cm_build_streaming_info_total": {
         "type": "counter",
         "help": "Number of streaming requests processed",
