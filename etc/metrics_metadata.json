@@ -923,6 +923,12 @@
             }
         ]
     },
+    "cm_rebalance_in_progress": {
+        "type": "gauge",
+        "help": "Indicates if a rebalance is running (1 = true, 0 = false). Only reported by the orchestrator node.",
+        "added": "7.2.6",
+        "stability": "committed"
+    },
     "cm_rebalance_total": {
         "type": "counter",
         "help": "Number of rebalance results",

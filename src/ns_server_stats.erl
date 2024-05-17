@@ -592,7 +592,7 @@ handle_info(Info, State) ->
 do_populate_stats(Count) ->
     case mb_master:master_node() =:= node() of
         true ->
-            %% Reserved for heavyweight stats populated on orchestrator.
+            %% Stats populated only on orchestrator.
             case Count rem ?HEAVYWEIGHT_STATS_SKIP_COUNT =:= 0 of
                 true ->
                     %% Heavyweight stat populated less frequently
@@ -602,12 +602,19 @@ do_populate_stats(Count) ->
                             end,
                     ns_server_stats:notify_gauge(is_balanced, Value);
                 false ->
+                    %% Shouldn't be any stats reported here.
                     ok
-            end;
+            end,
+            %% Is rebalance running? Only report on the orchestrator node
+            %% to be consistent with other rebalance progress stats.
+            ns_server_stats:notify_gauge(rebalance_in_progress,
+                                         rebalance:running());
         false ->
+            %% Shouldn't be any stats reported here.
             ok
     end,
-    %% Non-heavyweight stats populated on all nodes.
+
+    %% Stats populated on all nodes.
     %% Auto-failover information
     AutoFailoverStats = menelaus_web_auto_failover:get_stats(),
     lists:foreach(
