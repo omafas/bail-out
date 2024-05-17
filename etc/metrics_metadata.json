@@ -189,6 +189,12 @@
         "added": "7.0.0",
         "stability": "internal"
     },
+    "cm_is_balanced": {
+        "type": "gauge",
+        "help": "Indicates if cluster is balanced (1 = true, 0 = false). Only reported by the orchestrator node and only updated once every 30 seconds",
+        "added": "7.6.2",
+        "stability": "committed"
+    },
     "cm_lease_acquirer_prev_acquire_estimate_in_future_total": {
         "type": "counter",
         "help": "Number of times lease period start time estimate is in the future",

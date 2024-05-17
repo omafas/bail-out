@@ -26,6 +26,9 @@
 -define(DEFAULT_HIST_MAX, 10000). %%  10^4, 4 buckets
 -define(DEFAULT_HIST_UNIT, millisecond).
 -define(METRIC_PREFIX, <<"cm_">>).
+-define(POPULATE_STATS_INTERVAL, ?get_timeout(populate_stats_interval, 5000)).
+%% For heavyweight stats we populate them infrequently
+-define(HEAVYWEIGHT_STATS_SKIP_COUNT, ?get_param(skip_count, 6)).
 
 %% API
 -export([start_link/0]).
@@ -59,6 +62,11 @@
 -record(state, {
           process_stats_timer :: reference() | undefined,
           cleanup_stats_timer :: reference() | undefined,
+          populate_stats_timer :: reference() | undefined,
+          populate_stats_pid :: pid() | undefined,
+          populate_stats_start_time = 0 :: non_neg_integer(),
+          populate_stats_ref :: reference() | undefined,
+          populate_stats_count = 0 :: non_neg_integer(),
           pid_names :: [{os_pid(), binary()}]
          }).
 
@@ -561,8 +569,10 @@ init([]) ->
 
     spawn_ale_stats_collector(),
 
-    {ok, restart_cleanup_stats_timer(
-           restart_process_stats_timer(#state{pid_names = grab_pid_names()}))}.
+    {ok, restart_populate_stats_timer(0,
+           restart_cleanup_stats_timer(
+             restart_process_stats_timer(
+               #state{pid_names = grab_pid_names()})))}.
 
 init_stats() ->
     ets:new(?MODULE, [public, named_table, set]),
@@ -617,9 +627,83 @@ handle_info(cleanup_ns_server_stats, State) ->
     NumDeleted > 0
         andalso ?log_debug("Abandoned ~p ns_server stats", [NumDeleted]),
     {noreply, restart_cleanup_stats_timer(State)};
+handle_info(populate_ns_server_stats,
+            #state{populate_stats_pid = undefined,
+                   populate_stats_count = Count} = State) ->
+    %% Populating stats can be time-consuming so we spin off a process so
+    %% we don't block other work.
+    {Pid, MRef} = spawn_opt(
+                    fun () ->
+                            do_populate_stats(Count)
+                    end,
+                    [link, monitor]),
+    Now = erlang:monotonic_time(millisecond),
+    %% Timer gets restarted when process exits.
+    {noreply, State#state{populate_stats_pid = Pid,
+                          populate_stats_start_time = Now,
+                          populate_stats_ref = MRef,
+                          populate_stats_count = Count + 1}};
+handle_info(populate_ns_server_stats,
+            #state{populate_stats_pid = Pid,
+                   populate_stats_start_time = StartTime} = State) ->
+    Now = erlang:monotonic_time(millisecond),
+    ?log_debug("populate_stats process ~p is still running (~p msecs)",
+               [Pid, Now - StartTime]),
+    %% Still running. Check again in 1 second
+    {noreply, restart_populate_stats_timer(1000, State)};
+handle_info({'DOWN', MRef, process, Pid, normal},
+            #state{populate_stats_ref = MRef,
+                   populate_stats_pid = Pid,
+                   populate_stats_start_time = StartTime} = State) ->
+    %% Adjust interval to account for the amount of time taken
+    %% to do the last stats population. The goal is to have stats
+    %% populated at as close to the stats interval as possible
+    %% even though the amount of time to process a single
+    %% population might vary.
+    Now = erlang:monotonic_time(millisecond),
+    ElapsedTime = Now - StartTime,
+    NextInterval =
+        case ElapsedTime < ?POPULATE_STATS_INTERVAL of
+            true ->
+                ?POPULATE_STATS_INTERVAL - ElapsedTime;
+            false ->
+               ?log_debug("Populating stats took ~p msecs which is "
+                          "~p msecs over the desired interval",
+                          [ElapsedTime,
+                           ElapsedTime - ?POPULATE_STATS_INTERVAL]),
+               %% Last took longer than our target interval so kick
+               %% off the next immediately.
+               0
+        end,
+    {noreply,
+     restart_populate_stats_timer(NextInterval,
+                                  State#state{populate_stats_pid = undefined,
+                                              populate_stats_ref = undefined})};
 handle_info(Info, State) ->
     ?log_warning("Unhandled info: ~p", [Info]),
     {noreply, State}.
+
+%% Gather stats (which could be time consuming) and populate the ets
+%% table
+do_populate_stats(Count) ->
+    case mb_master:master_node() =:= node() of
+        true ->
+            %% Reserved for heavyweight stats populated on orchestrator.
+            case Count rem ?HEAVYWEIGHT_STATS_SKIP_COUNT =:= 0 of
+                true ->
+                    %% Heavyweight stat populated less frequently
+                    Value = case ns_cluster_membership:is_balanced() of
+                                true -> 1;
+                                false -> 0
+                            end,
+                    ns_server_stats:notify_gauge(is_balanced, Value);
+                false ->
+                    ok
+            end;
+        false ->
+            %% Reserved for non-heavyweight stats populated on all nodes.
+            ok
+    end.
 
 log_system_stats(TS) ->
     NSServerStats = lists:sort(ets:tab2list(ns_server_system_stats)),
@@ -992,6 +1076,17 @@ restart_cleanup_stats_timer(#state{cleanup_stats_timer = Ref} = State)
                                                     when is_reference(Ref) ->
     catch erlang:cancel_timer(Ref),
     restart_cleanup_stats_timer(State#state{cleanup_stats_timer = undefined}).
+
+restart_populate_stats_timer(Interval,
+  #state{populate_stats_timer = undefined} = State) ->
+    Ref = erlang:send_after(Interval, self(), populate_ns_server_stats),
+    State#state{populate_stats_timer = Ref};
+restart_populate_stats_timer(Interval,
+                             #state{populate_stats_timer = Ref} = State)
+  when is_reference(Ref) ->
+    catch erlang:cancel_timer(Ref),
+    restart_populate_stats_timer(Interval,
+                                 State#state{populate_stats_timer = undefined}).
 
 -ifdef(TEST).
 cleanup_stats_test_() ->
