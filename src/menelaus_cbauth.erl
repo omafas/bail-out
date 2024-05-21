@@ -24,7 +24,7 @@
 
 -record(worker, {pid :: pid(),
                  label :: string(),
-                 version :: string(),
+                 version :: string() | internal,
                  mref :: reference(),
                  connection :: pid()}).
 
