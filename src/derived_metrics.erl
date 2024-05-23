@@ -136,8 +136,11 @@ get_metric(<<"eventing_processed_count">>) ->
 get_metric(<<"eventing_failed_count">>) ->
     sum([<<"eventing_bucket_op_exception_count">>,
          <<"eventing_checkpoint_failure_count">>,
+         <<"eventing_dcp_delete_checkpoint_failure">>,
+         <<"eventing_dcp_mutation_checkpoint_failure">>,
          <<"eventing_doc_timer_create_failure">>,
          <<"eventing_n1ql_op_exception_count">>,
+         <<"eventing_analytics_op_exception_count">>,
          <<"eventing_non_doc_timer_create_failure">>,
          <<"eventing_on_delete_failure">>,
          <<"eventing_on_update_failure">>,
