@@ -240,12 +240,13 @@ handle_info(node_status_changed, State) ->
     self() ! maybe_notify_cbauth,
     case ns_cluster_membership:get_cluster_membership(node()) of
         active ->
-            {noreply, State};
+            ok;
         Other ->
             ?log_info("Killing all external connections due to node status"
                       " changing to ~p", [Other]),
-            {noreply, terminate_external_connections(State)}
-    end;
+            terminate_external_connections(State)
+    end,
+    {noreply, State};
 handle_info(maybe_notify_cbauth, State) ->
     misc:flush(maybe_notify_cbauth),
     {noreply, maybe_notify_cbauth(State)};
