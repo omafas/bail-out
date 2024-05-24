@@ -154,8 +154,9 @@ terminate(_Reason, State = #state{workers = Workers}) ->
     terminate_external_connections(State).
 
 terminate_external_connections(#state{workers = Workers}) ->
-    ToTerminate = [Pid || #worker{connection = Pid} <- Workers,
-                          Pid =/= internal],
+    ToTerminate = [Pid || #worker{version = V, connection = Pid} <- Workers,
+                          V =/= internal],
+    ?log_info("External connections to be terminated: ~p", [ToTerminate]),
     misc:terminate_and_wait(ToTerminate, shutdown).
 
 code_change(_OldVsn, State, _) -> {ok, State}.
