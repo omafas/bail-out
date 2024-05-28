@@ -34,19 +34,19 @@
     "cm_auto_failover_count": {
         "type": "gauge",
         "help": "Number of auto-failovers",
-        "added": "7.6.2",
+        "added": "7.2.6",
         "stability": "committed"
     },
     "cm_auto_failover_enabled": {
         "type": "gauge",
         "help": "Indicates if auto-failover is enabled (1 = true, 0 = false)",
-        "added": "7.6.2",
+        "added": "7.2.6",
         "stability": "committed"
     },
     "cm_auto_failover_max_count": {
         "type": "gauge",
         "help": "Maximum number of auto-failovers before being disabled",
-        "added": "7.6.2",
+        "added": "7.2.6",
         "stability": "committed"
     },
     "cm_build_streaming_info_total": {
@@ -210,7 +210,7 @@
     "cm_is_balanced": {
         "type": "gauge",
         "help": "Indicates if cluster is balanced (1 = true, 0 = false). Only reported by the orchestrator node and only updated once every 30 seconds",
-        "added": "7.6.2",
+        "added": "7.2.6",
         "stability": "committed"
     },
     "cm_lease_acquirer_prev_acquire_estimate_in_future_total": {
@@ -485,7 +485,7 @@
     "cm_rebalance_in_progress": {
         "type": "gauge",
         "help": "Indicates if a rebalance is running (1 = true, 0 = false). Only reported by the orchestrator node.",
-        "added": "7.6.2",
+        "added": "7.2.6",
         "stability": "committed"
     },
     "cm_rebalance_stuck": {
