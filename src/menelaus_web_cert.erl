@@ -192,11 +192,14 @@ warning_props(Warning) ->
      {message, ns_error_messages:node_certificate_warning(Warning)} |
      warning_severity_props(warning_severity(Warning))].
 
-translate_warning({{CertType, Node}, Warning})
-    when CertType =:= node_cert; CertType == client_cert ->
-    [{node, Node} | warning_props(Warning)];
+translate_warning({{node_cert, Node}, Warning}) ->
+    [{node, Node}, {certType, serverCertificate} |
+     warning_props(Warning)];
+translate_warning({{client_cert, Node}, Warning}) ->
+    [{node, Node}, {certType, internalClientCertificate} |
+     warning_props(Warning)];
 translate_warning({{ca, Id}, Warning}) ->
-    [{ca, Id} | warning_props(Warning)].
+    [{ca, Id}, {certType, trustedCertificate} | warning_props(Warning)].
 
 jsonify_cert_props(Props) ->
     {lists:filtermap(
