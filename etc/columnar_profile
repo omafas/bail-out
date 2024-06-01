@@ -15,3 +15,4 @@
       <<"analytics.settings.num_storage_partitions">>,
       128}]}.
 {unsupportedServices, [n1ql, index, fts, eventing, backup]}.
+{max_buckets_supported, 0}.
