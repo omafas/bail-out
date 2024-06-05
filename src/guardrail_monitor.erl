@@ -620,7 +620,10 @@ validate_storage_migration_resident_ratio(Stats, StorageMode) ->
 
 init([]) ->
     self() ! check,
-    {ok, #state{}}.
+    %% Initialise the statuses with whatever the enforcer currently sees, so
+    %% that we correctly detect changes relative to that
+    Statuses = ns_config:search_node_with_default(resource_statuses, []),
+    {ok, #state{statuses = Statuses}}.
 
 handle_call(_, _From, #state{} = State) ->
     {reply, ok, State}.
@@ -2401,7 +2404,9 @@ regular_checks_t() ->
     meck:expect(ns_config, search_node_with_default,
                 fun ({?MODULE, check_interval}, _Default) ->
                         %% Use tiny timeout to force a second check immediately
-                        1
+                        1;
+                    (_, Default) ->
+                        Default
                 end),
     meck:expect(ns_config, set,
                 fun ({node, _, _}, _) -> ok end),
@@ -2529,18 +2534,107 @@ regular_checks_t() ->
     meck:validate(cluster_compat_mode),
     meck:validate(stats_interface).
 
+
+%% Test the scenario where the monitor starts up on a node where a limit was
+%% reached previously, but became no longer reached between the node's last
+%% check and the monitor starting back up
+initial_check_t() ->
+    meck:expect(ns_config, search_node_with_default,
+                fun ({?MODULE, check_interval}, _Default) ->
+                        %% Use tiny timeout to force a second check immediately
+                        1;
+                    (resource_statuses, _Default) ->
+                        [{{bucket, "default"}, disk_usage}]
+                end),
+    meck:expect(ns_config, set,
+                fun ({node, _, _}, _) -> ok end),
+
+    meck:expect(cluster_compat_mode, is_cluster_76, ?cut(true)),
+    meck:expect(config_profile, get_bool,
+                fun ({resource_management, enabled}) -> false end),
+
+    meck:expect(ns_config, read_key_fast,
+                fun (resource_management, _) ->
+                        [{bucket,
+                          [{resident_ratio,
+                            [{enabled, true},
+                             {couchstore_minimum, 10},
+                             {magma_minimum, 1}]},
+                           {data_size,
+                            [{enabled, true},
+                             {couchstore_maximum, 1},
+                             {magma_maximum, 10}]}]},
+                         {disk_usage,
+                          [{enabled, true},
+                           {maximum, 96}]},
+                         {collections_per_quota,
+                          [{enabled, true},
+                           {maximum, 1}]},
+                         {cores_per_bucket,
+                          [{enabled, true},
+                           {minimum, 0.5}]}]
+                end),
+    meck:expect(stats_interface, for_resource_management,
+                fun () ->
+                        [{{bucket, "couchstore_bucket"},
+                          [{resident_ratio, 10}]},
+                         {{bucket, "magma_bucket"},
+                          [{resident_ratio, 1}]}]
+                end),
+
+    CouchstoreBucket = [{type, membase},
+                        {storage_mode, couchstore}],
+    MagmaBucket = [{type, membase},
+                   {storage_mode, magma}],
+    meck:expect(ns_bucket, get_buckets,
+                fun () ->
+                        [{"couchstore_bucket", CouchstoreBucket},
+                         {"magma_bucket", MagmaBucket}]
+                end),
+
+    meck:expect(ns_config, search_node,
+                fun (database_dir) ->
+                        {value, "dir"}
+                end),
+    meck:expect(ns_config, get_timeout,
+                fun (_, Default) -> Default end),
+
+    %% No disk usage issue at startup
+    pretend_disk_data(#{node() => [{"/", 1, 50}]}),
+
+    {ok, _Pid} = start_link(),
+
+    meck:expect(config_profile, get_bool,
+                fun ({resource_management, enabled}) -> true end),
+
+    %% Wait to see second check after enable (implying the first one completed)
+    meck:wait(2, ns_config, read_key_fast, [resource_management, '_'],
+              ?MECK_WAIT_TIMEOUT),
+
+    %% Confirm that ns_config gets updated to match the real state
+    meck:wait(1, ns_config, set,
+              [{node, node(), resource_statuses},
+               []],
+              ?MECK_WAIT_TIMEOUT),
+
+    %% Confirm that expected functions were called in the first check
+    meck:validate(ns_config),
+    meck:validate(cluster_compat_mode),
+    meck:validate(stats_interface).
+
 check_test_teardown() ->
     gen_server:stop(?SERVER),
     meck:unload(check_test_modules()).
 
 check_test_() ->
-    {setup,
+    {foreach,
      fun () ->
              check_test_setup()
      end,
      fun(_) ->
              check_test_teardown()
      end,
-     [{"regular checks test", fun () -> regular_checks_t() end}]}.
+     [{"regular checks test", fun () -> regular_checks_t() end},
+      {"initial check test", fun () -> initial_check_t() end}]}.
 
 -endif.
