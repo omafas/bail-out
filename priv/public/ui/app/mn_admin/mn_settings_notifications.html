@@ -17,7 +17,7 @@ licenses/APL2.txt.
     <input
        type="checkbox"
        id="for-update-notice-enable"
-       ng-disabled="!rbac.cluster.settings.write"
+       ng-disabled="!rbac.cluster.settings.write || !settingsNotificationsCtl.isEnterprise"
        ng-model="settingsNotificationsCtl.updates.enabled">
     <label for="for-update-notice-enable" class="margin-right-zero">
       Share usage information with Couchbase and get software update notifications.

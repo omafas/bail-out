@@ -22,14 +22,15 @@ angular
     mnSettingsNotificationsService,
     mnSettingsClusterService
   ])
-  .controller('mnSettingsNotificationsController', ["mnPromiseHelper", "mnSettingsNotificationsService", "pools", "mnSettingsClusterService", mnSettingsNotificationsController]);
+  .controller('mnSettingsNotificationsController', ["mnPromiseHelper", "mnSettingsNotificationsService", "pools", "mnPoolDefault", "mnSettingsClusterService", mnSettingsNotificationsController]);
 
-function mnSettingsNotificationsController(mnPromiseHelper, mnSettingsNotificationsService, pools, mnSettingsClusterService) {
+function mnSettingsNotificationsController(mnPromiseHelper, mnSettingsNotificationsService, pools, mnPoolDefault, mnSettingsClusterService) {
   var vm = this;
 
   mnSettingsClusterService.registerSubmitCallback(submit);
   mnSettingsClusterService.registerInitChecker(() => (vm.updates != void 0));
   vm.implementationVersion = pools.implementationVersion;
+  vm.isEnterprise = mnPoolDefault.export.isEnterprise;
 
   activate();
 
