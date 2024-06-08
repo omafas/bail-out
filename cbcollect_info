@@ -2074,6 +2074,7 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
                       "analytics_error.log", "analytics_warn.log", "analytics_dcpdebug.log",
                       "analytics_trace.json", "analytics_access.log", "analytics_cbas_debug.log",
                       "analytics_access_internal.log", "analytics_sdk_debug.log",
+                      "analytics_storage_debug.log", "analytics_periodic_dump.log",
                       "indexer_stats.log", "backup_service.log", "key.log", "sigar_port.log",
                       "sigar_port.1.log", "sigar_port.2.log", "sigar_port.3.log"]],
 
