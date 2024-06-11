@@ -95,3 +95,14 @@ class Node:
             r = testlib.get_succ(self, '/nodes/self')
             self.services_cached = strings_to_services(r.json()['services'])
         return self.services_cached
+
+    def set_alternate_address(self, alt_address):
+        testlib.put_succ(self,
+                         '/node/controller/setupAlternateAddresses/external',
+                         data={"hostname": alt_address})
+
+    def get_alternate_addresses(self):
+        r = testlib.get_succ(self, '/nodes/self')
+        # .get('xyz') over ['xyz'] because we want to return None if this does
+        # not exist for tests
+        return r.json().get('alternateAddresses')

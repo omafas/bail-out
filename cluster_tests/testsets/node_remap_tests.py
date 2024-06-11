@@ -74,6 +74,9 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
                                     'storageBackend': 'couchstore',
                                     'ramQuotaMB': '100'}, sync=True)
 
+        for node in self.cluster._nodes:
+            node.set_alternate_address(node.host)
+
 
     def test_teardown(self):
         pass
@@ -178,6 +181,11 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
 
             new_default_bucket_uuid = c.get_bucket_uuid("default")
             assert (old_default_bucket_uuid != new_default_bucket_uuid)
+
+            # MB-62201: alternate addresses should be removed
+            for node in c._nodes:
+                current_alt_address = node.get_alternate_addresses()
+                assert None == current_alt_address
 
             # Sanity check and shut down the remapped cluster
             c.smog_check()

@@ -78,11 +78,25 @@ rewrite_ns_config(#{output_path := OutputPath} = Args) ->
     NewCfg = functools:chain(OriginalCfg,
                              [modify_ns_config_tuples(_, Args),
                               maybe_rewrite_cookie(_, Args),
-                              maybe_rewrite_cluster_uuid(_, Args)]),
+                              maybe_rewrite_cluster_uuid(_, Args),
+                              maybe_remove_alternate_addresses(_, Args)]),
 
     NsConfigPath = filename:join(OutputPath, ?NS_CONFIG_NAME),
     ok = filelib:ensure_dir(NsConfigPath),
     ok = file:write_file(NsConfigPath, term_to_binary([NewCfg])).
+
+maybe_remove_alternate_addresses(Cfg, Args) ->
+    case maps:find(remove_alternate_addresses, Args) of
+        {ok, true} -> remove_alternate_addresses(Cfg);
+        _ -> Cfg
+    end.
+
+remove_alternate_addresses(Cfg) ->
+    ?log_info("Removing configured alternate addresses"),
+    lists:filter(
+        fun({{_, _, alternate_addresses}, _}) -> false;
+            (_) -> true
+        end, Cfg).
 
 maybe_rewrite_cluster_uuid(Cfg, Args) ->
     case maps:find(regenerate_cluster_uuid, Args) of
@@ -524,7 +538,8 @@ default_args() ->
     #{log_level => info,
       regenerate_cookie => false,
       regenerate_cluster_uuid => false,
-      regenerate_bucket_uuids => false}.
+      regenerate_bucket_uuids => false,
+      remove_alternate_addresses => false}.
 
 -spec parse_args(list(), map()) -> map().
 parse_args(["--output-path", Path | Rest], Map) ->
@@ -545,6 +560,8 @@ parse_args(["--regenerate-cluster-uuid" | Rest], Map) ->
     parse_args(Rest, Map#{regenerate_cluster_uuid => true});
 parse_args(["--regenerate-bucket-uuids" | Rest], Map) ->
     parse_args(Rest, Map#{regenerate_bucket_uuids => true});
+parse_args(["--remove-alternate-addresses" | Rest], Map) ->
+    parse_args(Rest, Map#{remove_alternate_addresses => true});
 parse_args([], Map) ->
     Map;
 parse_args(Args, _Map) ->
