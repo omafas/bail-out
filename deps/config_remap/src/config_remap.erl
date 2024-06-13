@@ -524,7 +524,7 @@ default_args() ->
     #{log_level => info,
       regenerate_cookie => false,
       regenerate_cluster_uuid => false,
-      regenerate_bucket_uuid => false}.
+      regenerate_bucket_uuids => false}.
 
 -spec parse_args(list(), map()) -> map().
 parse_args(["--output-path", Path | Rest], Map) ->
