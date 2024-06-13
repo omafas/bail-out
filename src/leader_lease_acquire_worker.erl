@@ -86,6 +86,8 @@ handle_acquire_lease(State) ->
             handle_lease_lost(State);
         {error, {already_acquired, LeaseProps}} ->
             handle_lease_already_acquired(LeaseProps, State);
+        {error, not_in_cluster} ->
+            handle_not_in_cluster(State);
         Other ->
             handle_unexpected_response(Other, State)
     catch
@@ -117,6 +119,14 @@ handle_acquire_timeout(AcquireOptions, State) ->
                      %% we don't have time to retry. So we backoff to try to
                      %% avoid this in future and also revoking the lease.
                      revoke_lease(_)]).
+
+handle_not_in_cluster(State) ->
+    ?log_warning("Failed to acquire lease from ~p as it isn't part of "
+                 "this cluster", [target_node(State)]),
+    %% The target node doesn't think it's part of our cluster. We don't want
+    %% to do anything drastic (e.g. exit) on our side in case this is just
+    %% a race so we we'll retry in a bit.
+    retry_acquire(State).
 
 handle_lease_acquired(StartTime, LeaseProps, State) ->
     NewState =
