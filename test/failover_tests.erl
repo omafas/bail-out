@@ -94,7 +94,7 @@ manual_failover_test_() ->
                   end} || {Name, TestFun} <- Tests]}.
 
 manual_failover_test_setup(SetupConfig) ->
-    fake_ns_config:new(),
+    fake_ns_config:setup(),
     fake_chronicle_kv:new(),
 
     fake_ns_config:setup_cluster_compat_version(?LATEST_VERSION_NUM),
@@ -217,7 +217,7 @@ manual_failover_test_teardown(_Config, PidMap) ->
     meck:unload(leader_activities),
 
     fake_chronicle_kv:unload(),
-    fake_ns_config:unload().
+    fake_ns_config:teardown().
 
 manual_failover_t(_SetupConfig, _R) ->
     ?assertEqual({error,not_found},

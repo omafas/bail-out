@@ -67,7 +67,8 @@
 -ifdef(TEST).
 -export([save_file/3, load_config/3,
          load_file/2, send_config/2,
-         test_setup/1, upgrade_config/2]).
+         test_setup/1, upgrade_config/2,
+         do_announce_changes/1]).
 -export([mock_tombstone_agent/0, unmock_tombstone_agent/0]).
 -endif.
 
@@ -1198,13 +1199,16 @@ announce_locally_made_changes(KVList) ->
 announce_changes([]) -> ok;
 announce_changes(KVList) ->
     ets:update_counter(ns_config_announces_counter, changes_counter, 1),
-    % Fire a event per changed key.
+    do_announce_changes(KVList).
+
+do_announce_changes(KVList) ->
+    %% Fire an event per changed key.
     lists:foreach(fun ({Key, Value}) ->
                           gen_event:notify(ns_config_events,
                                            {Key, strip_metadata(Value)})
                   end,
                   KVList),
-    % Fire a generic event that 'something changed'.
+    %% Fire a generic event that 'something changed'.
     gen_event:notify(ns_config_events, KVList).
 
 update_ets_dup(KVList) ->

@@ -43,10 +43,11 @@
 -module(fake_ns_config).
 
 -include("ns_config.hrl").
+-include("cut.hrl").
 
 %% API
--export([new/0,
-         unload/0,
+-export([setup/0,
+         teardown/0,
          update_snapshot/1,
          update_snapshot/2,
          delete_key/1]).
@@ -59,12 +60,16 @@
 %% --------------------
 %% API - Setup/Teardown
 %% --------------------
-new() ->
+setup() ->
     ets:new(?TABLE_NAME, [public, named_table]),
+    {ok, _} = gen_event:start_link({local, ns_config_events}),
     meck_setup().
 
-unload() ->
+teardown() ->
     ets:delete(?TABLE_NAME),
+    Pid = whereis(ns_config_events),
+    unlink(Pid),
+    misc:terminate_and_wait(Pid, normal),
     meck:unload(ns_config).
 
 %% -------------------------
@@ -120,7 +125,10 @@ meck_setup() ->
                         meck:passthrough([[get_ets_snapshot()]]);
                    (Snapshot) ->
                         meck:passthrough([[Snapshot]])
-                end).
+                end),
+
+    meck:expect(ns_config, do_announce_changes,
+                ?cut(meck:passthrough([_]))).
 
 meck_setup_getters() ->
     meck:expect(ns_config, get,
@@ -201,7 +209,15 @@ get_ets_snapshot() ->
     end.
 
 store_ets_snapshot(Snapshot) ->
-    ets:insert(?TABLE_NAME, {snapshot, Snapshot}).
+    OldSnapshot = get_ets_snapshot(),
+    ets:insert(?TABLE_NAME, {snapshot, Snapshot}),
+
+    Diff = lists:filter(
+             fun ({Key, NewValue}) ->
+                     proplists:get_value(Key, OldSnapshot) =/= NewValue
+             end, Snapshot),
+
+    ns_config:do_announce_changes(Diff).
 
 fetch_from_snapshot(Snapshot, Key)  ->
     {value, proplists:get_value(Key, Snapshot)}.
