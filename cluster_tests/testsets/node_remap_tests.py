@@ -135,9 +135,8 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
                 capture_output=testlib.config['intercept_output']
             )
 
-    def start_and_test_remapped_cluster(self, old_cluster, old_uuid, old_cookie,
-                                        old_travel_sample_bucket_uuid,
-                                        old_default_bucket_uuid):
+    def start_and_test_remapped_cluster(self, old_cluster, old_uuid,
+                                        old_cookie):
         # When we remap the cluster we do not remap the ports on which each node
         # runs. For on-prem deployments this is fine, but it makes it trickier
         # to work with a cluster_run. Rather than attempt to remap ports, we are
@@ -175,13 +174,6 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
             new_cookie = c.get_cluster_uuid
             assert old_cookie != new_cookie
 
-            new_travel_sample_bucket_uuid = c.get_bucket_uuid("travel-sample")
-            assert (old_travel_sample_bucket_uuid !=
-                    new_travel_sample_bucket_uuid)
-
-            new_default_bucket_uuid = c.get_bucket_uuid("default")
-            assert (old_default_bucket_uuid != new_default_bucket_uuid)
-
             # MB-62201: alternate addresses should be removed
             for node in c._nodes:
                 current_alt_address = node.get_alternate_addresses()
@@ -203,9 +195,6 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
         # remapped cluster
         old_uuid = self.cluster.get_cluster_uuid()
         old_cookie = self.cluster.get_cookie()
-        old_travel_sample_bucket_uuid =\
-            self.cluster.get_bucket_uuid("travel-sample")
-        old_default_bucket_uiud = self.cluster.get_bucket_uuid("default")
 
         # We can't tear down the older cluster in the setup because it wants to
         # log via diag/eval to the cluster...
@@ -220,9 +209,7 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
             self.remap_cluster(self.cluster)
 
             self.start_and_test_remapped_cluster(self.cluster, old_uuid,
-                                                 old_cookie,
-                                                 old_travel_sample_bucket_uuid,
-                                                 old_default_bucket_uiud)
+                                                 old_cookie)
         finally:
             print(f"Starting original cluster at node index "
                   f"{self.cluster.first_node_index}")
