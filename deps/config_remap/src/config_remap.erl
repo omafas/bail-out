@@ -34,17 +34,27 @@
 -define(CHRONICLE_KV_SNAPSHOT, "kv.snapshot").
 -define(CHRONICLE_CONFIG_RSM_SNAPSHOT, "chronicle_config_rsm.snapshot").
 
+rewrite_term(BeforeTerm, #{node_map := NodeMap}) ->
+    maps:fold(
+        fun(OldNode, NewNode, Acc) ->
+            misc:rewrite_value(list_to_atom(OldNode),
+                list_to_atom(NewNode), Acc)
+        end, BeforeTerm, NodeMap).
+
+rewrite_term(BeforeTerm, LogAs, Args) when is_map(BeforeTerm) ->
+    %% We can't maps:map here because we might rewrite keys as well as values
+    maps:fold(
+        fun(Key, Value, Acc) ->
+            {NewKey, NewValue} = rewrite_term({Key, Value}, LogAs, Args),
+            Acc#{NewKey => NewValue}
+        end, #{}, BeforeTerm);
 rewrite_term(BeforeTerm, LogAs, Args) when is_list(BeforeTerm) ->
     lists:map(
       fun(Term) ->
               rewrite_term(Term, LogAs, Args)
       end, BeforeTerm);
-rewrite_term(BeforeTerm, LogAs, #{node_map := NodeMap}) ->
-    AfterTerm = maps:fold(
-                  fun(OldNode, NewNode, Acc) ->
-                          misc:rewrite_value(list_to_atom(OldNode),
-                                             list_to_atom(NewNode), Acc)
-                  end, BeforeTerm, NodeMap),
+rewrite_term(BeforeTerm, LogAs, Args) ->
+    AfterTerm = rewrite_term(BeforeTerm, Args),
 
     %% We should avoid writing too much to the log that isn't useful, only log
     %% if different.
@@ -220,13 +230,16 @@ rewrite_chronicle_rsm_snapshot(Seqno, Snapshot,
 
 rewrite_chronicle_snapshot_term(?CHRONICLE_KV_SNAPSHOT, Term, Args) ->
     Msg = io_lib:format("chronicle ~s snapshot", [?CHRONICLE_KV_SNAPSHOT]),
-
-    rewrite_term(Term, Msg, Args);
+    rewrite_chronicle_snapshot_term(Msg, Term, Args);
 rewrite_chronicle_snapshot_term(?CHRONICLE_CONFIG_RSM_SNAPSHOT, Term, Args) ->
     Msg = io_lib:format("chronicle ~s snapshot",
                         [?CHRONICLE_CONFIG_RSM_SNAPSHOT]),
-    rewrite_term(Term, Msg, Args).
-
+    rewrite_chronicle_snapshot_term(Msg, Term, Args);
+rewrite_chronicle_snapshot_term(Msg,
+                                {snapshot, Seqno, HistoryId, RSM, Term, Config},
+                                Args) ->
+    {snapshot, Seqno, HistoryId, RSM, rewrite_term(Term, Msg, Args),
+                                      rewrite_term(Config, Msg, Args)}.
 
 rewrite_chronicle_log_header(Header, #{output_path := OutputPath,
                                        args := Args} = State) ->
@@ -245,15 +258,36 @@ rewrite_chronicle_log_header(Header, #{output_path := OutputPath,
     %% Return out log in the state to re-use it, rather than open the file again
     State#{log_file => Log}.
 
+sanitize_chronicle_log_command(root_cert_and_pkey, Value) ->
+    %% root_cert_and_pkey includes the OOTB CA cert and private key. We probably
+    %% don't want to log it
+    ?HIDE(Value);
+sanitize_chronicle_log_command(_Key, Value) ->
+    Value.
+
 rewrite_chronicle_log_command({command, Packed},
                               #{args := Args,
                                 output_path := OutputPath}) ->
     Unpacked = chronicle_rsm:unpack_command(Packed),
 
     LogNum = filename:basename(OutputPath),
-    Msg = io_lib:format("chronicle log ~p command", [LogNum]),
 
-    Rewritten = rewrite_term(Unpacked, Msg, Args),
+    Rewritten = rewrite_term(Unpacked, Args),
+    case Rewritten of
+        Unpacked -> ok;
+        _ ->
+            %% Different, lets log, but we must sanitize the term to avoid
+            %% printing private keys
+            Before = chronicle_kv:sanitize_command(
+                fun sanitize_chronicle_log_command/2,
+                Unpacked),
+            After = chronicle_kv:sanitize_command(
+                fun sanitize_chronicle_log_command/2,
+                Rewritten),
+
+            ?log_debug("Rewriting chronicle log ~p command term ~p as ~p",
+                        [LogNum, Before, After])
+    end,
 
     Repacked = chronicle_rsm:pack_command(Rewritten),
     {command, Repacked}.
