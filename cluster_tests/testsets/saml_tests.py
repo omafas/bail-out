@@ -62,13 +62,16 @@ deflate_encoding = "urn:oasis:names:tc:SAML:2.0:bindings:URL-Encoding:DEFLATE"
 sp_entity_id = "sp_test_entity"
 ui_headers = {'Host': 'some_addr', 'ns-server-ui': 'yes'}
 
+bucket = "test"
 
 class SamlTests(testlib.BaseTestSet):
 
     @staticmethod
     def requirements():
         return testlib.ClusterRequirements(min_num_nodes=2,
-                                           edition="Enterprise")
+                                           edition="Enterprise",
+                                           buckets=[{'name': bucket,
+                                                     'ramQuota': 100}])
 
 
     def setup(self):
@@ -215,6 +218,20 @@ class SamlTests(testlib.BaseTestSet):
                             '/pools/default',
                             headers=ui_headers)
             assert_http_code(200, r)
+
+            # Test that SAML users can access the docs endpoint (which requires
+            # making a request to memcached on their behalf).
+            # Polling is required because external authentication can take up
+            # to a second to get enabled in memcached after SAML is enabled, on
+            # all nodes. If we wanted to make enabling SAML synchronous, we
+            # would need to wait for the connection on all nodes. For now,
+            # we use polling in the test instead
+            testlib.poll_for_condition(
+                lambda: session.get(self.cluster.connected_nodes[0].url +
+                                    f'/pools/default/buckets/{bucket}/docs',
+                                    headers=ui_headers).status_code == 200,
+                sleep_time=0.5,
+                timeout=60)
 
             r = session.post(self.cluster.connected_nodes[0].url + '/uilogout',
                              headers=ui_headers)

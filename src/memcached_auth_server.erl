@@ -60,6 +60,8 @@ init([]) ->
               gen_server:cast(Self, check_enabled);
           (saslauthd_auth_settings) ->
               gen_server:cast(Self, check_enabled);
+          (saml_settings) ->
+              gen_server:cast(Self, check_enabled);
           (Key) ->
               case collections:key_match(Key) =/= false orelse
                   ns_bucket:names_change(Key) of

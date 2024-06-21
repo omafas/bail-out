@@ -138,6 +138,7 @@ is_notable_config_key(cluster_encryption_level) -> true;
 is_notable_config_key({security_settings, kv}) -> true;
 is_notable_config_key(ldap_settings) -> true;
 is_notable_config_key(saslauthd_auth_settings) -> true;
+is_notable_config_key(saml_settings) -> true;
 is_notable_config_key(scram_sha1_enabled) -> true;
 is_notable_config_key(scram_sha256_enabled) -> true;
 is_notable_config_key(scram_sha512_enabled) -> true;
@@ -475,7 +476,8 @@ is_external_auth_service_enabled() ->
     SaslauthdEnabled =
         proplists:get_value(enabled, saslauthd_auth:build_settings(), false),
     LDAPEnabled = ldap_util:get_setting(authentication_enabled),
-    SaslauthdEnabled or LDAPEnabled.
+    SamlEnabled = menelaus_web_saml:is_enabled(),
+    SaslauthdEnabled or LDAPEnabled or SamlEnabled.
 
 get_ssl_cipher_list([], Params) ->
     Cfg = ns_config:latest(),
