@@ -670,6 +670,13 @@ get_chain_info(Chain, CA) when is_binary(Chain), is_binary(CA) ->
                 end, undefined, public_key:pem_decode(CA) ++
                                 lists:reverse(public_key:pem_decode(Chain))).
 
+%% Note that this function guarantees the order of certificates.
+%% Current order: reversed order of addition.
+%% Reasons:
+%%   It is imporatant to check most recently added certificates first when
+%%   looking for node certificate's CA; in case if two CA certs are using
+%%   the same private key, we want the node cert to use the most recent
+%%   CA cert to support it's rotation;
 trusted_CAs(Format) ->
     Certs =
         case chronicle_kv:get(kv, ca_certificates) of
@@ -680,7 +687,7 @@ trusted_CAs(Format) ->
     SortedCerts = lists:sort(fun (PL1, PL2) ->
                                  Id1 = proplists:get_value(id, PL1),
                                  Id2 = proplists:get_value(id, PL2),
-                                 Id1 =< Id2
+                                 Id1 >= Id2
                              end, Certs),
     case Format of
         props ->
