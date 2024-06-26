@@ -116,60 +116,61 @@ meck_setup() ->
     %% and pass it through to the base function, which should stop this from
     %% ever getting out of sync.
     meck:expect(ns_config, get_node_uuid_map,
-        fun(?NS_CONFIG_LATEST_MARKER) ->
-                meck:passthrough([[get_ets_snapshot()]]);
-            (Snapshot) ->
-                meck:passthrough([[Snapshot]])
-        end).
+                fun(?NS_CONFIG_LATEST_MARKER) ->
+                        meck:passthrough([[get_ets_snapshot()]]);
+                   (Snapshot) ->
+                        meck:passthrough([[Snapshot]])
+                end).
 
 meck_setup_getters() ->
     meck:expect(ns_config, get,
-        fun() ->
-            get_ets_snapshot()
-        end),
+                fun() ->
+                        get_ets_snapshot()
+                end),
 
 
     meck:expect(ns_config, get_timeout,
-        fun(Key, Default) ->
-            fetch_with_default_from_latest_snapshot(Key, Default)
-        end),
+                fun(Key, Default) ->
+                        fetch_with_default_from_latest_snapshot(Key, Default)
+                end),
 
 
     meck:expect(ns_config, read_key_fast,
-        fun(Key, Default) ->
-            fetch_with_default_from_latest_snapshot(Key, Default)
-        end),
+                fun(Key, Default) ->
+                        fetch_with_default_from_latest_snapshot(Key, Default)
+                end),
 
 
     meck:expect(ns_config, search,
-        fun(Key) ->
-            fetch_from_latest_snapshot(Key)
-        end),
+                fun(Key) ->
+                        fetch_from_latest_snapshot(Key)
+                end),
     meck:expect(ns_config, search,
-        fun(?NS_CONFIG_LATEST_MARKER, Key) ->
-                fetch_from_latest_snapshot(Key);
-            (Snapshot, Key) ->
-                fetch_from_snapshot(Snapshot, Key)
-        end),
+                fun(?NS_CONFIG_LATEST_MARKER, Key) ->
+                        fetch_from_latest_snapshot(Key);
+                   (Snapshot, Key) ->
+                        fetch_from_snapshot(Snapshot, Key)
+                end),
     meck:expect(ns_config, search,
-        fun(?NS_CONFIG_LATEST_MARKER, Key, Default) ->
-                %% search/3 remaps {value, Value} to Value.
-                case fetch_with_default_from_latest_snapshot(Key, Default) of
-                    {value, V} -> V;
-                    Other -> Other
-                end;
-            (Snapshot, Key, Default) ->
-                case fetch_with_default(Snapshot, Key, Default) of
-                    {value, V} -> V;
-                    Other -> Other
-                end
-        end),
+                fun(?NS_CONFIG_LATEST_MARKER, Key, Default) ->
+                        %% search/3 remaps {value, Value} to Value.
+                        case fetch_with_default_from_latest_snapshot(Key,
+                                                                     Default) of
+                            {value, V} -> V;
+                            Other -> Other
+                        end;
+                   (Snapshot, Key, Default) ->
+                        case fetch_with_default(Snapshot, Key, Default) of
+                            {value, V} -> V;
+                            Other -> Other
+                        end
+                end),
 
 
     meck:expect(ns_config, search_node_with_default,
-        fun(Key, Default) ->
-            fetch_with_default_from_latest_snapshot(Key, Default)
-        end).
+                fun(Key, Default) ->
+                        fetch_with_default_from_latest_snapshot(Key, Default)
+                end).
 
 meck_setup_setters() ->
     meck:expect(ns_config, update_key,
@@ -186,9 +187,9 @@ meck_setup_setters() ->
 
 
     meck:expect(ns_config, set,
-        fun(Key, Value) ->
-            update_snapshot(Key, Value)
-        end).
+                fun(Key, Value) ->
+                        update_snapshot(Key, Value)
+                end).
 
 %% ----------------------------------
 %% Internal - getter/setter functions
