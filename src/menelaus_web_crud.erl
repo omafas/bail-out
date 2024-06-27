@@ -66,13 +66,6 @@ parse_bool("true", _) -> true;
 parse_bool("false", _) -> false;
 parse_bool(_, _) -> throw(bad_request).
 
-parse_int(undefined, Default) -> Default;
-parse_int(List, _) ->
-    try list_to_integer(List)
-    catch error:badarg ->
-            throw(bad_request)
-    end.
-
 parse_int(Name, Params, Default) ->
     case proplists:get_value(Name, Params, Default) of
         Default ->
@@ -105,8 +98,19 @@ parse_key(Key) ->
     end.
 
 parse_params(Params) ->
-    Limit = parse_int(proplists:get_value("limit", Params), 1000),
-    Skip = parse_int(proplists:get_value("skip", Params), 0),
+    %% Get maximum if specified in /internalSettings.
+    MaxLimit = ns_config:read_key_fast(max_docs_limit, ?DEFAULT_MAX_DOCS_LIMIT),
+    MaxSkip = ns_config:read_key_fast(max_docs_skip, ?DEFAULT_MAX_DOCS_SKIP),
+
+    %% Shouldn't have a default that's greater than the max allowed (e.g.
+    %% maxDocsLimit is set to 66 using /internalSettings. The maximum allowed
+    %% value for 'limit' should not be larger than 66).
+    MaxLimitDefault = min(?DEFAULT_DOCS_LIMIT, MaxLimit),
+
+    Limit = extract_int("limit", Params, ?LOWEST_ALLOWED_MAX_DOCS_LIMIT,
+                        MaxLimit, MaxLimitDefault),
+    Skip = extract_int("skip", Params, ?LOWEST_ALLOWED_MAX_DOCS_SKIP,
+                       MaxSkip, ?DEFAULT_DOCS_SKIP),
 
     {Skip, Limit,
      [{include_docs, parse_bool(proplists:get_value("include_docs", Params), false)},
@@ -327,18 +331,22 @@ extract_flags(Params) ->
             Val
     end.
 
+extract_int(Name, Params, Min, Max, Default) ->
+    case parse_int(Name, Params, Min, Max, Default) of
+        {error, _E} ->
+            menelaus_util:web_exception(
+              400,
+              io_lib:format("'~p' must be a valid integer between ~p and ~p",
+                            [Name, Min, Max]));
+        Val ->
+            Val
+    end.
+
 extract_expiry(Params) ->
     case cluster_compat_mode:is_cluster_76() of
         true ->
-            case parse_int("expiry", Params, 0, ?MAX_32BIT_UNSIGNED_INT, ?NO_EXPIRY) of
-                {error, _E} ->
-                    menelaus_util:web_exception(
-                      400,
-                      io_lib:format("'expiry' must be a valid positive integer "
-                                    "between 0 and ~p", [?MAX_32BIT_UNSIGNED_INT]));
-                Val ->
-                    Val
-            end;
+            extract_int("expiry", Params, 0, ?MAX_32BIT_UNSIGNED_INT,
+                        ?NO_EXPIRY);
         false ->
             %% We don't bother giving an error if expiry is specified in a mixed
             %% mode cluster, because we wouldn't give an error on the old nodes,

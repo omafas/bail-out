@@ -670,7 +670,13 @@ conf(internal) ->
      {memcached_password_hash_iterations_internal, scramShaIterations,
       ?DEFAULT_SCRAM_ITER, get_number(?PBKDF2_ITER_MIN, ?PBKDF2_ITER_MAX)},
      {use_relative_web_redirects, useRelativeWebRedirects, false,
-      fun get_bool/1}
+      fun get_bool/1},
+     {max_docs_skip, maxDocsSkip, ?DEFAULT_MAX_DOCS_SKIP,
+      get_number(?LOWEST_ALLOWED_MAX_DOCS_SKIP,
+                 ?HIGHEST_ALLOWED_MAX_DOCS_SKIP)},
+     {max_docs_limit, maxDocsLimit, ?DEFAULT_MAX_DOCS_LIMIT,
+      get_number(?LOWEST_ALLOWED_MAX_DOCS_LIMIT,
+                 ?HIGHEST_ALLOWED_MAX_DOCS_LIMIT)}
     ];
 
 conf(developer_preview) ->

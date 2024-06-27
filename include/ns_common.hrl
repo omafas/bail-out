@@ -271,6 +271,23 @@
 -define(MAX_OF_MAX_MOVES_PER_NODE, 64).
 -define(DEFAULT_MAX_MOVES_PER_NODE, 4).
 
+-define(LOWEST_ALLOWED_MAX_DOCS_SKIP, 0).
+%% Maximum allowed value when changing in /internalSettings
+-define(HIGHEST_ALLOWED_MAX_DOCS_SKIP, 5000).
+%% Unless changed in /internalSettings this is the maximum 'skip'
+%% value permitted.
+-define(DEFAULT_MAX_DOCS_SKIP, 1000).
+%% Value to use if not specified
+-define(DEFAULT_DOCS_SKIP, 0).
+
+-define(LOWEST_ALLOWED_MAX_DOCS_LIMIT, 1).
+%% Maximum allowed value when changing in /internalSettings
+-define(HIGHEST_ALLOWED_MAX_DOCS_LIMIT, 5000).
+%% Unless changed in /internalSettings this is the maximum 'limit'
+%% value permitted.
+-define(DEFAULT_MAX_DOCS_LIMIT, 1000).
+-define(DEFAULT_DOCS_LIMIT, 1000).
+
 -define(flush(Pattern),
         misc:letrec([0],
                     fun (Rec, I) ->

@@ -36,6 +36,10 @@ class CrudTests(testlib.BaseTestSet):
 
     def teardown(self):
         testlib.delete_all_buckets(self.cluster)
+        # Restore default internalSettings
+        testlib.post_succ(self.cluster, "/internalSettings",
+                          data={"maxDocsSkip": 1000,
+                                "maxDocsLimit": 1000})
 
     def test_teardown(self):
         testlib.ensure_deleted(self.cluster, doc_addr,
@@ -111,3 +115,37 @@ class CrudTests(testlib.BaseTestSet):
                           f"{doc_addr} response was not valid json")
         meta = assert_json_key("meta", j, doc_addr)
         return assert_json_key("expiration", meta, doc_addr)
+
+    def skip_and_limit_test(self):
+        def test_one(cmd, val, expected_code):
+            url = f"/pools/default/buckets/{bucket_name}/docs/?{cmd}={val}"
+            r = testlib.get(self.cluster, url)
+            testlib.assert_http_code(expected_code, r)
+
+        test_one('skip', 100, 200)
+        test_one('skip', 1001, 400)
+        test_one('skip', -1, 400)
+        test_one('limit', 1000, 200)
+        test_one('limit', 3000, 400)
+        test_one('limit', -222, 400)
+
+        # Increase the limits and what previously failed should now
+        # succeed. And new highter limits should fail.
+        testlib.post_succ(self.cluster, "/internalSettings",
+                          data={"maxDocsSkip": 2000,
+                                "maxDocsLimit": 3000})
+        test_one('skip', 1001, 200)
+        test_one('skip', 2001, 400)
+        test_one('limit', 3000, 200)
+        test_one('limit', 3001, 400)
+
+        # Now decrease the limits.
+        testlib.post_succ(self.cluster, "/internalSettings",
+                          data={"maxDocsSkip": 200,
+                                "maxDocsLimit": 300})
+        test_one('skip', 200, 200)
+        test_one('skip', 201, 400)
+        test_one('limit', 300, 200)
+        test_one('limit', 301, 400)
+
+
