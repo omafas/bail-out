@@ -1910,6 +1910,10 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
             make_cbas("select * from `Metadata`.`Index`"),
             make_cbas("select * from `Metadata`.`Bucket`"),
             make_cbas("select * from `Metadata`.`Link`"),
+            make_cbas("select * from `Metadata`.`Nodegroup`"),
+            make_cbas("select * from `Metadata`.`Role`"),
+            make_cbas("select * from `Metadata`.`AssignedRole`"),
+            make_cbas("select * from `Metadata`.`Privilege`"),
             *make_golang_profile_tasks('Analytics', local_token_creds_fun,
                                        cbas_parent_port, 'analytics')
         ]
