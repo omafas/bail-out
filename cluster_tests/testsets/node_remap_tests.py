@@ -63,13 +63,16 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
 
     def setup(self):
         self.load_and_assert_sample_bucket(self.cluster, "travel-sample")
-        # The test remaps snapshots, make sure we have one
+        # The script remaps chronicle snapshots and chronicle logs. Make sure
+        # that we have a snapshot containing the travel-sample info, we will
+        # later assert that it comes up, to test that the snapshot remapping
+        # works.
         testlib.post_succ(self.cluster, "/diag/eval",
                           data="{ok, _} = chronicle:force_snapshot()")
 
-        # Note that this bucket likely won't have a snapshot. We want to be able
-        # to recover from chronicle logs alone, so we'll try to test that here
-        # by not forcing a snapshot
+        # Note that this bucket likely won't exist in a chronicle snapshot. We
+        # want to be able to recover from chronicle logs alone, so we'll try to
+        # test that here by not forcing a snapshot
         self.cluster.create_bucket({'name': 'default',
                                     'storageBackend': 'couchstore',
                                     'ramQuotaMB': '100'}, sync=True)
