@@ -138,6 +138,15 @@ validate_topology_change(EjectedLiveNodes, KeepNodes) ->
               [?cut(validate_topology_change_data_grs(ActiveKVNodes,
                                                       EjectedLiveNodes,
                                                       KeepKVNodes)),
+               %% Note that we consider all nodes for the disk usage check,
+               %% even though (as of writing this comment) only data service
+               %% would actually enforce the disk usage guardrail after the
+               %% rebalance. The reason for this is to be consistent with the
+               %% behaviour of the data growth guardrail, that is, we will
+               %% check the disk usage on all nodes after the rebalance, when
+               %% deciding whether to disable data ingress, so we should try to
+               %% avoid allowing a rebalance to occur which could cause the disk
+               %% usage to get higher on an already high node.
                ?cut(validate_topology_change_disk_usage(NewNodes,
                                                         EjectedLiveNodes,
                                                         KeepNodes)),
@@ -725,10 +734,19 @@ check({disk_usage = Resource, Config}, _Stats) ->
                         %% are sure that we have to.
                         {ok, []};
                     [{Node, maximum = S}] ->
-                        %% For now if we see disk usage reach the limit we apply
-                        %% the guard for all buckets. In future we should allow
-                        %% this to apply on a per-service and per-bucket level,
-                        %% when these are mapped to different disk partitions
+                        %% For now if we see disk usage reach the limit on any
+                        %% node, we apply the guard for all buckets.
+                        %% It may seem odd that we don't restrict this check to
+                        %% only data-service nodes, since the impact (prior to
+                        %% the addition of other service guardrails) was
+                        %% restricted to only data-service nodes. However, by
+                        %% making the check on all nodes, we ensure that data
+                        %% doesn't indirectly get ingested into other nodes via
+                        %% KV, which would make a disk usage issue worse.
+                        %%
+                        %% In future we may wish to allow this to apply on a
+                        %% per-service and per-bucket level, when these are
+                        %% mapped to different disk partitions
                         {S,
                          [{{bucket, BucketName}, disk_usage}
                           || BucketName <- ns_bucket:get_bucket_names()] ++
