@@ -497,7 +497,7 @@
     "cm_rebalance_progress": {
         "type": "gauge",
         "help": "Estimate of the rebalance progress (0 - 1) for each stage. Only reported by the orchestrator node.",
-        "added": "7.6.2",
+        "added": "7.2.6",
         "stability": "volatile",
         "unit": "ratio",
         "labels": [
