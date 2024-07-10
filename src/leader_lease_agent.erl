@@ -135,10 +135,18 @@ validate_option(Key, Options, Pred) ->
             {error, {bad_option, Key, Value}}
     end.
 
-do_handle_acquire_lease(Caller, Period, From,
+do_handle_acquire_lease(#lease_holder{node = Node} = Caller, Period, From,
                         #state{lease = undefined} = State) ->
-    ?log_debug("Granting lease to ~p for ~bms", [Caller, Period]),
-    grant_lease(Caller, Period, From, State);
+    case lists:member(Node, ns_node_disco:nodes_wanted()) of
+        false ->
+            ?log_warning("Ignoring lease request from node ~p which is not "
+                         "part of the cluster", [Node]),
+            gen_server2:reply(From, {error, not_in_cluster}),
+            State;
+        true ->
+            ?log_debug("Granting lease to ~p for ~bms", [Caller, Period]),
+            grant_lease(Caller, Period, From, State)
+    end;
 do_handle_acquire_lease(Caller, Period, From, #state{lease = Lease} = State) ->
     case Lease#lease.holder =:= Caller of
         true ->
