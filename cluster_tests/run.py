@@ -68,7 +68,8 @@ from testsets import \
     users_tests, \
     web_settings_tests, \
     rest_eject_test, \
-    node_remap_tests
+    node_remap_tests, \
+    cbcollect_tests
 
 tmp_cluster_dir = os.path.join(scriptdir, "test_cluster_data")
 
