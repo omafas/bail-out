@@ -474,11 +474,11 @@ class ZippedFileStream(Writer):
         self._filename = filename
         self._inner = inner
 
-    def write(self, b: ReadableBuffer) -> int:
+    def write(self, buf: ReadableBuffer) -> int:
         """
         Overriden write function from Writer.
         """
-        return write_readable_buffer(b, self._inner)
+        return write_readable_buffer(buf, self._inner)
 
     def close(self):
         self.flush()
@@ -662,13 +662,14 @@ class Task:
     is_posix: bool = (os.name == "posix")
     extra_flags: Dict[str, str] = {}
     zip_relative_path: Optional[str] = None
+    never_redact: bool = False
     _task_runner: Optional["TaskRunner"] = None
 
     def __init__(self, description, command, timeout=None,
                  log_file=DEFAULT_LOG, artifacts=None, num_samples=1,
                  interval=0, suppress_append_newline=False, to_stdin=None,
                  no_header=False, change_dir=False, addenv=None,
-                 privileged=False):
+                 privileged=False, never_redact=False):
         self.output_file = log_file
         self.description = description
         self.command = command
@@ -684,6 +685,7 @@ class Task:
         self.addenv = addenv
         self.privileged = privileged
         self.is_posix = (os.name == "posix")
+        self.never_redact = never_redact
 
     def execute(self, outstream: Writer):
         log(f"{self.description} ({self.command}) - ", new_line=False)
@@ -915,6 +917,7 @@ class LiteralTask(AllOsTask):
 
     def __init__(self, description, literal, timeout=None,
                  log_file=DEFAULT_LOG, no_header=False):
+        super().__init__(description, literal)
         self.description = description
         self.literal = literal
         self.timeout = timeout
@@ -929,7 +932,10 @@ class LiteralTask(AllOsTask):
 
 
 class CollectFileTask(AllOsTask):
-    def __init__(self, description, file_path, zip_relative: str = ""):
+    def __init__(self, description, file_path, zip_relative: str = "",
+                 never_redact=False):
+        super().__init__(description, file_path, zip_relative,
+                         never_redact=never_redact)
         self.description = description
         self.output_file = file_path
         if zip_relative == "":
@@ -952,7 +958,8 @@ class CollectFileTask(AllOsTask):
             return 1
 
     @staticmethod
-    def create_directory_collection_tasks(dir_path, relative_path_base):
+    def create_directory_collection_tasks(dir_path, relative_path_base,
+                                          never_redact=False):
         tasks = []
         for dirpath, _, filenames in os.walk(dir_path):
             for f in filenames:
@@ -961,7 +968,8 @@ class CollectFileTask(AllOsTask):
                 path_in_zip = os.path.join(relative_path_base, relative_path)
                 task = CollectFileTask(f"Collecting {full_path}",
                                        full_path,
-                                       zip_relative=path_in_zip)
+                                       zip_relative=path_in_zip,
+                                       never_redact=never_redact)
                 tasks.append(task)
         return tasks
 
@@ -1011,13 +1019,15 @@ class MetaTask:
     tmp_dir: Optional[str] = None
     pending_artifacts: List["MetaTask"] = []
     output_file: str
+    never_redact: bool
 
     def __init__(self, *subtasks: Task, filename=DEFAULT_LOG,
-                 tmp_dir=None):
+                 tmp_dir=None, never_redact=False):
         self.output_file = filename
         self.subtasks = list(subtasks)
         self.tmp_dir = tmp_dir
         self.pending_artifacts = []
+        self.never_redact = never_redact
 
     def execute_all(self, outstream: Writer):
         for task in self.subtasks:
@@ -1156,7 +1166,8 @@ class TaskRunner:
                 else:
                     outfile = task.output_file
                 output[task.output_file] = MetaTask(task, filename=outfile,
-                                                    tmp_dir=tmp_dir)
+                                                    tmp_dir=tmp_dir,
+                                                    never_redact=task.never_redact)
         return output
 
     def _run_metatask(self, metatask: MetaTask):
@@ -1167,7 +1178,8 @@ class TaskRunner:
             return
 
         if self.redacted_zip_out:
-            if metatask.output_file not in OMIT_IN_REDACT_ZIP:
+            if (metatask.output_file not in OMIT_IN_REDACT_ZIP and
+                not metatask.never_redact):
                 self._write_both(metatask)
             else:
                 self._write_unredacted(metatask)
@@ -2793,7 +2805,7 @@ def main():
     snapshot_dir_path = get_prometheus_stats(guts)
     if snapshot_dir_path is not None:
         tasks = CollectFileTask.create_directory_collection_tasks(
-            snapshot_dir_path, "stats_snapshot")
+            snapshot_dir_path, "stats_snapshot", never_redact=True)
         all_tasks.extend(tasks)
     else:
         log("Error: unable to retrieve statistics")
