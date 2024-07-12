@@ -595,15 +595,6 @@ class RedactStream(Writer):
         return write_readable_buffer(chunk, self._inner)
 
     def flush(self):
-        """
-        Make sure we flush the remaining wrap-around data. This is especially
-        important when we finish with a file, but it didn't also end with a
-        newline.
-        """
-        if self._wraparound:
-            self._inner.write(''.join(self._wraparound).encode(LATIN1))
-            self._wraparound.clear()
-
         return self._inner.flush()
 
     def process_line(self, line: str) -> bytes:
