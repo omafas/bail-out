@@ -1888,9 +1888,10 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
 
     cbas_tasks = []
     cbas_port = read_guts(guts, "cbas_parent_port")
+    cbas_diag_timeout = 300
     if cbas_port:
-        cbas_diag_url = 'http://%s:%s/analytics/node/diagnostics' % (
-            local_url_addr, cbas_port)
+        cbas_diag_url = 'http://%s:%s/analytics/node/diagnostics?timeout=%d' % (
+            local_url_addr, cbas_port, cbas_diag_timeout * 1000)
         cbas_parent_port = cbas_port
 
         def make_cbas(statement):
@@ -1902,6 +1903,7 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
             make_curl_task(
                 name="Analytics /analytics/node/diagnostics: ",
                 get_creds_fun=local_token_creds_fun,
+                timeout=cbas_diag_timeout,
                 url=cbas_diag_url,
                 log_file="analytics_diag.json",
                 no_header=True),
