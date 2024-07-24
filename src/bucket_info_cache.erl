@@ -73,6 +73,7 @@ is_interesting(rest) -> true;
 is_interesting({node, _, memcached}) -> true;
 is_interesting({node, _, membership}) -> true;
 is_interesting(cluster_compat_version) -> true;
+is_interesting(cluster_name) -> true;
 is_interesting(developer_preview_enabled) -> true;
 is_interesting({node, _, services}) -> true;
 is_interesting(server_groups) -> true;
@@ -474,7 +475,9 @@ call_build_node_services() ->
 build_cluster_capabilities() ->
     Caps = cluster_compat_mode:get_cluster_capabilities(),
     [{clusterCapabilitiesVer, [1, 0]},
-     {clusterCapabilities, {Caps}}].
+     {clusterCapabilities, {Caps}},
+     {clusterUUID, menelaus_web:get_uuid()},
+     {clusterName, list_to_binary(menelaus_web_pools:get_cluster_name())}].
 
 do_build_node_services() ->
     Config = ns_config:get(),
@@ -634,6 +637,11 @@ verify_compatibility_test() ->
     meck:new(ns_cluster_membership, [passthrough]),
     meck:expect(ns_cluster_membership, get_node_server_group,
                 fun (_,_) -> undefined end),
+    meck:new(menelaus_web, [passthrough]),
+    meck:expect(menelaus_web, get_uuid, fun () -> <<"77777">> end),
+    meck:new(menelaus_web_pools, [passthrough]),
+    meck:expect(menelaus_web_pools, get_cluster_name,
+                fun () -> "test_cluster" end),
 
     BC = [{servers, [node()]},
           {type, membase},
