@@ -1027,7 +1027,15 @@ extract_user_name([Val | Rest], Prefix, Delimiters) ->
         {error, not_found} ->
             extract_user_name(Rest, Prefix, Delimiters);
         Username ->
-            Username
+            %% Assert that the user exists. Must be a 'local' user.
+            %% See MB-62413.
+            case menelaus_users:user_exists({Username, local}) of
+                true ->
+                    Username;
+                false ->
+                    %% Rest could contain more user names
+                    extract_user_name(Rest, Prefix, Delimiters)
+            end
     end.
 
 do_extract_user_name(Name, Prefix, Delimiters) ->
