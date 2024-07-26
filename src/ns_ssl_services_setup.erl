@@ -1139,6 +1139,8 @@ security_settings_state() ->
 
 -ifdef(TEST).
 extract_user_name_test() ->
+    meck:new(menelaus_users, [passthrough]),
+    meck:expect(menelaus_users, user_exists, fun (_) -> true end),
     ?assertEqual(extract_user_name(["www.abc.com"], "www.", ";,."), "abc"),
     ?assertEqual(extract_user_name(["xyz.abc.com", "qwerty", "www.abc.com"],
                                    "www.", "."), "abc"),
@@ -1146,7 +1148,8 @@ extract_user_name_test() ->
     ?assertEqual(extract_user_name(["abc", "xyz"], "", ""), "abc"),
     ?assertEqual(extract_user_name(["xyz.abc.com"],
                                    "www.", "."), {error, not_found}),
-    ?assertEqual(extract_user_name(["xyz.abc.com"], "", "-"), "xyz.abc.com").
+    ?assertEqual(extract_user_name(["xyz.abc.com"], "", "-"), "xyz.abc.com"),
+    meck:unload(menelaus_users).
 -endif.
 
 maybe_convert_pre_71_certs() ->
