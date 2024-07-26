@@ -1115,7 +1115,15 @@ extract_user_name([Val | Rest], Prefix, Delimiters) ->
         {error, not_found} ->
             extract_user_name(Rest, Prefix, Delimiters);
         Username ->
-            Username
+            %% Assert that the user exists. Must be a 'local' user.
+            %% See MB-62413.
+            case menelaus_users:user_exists({Username, local}) of
+                true ->
+                    Username;
+                false ->
+                    %% Rest could contain more user names
+                    extract_user_name(Rest, Prefix, Delimiters)
+            end
     end.
 
 do_extract_user_name(Name, Prefix, Delimiters) ->
@@ -1223,6 +1231,8 @@ security_settings_state() ->
 
 -ifdef(TEST).
 extract_user_name_test() ->
+    meck:new(menelaus_users, [passthrough]),
+    meck:expect(menelaus_users, user_exists, fun (_) -> true end),
     ?assertEqual(extract_user_name(["www.abc.com"], "www.", ";,."), "abc"),
     ?assertEqual(extract_user_name(["xyz.abc.com", "qwerty", "www.abc.com"],
                                    "www.", "."), "abc"),
@@ -1230,7 +1240,8 @@ extract_user_name_test() ->
     ?assertEqual(extract_user_name(["abc", "xyz"], "", ""), "abc"),
     ?assertEqual(extract_user_name(["xyz.abc.com"],
                                    "www.", "."), {error, not_found}),
-    ?assertEqual(extract_user_name(["xyz.abc.com"], "", "-"), "xyz.abc.com").
+    ?assertEqual(extract_user_name(["xyz.abc.com"], "", "-"), "xyz.abc.com"),
+    meck:unload(menelaus_users).
 -endif.
 
 security_config_update_warning(Version, MinVersion) ->
