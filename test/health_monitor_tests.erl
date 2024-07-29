@@ -209,6 +209,58 @@ gen_test_() ->
      fun test_teardown/1,
      Tests}.
 
+%% Testing failure in the kv_stats_monitor, and propagation to
+%% node_status_analyzer. kv_stats_monitor passes statuses up to kv_monitor,
+%% which also pulls statuses from dcp_traffic_monitor, so we need half of the
+%% health monitoring running for this test...
+kv_stats_monitor_io_failure_detection_t(Stat) ->
+    meck:expect(
+        auto_failover, get_cfg,
+        fun() ->
+            [{enabled, true},
+                %% timeout is the time (in seconds) a node needs to be down
+                %% before it is automatically fail-overed
+                {timeout, 1},
+                {failover_on_data_disk_issues, [{enabled, true},
+                    {timePeriod, 1}]}]
+        end),
+
+    meck:expect(ns_bucket, node_bucket_names_of_type,
+        fun(_, persistent) ->
+            ["default"]
+        end),
+
+    setup_service_monitors([kv]),
+
+    dcp_traffic_monitor:node_alive(node(), {"default", 1, self()}),
+
+    %% First, make sure that we are healthy so that we can test a transition
+    %% to unhealthy
+    ?assert(misc:poll_for_condition(
+        fun() ->
+            is_node_healthy(node())
+        end, 30000, 100)),
+
+    meck:expect(ns_memcached, stats,
+        fun(_Bucket, <<"disk-failures">>) ->
+            StatCount = integer_to_binary(
+                meck:num_calls(ns_memcached, stats, '_')),
+            {ok, [{Stat, StatCount}]}
+        end),
+
+    %% Should turn the node unhealthy
+    ?assert(misc:poll_for_condition(
+        fun() ->
+            is_node_unhealthy(node())
+        end, 30000, 100)).
+
+kv_stats_monitor_io_failure_detection_test_() ->
+    {foreach,
+        fun test_setup/0,
+        fun test_teardown/1,
+        [?cut(kv_stats_monitor_io_failure_detection_t(atom_to_binary(Stat))) ||
+            {Stat, _} <- kv_stats_monitor:failure_stats()]}.
+
 %% Get a list of callbacks in the behaviour spec that have not been called
 %% yet. Returns a list of the form [{Module, [{Function, Arity}]}].
 callbacks_not_made() ->

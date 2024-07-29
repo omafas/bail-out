@@ -67,7 +67,8 @@
          get_statuses/0]).
 
 -export([register_tick/3,
-         is_unhealthy/2]).
+         is_unhealthy/2,
+         failure_stats/0]).
 
 -ifdef(TEST).
 -export([common_test_setup/0,
