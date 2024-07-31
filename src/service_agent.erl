@@ -21,6 +21,7 @@
 -export([wait_for_agents/3]).
 -export([set_service_manager/3, unset_service_manager/3]).
 -export([get_node_infos/3, prepare_rebalance/7, start_rebalance/7]).
+-export([get_params/2]).
 -export([prepare_pause_bucket/5, pause_bucket/5]).
 -export([prepare_resume_bucket/6, resume_bucket/6]).
 -export([spawn_connection_waiter/2]).
@@ -143,6 +144,9 @@ get_node_infos(Service, Nodes, Manager) ->
 
     Result = multi_call(Nodes, Service, Call, ?OUTER_TIMEOUT),
     handle_multicall_result(Service, Tag, Result).
+
+get_params(Service, Leader) ->
+    rpc:call(Leader, service_api, get_params, [Service], ?OUTER_TIMEOUT).
 
 prepare_rebalance(Service, Nodes, Manager, RebalanceId, Type, KeepNodes,
                   EjectNodes) ->
@@ -945,8 +949,15 @@ handle_new_topology({Rev, Topology}, #state{node_uuid_map = Map} = State) ->
               end, UUIDs),
 
     Topology1 = Topology#topology{nodes = lists:sort(Nodes)},
+    report_new_topology(State, Nodes),
 
     State#state{topology = {Rev, Topology1}}.
+
+report_new_topology(#state{type = rebalance, task_observer = Observer},
+                    Nodes) when Observer =/= undefined ->
+    Observer ! {new_topology, Nodes};
+report_new_topology(_, _) ->
+    ok.
 
 process_service_response(Name, Raw, Fun) ->
     try

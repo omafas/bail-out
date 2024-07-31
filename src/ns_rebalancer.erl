@@ -378,8 +378,7 @@ rebalance_topology_aware_services(Snapshot, Services, KeepNodesAll,
                         Service, AllNodes),
                       ok = rebalance_topology_aware_service(
                              Service, KeepNodes, EjectNodes, DeltaNodes),
-                      service_manager:update_service_map(Service, AllNodes,
-                                                         KeepNodes),
+                      service_manager:update_service_map(Service, KeepNodes),
                       master_activity_events:note_rebalance_stage_completed(
                         Service),
                       {true, {Service, os:timestamp()}}

@@ -15,7 +15,7 @@
 
 -export([shutdown/1, get_node_info/1,
          get_task_list/2, cancel_task/3,
-         get_current_topology/2,
+         get_current_topology/2, get_params/1,
          prepare_topology_change/6, start_topology_change/6,
          prepare_pause_bucket/3, pause_bucket/3,
          prepare_resume_bucket/4, resume_bucket/4,
@@ -34,6 +34,15 @@ get_node_info(Pid) ->
 get_task_list(Pid, Rev) ->
     perform_service_manager_call(Pid, "GetTaskList",
                                  get_req(Rev, ?LONG_POLL_TIMEOUT)).
+
+get_params(Service) ->
+    case perform_call(get_label(Service), "GetParams", empty_req(),
+                      #{timeout => ?RPC_TIMEOUT}) of
+        {ok, {Params}} ->
+            {ok, Params};
+        Other ->
+            handle_result(Other)
+    end.
 
 cancel_task(Pid, Id, Rev) ->
     perform_service_manager_call(Pid, "CancelTask", cancel_task_req(Id, Rev)).
