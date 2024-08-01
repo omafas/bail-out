@@ -89,11 +89,29 @@ rewrite_ns_config(#{output_path := OutputPath} = Args) ->
                              [modify_ns_config_tuples(_, Args),
                               maybe_rewrite_cookie(_, Args),
                               maybe_rewrite_cluster_uuid(_, Args),
-                              maybe_remove_alternate_addresses(_, Args)]),
+                              maybe_remove_alternate_addresses(_, Args),
+                              maybe_disable_auto_failover(_, Args)]),
 
     NsConfigPath = filename:join(OutputPath, ?NS_CONFIG_NAME),
     ok = filelib:ensure_dir(NsConfigPath),
     ok = file:write_file(NsConfigPath, term_to_binary([NewCfg])).
+
+maybe_disable_auto_failover(Cfg, Args) ->
+    case maps:find(disable_auto_failover, Args) of
+        {ok, true} -> disable_auto_failover(Cfg);
+        _ -> Cfg
+    end.
+
+disable_auto_failover(Cfg) ->
+    ?log_info("Disabling auto-failover"),
+    lists:map(
+        fun({auto_failover_cfg, [VClock | Value]}) ->
+            ?log_debug("Original AFO settings ~p", [Value]),
+            NewAFOSettings = misc:update_proplist(Value, [{enabled, false}]),
+            ?log_debug("New AFO settings ~p", [NewAFOSettings]),
+            {auto_failover_cfg, [VClock | NewAFOSettings]};
+            (Existing) -> Existing
+        end, Cfg).
 
 maybe_remove_alternate_addresses(Cfg, Args) ->
     case maps:find(remove_alternate_addresses, Args) of
@@ -505,7 +523,8 @@ default_args() ->
     #{log_level => info,
       regenerate_cookie => false,
       regenerate_cluster_uuid => false,
-      remove_alternate_addresses => false}.
+      remove_alternate_addresses => false,
+      disable_auto_failover => false}.
 
 -spec parse_args(list(), map()) -> map().
 parse_args(["--output-path", Path | Rest], Map) ->
@@ -526,6 +545,8 @@ parse_args(["--regenerate-cluster-uuid" | Rest], Map) ->
     parse_args(Rest, Map#{regenerate_cluster_uuid => true});
 parse_args(["--remove-alternate-addresses" | Rest], Map) ->
     parse_args(Rest, Map#{remove_alternate_addresses => true});
+parse_args(["--disable-auto-failover" | Rest], Map) ->
+    parse_args(Rest, Map#{disable_auto_failover => true});
 parse_args([], Map) ->
     Map;
 parse_args(Args, _Map) ->
