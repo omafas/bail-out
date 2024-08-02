@@ -392,17 +392,24 @@ rewrite_string_file(File, #{?INITARGS_DATA_DIR := InputDir,
                             node_map := NodeMap}) ->
     InputFileName = filename:join(InputDir, File),
     {ok, OldContents} = file:read_file(InputFileName),
-    NewContents = maps:fold(
+    NewContents =
+        case NodeMap of
+            #{} -> OldContents;
+            _ ->
+                R = maps:fold(
                     fun(Key, Value, Acc) ->
-                            string:replace(Acc, Key, Value, all)
+                        string:replace(Acc, Key, Value, all)
                     end, OldContents, NodeMap),
+                list_to_binary(R)
+        end,
+
 
     ?log_debug("Final result for ~p file: ~p",
-               [File, list_to_binary(NewContents)]),
+               [File, NewContents]),
 
     OutputFileName = filename:join(OutputDir, File),
     filelib:ensure_dir(OutputFileName),
-    ok = file:write_file(OutputFileName, list_to_binary(NewContents)).
+    ok = file:write_file(OutputFileName, NewContents).
 
 rewrite_nodefile(#{?INITARGS_DATA_DIR := InputDir} = Args) ->
     ?log_info("Rewriting nodefile"),
@@ -428,19 +435,24 @@ rewrite_ip_file(File, #{?INITARGS_DATA_DIR := InputDir,
 
     InputFileName = filename:join(InputDir, File),
     {ok, Contents} = file:read_file(InputFileName),
-    IP = maps:fold(
-           fun(FullKey, FullValue, Acc) ->
-                   Key = remove_prefix_from_node_name(FullKey),
-                   Value = remove_prefix_from_node_name(FullValue),
-                   string:replace(Acc, Key, Value, all)
-           end, Contents, NodeMap),
+    IP = case NodeMap of
+        #{} -> Contents;
+        _ ->
+            R = maps:fold(
+                 fun(FullKey, FullValue, Acc) ->
+                        Key = remove_prefix_from_node_name(FullKey),
+                        Value = remove_prefix_from_node_name(FullValue),
+                        string:replace(Acc, Key, Value, all)
+                 end, Contents, NodeMap),
+            list_to_binary(R)
+    end,
 
-    ?log_debug("Final result for ip file: ~p", [list_to_binary(IP)]),
+    ?log_debug("Final result for ip file: ~p", [IP]),
 
     OutputFileName = filename:join(OutputDir, File),
 
     ok = filelib:ensure_dir(OutputFileName),
-    ok = file:write_file(OutputFileName, list_to_binary(IP)).
+    ok = file:write_file(OutputFileName, IP).
 
 maybe_rewrite_ip_file(File, #{?INITARGS_DATA_DIR := InputDir} = Args) ->
     InputFileName = filename:join(InputDir, File),
@@ -524,7 +536,8 @@ default_args() ->
       regenerate_cookie => false,
       regenerate_cluster_uuid => false,
       remove_alternate_addresses => false,
-      disable_auto_failover => false}.
+      disable_auto_failover => false,
+      node_map => #{}}.
 
 -spec parse_args(list(), map()) -> map().
 parse_args(["--output-path", Path | Rest], Map) ->
@@ -597,13 +610,6 @@ setup(Args) ->
 
     ArgsMap0 = parse_args(Args, default_args()),
     ?log_debug("Parsed args map ~p", [ArgsMap0]),
-
-    case maps:is_key(node_map, ArgsMap0) of
-        true -> ok;
-        false ->
-            ?log_error("Must pass remap args"),
-            erlang:halt(1)
-    end,
 
     maybe_tweak_log_verbosity(ArgsMap0),
 

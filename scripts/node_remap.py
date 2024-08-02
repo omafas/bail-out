@@ -49,3 +49,31 @@ def run_config_remap_via_escript_wrapper(initargs,
 
     pr = subprocess.run(cmd, capture_output=capture_output)
     pr.check_returncode()
+
+def disable_afo_via_config_remap(initargs,
+                                 output_path,
+                                 log_level='info',
+                                 capture_output=False,
+                                 root_dir=basedir()):
+    escript_path = find_valid_binary('escript', root_dir)
+    escript_wrapper_path = find_valid_binary('escript-wrapper', root_dir)
+    config_remap_path = find_valid_binary('config_remap', root_dir)
+
+    initargs_path = ''
+    for possible_initargs in initargs:
+        if os.path.exists(possible_initargs):
+            initargs_path = possible_initargs
+            break
+        raise RuntimeError("Did not find initargs")
+
+    cmd = [escript_path,
+           escript_wrapper_path,
+           '--initargs-path', initargs_path,
+           '--', config_remap_path,
+           '--initargs-path', initargs_path,
+           '--output-path', output_path,
+           '--disable-auto-failover',
+           '--log-level', log_level]
+
+    pr = subprocess.run(cmd, capture_output=capture_output)
+    pr.check_returncode()
