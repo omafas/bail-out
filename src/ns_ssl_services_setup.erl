@@ -646,6 +646,8 @@ init([]) ->
                        [CertsDir, Reason]),
             exit({certs_dir, CertsDir, Reason})
     end,
+    %% In case a failure occurred while certs were being updated there will
+    %% be a temp file which must be processed.
     _ = save_certs_phase2(node_cert),
     _ = save_certs_phase2(client_cert),
     maybe_store_ca_certs(),
@@ -698,12 +700,28 @@ handle_config_change(cluster_certs_epoch, Parent) ->
 handle_config_change(_OtherEvent, _Parent) ->
     ok.
 
-
 handle_call({set_certificate_chain, Type, CAEntry, Chain, PKeyFun,
              PassphraseSettingsFun}, _From, State) ->
-    Props = save_uploaded_certs(Type, CAEntry, Chain, PKeyFun(),
-                                PassphraseSettingsFun()),
-    {reply, {ok, Props}, read_marker_and_reload_ssl(State)};
+    NewPKey = PKeyFun(),
+    NewPassphraseSettings = PassphraseSettingsFun(),
+    {value, SavedProps} = ns_config:search(ns_config:latest(),
+                                           {node, node(), node_cert}),
+    Pem = proplists:get_value(pem, SavedProps),
+    PassphraseSettings = proplists:get_value(pkey_passphrase_settings,
+                                             SavedProps, []),
+    CA = proplists:get_value(ca, SavedProps),
+
+    case Chain =:= Pem andalso CAEntry =:= CA andalso
+         NewPassphraseSettings =:= PassphraseSettings of
+        true ->
+            %% Nothing changed so just return.
+            ?log_debug("Certs unchanged so not reloading."),
+            {reply, {ok, SavedProps}, State};
+        false ->
+            Props = save_uploaded_certs(Type, CAEntry, Chain, NewPKey,
+                                        NewPassphraseSettings),
+            {reply, {ok, Props}, read_marker_and_reload_ssl(State)}
+    end;
 
 %% This is used in the case when this node is added to a cluster
 %% and that cluster pushes generated node certs to us (only in the case when
