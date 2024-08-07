@@ -27,6 +27,7 @@
          this_node_uses_self_generated_client_certs/1,
          self_generated_ca/0,
          load_certs_from_inbox/2,
+         load_certs_from_inbox/3,
          is_cert_loaded_from_file/1,
          load_CAs_from_inbox/0,
          add_CAs/2,
@@ -703,25 +704,31 @@ trusted_CAs(Format) ->
               end, SortedCerts)
     end.
 
-load_certs_from_inbox(Type, PassphraseSettings) when Type == node_cert;
-                                                     Type == client_cert ->
+load_certs_from_inbox(Type, PassphraseSettings) ->
+    %% Maintain behavior for existing callers where certs are always loaded.
+    load_certs_from_inbox(Type, PassphraseSettings, true).
+
+load_certs_from_inbox(Type, PassphraseSettings, ForceReload)
+  when Type == node_cert; Type == client_cert ->
     P12Path = inbox_p12_path(Type),
     ChainPath = inbox_chain_path(Type),
     KeyPath = inbox_pkey_path(Type),
     case {filelib:is_file(P12Path), filelib:is_file(ChainPath)} of
         {true, false} ->
             ?log_info("Loading ~p from PKCS12 file ~s", [Type, P12Path]),
-            load_certs_from_p12_file(Type, P12Path, PassphraseSettings);
+            load_certs_from_p12_file(Type, P12Path, PassphraseSettings,
+                                     ForceReload);
         {true, true} ->
             ?log_error("Aborting ~p loading because both types of certs are "
                        "present: ~p and ~p", [Type, P12Path, ChainPath]),
             {error, {conflicting_certs, ChainPath, P12Path}};
         {false, _} ->
             ?log_info("Loading ~p from ~s and ~s", [Type, ChainPath, KeyPath]),
-            load_certs_from_files(Type, ChainPath, KeyPath, PassphraseSettings)
+            load_certs_from_files(Type, ChainPath, KeyPath, PassphraseSettings,
+                                  ForceReload)
     end.
 
-load_certs_from_p12_file(Type, P12Path, PassphraseSettings) ->
+load_certs_from_p12_file(Type, P12Path, PassphraseSettings, ForceReload) ->
     Dir = filename:dirname(P12Path),
     with_tmp_files(
       Dir, ["chain", "key"],
@@ -730,7 +737,7 @@ load_certs_from_p12_file(Type, P12Path, PassphraseSettings) ->
                                   PassphraseSettings) of
               ok ->
                   load_certs_from_files(Type, TmpChainPath, TmpKeyPath,
-                                        PassphraseSettings);
+                                        PassphraseSettings, ForceReload);
               {error, Reason} ->
                   {error, Reason}
           end
@@ -744,13 +751,14 @@ with_tmp_files(Dir, Prefixes, Fun) ->
         [catch file:delete(F) || F <- TmpFiles]
     end.
 
-load_certs_from_files(Type, ChainFile, KeyFile, PassphraseSettings) ->
+load_certs_from_files(Type, ChainFile, KeyFile, PassphraseSettings,
+                      ForceReload) ->
     case file:read_file(ChainFile) of
         {ok, Chain} ->
             case file:read_file(KeyFile) of
                 {ok, PKey} ->
                     set_certificate_chain(Type, Chain, PKey,
-                                          PassphraseSettings);
+                                          PassphraseSettings, ForceReload);
                 {error, Reason} ->
                     {error, {read_pkey, KeyFile, Reason}}
             end;
@@ -842,7 +850,7 @@ is_cert_loaded_from_file(ChainPath) ->
             false
     end.
 
-set_certificate_chain(Type, Chain, PKey, PassphraseSettings) ->
+set_certificate_chain(Type, Chain, PKey, PassphraseSettings, ForceReload) ->
     case decode_and_validate_chain(trusted_CAs(props), Chain) of
         {ok, CAPem, ChainEntriesReversed} ->
             %% ChainReversed :: [Int cert,..., Node cert] (without CA)
@@ -880,7 +888,8 @@ set_certificate_chain(Type, Chain, PKey, PassphraseSettings) ->
                             CAPem,
                             ChainPem,
                             PKey,
-                            PassphraseSettings),
+                            PassphraseSettings,
+                            ForceReload),
 
                     {ok, Props, WarningList}
             end;

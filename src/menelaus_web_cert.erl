@@ -381,11 +381,12 @@ handle_reload_certificate(Type, Req) when Type == node_cert;
           PassphraseSettings =
               proplists:get_value(privateKeyPassphrase, Params, []),
 
+          ForceReload = proplists:get_bool(forceReload, Params),
+
           menelaus_util:survive_web_server_restart(
             fun () ->
                 case ns_server_cert:load_certs_from_inbox(
-                       Type,
-                       PassphraseSettings) of
+                       Type, PassphraseSettings, ForceReload) of
                     {ok, Props, WarningList} ->
                         ns_audit:reload_node_certificate(
                           Req,
@@ -412,7 +413,8 @@ handle_reload_certificate(Type, Req) when Type == node_cert;
                 end
             end)
       end, Req, JSONData,
-      [validator:decoded_json(
+      [validator:boolean(forceReload, _),
+       validator:decoded_json(
          privateKeyPassphrase,
          [validator:required(type, _),
           validator:one_of(type, ["script", "rest", "plain"], _),

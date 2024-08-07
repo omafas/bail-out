@@ -34,7 +34,7 @@
          client_cert_auth_state/0,
          client_cert_auth_state/1,
          get_user_name_from_client_cert/1,
-         set_certificate_chain/5,
+         set_certificate_chain/6,
          tls_client_opts/2,
          merge_ns_config_tls_options/3,
          tls_client_certs_opts/0,
@@ -622,11 +622,13 @@ sync() ->
     %% has been handled
     ok = gen_server:call(?MODULE, ping, ?TIMEOUT).
 
-set_certificate_chain(Type, CAEntry, Chain, PKey, PassphraseSettings) ->
+set_certificate_chain(Type, CAEntry, Chain, PKey, PassphraseSettings,
+                      ForceReload) ->
     ?log_debug("Setting node certificate chain"),
     gen_server:call(?MODULE, {set_certificate_chain, Type, CAEntry, Chain,
                               fun () -> PKey end,
-                              fun () -> PassphraseSettings end}, ?TIMEOUT).
+                              fun () -> PassphraseSettings end,
+                              ForceReload}, ?TIMEOUT).
 
 set_certs(Host, CA, NodeCert, NodeKey, ClientCert, ClientKey) ->
     ?log_debug("Setting certificates"),
@@ -701,7 +703,7 @@ handle_config_change(_OtherEvent, _Parent) ->
     ok.
 
 handle_call({set_certificate_chain, Type, CAEntry, Chain, PKeyFun,
-             PassphraseSettingsFun}, _From, State) ->
+             PassphraseSettingsFun, ForceReload}, _From, State) ->
     NewPKey = PKeyFun(),
     NewPassphraseSettings = PassphraseSettingsFun(),
     {value, SavedProps} = ns_config:search(ns_config:latest(),
@@ -711,16 +713,32 @@ handle_call({set_certificate_chain, Type, CAEntry, Chain, PKeyFun,
                                              SavedProps, []),
     CA = proplists:get_value(ca, SavedProps),
 
-    case Chain =:= Pem andalso CAEntry =:= CA andalso
-         NewPassphraseSettings =:= PassphraseSettings of
+    Reload =
+        case Chain =:= Pem andalso CAEntry =:= CA andalso
+             NewPassphraseSettings =:= PassphraseSettings of
+            true ->
+                case ForceReload of
+                    false ->
+                        %% Nothing changed so just return.
+                        ?log_debug("Certs unchanged so not reloading."),
+                        false;
+                    true ->
+                        %% User wants to force a reload
+                        ?log_debug("Unchanged certs being forcibly reloaded."),
+                        true
+                end;
+            false ->
+                %% Certs have changed.
+                true
+        end,
+
+    case Reload of
         true ->
-            %% Nothing changed so just return.
-            ?log_debug("Certs unchanged so not reloading."),
-            {reply, {ok, SavedProps}, State};
-        false ->
             Props = save_uploaded_certs(Type, CAEntry, Chain, NewPKey,
                                         NewPassphraseSettings),
-            {reply, {ok, Props}, read_marker_and_reload_ssl(State)}
+            {reply, {ok, Props}, read_marker_and_reload_ssl(State)};
+        false ->
+            {reply, {ok, SavedProps}, State}
     end;
 
 %% This is used in the case when this node is added to a cluster
