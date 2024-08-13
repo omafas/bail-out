@@ -110,6 +110,8 @@ class AuthnTests(testlib.BaseTestSet):
         r = session.post(base_url + '/uilogin', headers=headers, **kwargs)
         testlib.assert_http_code(expected_code, r)
         if expected_code == 200:
+            session.cert = kwargs.get('cert', None)
+            session.verify = kwargs.get('verify', None)
             r = session.get(base_url + self.testEndpoint, headers=headers)
             testlib.assert_http_code(200, r)
             r = session.get(base_url + '/whoami', headers=headers).json()
