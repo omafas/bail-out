@@ -1115,9 +1115,10 @@ extract_user_name([Val | Rest], Prefix, Delimiters) ->
         {error, not_found} ->
             extract_user_name(Rest, Prefix, Delimiters);
         Username ->
-            %% Assert that the user exists. Must be a 'local' user.
-            %% See MB-62413.
-            case menelaus_users:user_exists({Username, local}) of
+            %% Assert that the user exists. Must be a 'local' (or 'admin') user.
+            %% See MB-62413 / MB-63001
+            case menelaus_users:user_exists({Username, local})
+                orelse Username =:= ns_config_auth:get_user(admin) of
                 true ->
                     Username;
                 false ->
