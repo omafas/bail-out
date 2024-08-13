@@ -595,6 +595,7 @@ prepare_cert_info(CertType, Node, AllWarnings)
             Filtered =
                 lists:filtermap(
                     fun ({subject, _}) -> true;
+                        ({load_timestamp, _}) -> true;
                         %% Backward compat:
                         ({not_after, V}) -> {true, {expires, V}};
                         ({pem, _}) -> true;
