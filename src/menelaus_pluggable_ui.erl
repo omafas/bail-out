@@ -291,8 +291,8 @@ proxy_req(RestPrefix, Path, PluginsConfig, Req) ->
                     % this node and the destination node are same.
 
                     AuthnRes = menelaus_auth:get_authn_res(Req),
-                    FwdHeader = [menelaus_rest:on_behalf_header(AuthnRes),
-                                 menelaus_rest:special_auth_header(Node)],
+                    FwdHeader = menelaus_rest:on_behalf_headers(AuthnRes) ++
+                        [menelaus_rest:special_auth_header(Node)],
 
                     Headers = FwdHeader ++
                         convert_headers(Req, add_filter_headers(HdrFilter)) ++

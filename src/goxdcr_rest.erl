@@ -40,8 +40,8 @@ headers_for_proxy(MochiReq, AuthnRes) ->
                                 {true, {convert_header_name(Name), Value}}
                         end
                 end, HeadersList),
-    [menelaus_rest:on_behalf_header(AuthnRes),
-     menelaus_rest:special_auth_header() | Headers].
+    menelaus_rest:on_behalf_headers(AuthnRes) ++
+        [menelaus_rest:special_auth_header() | Headers].
 
 send(MochiReq, Method, Path, Headers, Body) ->
     Params = mochiweb_request:parse_qs(MochiReq),

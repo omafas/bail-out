@@ -17,7 +17,8 @@
 
 -export([start_ui_session/3, maybe_refresh/1,
          check/1, reset/0, logout/1, session_type_by_id/1,
-         logout_by_session_name/2, logout_by_session_type/1]).
+         logout_by_session_name/2, logout_by_session_type/1,
+         get_authn_res_from_ui_session/1]).
 
 start_link() ->
     token_server:start_link(?MODULE, 1024, ?UI_AUTH_EXPIRATION_SECONDS,
@@ -108,3 +109,20 @@ logout_by_session_name(Type, SessionName) ->
 logout_by_session_type(Type) ->
     Pattern = #uisession{type = Type, _ = '_'},
     token_server:purge(?MODULE, Pattern).
+
+-spec get_authn_res_from_ui_session(Id :: string()) -> #authn_res{} | undefined.
+get_authn_res_from_ui_session(Id) ->
+    case ns_node_disco:couchdb_node() == node() of
+        false ->
+            SessionBin = list_to_binary(Id),
+            AuthPattern = #authn_res{type = ui, session_id = SessionBin,
+                                     _ = '_'},
+            MemoPattern = #uisession{authn_res = AuthPattern, _ = '_'},
+            case token_server:find_memos(?MODULE, MemoPattern) of
+                [] -> undefined;
+                [#uisession{authn_res = UiAuthnRes}] -> UiAuthnRes
+            end;
+        true ->
+            rpc:call(ns_node_disco:ns_server_node(),
+                     ?MODULE, get_authn_res_from_ui_session, [Id])
+    end.

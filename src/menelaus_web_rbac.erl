@@ -1405,8 +1405,8 @@ check_permissions_url_version(Snapshot) ->
            menelaus_roles:params_version(Snapshot)]),
     base64:encode(crypto:hash(sha, B)).
 
-get_accessible_buckets(Identity) ->
-    Roles = menelaus_roles:get_compiled_roles(Identity),
+get_accessible_buckets(AuthnRes) ->
+    Roles = menelaus_roles:get_compiled_roles(AuthnRes),
     lists:filter(
       fun (Bucket) ->
               lists:any(
@@ -1417,9 +1417,12 @@ get_accessible_buckets(Identity) ->
 
 handle_get_user_buckets_for_cbauth(Req) ->
     Params = mochiweb_request:parse_qs(Req),
-    Identity = {proplists:get_value("user", Params),
-                list_to_existing_atom(proplists:get_value("domain", Params))},
-    Buckets = [list_to_binary(B) || B <- get_accessible_buckets(Identity)],
+    User = proplists:get_value("user", Params),
+    Domain = list_to_existing_atom(proplists:get_value("domain", Params)),
+    Context = proplists:get_value("context", Params, undefined),
+    AuthnRes = menelaus_auth:get_authn_res_from_on_behalf_of(User, Domain,
+                                                             Context),
+    Buckets = [list_to_binary(B) || B <- get_accessible_buckets(AuthnRes)],
     menelaus_util:reply_json(Req, Buckets, 200).
 
 handle_get_user_uuid_for_cbauth(Req) ->
@@ -1433,13 +1436,15 @@ handle_get_user_uuid_for_cbauth(Req) ->
 
 handle_check_permission_for_cbauth(Req) ->
     Params = mochiweb_request:parse_qs(Req),
-    Identity = {proplists:get_value("user", Params),
-                list_to_existing_atom(proplists:get_value("domain", Params))},
     RawPermission = proplists:get_value("permission", Params),
     Permission = parse_permission(string:trim(RawPermission)),
+    User = proplists:get_value("user", Params),
+    Domain = list_to_existing_atom(proplists:get_value("domain", Params)),
+    Context = proplists:get_value("context", Params, undefined),
+    AuthnRes = menelaus_auth:get_authn_res_from_on_behalf_of(User, Domain,
+                                                             Context),
 
-    case menelaus_roles:is_allowed(Permission,
-                                   #authn_res{identity = Identity}) of
+    case menelaus_roles:is_allowed(Permission, AuthnRes) of
         true ->
             menelaus_util:reply_text(Req, "", 200);
         false ->

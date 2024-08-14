@@ -42,7 +42,9 @@
          new_session_id/0,
          get_resp_headers/1,
          acting_on_behalf/1,
-         init_auth/1]).
+         init_auth/1,
+         on_behalf_context/1,
+         get_authn_res_from_on_behalf_of/3]).
 
 %% rpc from ns_couchdb node
 -export([authenticate/1,
@@ -501,7 +503,7 @@ verify_rest_auth(Req, Permission) ->
         {ok, #authn_res{} = AuthnRes,
          RespHeaders} ->
             Req2 = append_resp_headers(RespHeaders, Req),
-            case apply_on_behalf_of_identity(AuthnRes, Req2) of
+            case apply_on_behalf_of_authn_res(AuthnRes, Req2) of
                 error ->
                     Req3 = maybe_store_rejected_user(
                              get_rejected_user(Auth), Req2),
@@ -526,15 +528,41 @@ verify_rest_auth(Req, Permission) ->
             {auth_failure, Req2}
     end.
 
--spec apply_on_behalf_of_identity(#authn_res{}, mochiweb_request()) ->
-                                        error | #authn_res{}.
-apply_on_behalf_of_identity(AuthnRes, Req) ->
-    case extract_on_behalf_of_identity(Req) of
+%% Specify authentication context for SAML (and later JWT) in on-behalf-of
+%% extras. {User, Domain} aren't sufficient to determine the full set of
+%% privileges available to the user.
+-spec on_behalf_context(#authn_res{}) -> {string(), boolean()}.
+on_behalf_context(#authn_res{session_id = Id}) when is_binary(Id) ->
+            {"context:ui=" ++ binary_to_list(Id), true};
+on_behalf_context(_) -> {"", false}.
+
+-spec get_authn_res_from_on_behalf_of(User :: rbac_user_id(),
+                                      Domain :: rbac_identity_type(),
+                                      Context :: string() | undefined) ->
+          #authn_res{}.
+get_authn_res_from_on_behalf_of(User, Domain, Context) ->
+    AuthnRes0 = #authn_res{identity = {User, Domain}},
+    case Context of
+        undefined -> AuthnRes0;
+        "ui=" ++ Id ->
+            UiAuthnRes = menelaus_ui_auth:get_authn_res_from_ui_session(Id),
+            case UiAuthnRes of
+                undefined -> AuthnRes0;
+                #authn_res{identity = {User0, Domain0}}
+                  when User0 =:= User, Domain0 =:= Domain -> UiAuthnRes;
+                _ -> AuthnRes0
+            end
+    end.
+
+-spec apply_on_behalf_of_authn_res(#authn_res{}, mochiweb_request()) ->
+          error | #authn_res{}.
+apply_on_behalf_of_authn_res(AuthnRes, Req) ->
+    case extract_on_behalf_of_authn_res(Req) of
         error ->
             error;
         undefined ->
             AuthnRes;
-        {ok, RealIdentity} ->
+        {User, Domain, Context} ->
             %% The permission is formed the way that it is currently granted
             %% to full admins only. We might consider to reformulate it
             %% like {[onbehalf], impersonate} or, such in the upcoming
@@ -547,9 +575,7 @@ apply_on_behalf_of_identity(AuthnRes, Req) ->
             case menelaus_roles:is_allowed(
                    {[admin, security, admin], impersonate}, AuthnRes) of
                 true ->
-                    AuthnRes#authn_res{identity = RealIdentity,
-                                       extra_groups = [],
-                                       extra_roles = []};
+                    get_authn_res_from_on_behalf_of(User, Domain, Context);
                 false ->
                     error
             end
@@ -559,17 +585,23 @@ apply_on_behalf_of_identity(AuthnRes, Req) ->
 acting_on_behalf(Req) ->
     get_authenticated_identity(Req) =/= get_identity(Req).
 
--spec extract_on_behalf_of_identity(mochiweb_request()) ->
-                                                error | undefined
-                                                | {ok, rbac_identity()}.
-extract_on_behalf_of_identity(Req) ->
+-spec extract_on_behalf_of_authn_res(mochiweb_request()) ->
+          error | undefined |
+          {rbac_user_id(), rbac_identity_type(), string() | undefined}.
+extract_on_behalf_of_authn_res(Req) ->
     case read_on_behalf_of_header(Req) of
         Header when is_list(Header) ->
             case parse_on_behalf_of_header(Header) of
                 {User, Domain} ->
-                    try
-                        ExistingDomain = list_to_existing_atom(Domain),
-                        {ok, {User, ExistingDomain}}
+                    try list_to_existing_atom(Domain) of
+                        ExistingDomain ->
+                            case parse_on_behalf_of_extras(Req) of
+                                error -> error;
+                                Context when is_list(Context) ->
+                                    {User, ExistingDomain, Context};
+                                undefined ->
+                                    {User, ExistingDomain, undefined}
+                            end
                     catch
                         error:badarg ->
                             ?log_debug("Invalid domain in cb-on-behalf-of: ~s",
@@ -582,11 +614,20 @@ extract_on_behalf_of_identity(Req) ->
                     error
             end;
         undefined ->
-            undefined
+            case read_on_behalf_of_extras(Req) of
+                undefined -> undefined;
+                Hdr ->
+                    ?log_debug("Unexpected cb-on-behalf-extras: ~s",
+                               [ns_config_log:tag_user_name(Hdr)]),
+                    undefined
+            end
     end.
 
 read_on_behalf_of_header(Req) ->
     mochiweb_request:get_header_value("cb-on-behalf-of", Req).
+
+read_on_behalf_of_extras(Req) ->
+    mochiweb_request:get_header_value("cb-on-behalf-extras", Req).
 
 parse_on_behalf_of_header(Header) ->
     case (catch base64:decode_to_string(Header)) of
@@ -600,6 +641,29 @@ parse_on_behalf_of_header(Header) ->
             end;
         _ ->
             error
+    end.
+
+parse_on_behalf_of_extras(Req) ->
+    case read_on_behalf_of_extras(Req) of
+        undefined -> undefined;
+        Extras when is_list(Extras) ->
+            Status =
+                case (catch base64:decode_to_string(Extras)) of
+                    ContextStr when is_list(ContextStr) ->
+                        case ContextStr of
+                            "context:" ++ X -> X;
+                            _ -> error
+                        end;
+                    _ -> error
+                end,
+            case Status of
+                error ->
+                    ?log_debug("Invalid context in cb-on-behalf-extras:~s",
+                               [ns_config_log:tag_user_name(Extras)]),
+                    error;
+                S -> S
+            end;
+        _ -> error
     end.
 
 -spec extract_identity_from_cert(binary()) ->
