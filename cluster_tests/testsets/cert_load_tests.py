@@ -11,6 +11,7 @@ import os
 import ipaddress
 import subprocess
 import sys
+import time
 
 scriptdir = sys.path[0]
 certs_path = os.path.join(scriptdir, 'resources', 'test_certs')
@@ -131,6 +132,32 @@ class CertLoadTests(testlib.BaseTestSet):
         self.generate_and_load_pkcs12_cert('ec',
                                            passphrase=testlib.random_str(8))
 
+    ## Reload node certificates is disruptive to the system. So if the cert
+    ## is the same as what is in use we skip the reloading.
+    def short_circuit_reloading_node_cert_test(self):
+
+        def load_cert_return_timestamp(force=False):
+            load_cert(self.cluster.connected_nodes[0], cert, key,
+                      passphrase=None, is_client=False, force_reload=force)
+            r = testlib.get_succ(self.cluster.connected_nodes[0],
+                                 f'/pools/default/certificate/'
+                                 f'node/{self.cluster.connected_nodes[0]}')
+            r = r.json()
+            return r['loadTimestamp']
+
+        cert, key = generate_node_certs(self.node_addr,
+                                        self.ca_pem, self.ca_key)
+
+        ts1 = load_cert_return_timestamp(force=False)
+        time.sleep(2)
+        ts2 = load_cert_return_timestamp(force=False)
+        ## Because the certs haven't changed the returned timestamp will
+        ## not have changed.
+        assert (ts1 == ts2)
+        ts3 = load_cert_return_timestamp(force=True)
+        ## The reload was forced so the returned timestamp will be different.
+        assert (ts1 != ts3)
+
     def generate_and_load_pkcs12_cert(self, key_type, passphrase=None,
                                       is_client=False):
         if is_client:
@@ -169,7 +196,7 @@ def load_client_cert(node, cert, key, passphrase=None):
     load_cert(node, cert, key, passphrase, is_client=True)
 
 
-def load_cert(node, cert, key, passphrase, is_client):
+def load_cert(node, cert, key, passphrase, is_client, force_reload=False):
     inbox_dir = os.path.join(node.data_path(), 'inbox')
     chain_file_name = 'client_chain.pem' if is_client else 'chain.pem'
     chain_path = os.path.join(inbox_dir, chain_file_name)
@@ -187,6 +214,11 @@ def load_cert(node, cert, key, passphrase, is_client):
         if passphrase is not None:
             data = {'privateKeyPassphrase': {'type': 'plain',
                                              'password': passphrase}}
+        if force_reload:
+            if data is None:
+                data = {'forceReload': True}
+            else:
+                data['forceReload'] = True
         testlib.post_succ(node, f'/node/controller/{endpoint}', json=data)
     finally:
         if os.path.exists(chain_path):
