@@ -917,7 +917,6 @@ class LiteralTask(AllOsTask):
 
     def __init__(self, description, literal, timeout=None,
                  log_file=DEFAULT_LOG, no_header=False):
-        super().__init__(description, literal)
         self.description = description
         self.literal = literal
         self.timeout = timeout
