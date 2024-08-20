@@ -335,13 +335,19 @@ build_node_info(N, Config, Snapshot) ->
 build_node_info(_N, undefined, _Config, _Snapshot) ->
     undefined;
 build_node_info(N, User, Config, Snapshot) ->
-    ActiveServices = [rest |
-                      ns_cluster_membership:node_active_services(Snapshot, N)],
+    IncludedServices =
+        case config_profile:get_bool({cbauth, include_non_active_services}) of
+            true ->
+                ns_cluster_membership:node_services(Snapshot, N);
+            false ->
+                ns_cluster_membership:node_active_services(Snapshot, N)
+        end,
+    Services = [rest | IncludedServices],
     Ports0 = [Port || {_Key, Port} <- service_ports:get_ports_for_services(
-                                        N, Config, ActiveServices)],
+                                        N, Config, Services)],
 
     Ports =
-        case N =:= node() andalso not lists:member(kv, ActiveServices) of
+        case N =:= node() andalso not lists:member(kv, Services) of
             true ->
                 [service_ports:get_port(memcached_port, Config) | Ports0];
             false ->

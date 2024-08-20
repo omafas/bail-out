@@ -16,3 +16,4 @@
       128}]}.
 {unsupportedServices, [n1ql, index, fts, eventing, backup]}.
 {max_buckets_supported, 0}.
+{{cbauth, include_non_active_services}, true}.
