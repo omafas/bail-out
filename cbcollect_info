@@ -163,6 +163,19 @@ class Writer(ABC):
         """
         pass
 
+    def clear_wraparound(self):
+        """
+        Clear the wraparound (if one exists). This isn't relevant to all types
+        of Writers but is very meaningful for redacted writers. The safest
+        way to interact with this method is to only call it at the end of a
+        file since the rest of the algorithm functions properly as-is. The
+        issue arises if there is no trailing newline or no newlines in the file
+        at all. This is why calling this hook at the END of the logical file
+        makes the most sense. You can see it being called for CollectFileTask
+        as well as the base Task (that handles process -> logfile type tasks).
+        """
+        pass
+
 
 class FSyncedFile(Writer):
     SYNC_BYTES = 16 * 1024 * 1024
@@ -594,6 +607,11 @@ class RedactStream(Writer):
     def write_passthrough(self, chunk: ReadableBuffer):
         return write_readable_buffer(chunk, self._inner)
 
+    def clear_wraparound(self):
+        if self._wraparound:
+            self._inner.write(self.process_line(''.join(self._wraparound)))
+            self._wraparound.clear()
+
     def flush(self):
         return self._inner.flush()
 
@@ -631,6 +649,10 @@ class DoubleStream(Writer):
     def flush(self):
         self._first.flush()
         self._second.flush()
+
+    def clear_wraparound(self):
+        self._first.clear_wraparound()
+        self._second.clear_wraparound()
 
 
 @unique
@@ -791,6 +813,14 @@ class Task:
             stdout.close()
 
         outstream.flush()
+
+        # due to the fact that we overload usage of builtin containers like
+        # BytesIO we need to double check if the method is defined on the
+        # object or not before calling it.
+        # TODO: handle in a more graceful / OOP way. See: MB-63307
+        if "clear_wraparound" in dir(outstream):
+            outstream.clear_wraparound()
+
         return code
 
     def will_run(self):
@@ -951,6 +981,7 @@ class CollectFileTask(AllOsTask):
                         break
                     outstream.write(res)
                 outstream.flush()
+                outstream.clear_wraparound()
                 return 0
         except FileNotFoundError:
             log(f"File doesn't exist: {self.output_file} -- ", new_line=False)
