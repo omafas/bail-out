@@ -585,7 +585,6 @@ class RedactStream(Writer):
             # it so we don't write it again
             if self._wraparound:
                 combined = f"{''.join(self._wraparound)}{line}"
-                assert(combined.endswith(os.linesep))
                 written = written + \
                     write_readable_buffer(self.process_line(combined),
                                           self._inner)
@@ -1208,11 +1207,23 @@ class TaskRunner:
             return
 
         if self.redacted_zip_out:
-            if (metatask.output_file not in OMIT_IN_REDACT_ZIP and
-                not metatask.never_redact):
-                self._write_both(metatask)
+            if metatask.output_file not in OMIT_IN_REDACT_ZIP:
+                if metatask.never_redact:
+                    self._write_double_passthrough(metatask)
+                else:
+                    # this is the main redacted path
+                    self._write_both(metatask)
             else:
-                self._write_unredacted(metatask)
+                if metatask.never_redact:
+                    # Currently this won't get called unless the task that grabs
+                    # user.dets also included the never_redact=True flag.
+                    # That said, if we wanted to set never_redact=True it should
+                    # probably work for user.dets as well, whether we want to
+                    # actually do that or not.
+                    self._write_double_passthrough(metatask)
+                else:
+                    # only users.dets right now
+                    self._write_unredacted(metatask)
         else:
             self._write_unredacted(metatask)
 
@@ -1221,17 +1232,22 @@ class TaskRunner:
             self._run_metatask(artifact)
 
     def _write_both(self, metatask: MetaTask):
-        if self.redacted_zip_out:
-            with self.redacted_zip_out.open(metatask.output_file) as rlogfile:
-                redact = RedactStream(rlogfile, self.salt_value,
-                                      metatask.output_file)
-                with self.zip_out.open(metatask.output_file) as logfile:
-                    double = DoubleStream(redact, logfile)
-                    metatask.execute_all(double)
+        with self.redacted_zip_out.open(metatask.output_file) as rlogfile:
+            redact = RedactStream(rlogfile, self.salt_value,
+                                  metatask.output_file)
+            with self.zip_out.open(metatask.output_file) as logfile:
+                double = DoubleStream(redact, logfile)
+                metatask.execute_all(double)
 
     def _write_unredacted(self, metatask: MetaTask):
         with self.zip_out.open(metatask.output_file) as logfile:
             metatask.execute_all(logfile)
+
+    def _write_double_passthrough(self, metatask: MetaTask):
+        with self.redacted_zip_out.open(metatask.output_file) as rlogfile:
+            with self.zip_out.open(metatask.output_file) as logfile:
+                double = DoubleStream(rlogfile, logfile)
+                metatask.execute_all(double)
 
 
 def make_curl_task(name, get_creds_fun, url, method="GET",
