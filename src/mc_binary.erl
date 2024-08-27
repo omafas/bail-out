@@ -694,15 +694,11 @@ try_get_xattr(Sock, DocId, VBucket, Key, Identity) ->
             error(Error)
     end.
 
-%% X-Keys starting with a leading dollar sign are considered virtual XATTRs
-%% and can only be accessed if the client holds the XATTR_READ privilege.
-check_xattr_read_permission(<<"$", _binary>>, Permissions) ->
-    lists:member(user_read, Permissions);
 %% X-Keys starting with a leading underscore are considered system XATTRs
 %% and can only be read if the client holds the SYSTEM_XATTR read privilege.
 check_xattr_read_permission(<<"_", _/binary>>, Permissions) ->
     lists:member(server_read, Permissions);
-%% X-Keys not starting with a leading underscore (and not starting with a
-%% reserved symbol) are user XATTRs and may be read by clients with the XATTR_READ
-check_xattr_read_permission(_XKey, Permissions) ->
-    lists:member(user_read, Permissions).
+%% Only system xattrs have permissions. User xattrs do not have checks
+%% in memcached so it doesn't make sense to have them in ns_server.
+check_xattr_read_permission(_XKey, _Permissions) ->
+    true.

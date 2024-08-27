@@ -39,11 +39,8 @@ handle_list(Bucket, Scope, Collection, Req) ->
 get_xattrs_permissions(Bucket, Scope, Collection, Req) ->
     ServerPrivilege = {[{collection, [Bucket, Scope, Collection]},
                         data, sxattr], read},
-    UserPrivilege = {[{collection, [Bucket, Scope, Collection]},
-                      data, xattr], read},
     ServerPerm = menelaus_auth:has_permission(ServerPrivilege, Req),
-    UserPerm = menelaus_auth:has_permission(UserPrivilege, Req),
-    [server_read||ServerPerm] ++ [user_read||UserPerm].
+    [server_read||ServerPerm].
 
 handle_get(Bucket, Scope, Collection, DocId, Req) ->
     menelaus_web_collections:assert_api_available(Bucket),
