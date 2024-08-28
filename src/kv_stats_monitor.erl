@@ -98,12 +98,12 @@ init(BaseMonitorState) ->
                       Self ! {event, buckets}
               end
       end),
-    {Enabled, NumSamples} = get_failover_on_disk_issues(auto_failover:get_cfg(),
-                                                        BaseMonitorState),
+    {EnabledDiskIssues, NumSamplesDiskIssues} =
+        get_failover_on_disk_issues(auto_failover:get_cfg(), BaseMonitorState),
     maybe_spawn_stats_collector(
       BaseMonitorState#{buckets => reset_bucket_info(),
-                        enabled => Enabled,
-                        numSamples => NumSamples,
+                        enabled_disk_issues => EnabledDiskIssues,
+                        num_samples_disk_issues => NumSamplesDiskIssues,
                         stats_collector => undefined,
                         latest_stats => {undefined, dict:new()}}).
 
@@ -124,11 +124,11 @@ handle_cast(Cast, State) ->
     ?log_warning("Unexpected cast ~p when in state:~n~p", [Cast, State]),
     {noreply, State}.
 
-handle_info(refresh, #{enabled := false} = MonitorSate) ->
+handle_info(refresh, #{enabled_disk_issues := false} = MonitorSate) ->
     {noreply, MonitorSate};
 handle_info(refresh, MonitorState) ->
     #{buckets := Buckets,
-      numSamples := NumSamples,
+      num_samples_disk_issues := NumSamples,
       latest_stats := {TS, Stats}} = MonitorState,
     NewBuckets = check_for_disk_issues(Buckets, TS, Stats, NumSamples),
     NewState =
@@ -164,7 +164,8 @@ handle_info({event, auto_failover_cfg}, MonitorState) ->
                end,
     ?log_debug("auto_failover_cfg change enabled:~p numSamples:~p ",
                [Enabled, NumSamples]),
-    {noreply, NewState#{enabled => Enabled, numSamples => NumSamples}};
+    {noreply, NewState#{enabled_disk_issues => Enabled,
+                        num_samples_disk_issues => NumSamples}};
 
 handle_info({Pid, BucketStats}, MonitorState) ->
     #{stats_collector := Pid} = MonitorState,
@@ -411,7 +412,8 @@ health_monitor_test_setup() ->
    common_test_setup().
 
 health_monitor_t() ->
-    {state, kv_stats_monitor, #{enabled := Enabled1}} = sys:get_state(?MODULE),
+    {state, kv_stats_monitor, #{enabled_disk_issues := Enabled1}}
+        = sys:get_state(?MODULE),
     ?assertNot(Enabled1),
 
     meck:expect(
@@ -431,7 +433,8 @@ health_monitor_t() ->
     %% Do a call to make sure that we process the previous info message
     get_statuses(),
 
-    {state, kv_stats_monitor, #{enabled := Enabled2}} = sys:get_state(?MODULE),
+    {state, kv_stats_monitor, #{enabled_disk_issues := Enabled2}}
+        = sys:get_state(?MODULE),
     ?assert(Enabled2),
 
     {state, kv_stats_monitor, #{buckets := Buckets1}} = sys:get_state(?MODULE),
