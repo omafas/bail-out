@@ -78,7 +78,7 @@ function appConfig($httpProvider, $stateProvider, $urlRouterProvider, $transitio
 
     if (!original.commonBucket) {
       let params = Object.assign({}, original);
-      (["bucket", "scenarioBucket", "collectionsBucket", "indexesBucket"])
+      (["bucket", "collectionsBucket", "indexesBucket"])
         .forEach(bucket => {
           if (params[bucket]) {
             params.commonBucket = params[bucket];

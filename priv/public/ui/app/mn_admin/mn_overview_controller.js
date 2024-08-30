@@ -75,16 +75,12 @@ function mnOverviewConfig($stateProvider, $transitionsProvider) {
                                   (g.uiid == "mn-all-services-data-group"))).map(g => g.id);
       }
 
-      if (!params.commonBucket && statsRead && statsRead[0]) {
-        params.commonBucket = statsRead[0];
-      } else if (params.commonBucket &&
-                 statsRead && statsRead.indexOf(params.commonBucket) < 0) {
-        params.commonBucket = statsRead[0];
-      } else if (params.commonBucket && (!statsRead || !statsRead[0])) {
-        params.commonBucket = null;
+
+      if (params.scenarioBucket && (!statsRead || !statsRead[0])) {
+        params.scenarioBucket = null;
       }
 
-      if ((params.commonBucket !== original.commonBucket) ||
+      if ((params.scenarioBucket !== original.scenarioBucket) ||
           (params.scenario !== original.scenario) ||
           (params.openedGroups.length !== original.openedGroups.length)) {
         return trans.router.stateService.target("app.admin.overview.statistics", params);

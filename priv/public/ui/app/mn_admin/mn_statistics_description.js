@@ -37,6 +37,8 @@ var compat65 = get65CompatDesc();
 
 var compat70 = get70CompatDesc();
 
+var compat72 = get72CompatDesc();
+
 var compat76 = get76CompatDesc();
 
 var mapping70 = get70Mapping();
@@ -70,7 +72,7 @@ var compat70Combined = propertiesToArray(compat65.stats)
           parent[key] = Object.assign({
             nodesAggregation: "sum",
             metric: {name: key}
-          }, readByPath(statPath, !mapping65[statPath]), config);
+          }, readByPath(statPath, !mapping65[statPath] ? compat70.stats : compat65.stats), config);
         } else {
           parent[key] = parent[key] || {};
           parent = parent[key];
@@ -80,6 +82,27 @@ var compat70Combined = propertiesToArray(compat65.stats)
       return acc;
     }, {});
 
+
+var compat72Combined =
+    propertiesToArray(compat72.stats)
+    .reduce((acc, statPath) => {
+      let config = getStatAdditionalConfig(statPath);
+      let path = statPath.split(".");
+      let parent = acc;
+      path.forEach((key, index) => {
+        if (index == (path.length - 1)) {
+          parent[key] = Object.assign({
+            nodesAggregation: "sum",
+            metric: {name: key}
+          }, readByPath(statPath, compat72.stats), config);
+        } else {
+          parent[key] = parent[key] || {};
+          parent = parent[key];
+        }
+      });
+
+      return acc;
+    }, compat70Combined);
 
 //per @items Modifier
 var stats70LabelsModifier = {
@@ -193,6 +216,11 @@ let service = {
   }
 };
 
+service["7.2"] = {
+  "kvGroups": service["7.0"].kvGroups,
+  stats: compat72Combined,
+};
+
 // 7.6 has stats very similar to 7.0, but with some changes for analytics
 service["7.6"] = {
   "kvGroups": service["7.0"].kvGroups,
@@ -202,11 +230,12 @@ service["7.6"] = {
 function get76Stats() {
   // 7.6 should be a deep copy of 7.0 so we can modify it where necessary
   const compat76Combined = {};
-  for (let category in compat70Combined) {
+
+  for (let category in compat72Combined) {
     compat76Combined[category] = {};
-    for (let stat in compat70Combined[category]) {
+    for (let stat in compat72Combined[category]) {
       compat76Combined[category][stat] = {};
-      Object.assign(compat76Combined[category][stat],compat70Combined[category][stat]);
+      Object.assign(compat76Combined[category][stat], compat72Combined[category][stat]);
     }
   }
 
@@ -216,11 +245,11 @@ function get76Stats() {
       const statData = compat76.stats[category][stat];
       const statName = statData.metric.name;
       compat76Combined[category][statName] = compat76Combined[category][statName] || {};
-      Object.assign(compat76Combined[category][statName],statData);
-      Object.assign(compat76Combined[category][statName],getStatAdditionalConfig(`${category}.${statName}`));
+      Object.assign(compat76Combined[category][statName], statData);
+      Object.assign(compat76Combined[category][statName], getStatAdditionalConfig(`${category}.${statName}`));
       // nodesAggregation defaults to "sum" for all new stats
       if (!compat76Combined[category][statName].nodesAggregation) {
-	compat76Combined[category][statName].nodesAggregation = "sum";
+	      compat76Combined[category][statName].nodesAggregation = "sum";
       }
     }
   }
@@ -387,6 +416,7 @@ function getStatAdditionalConfig(statName) {
   case "@index-.index_num_docs_indexed":
   case "@index-.index_num_requests":
   case "@index-.index_num_rows_returned":
+  case "@index.index_num_rows_scanned":
   case "@fts-.fts_total_bytes_indexed":
   case "@fts-.fts_total_queries":
   case "@kv-.kv_ops":
@@ -609,9 +639,8 @@ function getStatAdditionalConfig(statName) {
 }
 
 
-function readByPath(descPath, is70Stat) {
+function readByPath(descPath, statsDesc) {
   var paths = descPath.split('.');
-  var statsDesc = is70Stat ? compat70.stats : compat65.stats;
   var i;
 
   for (i = 0; i < paths.length; ++i) {
@@ -877,6 +906,30 @@ function get70Mapping() {
   });
 }
 
+function get72CompatDesc() {
+  return {
+    "stats": {
+      "@index": {
+        "index_num_indexes": {
+          unit: "number",
+          title: "Total Number of Indexes",
+          desc: "Total number of indexes, located on this node",
+        },
+        "index_memory_total_storage": {
+          unit: "bytes",
+          title: "Total In-Use Memory",
+          desc: "Amount of memory used by the index memory allocator, on this node. Index services uses a memory allocator named jemalloc. This metric reports the in-use memory by this allocator.",
+        },
+        "index_num_rows_scanned": {
+          unit: "number/sec",
+          title: "Index Scan Items",
+          desc: "Number of rows/index entries read during the index scans, for this index",
+        }
+      }
+    }
+  }
+}
+
 // here are the new stats and changed stats in 76
 function get76CompatDesc() {
   return {
@@ -905,6 +958,15 @@ function get76CompatDesc() {
           title: "Analytics Ops Rate",
           desc: "Operations (gets + sets + deletes) per second processed by Analytics for this bucket.",
           metric: {name: "cbas_incoming_records_total"},
+        },
+      },
+
+      "@index": {
+        "index_storage_current_quota": {
+          unit: "bytes",
+          title: "Index Current Quota",
+          desc: "Plasma's internally active memory quota for this node. It is tuned by memtuner. Valid only for standard GSI indexes",
+          metric: {name: "index_storage_current_quota"},
         },
       },
 
@@ -1963,8 +2025,8 @@ function get65CompatDesc() {
           },
           "num_rows_returned": {
             unit: "number/sec",
-            title: "Index Scan Items",
-            desc: "Number of index items scanned by the indexer per second. Per index."
+            title: "Index Returned Items",
+            desc: "Number of rows/index entries returned as the scan result during index scans, for this index. Per index."
           },
           "scan_bytes_read": {
             unit: "number/sec",

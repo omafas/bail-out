@@ -515,7 +515,7 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
         let service = getServiceNameFromDescriptionPath(statPath);
         cfg1.metric = Object.assign({}, statDesc.metric);
         if (isPerBucketStat(statPath)) {
-          if (statDesc.bucket === null) {
+          if (statDesc.bucket === null || config.bucket === '') {
             delete cfg1.metric.bucket;
           } else {
             cfg1.metric[statDesc.bucketLabel || "bucket"] = config.bucket;

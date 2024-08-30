@@ -192,7 +192,7 @@ function mnAdminConfig($stateProvider, $urlMatcherFactoryProvider, mnPluggableUi
 
   $stateProvider
     .state('app.admin', {
-      url: "?commonBucket&commonScope&commonCollection&scenarioZoom&scenario",
+      url: "?commonBucket&scenarioBucket&commonScope&commonCollection&scenarioZoom&scenario",
       abstract: true,
       data: {
         requiresAuth: true
@@ -201,6 +201,10 @@ function mnAdminConfig($stateProvider, $urlMatcherFactoryProvider, mnPluggableUi
         openedGroups: {
           value: [],
           array: true,
+          dynamic: true
+        },
+        scenarioBucket: {
+          value: null,
           dynamic: true
         },
         commonBucket: {

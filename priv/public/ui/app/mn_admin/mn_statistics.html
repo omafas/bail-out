@@ -121,7 +121,7 @@
         <mn-select
            class="inline margin-right-half"
            ng-model="statisticsNewCtl.selectedBucket"
-           values="rbac.bucketNames['.stats!read']"
+           values="statisticsNewCtl.bucketNames"
            has-search="true"
            on-select="statisticsNewCtl.onBucketChange(selectedOption)">
         </mn-select>
@@ -162,7 +162,6 @@
        ng-repeat="groupID in statisticsNewCtl.getSelectedScenario().groups track by ($index + groupID)"
        ng-attr-id="group-{{groupID}}"
        ng-controller="mnStatisticsGroupsController as mnStatsGroupsCtl"
-       ng-if="statisticsNewCtl.selectedBucket"
        class="charts-group">
       <div
          ng-if="mnStatsGroupsCtl.getGroup() && ((mnStatsGroupsCtl.getGroup().enterprise == undefined) || poolDefault.isEnterprise)"

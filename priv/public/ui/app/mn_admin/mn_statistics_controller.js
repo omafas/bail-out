@@ -20,6 +20,7 @@ import mnMainSpinner from "../components/directives/mn_main_spinner.js";
 import mnHelper from "../components/mn_helper.js";
 import mnStoreService from "../components/mn_store_service.js";
 import mnDropdown from "../components/directives/mn_dropdown.js";
+import mnPoolDefault from '../components/mn_pool_default.js';
 
 import mnStatisticsChart from "./mn_statistics_chart_directive.js";
 import mnStatisticsNewService from "./mn_statistics_service.js";
@@ -56,7 +57,8 @@ angular
     mnStatisticsDescriptionService,
     mnUserRolesService,
     mnStoreService,
-    mnGsiService
+    mnGsiService,
+    mnPoolDefault
   ])
   .controller('mnStatisticsNewController', mnStatisticsNewController)
   .controller('mnStatisticsGroupsController', mnStatisticsGroupsController)
@@ -233,7 +235,7 @@ function mnStatisticsGroupsController($scope, $uibModal, $timeout,
   }
 }
 
-function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http, mnPoller, $uibModal, mnHelper, $window, mnUserRolesService, permissions, $timeout, mnStoreService, mnGsiService, mnTasksDetails, $anchorScroll, $location) {
+function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http, mnPoller, $uibModal, mnHelper, $window, mnUserRolesService, permissions, $timeout, mnStoreService, mnGsiService, mnTasksDetails, $anchorScroll, $location, mnPoolDefault) {
   var vm = this;
 
   vm.mnStatisticsNewScope = $scope;
@@ -241,12 +243,13 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
   vm.onSelectScenario = onSelectScenario;
   vm.onSelectZoom = onSelectZoom;
 
-  vm.bucket = $state.params.commonBucket;
+  vm.bucket = $state.params.scenarioBucket;
   vm.zoom = $state.params.scenarioZoom;
   vm.node = $state.params.statsHostname;
   //selected scenario holder
   vm.openGroupDialog = openGroupDialog;
-  vm.selectedBucket = $state.params.commonBucket;
+  vm.selectedBucket = $state.params.scenarioBucket || (mnPoolDefault.export.compat.atLeast70 ? "All Buckets": $state.params.scenarioBucket);
+  vm.bucketNames = mnPoolDefault.export.compat.atLeast70 ? [...$scope.rbac.bucketNames['.stats!read'] || [], "All Buckets"] : $scope.rbac.bucketNames['.stats!read'];
   vm.onBucketChange = onBucketChange;
   vm.onSelectNode = onSelectNode;
   vm.getSelectedScenario = getSelectedScenario;
@@ -308,13 +311,13 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
 
   function onSelectNode(selectedHostname) {
     $state.go('^.statistics', {
-      statsHostname: selectedHostname.indexOf("All Server Nodes") > -1 ? "all" :selectedHostname
+      statsHostname: selectedHostname.indexOf("All Server Nodes") > -1 ? "all" : selectedHostname
     });
   }
 
   function onBucketChange(selectedOption) {
     $state.go('^.statistics', {
-      commonBucket: selectedOption,
+      scenarioBucket: selectedOption.indexOf("All Buckets") > -1 ? null : selectedOption,
       commonScope: null,
       commonCollection: null
     }, {reload: true});
@@ -336,11 +339,11 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
     if ($scope.rbac.cluster.tasks.read) {
       new mnPoller($scope, function () {
         return mnTasksDetails.get().then(function (rv) {
-          if (!$state.params.commonBucket) {
+          if (!$state.params.scenarioBucket) {
             return;
           }
           return rv.tasksXDCR.filter(function (row) {
-            return row.source == $state.params.commonBucket;
+            return row.source == $state.params.scenarioBucket;
           });
         });
       })
@@ -361,7 +364,7 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
         return $http.get('/_p/fts/api/index').then(function(rv) {
           return Object.keys(rv.data.indexDefs.indexDefs).reduce(function (acc, key) {
             var index = rv.data.indexDefs.indexDefs[key];
-            if (index.sourceName == $state.params.commonBucket) {
+            if (index.sourceName == $state.params.scenarioBucket) {
               acc.push(index);
             }
             return acc;
@@ -383,10 +386,10 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
     if ($scope.rbac.cluster.collection['.:.:.'].n1ql.index.read) {
       new mnPoller($scope, function () {
         return mnGsiService.getIndexStatus().then(function (rv) {
-          if (!$state.params.commonBucket) {
+          if (!$state.params.scenarioBucket) {
             return;
           }
-          return rv.indexes.filter(index => index.bucket === $state.params.commonBucket);
+          return rv.indexes.filter(index => index.bucket === $state.params.scenarioBucket);
         });
       })
         .setInterval(10000)
@@ -422,11 +425,11 @@ function mnStatisticsNewController($scope, mnStatisticsNewService, $state, $http
         .cycle();
     }
 
-    if ($scope.rbac.cluster.bucket['.'].views.read) {
+    if ($scope.rbac.cluster.bucket['.'].views.read && $state.params.scenarioBucket) {
       new mnPoller($scope, function () {
-        return mnStatisticsNewService.getStatsDirectory($state.params.commonBucket, {})
+        return mnStatisticsNewService.getStatsDirectory($state.params.scenarioBucket, {})
           .then(function (rv) {
-            if (!$state.params.commonBucket) {
+            if (!$state.params.scenarioBucket) {
               return;
             }
             return rv.data.blocks.filter(function (block) {
