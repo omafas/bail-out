@@ -308,8 +308,7 @@ mcd_update_user_permissions(RBACJson) ->
 process_data_test() ->
     Roles = [[{[admin, memcached], all},
               {[{bucket, any}], [read]}],
-             [{[{bucket, "b1"}, data, docs], [insert, upsert]},
-              {[{bucket, "b2"}, data, xattr], [write]}]],
+             [{[{bucket, "b1"}, data, docs], [insert, upsert]}]],
     Users = [{{"User1", "foo"}, local, []},
              {{"User2", "bar"}, external, Roles}],
 
