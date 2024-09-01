@@ -162,6 +162,7 @@
        ng-repeat="groupID in statisticsNewCtl.getSelectedScenario().groups track by ($index + groupID)"
        ng-attr-id="group-{{groupID}}"
        ng-controller="mnStatisticsGroupsController as mnStatsGroupsCtl"
+       ng-if="poolDefault.compat.atLeast70 || statisticsNewCtl.selectedBucket"
        class="charts-group">
       <div
          ng-if="mnStatsGroupsCtl.getGroup() && ((mnStatsGroupsCtl.getGroup().enterprise == undefined) || poolDefault.isEnterprise)"

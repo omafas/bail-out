@@ -778,6 +778,10 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
       }, {
         name: "Index",
         charts: [{
+          stats: {"@index-.index_num_rows_scanned": true},
+          size: "small",
+          specificStat: true
+        },{
           stats: {"@index-.index/num_rows_returned": true},
           size: "small",
           specificStat: true
@@ -800,6 +804,22 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
                   "@index-.index/disk_size": true},
           size: "medium",
           specificStat: false
+        }, {
+          stats: {"@index-.index/num_requests": true},
+          size: "small",
+          specificStat: true
+        }, {
+          stats: {"@index.index_num_indexes": true},
+          size: "small",
+          specificStat: true
+        }, {
+          stats: {"@index.index_memory_total_storage": true},
+          size: "small",
+          specificStat: true
+        }, {
+          stats: {"@index.index_storage_current_quota": true},
+          size: "small",
+          specificStat: true
         }]
       }, {
         name: "Search",

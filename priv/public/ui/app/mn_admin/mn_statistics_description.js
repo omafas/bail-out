@@ -416,7 +416,7 @@ function getStatAdditionalConfig(statName) {
   case "@index-.index_num_docs_indexed":
   case "@index-.index_num_requests":
   case "@index-.index_num_rows_returned":
-  case "@index.index_num_rows_scanned":
+  case "@index-.index_num_rows_scanned":
   case "@fts-.fts_total_bytes_indexed":
   case "@fts-.fts_total_queries":
   case "@kv-.kv_ops":
@@ -920,9 +920,11 @@ function get72CompatDesc() {
           title: "Total In-Use Memory",
           desc: "Amount of memory used by the index memory allocator, on this node. Index services uses a memory allocator named jemalloc. This metric reports the in-use memory by this allocator.",
         },
+      },
+      "@index-": {
         "index_num_rows_scanned": {
           unit: "number/sec",
-          title: "Index Scan Items",
+          title: "Index Scan Items Rate",
           desc: "Number of rows/index entries read during the index scans, for this index",
         }
       }
@@ -965,7 +967,7 @@ function get76CompatDesc() {
         "index_storage_current_quota": {
           unit: "bytes",
           title: "Index Current Quota",
-          desc: "Plasma's internally active memory quota for this node. It is tuned by memtuner. Valid only for standard GSI indexes",
+          desc: "Internally active memory quota of Plasma for this node. It is tuned by memtuner. Valid only for standard GSI indexes",
           metric: {name: "index_storage_current_quota"},
         },
       },
@@ -2025,8 +2027,8 @@ function get65CompatDesc() {
           },
           "num_rows_returned": {
             unit: "number/sec",
-            title: "Index Returned Items",
-            desc: "Number of rows/index entries returned as the scan result during index scans, for this index. Per index."
+            title: "Index Returned Items Rate",
+            desc: "Number of index items returned by the indexer per second. Per index."
           },
           "scan_bytes_read": {
             unit: "number/sec",
@@ -2081,8 +2083,8 @@ function get65CompatDesc() {
         },
         "index/num_rows_returned": {
           unit: "number/sec",
-          title: "Index Total Scan Rate",
-          desc: "Number of index items scanned by the indexer per second across all indexes."
+          title: "Index Total Returned Rate",
+          desc: "Number of index items returned by the indexer per second across all indexes."
         },
         "index/scan_bytes_read": {
           unit: "bytes/sec",
