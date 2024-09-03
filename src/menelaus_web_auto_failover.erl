@@ -20,6 +20,7 @@
          handle_settings_post/1,
          handle_settings_reset_count/1,
          get_failover_on_disk_issues/1,
+         get_failover_on_disk_non_responsiveness/1,
          config_check_can_abort_rebalance/0,
          default_config/1,
          get_stats/0,
@@ -42,7 +43,11 @@
         ?get_param(min_data_disk_issues_timeperiod, 5)). %% seconds
 -define(MAX_DATA_DISK_ISSUES_TIMEPERIOD, 3600). %% seconds
 
+-define(DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
+    failover_on_data_disk_non_responsiveness).
+
 -define(FAILOVER_SERVER_GROUP_CONFIG_KEY, failover_server_group).
+
 -define(FAILOVER_PRESERVE_DURABILITY_MAJORITY_CONFIG_KEY,
         failover_preserve_durability_majority).
 -define(FAILOVER_PRESERVE_DURABILITY_MAJORITY_DEFAULT, false).
@@ -158,6 +163,16 @@ get_failover_on_disk_issues(Config) ->
     case proplists:get_value(?DATA_DISK_ISSUES_CONFIG_KEY, Config) of
         undefined ->
             undefined;
+        Val ->
+            Enabled = proplists:get_value(enabled, Val),
+            TimePeriod = proplists:get_value(timePeriod, Val),
+            {Enabled, TimePeriod}
+    end.
+
+get_failover_on_disk_non_responsiveness(Config) ->
+    case proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
+                             Config) of
+        undefined -> undefined;
         Val ->
             Enabled = proplists:get_value(enabled, Val),
             TimePeriod = proplists:get_value(timePeriod, Val),

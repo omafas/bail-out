@@ -261,6 +261,147 @@ kv_stats_monitor_io_failure_detection_test_() ->
         [?cut(kv_stats_monitor_io_failure_detection_t(atom_to_binary(Stat))) ||
             {Stat, _} <- kv_stats_monitor:failure_stats()]}.
 
+kv_stats_monitor_io_slow_test_setup() ->
+    SupPid = test_setup(),
+
+    meck:expect(
+        auto_failover, get_cfg,
+        fun() ->
+            [{enabled, true},
+                %% timeout is the time (in seconds) a node needs to be down
+                %% before it is automatically fail-overed
+                {timeout, 1},
+                {failover_on_data_disk_non_responsiveness, [{enabled, true},
+                    {timePeriod, 1}]}]
+        end),
+
+    meck:expect(ns_bucket, node_bucket_names_of_type,
+        fun(_, persistent) ->
+            ["default"]
+        end),
+
+    setup_service_monitors([kv]),
+    dcp_traffic_monitor:node_alive(node(), {"default", 1, self()}),
+
+    %% First, make sure that we are healthy so that we can test a transition
+    %% to unhealthy
+    ?assert(misc:poll_for_condition(
+        fun() ->
+            is_node_healthy(node())
+        end, 30000, 100)),
+
+    SupPid.
+
+kv_stats_monitor_io_slow_test_teardown(SupPid) ->
+    meck:unload(ns_memcached),
+    test_teardown(SupPid).
+
+kv_stats_mon_io_slow_zero({StatNum, StatSlow}) ->
+    %% Not all readers/writers stuck, we should remain healthy. We have to
+    %% special case this though, because equality of any other value would drive
+    %% a failover.
+    meck:expect(ns_memcached, stats,
+        fun(_Bucket, <<"disk-slowness 1">>) ->
+            {ok, [{atom_to_binary(StatNum), integer_to_binary(0)},
+                  {atom_to_binary(StatSlow), integer_to_binary(0)}]}
+        end),
+
+    %% Timeout as we will remain healthy
+    ?assertEqual(timeout, misc:poll_for_condition(
+        fun() ->
+            is_node_unhealthy(node())
+        end, 2000, 100)).
+
+kv_stats_monitor_io_slow_detection_t({StatNum, StatSlow}) ->
+    %% Another healthy case, Slow < Count.
+    meck:expect(ns_memcached, stats,
+        fun(_Bucket, <<"disk-slowness 1">>) ->
+            {ok, [{atom_to_binary(StatNum), integer_to_binary(1)},
+                  {atom_to_binary(StatSlow), integer_to_binary(0)}]}
+        end),
+
+    %% Timeout as we will remain healthy
+    ?assertEqual(timeout, misc:poll_for_condition(
+        fun() ->
+            is_node_unhealthy(node())
+        end, 2000, 100)).
+
+kv_stats_mon_io_slow_equal_count({StatNum, StatSlow}) ->
+    meck:expect(ns_memcached, stats,
+        fun(_Bucket, <<"disk-slowness 1">>) ->
+            {ok, [{atom_to_binary(StatNum), integer_to_binary(1)},
+                  {atom_to_binary(StatSlow), integer_to_binary(1)}]}
+        end),
+
+    %% Should turn the node unhealthy
+    ?assert(misc:poll_for_condition(
+        fun() ->
+            is_node_unhealthy(node())
+        end, 30000, 100)).
+
+%% We don't expect to see Slow > Count, but it should probably fail over anyways
+kv_stats_mon_io_slow_greater_than_count({StatNum, StatSlow}) ->
+    meck:expect(ns_memcached, stats,
+        fun(_Bucket, <<"disk-slowness 1">>) ->
+            {ok, [{atom_to_binary(StatNum), integer_to_binary(1)},
+                  {atom_to_binary(StatSlow), integer_to_binary(2)}]}
+        end),
+
+    %% Should turn the node unhealthy
+    ?assert(misc:poll_for_condition(
+        fun() ->
+            is_node_unhealthy(node())
+        end, 30000, 100)).
+
+kv_stats_mon_io_slow_and_disk_failure({StatNum, StatSlow}) ->
+    meck:expect(
+        auto_failover, get_cfg,
+        fun() ->
+            [{enabled, true},
+                %% timeout is the time (in seconds) a node needs to be down
+                %% before it is automatically fail-overed
+                {timeout, 1},
+                {failover_on_data_disk_issues, [{enabled, true},
+                                                {timePeriod, 1}]},
+                {failover_on_data_disk_non_responsiveness, [{enabled, true},
+                                                            {timePeriod, 1}]}]
+        end),
+
+    %% Force a config refresh in the monitor for the disk issues config
+    kv_stats_monitor ! {event, auto_failover_cfg},
+
+    meck:expect(ns_memcached, stats,
+        fun(_Bucket, <<"disk-slowness 1">>) ->
+                {ok, [{atom_to_binary(StatNum), integer_to_binary(1)},
+                      {atom_to_binary(StatSlow), integer_to_binary(1)}]};
+            (_Bucket, <<"disk-failures">>) ->
+                [{FirstStat, _FirstFail}|_] = kv_stats_monitor:failure_stats(),
+                {ok, [{atom_to_binary(FirstStat),
+                      integer_to_binary(
+                          meck:num_calls(ns_memcached, stats, '_'))}]}
+        end),
+
+    %% Should turn the node unhealthy
+    ?assert(misc:poll_for_condition(
+        fun() ->
+            [{_Bucket, Status}] = kv_stats_monitor:get_statuses(),
+            Status =:= io_failed
+        end, 30000, 100)).
+
+kv_stats_monitor_io_slow_detection_test_() ->
+    Tests = [fun kv_stats_monitor_io_slow_detection_t/1,
+             fun kv_stats_mon_io_slow_zero/1,
+             fun kv_stats_mon_io_slow_equal_count/1,
+             fun kv_stats_mon_io_slow_greater_than_count/1,
+             fun kv_stats_mon_io_slow_and_disk_failure/1],
+
+    {foreach,
+        fun kv_stats_monitor_io_slow_test_setup/0,
+        fun kv_stats_monitor_io_slow_test_teardown/1,
+        [?cut(T(Stats)) ||
+            {Stats, _} <- kv_stats_monitor:slow_stats(),
+            T <- Tests]}.
+
 %% Get a list of callbacks in the behaviour spec that have not been called
 %% yet. Returns a list of the form [{Module, [{Function, Arity}]}].
 callbacks_not_made() ->
