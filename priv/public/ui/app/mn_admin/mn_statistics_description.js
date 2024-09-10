@@ -917,7 +917,7 @@ function get72CompatDesc() {
         },
         "index_memory_total_storage": {
           unit: "bytes",
-          title: "Total In-Use Memory",
+          title: "Total Memory Used by Index Storage",
           desc: "Amount of memory used by the index memory allocator, on this node. Index services uses a memory allocator named jemalloc. This metric reports the in-use memory by this allocator.",
         },
       },
@@ -966,7 +966,7 @@ function get76CompatDesc() {
       "@index": {
         "index_storage_current_quota": {
           unit: "bytes",
-          title: "Index Current Quota",
+          title: "Adaptive Index Storage Quota",
           desc: "Internally active memory quota of Plasma for this node. It is tuned by memtuner. Valid only for standard GSI indexes",
           metric: {name: "index_storage_current_quota"},
         },
@@ -2048,7 +2048,7 @@ function get65CompatDesc() {
         },
         "index/data_size": {
           unit: "bytes",
-          title: "Index Total RAM Used",
+          title: "Index Data Size",
           desc: "Bytes in memory used by Index across all indexes and buckets."
         },
         "index/disk_size": {
@@ -2083,7 +2083,7 @@ function get65CompatDesc() {
         },
         "index/num_rows_returned": {
           unit: "number/sec",
-          title: "Index Total Returned Rate",
+          title: "Index Returned Items Rate",
           desc: "Number of index items returned by the indexer per second across all indexes."
         },
         "index/scan_bytes_read": {
