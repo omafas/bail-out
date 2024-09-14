@@ -43,7 +43,7 @@
          get_resp_headers/1,
          acting_on_behalf/1,
          init_auth/1,
-         on_behalf_context/1,
+         on_behalf_extras/1,
          get_authn_res_from_on_behalf_of/3]).
 
 %% rpc from ns_couchdb node
@@ -528,30 +528,110 @@ verify_rest_auth(Req, Permission) ->
             {auth_failure, Req2}
     end.
 
-%% Specify authentication context for SAML (and later JWT) in on-behalf-of
-%% extras. {User, Domain} aren't sufficient to determine the full set of
-%% privileges available to the user.
--spec on_behalf_context(#authn_res{}) -> {string(), boolean()}.
-on_behalf_context(#authn_res{session_id = Id}) when is_binary(Id) ->
-            {"context:ui=" ++ binary_to_list(Id), true};
-on_behalf_context(_) -> {"", false}.
+on_behalf_session(#authn_res{session_id = Session}) when is_binary(Session) ->
+    "session=" ++ binary_to_list(Session);
+on_behalf_session(_) ->
+    "".
+
+%% SAML and JWT can specify extra groups and roles which must be transmitted
+%% in cb-on-behalf-of requests. They cannot be determined from Identity alone.
+-spec on_behalf_groups(#authn_res{}) -> string().
+on_behalf_groups(#authn_res{extra_groups = []}) ->
+    "";
+on_behalf_groups(#authn_res{extra_groups = ExtraGroups}) ->
+    "groups=" ++ lists:flatten(misc:intersperse(ExtraGroups, ",")).
+
+-spec on_behalf_roles(#authn_res{}) -> string().
+on_behalf_roles(#authn_res{extra_roles = []}) ->
+    "";
+on_behalf_roles(#authn_res{extra_roles = ExtraRoles}) ->
+    RolesStr =
+        [menelaus_web_rbac:role_to_string(R) || R <- ExtraRoles],
+    "roles=" ++ lists:flatten(misc:intersperse(RolesStr, ",")).
+
+%% SAML and JWT specify an expiration time when auth is valid. This time is
+%% in Gregorian seconds unlike JWT specified exp time (seconds since epoch).
+-spec on_behalf_expiry(#authn_res{}) -> string().
+on_behalf_expiry(#authn_res{expiration_datetime_utc = undefined}) -> "";
+on_behalf_expiry(#authn_res{expiration_datetime_utc = '_'}) -> "";
+on_behalf_expiry(#authn_res{expiration_datetime_utc = Exp}) ->
+    Seconds = calendar:datetime_to_gregorian_seconds(Exp),
+    "expiry=" ++ integer_to_list(Seconds).
+
+on_behalf_extras(AuthnRes) ->
+    Entries = lists:filter(fun("") -> false;
+                              (_) -> true
+                           end,
+                           [on_behalf_session(AuthnRes),
+                            on_behalf_groups(AuthnRes),
+                            on_behalf_roles(AuthnRes),
+                            on_behalf_expiry(AuthnRes)]),
+    lists:flatten(misc:intersperse(Entries, ";")).
+
+parse_on_behalf_session(List) ->
+    case proplists:get_value("session", List, undefined) of
+        undefined -> undefined;
+        SessionStr -> list_to_binary(SessionStr)
+    end.
+
+parse_on_behalf_groups(List) ->
+    case proplists:get_value("groups", List, undefined) of
+        undefined -> [];
+        GroupStr -> string:lexemes(GroupStr, ",")
+    end.
+
+parse_on_behalf_roles(List) ->
+    case proplists:get_value("roles", List, undefined) of
+        undefined -> [];
+        RolesStr ->
+            Parsed = menelaus_web_rbac:parse_roles(RolesStr),
+            true = Parsed =/= {error, _},
+            {GoodRoles, BadRoles} = menelaus_roles:validate_roles(Parsed),
+            BadRoles /= [] andalso
+                ?log_warning("ignoring invalid roles in on-behalf-extras: ~p",
+                             [BadRoles]),
+            GoodRoles
+    end.
+
+parse_on_behalf_expiry(List) ->
+    case proplists:get_value("expiry", List, undefined) of
+        undefined -> undefined;
+        SecondsStr ->
+            Seconds = list_to_integer(SecondsStr),
+            calendar:gregorian_seconds_to_datetime(Seconds)
+    end.
 
 -spec get_authn_res_from_on_behalf_of(User :: rbac_user_id(),
                                       Domain :: rbac_identity_type(),
-                                      Context :: string() | undefined) ->
+                                      EncodedExtras :: string() | undefined) ->
           #authn_res{}.
-get_authn_res_from_on_behalf_of(User, Domain, Context) ->
+get_authn_res_from_on_behalf_of(User, Domain, EncodedExtras) ->
     AuthnRes0 = #authn_res{identity = {User, Domain}},
-    case Context of
+    case EncodedExtras of
         undefined -> AuthnRes0;
-        "ui=" ++ Id ->
-            UiAuthnRes = menelaus_ui_auth:get_authn_res_from_ui_session(Id),
-            case UiAuthnRes of
-                undefined -> AuthnRes0;
-                #authn_res{identity = {User0, Domain0}}
-                  when User0 =:= User, Domain0 =:= Domain -> UiAuthnRes;
+        EncodedExtras when is_list(EncodedExtras) ->
+            case (catch base64:decode_to_string(EncodedExtras)) of
+                Decoded when is_list(EncodedExtras) ->
+                    Extras =
+                        lists:foldl(
+                          fun(Token, Acc) ->
+                                  {Key, [$=|Value]} =
+                                      string:take(Token, "=", true),
+                                  [{Key, Value} | Acc]
+                          end, [], string:lexemes(Decoded, ";")),
+
+                    Session = parse_on_behalf_session(Extras),
+                    Groups = parse_on_behalf_groups(Extras),
+                    Roles = parse_on_behalf_roles(Extras),
+                    Expiry = parse_on_behalf_expiry(Extras),
+
+                    AuthnRes0#authn_res{session_id = Session,
+                                        extra_groups = Groups,
+                                        extra_roles = Roles,
+                                        expiration_datetime_utc = Expiry};
                 _ -> AuthnRes0
-            end
+            end;
+        _ -> AuthnRes0
     end.
 
 -spec apply_on_behalf_of_authn_res(#authn_res{}, mochiweb_request()) ->
@@ -562,7 +642,7 @@ apply_on_behalf_of_authn_res(AuthnRes, Req) ->
             error;
         undefined ->
             AuthnRes;
-        {User, Domain, Context} ->
+        {User, Domain, Extras} ->
             %% The permission is formed the way that it is currently granted
             %% to full admins only. We might consider to reformulate it
             %% like {[onbehalf], impersonate} or, such in the upcoming
@@ -575,7 +655,7 @@ apply_on_behalf_of_authn_res(AuthnRes, Req) ->
             case menelaus_roles:is_allowed(
                    {[admin, security, admin], impersonate}, AuthnRes) of
                 true ->
-                    get_authn_res_from_on_behalf_of(User, Domain, Context);
+                    get_authn_res_from_on_behalf_of(User, Domain, Extras);
                 false ->
                     error
             end
@@ -595,12 +675,14 @@ extract_on_behalf_of_authn_res(Req) ->
                 {User, Domain} ->
                     try list_to_existing_atom(Domain) of
                         ExistingDomain ->
-                            case parse_on_behalf_of_extras(Req) of
-                                error -> error;
-                                Context when is_list(Context) ->
-                                    {User, ExistingDomain, Context};
-                                undefined ->
-                                    {User, ExistingDomain, undefined}
+                            case parse_on_behalf_extras_header(Req) of
+                                error ->
+                                    ?log_debug("Invalid format of "
+                                               "cb-on-behalf-extras:~s",
+                                               [ns_config_log:tag_user_name(
+                                                  Header)]),
+                                    error;
+                                Extras -> {User, ExistingDomain, Extras}
                             end
                     catch
                         error:badarg ->
@@ -614,7 +696,7 @@ extract_on_behalf_of_authn_res(Req) ->
                     error
             end;
         undefined ->
-            case read_on_behalf_of_extras(Req) of
+            case read_on_behalf_extras(Req) of
                 undefined -> undefined;
                 Hdr ->
                     ?log_debug("Unexpected cb-on-behalf-extras: ~s",
@@ -626,7 +708,7 @@ extract_on_behalf_of_authn_res(Req) ->
 read_on_behalf_of_header(Req) ->
     mochiweb_request:get_header_value("cb-on-behalf-of", Req).
 
-read_on_behalf_of_extras(Req) ->
+read_on_behalf_extras(Req) ->
     mochiweb_request:get_header_value("cb-on-behalf-extras", Req).
 
 parse_on_behalf_of_header(Header) ->
@@ -643,26 +725,10 @@ parse_on_behalf_of_header(Header) ->
             error
     end.
 
-parse_on_behalf_of_extras(Req) ->
-    case read_on_behalf_of_extras(Req) of
+parse_on_behalf_extras_header(Req) ->
+    case read_on_behalf_extras(Req) of
         undefined -> undefined;
-        Extras when is_list(Extras) ->
-            Status =
-                case (catch base64:decode_to_string(Extras)) of
-                    ContextStr when is_list(ContextStr) ->
-                        case ContextStr of
-                            "context:" ++ X -> X;
-                            _ -> error
-                        end;
-                    _ -> error
-                end,
-            case Status of
-                error ->
-                    ?log_debug("Invalid context in cb-on-behalf-extras:~s",
-                               [ns_config_log:tag_user_name(Extras)]),
-                    error;
-                S -> S
-            end;
+        Extras when is_list(Extras) -> Extras;
         _ -> error
     end.
 

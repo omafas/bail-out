@@ -58,14 +58,16 @@ special_auth_header(Node) when is_atom(Node) ->
 %% Allow specifying on behalf of user (User, Domain) in cb-on-behalf-of header
 %% and an optional on-behalf-extras header for additional auth context.
 %% on-behalf-extras can specify multiple kv pairs separated by ;
-%% [key1:v1;key2:v2;key3:v3]
-%% Currently only (optional) UI context is specified as
-%% context:ui=<session_id>.
+%% [key1=v1;key2=v2;key3=v3]
+%% Group names and role names don't contain special chars. However, roles can
+%% include ":" (e.g. query_select[bucket:scope:collection]). Multiple groups (or
+%% roles) are separated by ','. Use non-overlapping "=" and ";" as separators.
 on_behalf_headers(#authn_res{identity = {User, Domain}} = AuthnRes) ->
-    {Value, Present} = menelaus_auth:on_behalf_context(AuthnRes),
+    Extras = menelaus_auth:on_behalf_extras(AuthnRes),
     [{"cb-on-behalf-of",
       base64:encode_to_string(User ++ ":" ++ atom_to_list(Domain))}] ++
-        [{"cb-on-behalf-extras", base64:encode_to_string(Value)} || Present].
+        [{"cb-on-behalf-extras", base64:encode_to_string(Extras)} ||
+            Extras =/= ""].
 
 is_auth_header(Header) when is_atom(Header) ->
     is_auth_header(atom_to_list(Header));

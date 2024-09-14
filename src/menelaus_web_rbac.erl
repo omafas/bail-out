@@ -1419,9 +1419,9 @@ handle_get_user_buckets_for_cbauth(Req) ->
     Params = mochiweb_request:parse_qs(Req),
     User = proplists:get_value("user", Params),
     Domain = list_to_existing_atom(proplists:get_value("domain", Params)),
-    Context = proplists:get_value("context", Params, undefined),
+    Extras = proplists:get_value("extras", Params, undefined),
     AuthnRes = menelaus_auth:get_authn_res_from_on_behalf_of(User, Domain,
-                                                             Context),
+                                                             Extras),
     Buckets = [list_to_binary(B) || B <- get_accessible_buckets(AuthnRes)],
     menelaus_util:reply_json(Req, Buckets, 200).
 
@@ -1440,9 +1440,9 @@ handle_check_permission_for_cbauth(Req) ->
     Permission = parse_permission(string:trim(RawPermission)),
     User = proplists:get_value("user", Params),
     Domain = list_to_existing_atom(proplists:get_value("domain", Params)),
-    Context = proplists:get_value("context", Params, undefined),
+    Extras = proplists:get_value("extras", Params, undefined),
     AuthnRes = menelaus_auth:get_authn_res_from_on_behalf_of(User, Domain,
-                                                             Context),
+                                                             Extras),
 
     case menelaus_roles:is_allowed(Permission, AuthnRes) of
         true ->

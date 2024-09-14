@@ -12,6 +12,7 @@ import base64
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from multiprocessing import Process
+from testlib.util import Service
 import time
 import requests
 from urllib.parse import urlparse, parse_qs, urlunparse
@@ -65,14 +66,26 @@ ui_headers = {'Host': 'some_addr', 'ns-server-ui': 'yes'}
 bucket = "test"
 
 class SamlTests(testlib.BaseTestSet):
+    # MB-63612: Remove unnecessary Service.KV. It was added only to get rid of
+    # the OnPremAutoFailoverSettingsTest failure.
+    services_to_run = [Service.KV, Service.QUERY, Service.BACKUP]
 
     @staticmethod
     def requirements():
+        # Note: The services specified here are a min requirement. To be able to
+        # exercise forwarding of a UI request to another node, we need to
+        # be able to specify that a service does *not* run query/backup. This
+        # happens to exercise forwarding now but it is not by design. The
+        # services are specified as a min. requirement.
+        # i.e. 'n0': [Service.KV] matches 'n0' running at least [Service.KV] not
+        # exactly [Service.KV]. It may also be running query and backup.
         return testlib.ClusterRequirements(min_num_nodes=2,
                                            edition="Enterprise",
                                            buckets=[{'name': bucket,
-                                                     'ramQuota': 100}])
-
+                                                     'ramQuota': 100}],
+                                           services={'n0': [Service.KV],
+                                                     'n1':
+                                                     SamlTests.services_to_run})
 
     def setup(self):
         testlib.put_succ(self.cluster,
@@ -571,6 +584,85 @@ class SamlTests(testlib.BaseTestSet):
                               'external_stats_reader', 'replication_admin']
             assert_eq(roles, expected_roles)
 
+            # MB-62604: Query uses cbauth IsAllowed to determine whether it
+            # has cluster.n1ql.meta!read permission. replication_admin role
+            # grants it. Needs content in extras.
+            r = session.get(self.cluster.connected_nodes[0].url +
+                            '/_p/query/admin/vitals',
+                            headers=ui_headers)
+            assert_http_code(200, r)
+
+            # testuser2 doesn't have permissions to do backup reads.
+            r = session.get(self.cluster.connected_nodes[0].url +
+                            '/_p/backup/api/v1/plan',
+                            headers=ui_headers)
+            assert_http_code(403, r)
+
+            # MB-62604, MB-63208: Query uses cbauth GetBuckets to determine the
+            # accessible buckets. replication_admin role makes all buckets
+            # accessible. Needs content in extras.
+            r = session.post(self.cluster.connected_nodes[0].url +
+                             '/_p/query/query/service',
+                             data={'statement': 'select * from '
+                                   'system:buckets;'},
+                             headers=ui_headers)
+            assert_http_code(200, r)
+
+            bkts = []
+            for x in r.json()['results']:
+                bkts.append(x['buckets']['name'])
+                assert bkts == [f'{bucket}']
+
+    def groups_and_roles_admin_test(self):
+        with saml_configured(self.cluster.connected_nodes[0],
+                             groupsAttribute='groups',
+                             groupsAttributeSep=', ',
+                             groupsFilterRE='admin') as IDP:
+            identity = idp_test_user_attrs.copy()
+            identity["groups"] = "test2, admingroup, testgroup1, "\
+                "test3, testgroup2"
+            identity["uid"] = "adminuser" # so we don't have such user in cb
+            binding_out, destination = \
+                IDP.pick_binding("assertion_consumer_service",
+                                 bindings=[BINDING_HTTP_POST],
+                                 entity_id=sp_entity_id)
+            name_id = NameID(text=testlib.random_str(16))
+
+            response = IDP.create_authn_response(
+                         identity,
+                         None, # InResponseTo is missing cause it is
+                               # an unsolicited response
+                         destination,
+                         sp_entity_id=sp_entity_id,
+                         userid=idp_test_username,
+                         name_id=name_id,
+                         sign_assertion=True,
+                         sign_response=True)
+
+            response_encoded = base64.b64encode(f"{response}".encode("utf-8"))
+
+            session = requests.Session()
+            r = session.post(destination,
+                             data={'SAMLResponse': response_encoded},
+                             headers=ui_headers,
+                             allow_redirects=False)
+            assert_http_code(302, r)
+
+            # All 403 test cases in groups_and_roles_attributes_test should
+            # pass now as full admin.
+            r = session.get(self.cluster.connected_nodes[0].url + '/whoami',
+                            headers=ui_headers)
+            assert_http_code(200, r)
+            roles = [a["role"] for a in r.json()["roles"]]
+            roles.sort()
+            expected_roles = ['admin']
+            assert_eq(roles, expected_roles)
+
+            # Backup pluggable UI request
+            r = session.get(self.cluster.connected_nodes[0].url +
+                            '/_p/backup/api/v1/plan',
+                            headers=ui_headers)
+            assert_http_code(200, r)
 
     # Successfull authentication, but user doesn't have access to UI
     def access_denied_test(self):
