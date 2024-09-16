@@ -147,6 +147,30 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
                 capture_output=testlib.config['intercept_output']
             )
 
+    def check_nodefile(self, old_cluster):
+        # nodefile is a cluster_run only file containing the node name. Check
+        # that it was remapped properly. We can't check the ip files because
+        # they will all list localhost/cb.local.
+        old_start_index = old_cluster.first_node_index
+        new_start_index = old_start_index * REMAP_MULTIPLE
+
+        cluster_path = (run.scriptdir /
+                        Path(f'test_cluster_data-{old_cluster.index}'))
+
+        hostname = '127.0.0.1'
+        if len(old_cluster._nodes) == 1:
+            hostname = 'cb.local'
+
+        for i in range(len(old_cluster._nodes)):
+            old_node_index = old_start_index + i
+            new_node_index = new_start_index + i
+            output_path=f'{cluster_path}/data/n_{new_node_index}'
+
+            nodefile_path = f'{output_path}/nodefile'
+            nodefile = open(nodefile_path, 'r')
+            contents = nodefile.read().splitlines()[0]
+            assert contents == f'n_{new_node_index}@{hostname}'
+
     def start_and_test_remapped_cluster(self, old_cluster, old_uuid,
                                         old_cookie):
         # When we remap the cluster we do not remap the ports on which each node
@@ -225,6 +249,7 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
         try:
             self.remap_cluster(self.cluster)
 
+            self.check_nodefile(self.cluster)
             self.start_and_test_remapped_cluster(self.cluster, old_uuid,
                                                  old_cookie)
         finally:
