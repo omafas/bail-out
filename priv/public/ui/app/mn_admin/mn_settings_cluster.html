@@ -827,11 +827,16 @@
             <input
                type="checkbox"
                id="enableShardAffinity"
-               ng-disabled="!rbac.cluster.settings.write || settingsClusterCtl.initialIndexSettings.enableShardAffinity"
+               ng-disabled="!rbac.cluster.settings.write"
                ng-model="settingsClusterCtl.indexSettings.enableShardAffinity">
             <label for="enableShardAffinity" class="checkbox">
               Enable File Transfer Based Rebalance
             </label>
+            <div
+              class="error error-field"
+              ng-show="settingsClusterCtl.initialIndexSettings.enableShardAffinity && !settingsClusterCtl.indexSettings.enableShardAffinity">
+              Warning: disabling this feature will lead to very slow rebalance operation.
+            </div>
             <div
                class="error error-field"
                ng-show="settingsClusterCtl.indexSettingsErrors.enableShardAffinity">
