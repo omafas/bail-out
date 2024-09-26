@@ -68,7 +68,7 @@ bucket = "test"
 class SamlTests(testlib.BaseTestSet):
     # MB-63612: Remove unnecessary Service.KV. It was added only to get rid of
     # the OnPremAutoFailoverSettingsTest failure.
-    services_to_run = [Service.KV, Service.QUERY, Service.BACKUP]
+    services_to_run = [Service.KV, Service.QUERY, Service.BACKUP, Service.CBAS]
 
     @staticmethod
     def requirements():
@@ -613,6 +613,23 @@ class SamlTests(testlib.BaseTestSet):
                 bkts.append(x['buckets']['name'])
                 assert bkts == [f'{bucket}']
 
+            # MB-62604, MB-63214: cbas doesn't use cbauth. It uses a combination
+            # of /pools/default/checkPermissions, /_cbauth/checkPermission. cbas
+            # parses cb-on-behalf-extras headers and populates context (similar
+            # to cbauth) before calling ns_server /_cbauth/checkPermission.
+
+            # Create analytics collection in test._default._default. This will
+            # fail - we don't have cluster.analytics!manage. Analytics and full
+            # admin roles have the permission (see admin_test).
+            r = session.post(self.cluster.connected_nodes[0].url +
+                             '/_p/cbas/query/service',
+                           data={'statement':
+                                 'alter collection '
+                                 f'`{bucket}`.`_default`.`_default` '
+                                 'enable analytics;'},
+                             headers=ui_headers)
+            assert_http_code(403, r)
+
     def groups_and_roles_admin_test(self):
         with saml_configured(self.cluster.connected_nodes[0],
                              groupsAttribute='groups',
@@ -662,6 +679,24 @@ class SamlTests(testlib.BaseTestSet):
             r = session.get(self.cluster.connected_nodes[0].url +
                             '/_p/backup/api/v1/plan',
                             headers=ui_headers)
+            assert_http_code(200, r)
+
+            # Create analytics collection in test._default._default.
+            r = session.post(self.cluster.connected_nodes[0].url +
+                             '/_p/cbas/query/service',
+                           data={'statement':
+                                 'alter collection '
+                                 f'`{bucket}`.`_default`.`_default` '
+                                 'enable analytics;'},
+                             headers=ui_headers)
+            assert_http_code(200, r)
+
+            # Query analytics collections. They should exist.
+            r = session.post(self.cluster.connected_nodes[0].url +
+                             '/_p/cbas/query/service',
+                             data={'statement':
+                                   f'select * from `{bucket}`'},
+                             headers=ui_headers)
             assert_http_code(200, r)
 
     # Successfull authentication, but user doesn't have access to UI
