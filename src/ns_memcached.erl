@@ -1001,10 +1001,13 @@ do_terminate(Reason, Bucket, Sock) ->
 
     case Deleting orelse Reconfig of
         true ->
-            ale:info(?USER_LOGGER, "Shutting down bucket ~p on ~p for ~s",
+            %% We no longer use 'for deletion' as this was scarey for some
+            %% users as they thought their data was being deleted. Whereas
+            %% the bucket is actually just not provisioned to serve data.
+            ale:info(?USER_LOGGER, "Shutting down bucket ~p on ~p ~s",
                      [Bucket, ThisNode, if
-                                            Reconfig -> "reconfiguration";
-                                            Deleting -> "deletion"
+                                            Reconfig -> "for reconfiguration";
+                                            Deleting -> ""
                                         end]),
 
             %% force = true means that that ep_engine will not try to flush
