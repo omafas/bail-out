@@ -63,7 +63,7 @@ handle_server_groups_put(Req) ->
             reply_json(Req, Error, 400);
         rebalance_running ->
             menelaus_util:reply_json(
-              Req, "Cannot update server group while rebalance is running",
+              Req, <<"Cannot update server group while rebalance is running">>,
               503);
         wrong_revision ->
             menelaus_util:reply_json(Req, [], 409)
