@@ -30,7 +30,9 @@ function mnStatisticsDescriptionFactory($http, $q, mnPoolDefault) {
   };
 
   function getStats() {
-    return mnPoolDefault.export.compat.atLeast76 ?
+    return mnPoolDefault.export.compat.atLeast764 ? 
+        mnStatsDescription["7.6.4"].stats :
+        mnPoolDefault.export.compat.atLeast76 ?
         mnStatsDescription["7.6"].stats :
         mnPoolDefault.export.compat.atLeast72 ?
         mnStatsDescription["7.2"].stats :

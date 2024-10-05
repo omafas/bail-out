@@ -41,6 +41,8 @@ var compat72 = get72CompatDesc();
 
 var compat76 = get76CompatDesc();
 
+var compat764 = get764CompatDesc();
+
 var mapping70 = get70Mapping();
 
 var mapping65 = get65Mapping();
@@ -103,6 +105,29 @@ var compat72Combined =
 
       return acc;
     }, compat70Combined);
+
+var compat76Combined = get76Stats();
+
+var compat764Combined =
+    propertiesToArray(compat764.stats)
+    .reduce((acc, statPath) => {
+      let config = getStatAdditionalConfig(statPath);
+      let path = statPath.split(".");
+      let parent = acc;
+      path.forEach((key, index) => {
+        if (index == (path.length - 1)) {
+          parent[key] = Object.assign({
+            nodesAggregation: "sum",
+            metric: {name: key}
+          }, readByPath(statPath, compat764.stats), config);
+        } else {
+          parent[key] = parent[key] || {};
+          parent = parent[key];
+        }
+      });
+
+      return acc;
+    }, compat76Combined);
 
 //per @items Modifier
 var stats70LabelsModifier = {
@@ -224,7 +249,12 @@ service["7.2"] = {
 // 7.6 has stats very similar to 7.0, but with some changes for analytics
 service["7.6"] = {
   "kvGroups": service["7.0"].kvGroups,
-  stats: get76Stats(),
+  stats: compat76Combined,
+};
+
+service["7.6.4"] = {
+  "kvGroups": service["7.0"].kvGroups,
+  stats: compat764Combined,
 };
 
 function get76Stats() {
@@ -417,6 +447,8 @@ function getStatAdditionalConfig(statName) {
   case "@index-.index_num_requests":
   case "@index-.index_num_rows_returned":
   case "@index-.index_num_rows_scanned":
+  case "@index-.index_disk_bytes":
+  case "@index-.index_num_items_flushed":
   case "@fts-.fts_total_bytes_indexed":
   case "@fts-.fts_total_queries":
   case "@kv-.kv_ops":
@@ -970,6 +1002,24 @@ function get76CompatDesc() {
           desc: "Internally active memory quota of Plasma for this node. It is tuned by memtuner. Valid only for standard GSI indexes",
           metric: {name: "index_storage_current_quota"},
         },
+        "index_storage_lss_fragmentation": {
+          unit: "percent",
+          title: "Index Memory Fragmentation",
+          desc: "The fraction of garbage data present in the logs",
+          metric: {name: "index_storage_lss_fragmentation"},
+        },
+        "index_avg_resident_percent": {
+          unit: "percent",
+          desc: "Average resident percent across all indexes, located on this node. Valid only for standard GSI indexes.",
+          title: "Index Average Resident Percent",
+          metric: {name: "index_avg_resident_percent"},
+        },
+        "index_storage_reclaim_pending_global": {
+          unit: "bytes",
+          desc: "Aggregated number of bytes across all plasma instances which have been freed but not yet returned to OS. Valid only for standard GSI indexes.",
+          title: "Index Memory Pending For Reclaim",
+          metric: {name: "index_storage_reclaim_pending_global"},
+        }
       },
 
       "@cbas": {
@@ -1082,6 +1132,26 @@ function get76CompatDesc() {
           metric: {name: "cbas_http_requests_failed_503_total"},
         }
       },
+    }
+  };
+}
+
+// here are the new stats and changed stats in 76
+function get764CompatDesc() {
+  return {
+    "stats": {
+      "@index-": {
+        "index_disk_bytes": {
+          unit: "bytes/sec",
+          title: "Index Disk Bytes Rate",
+          desc: "Number of bytes read from and written to disk, including insert, get, and delete operations",
+        },
+        "index_num_items_flushed": {
+          unit: "number/sec",
+          title: "Index Drain Rate",
+          desc: "Number of documents written from memory to index storage",
+        }
+      }
     }
   };
 }

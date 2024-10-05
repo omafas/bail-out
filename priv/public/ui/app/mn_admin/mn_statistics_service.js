@@ -820,6 +820,28 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
           stats: {"@index.index_storage_current_quota": true},
           size: "small",
           specificStat: true
+        }, {
+          stats: {"@index.index_storage_lss_fragmentation": true},
+          size: "small",
+          specificStat: true
+        }, {
+          stats: {"@index.index_avg_resident_percent": true},
+          size: "small",
+          specificStat: true
+        },
+        {
+          stats: {"@index.index_storage_reclaim_pending_global": true},
+          size: "small",
+          specificStat: true
+        },
+        {
+          stats: {"@index-.index_disk_bytes": true},
+          size: "small",
+          specificStat: true
+        }, {
+          stats: {"@index-.index_num_items_flushed": true},
+          size: "small",
+          specificStat: true
         }]
       }, {
         name: "Search",
