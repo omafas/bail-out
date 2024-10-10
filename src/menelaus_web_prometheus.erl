@@ -112,6 +112,8 @@ sd_config_validators() ->
      validator:convert(port, fun list_to_atom/1, _),
      validator:one_of(network, ["default", "external"], _),
      validator:convert(network, fun list_to_atom/1, _),
+     validator:one_of(clusterLabels, ["none", "uuidOnly", "uuidAndName"], _),
+     validator:convert(clusterLabels, fun list_to_atom/1, _),
      validator:unsupported(_)
     ].
 
@@ -123,6 +125,15 @@ do_handle_sd_config(Req, Params) ->
                insecure -> rest_port
            end,
     Network = proplists:get_value(network, Params, default),
+    {IncClusterName, IncClusterUuid} =
+        case proplists:get_value(clusterLabels, Params, none) of
+            none ->
+                {false, false};
+            uuidOnly ->
+                {false, true};
+            uuidAndName ->
+                {true, true}
+        end,
     Nodes = menelaus_web_node:get_hostnames(Req, any, [{port, Port}]),
     Hosts =
         case Network of
@@ -155,12 +166,42 @@ do_handle_sd_config(Req, Params) ->
         _ ->
             ok
     end,
+    Labels =
+        case IncClusterUuid of
+            false ->
+                [];
+            true ->
+                Uuid = misc:format_v4uuid(menelaus_web:get_uuid()),
+                [{cluster_uuid, list_to_binary(Uuid)}]
+        end ++
+        case IncClusterName of
+            false ->
+                [];
+            true ->
+                Name = menelaus_web_pools:get_cluster_name(),
+                [{cluster_name, list_to_binary(Name)}]
+        end,
     Body = case Type of
                yaml ->
-                   Yaml = [#{targets => Hosts}],
+                   Yaml = case Labels of
+                              [] ->
+                                  [#{targets => Hosts}];
+                              _ ->
+                                  LabelsMap =
+                                    lists:foldl(
+                                      fun ({Key, Val}, AccIn) ->
+                                              maps:put(Key, Val, AccIn)
+                                      end, #{}, Labels),
+                                  [#{targets => Hosts, labels => LabelsMap}]
+                          end,
                    yaml:encode(Yaml);
                json ->
-                   Json = [{[{targets, Hosts}]}],
+                   Json = case Labels of
+                              [] ->
+                                  [{[{targets, Hosts}]}];
+                              _ ->
+                                  [{[{targets, Hosts}, {labels, {Labels}}]}]
+                          end,
                    menelaus_util:encode_json(Json)
            end,
     ExtraHeaders =

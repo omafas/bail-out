@@ -3225,6 +3225,17 @@ is_valid_iso_8601_utc_test() ->
     false = is_valid_iso_8601_utc("dsdsd", [required_msecs]).
 
 -endif.
+
+%% Formats a UUID into 8-4-4-4-12 format.
+format_v4uuid(<<>>) ->
+    [];
+format_v4uuid(UUID) when is_binary(UUID) ->
+    <<Part1:8/binary, Part2:4/binary, Part3:4/binary, Part4:4/binary,
+      Part5:12/binary>> = UUID,
+    Formatted = io_lib:format("~s-~s-~s-~s-~s",
+                              [Part1, Part2, Part3, Part4, Part5]),
+    lists:flatten(Formatted).
+
 is_valid_v4uuid(UUID) ->
     Pattern = "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}"
               "\-[0-9a-fA-F]{12}",
@@ -3239,7 +3250,11 @@ is_valid_v4uuid(UUID) ->
 is_valid_v4uuid_test() ->
     true = is_valid_v4uuid("fe27e478-38a1-4aa8-ba87-45244a0677f7"),
     true = is_valid_v4uuid("ce8631a6-a348-42c5-b97c-cfdc0a49d283"),
-    false = is_valid_v4uuid("sdfsdfsdfsd").
+    false = is_valid_v4uuid("sdfsdfsdfsd"),
+    ?assertEqual("fe27e478-38a1-4aa8-ba87-45244a0677f7",
+                 format_v4uuid(<<"fe27e47838a14aa8ba8745244a0677f7">>)),
+    ?assertEqual("ce8631a6-a348-42c5-b97c-cfdc0a49d283",
+                 format_v4uuid(<<"ce8631a6a34842c5b97ccfdc0a49d283">>)).
 -endif.
 
 is_raw_ip(Host) ->
