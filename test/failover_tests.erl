@@ -289,7 +289,7 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
                         %% Now sync the config and we realise that 'c' has
                         %% actually been failed over
                         OldNodes = maps:get(nodes, SetupConfig),
-                        NewNodes = maps:put('c', {inactiveFailed, kv},
+                        NewNodes = maps:put('c', {inactiveFailed, [kv]},
                                             OldNodes),
 
                         setup_node_config(NewNodes),
