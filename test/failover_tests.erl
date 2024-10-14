@@ -332,6 +332,37 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
 
 
 auto_failover_test_() ->
+    HealthyNodes = [{'a', [kv]}, {'b', [kv]}],
+    UnhealthyNodes = [{'c', [kv]}],
+
+    Nodes = lists:foldl(
+              fun({Node, Services}, Acc) ->
+                      Acc#{ Node => {active, Services}}
+              end, #{}, HealthyNodes ++ UnhealthyNodes),
+
+    Buckets = ["default"],
+    SetupArgs =
+        #{nodes => Nodes,
+          buckets => Buckets,
+          unhealthy_nodes => UnhealthyNodes},
+
+    Tests = [
+             {"Auto failover",
+              fun auto_failover_t/2},
+             {"Auto failover async",
+              fun auto_failover_async_t/2},
+             {"Enable auto failover test", fun enable_auto_failover_test/2}
+            ],
+
+    %% foreachx here to let us pass parameters to setup.
+    {foreachx,
+     fun auto_failover_test_setup/1,
+     fun auto_failover_test_teardown/2,
+     [{SetupArgs, fun(T, R) ->
+                          {Name, ?_test(TestFun(T, R))}
+                  end} || {Name, TestFun} <- Tests]}.
+
+auto_failover_with_partition_test_() ->
     PartitionA = [{'a', [kv]}, {'b', [kv]}, {'q', [query]}],
     PartitionB = [{'c', [kv]}, {'d', [kv]}],
 
@@ -344,17 +375,15 @@ auto_failover_test_() ->
     SetupArgs =
         #{nodes => Nodes,
           buckets => Buckets,
-          partition_with_quorum => PartitionA,
+          %% The test will see the partition that had the quorum as down and
+          %% attempt to fail it over, not realising that the partition without
+          %% quorum had already been failed over.
+          unhealthy_nodes => PartitionA,
           partition_without_quorum => PartitionB},
 
     Tests = [
-             {"Auto failover",
-              fun auto_failover_t/2},
-             {"Auto failover async",
-              fun auto_failover_async_t/2},
              {"Auto failover post network partition stale config test",
-              fun auto_failover_post_network_partition_stale_config/2},
-             {"Enable auto failover test", fun enable_auto_failover_test/2}
+              fun auto_failover_post_network_partition_stale_config/2}
             ],
 
     %% foreachx here to let us pass parameters to setup.
@@ -388,9 +417,6 @@ auto_failover_test_setup(SetupConfig) ->
     meck:new(ns_doctor),
     meck:expect(ns_doctor, get_nodes, fun() -> [] end),
 
-    %% The test will see the partition that had the quorum as down and attempt
-    %% to fail it over, not realising that the partition without quorum had
-    %% already been failed over.
     meck:new(node_status_analyzer),
     meck:expect(node_status_analyzer, get_statuses,
                 fun() ->
@@ -399,7 +425,7 @@ auto_failover_test_setup(SetupConfig) ->
                                   dict:store(Node, {unhealthy, foo}, Acc)
                           end,
                           dict:new(),
-                          maps:get(partition_with_quorum, SetupConfig))
+                          maps:get(unhealthy_nodes, SetupConfig))
                 end),
 
     %% Needed to start the orchestrator. We don't really need the janitor to run
