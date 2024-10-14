@@ -330,37 +330,46 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
     ?assert(meck:called(leader_activities, run_activity,
                         [failover, majority, '_', '_'])).
 
-
-auto_failover_test_() ->
-    HealthyNodes = [{'a', [kv]}, {'b', [kv]}],
-    UnhealthyNodes = [{'c', [kv]}],
+add_nodes_to_setup_config(
+    #{healthy_nodes := HealthyNodes,
+      unhealthy_nodes := UnhealthyNodes} = SetupConfig) ->
 
     Nodes = lists:foldl(
               fun({Node, Services}, Acc) ->
                       Acc#{ Node => {active, Services}}
               end, #{}, HealthyNodes ++ UnhealthyNodes),
 
-    Buckets = ["default"],
-    SetupArgs =
-        #{nodes => Nodes,
-          buckets => Buckets,
-          unhealthy_nodes => UnhealthyNodes},
+    SetupConfig#{nodes => Nodes}.
 
+build_setup_config(SetupArgs) ->
+    add_nodes_to_setup_config(SetupArgs).
+
+basic_auto_failover_test_config() ->
+    #{buckets => ["default"],
+      healthy_nodes => [{'a', [kv]}, {'b', [kv]}],
+      unhealthy_nodes => [{'c', [kv]}]}.
+
+auto_failover_test_() ->
     Tests = [
              {"Auto failover",
-              fun auto_failover_t/2},
+              fun auto_failover_t/2,
+              basic_auto_failover_test_config()},
              {"Auto failover async",
-              fun auto_failover_async_t/2},
-             {"Enable auto failover test", fun enable_auto_failover_test/2}
+              fun auto_failover_async_t/2,
+              basic_auto_failover_test_config()},
+             {"Enable auto failover test",
+              fun enable_auto_failover_test/2,
+              basic_auto_failover_test_config()}
             ],
 
     %% foreachx here to let us pass parameters to setup.
     {foreachx,
      fun auto_failover_test_setup/1,
      fun auto_failover_test_teardown/2,
-     [{SetupArgs, fun(T, R) ->
-                          {Name, ?_test(TestFun(T, R))}
-                  end} || {Name, TestFun} <- Tests]}.
+     [{build_setup_config(SetupArgs),
+         fun(T, R) ->
+                 {Name, ?_test(TestFun(T, R))}
+         end} || {Name, TestFun, SetupArgs} <- Tests]}.
 
 auto_failover_with_partition_test_() ->
     PartitionA = [{'a', [kv]}, {'b', [kv]}, {'q', [query]}],
