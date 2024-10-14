@@ -998,7 +998,7 @@ function get76CompatDesc() {
       "@index": {
         "index_storage_current_quota": {
           unit: "bytes",
-          title: "Adaptive Index Storage Quota",
+          title: "Current Index Storage Quota",
           desc: "Internally active memory quota of Plasma for this node. It is tuned by memtuner. Valid only for standard GSI indexes",
           metric: {name: "index_storage_current_quota"},
         },
