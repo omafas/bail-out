@@ -477,9 +477,18 @@ get_auto_failover_reported_errors(AutoFailoverPid) ->
 get_auto_failover_tick_period(AutoFailoverPid) ->
     auto_failover:get_tick_period_from_state(sys:get_state(AutoFailoverPid)).
 
-auto_failover_t(_SetupConfig, PidMap) ->
-    #{auto_failover := AutoFailoverPid} = PidMap,
+poll_for_auto_failover_completion() ->
+    %% Failover is async to the auto_failover module, poll til it is completed
+    misc:poll_for_condition(
+        fun() ->
+                case chronicle_compat:get(counters, #{}) of
+                    {error, not_found} -> false;
+                    {ok, Value} ->
+                        proplists:is_defined(failover_complete, Value)
+                end
+        end, 5000, 100).
 
+perform_auto_failover(AutoFailoverPid) ->
     %% Override tick period. This lets us tick auto_failover as few times as
     %% possible in the test as we essentially don't have to wait for nodes to
     %% be in a down state for n ticks at any point.
@@ -502,15 +511,12 @@ auto_failover_t(_SetupConfig, PidMap) ->
       end,
       lists:seq(0, 3)),
 
-    %% Failover is async to the auto_failover module, poll til it is completed
-    misc:poll_for_condition(
-      fun() ->
-              case chronicle_compat:get(counters, #{}) of
-                  {error, not_found} -> false;
-                  {ok, Value} ->
-                      proplists:is_defined(failover_complete, Value)
-              end
-      end, 5000, 100),
+    poll_for_auto_failover_completion().
+
+auto_failover_t(_SetupConfig, PidMap) ->
+    #{auto_failover := AutoFailoverPid} = PidMap,
+
+    perform_auto_failover(AutoFailoverPid),
 
     %% Should not see any auto-failover errors
     ?assertEqual([],
@@ -574,10 +580,7 @@ auto_failover_async_t(_SetupConfig, PidMap) ->
                 end),
 
     %% Wait for the failover to complete
-    misc:poll_for_condition(
-        fun() ->
-            proplists:get_value(count, auto_failover:get_cfg()) =:= 3
-        end, 5000, 100),
+    poll_for_auto_failover_completion(),
 
     %% Without any auto-failover errors
     ?assertEqual([],
@@ -676,13 +679,13 @@ auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
       end,
       lists:seq(0, 3)),
 
+    %% Wait for the failover to complete
+    poll_for_auto_failover_completion(),
+
     %% We should have failed to fail over, and, we should now have the reported
     %% error (autofailover_unsafe) stored in the auto_failover state.
-    misc:poll_for_condition(
-        fun() ->
-            get_auto_failover_reported_errors(AutoFailoverPid) =:=
-                [autofailover_unsafe]
-        end, 5000, 100).
+    ?assertEqual([autofailover_unsafe],
+                 get_auto_failover_reported_errors(AutoFailoverPid)).
 
 enable_auto_failover_test(_SetupConfig, PidMap) ->
     #{auto_failover := AutoFailoverPid} = PidMap,
