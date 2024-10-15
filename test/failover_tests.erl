@@ -523,26 +523,6 @@ auto_failover_t(_SetupConfig, PidMap) ->
 auto_failover_async_t(_SetupConfig, PidMap) ->
     #{auto_failover := AutoFailoverPid} = PidMap,
 
-    %% Override tick period. This lets us tick auto_failover as few times as
-    %% possible in the test as we essentially don't have to wait for nodes to
-    %% be in a down state for n ticks at any point.
-    fake_ns_config:update_snapshot(auto_failover_tick_period, 100000),
-    AutoFailoverPid ! tick_period_updated,
-    auto_failover:enable(1, 5, []),
-
-    %% Part of our test, we should not have any reported errors yet.
-    ?assertEqual([],
-                 get_auto_failover_reported_errors(AutoFailoverPid)),
-
-    %% Tick auto-failover 4 times. We could wait long enough to do the auto
-    %% failover but we can speed this test up a bit by manually ticking. This
-    %% amount of ticks should be the minimum to process the auto-failover.
-    lists:foreach(
-      fun(_) ->
-              AutoFailoverPid ! tick
-      end,
-      lists:seq(0, 3)),
-
     %% Janitor is called during auto_failover to "cleanup" buckets, one step of
     %% which is marking the buckets as warmed. We're already mocking the
     %% janitor_agent here so we will add an extra mock to this function to
@@ -577,8 +557,7 @@ auto_failover_async_t(_SetupConfig, PidMap) ->
                                                        auto_failover:get_cfg()))
                 end),
 
-    %% Wait for the failover to complete
-    poll_for_auto_failover_completion(),
+    perform_auto_failover(AutoFailoverPid),
 
     %% Without any auto-failover errors
     ?assertEqual([],
@@ -632,20 +611,7 @@ auto_failover_async_t(_SetupConfig, PidMap) ->
 %% This test tests that in such a scenario we take the quorum and sync the
 %% config before performing auto_failover checks.
 auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
-    #{auto_failover := AutoFailoverPid} = PidMap,
-
-    %% Override tick period. This lets us tick auto_failover as few times as
-    %% possible in the test as we essentially don't have to wait for nodes to
-    %% be in a down state for n ticks at any point.
-    fake_ns_config:update_snapshot(auto_failover_tick_period, 100000),
-    AutoFailoverPid ! tick_period_updated,
-    auto_failover:enable(1, 5, []),
-
-    %% Part of our test, we should not have any reported errors yet.
-    ?assertEqual([],
-                 get_auto_failover_reported_errors(AutoFailoverPid)),
-
-    %% On config sync we find our updates config
+    %% On config sync we find our updated config
     meck:expect(chronicle_compat, pull,
                 fun(_) ->
                         %% Now sync the config and we realise that the partition
@@ -668,17 +634,8 @@ auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
                         ok
                 end),
 
-    %% Tick auto-failover 4 times. We could wait long enough to do the auto
-    %% failover but we can speed this test up a bit by manually ticking. This
-    %% amount of ticks should be the minimum to process the auto-failover.
-    lists:foreach(
-      fun(_) ->
-              AutoFailoverPid ! tick
-      end,
-      lists:seq(0, 3)),
-
-    %% Wait for the failover to complete
-    poll_for_auto_failover_completion(),
+    #{auto_failover := AutoFailoverPid} = PidMap,
+    perform_auto_failover(AutoFailoverPid),
 
     %% We should have failed to fail over, and, we should now have the reported
     %% error (autofailover_unsafe) stored in the auto_failover state.
