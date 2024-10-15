@@ -500,8 +500,6 @@ perform_auto_failover(AutoFailoverPid) ->
     ?assertEqual([],
                  get_auto_failover_reported_errors(AutoFailoverPid)),
 
-    meck:expect(chronicle_compat, pull, 1, ok),
-
     %% Tick auto-failover 4 times. We could wait long enough to do the auto
     %% failover but we can speed this test up a bit by manually ticking. This
     %% amount of ticks should be the minimum to process the auto-failover.
