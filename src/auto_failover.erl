@@ -627,7 +627,10 @@ try_autofailover(Nodes, DownNodeNames, DownNodes, NodeStatuses,
                 validate_services_safety(Snapshot, Nodes, DownNodeNames, []),
             case ValidNodes of
                 [] ->
-                    {ok, UnsafeNodes};
+                    %% We are not failing anything over, we just need to report
+                    %% the error and return the new state
+                    lists:foldl(fun log_unsafe_node/2, State,
+                                UnsafeNodes);
                 _ ->
                     trigger_autofailover(ValidNodes, NodeStatuses,
                                          DownNodeNames, DownNodes,

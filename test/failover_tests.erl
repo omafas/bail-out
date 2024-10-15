@@ -16,17 +16,30 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-spec add_service_map_to_snapshot(atom(), list(), map()) -> map().
+add_service_map_to_snapshot(Node, Services, Snapshot) ->
+    lists:foldl(
+        fun(kv, AccSnapshot) ->
+                %% KV is handled in a special way
+                AccSnapshot;
+            (Service, S) ->
+                case maps:find({service_map, Service}, S) of
+                    error -> S#{{service_map, Service} => [Node]};
+                    {ok, Nodes} -> S#{{service_map, Service} => [Node | Nodes]}
+                end
+        end, Snapshot, Services).
+
 %% Map should be of the form Key => {State, Services (list)}.
 -spec setup_node_config(map()) -> true.
 setup_node_config(NodesMap) ->
-    ClusterSnapshot = maps:fold(
-                        fun(Node, {State, Services}, Snapshot) ->
-                                Snapshot#{
-                                          {node, Node, membership} => State,
-                                          {node, Node, services} => Services,
-                                          {node, Node, failover_vbuckets} => []
-                                         }
-                        end, #{}, NodesMap),
+    ClusterSnapshot =
+        maps:fold(
+            fun(Node, {State, Services}, Snapshot) ->
+                    S = add_service_map_to_snapshot(Node, Services, Snapshot),
+                    S#{{node, Node, membership} => State,
+                        {node, Node, services} => Services,
+                        {node, Node, failover_vbuckets} => []}
+            end, #{}, NodesMap),
     fake_chronicle_kv:update_snapshot(ClusterSnapshot),
 
     Nodes = maps:keys(NodesMap),
@@ -349,6 +362,11 @@ basic_auto_failover_test_config() ->
       healthy_nodes => [{'a', [kv]}, {'b', [kv]}],
       unhealthy_nodes => [{'c', [kv]}]}.
 
+index_auto_failover_test_config() ->
+    #{buckets => ["default"],
+      healthy_nodes => [{'a', [kv]}, {'b', [index]}],
+      unhealthy_nodes => [{'c', [index]}]}.
+
 auto_failover_test_() ->
     Tests = [
              {"Auto failover",
@@ -359,7 +377,10 @@ auto_failover_test_() ->
               basic_auto_failover_test_config()},
              {"Enable auto failover test",
               fun enable_auto_failover_test/2,
-              basic_auto_failover_test_config()}
+              basic_auto_failover_test_config()},
+             {"Index safety check failure test",
+              fun auto_failover_index_safety_check_failure_t/2,
+              index_auto_failover_test_config()}
             ],
 
     %% foreachx here to let us pass parameters to setup.
@@ -450,6 +471,10 @@ auto_failover_test_setup(SetupConfig) ->
                         ok
                 end),
 
+    %% May be required if the test tries to send an email alert (and wants to
+    %% see that this has happened).
+    meck:new(ns_email_alert, [passthrough]),
+
     %% Need to start the orchestrator so that auto_failover can follow the full
     %% code path.
     {ok, OrchestratorPid} = ns_orchestrator:start_link(),
@@ -467,6 +492,7 @@ auto_failover_test_teardown(Config, PidMap) ->
     meck:unload(ns_janitor_server),
     meck:unload(node_status_analyzer),
     meck:unload(ns_doctor),
+    meck:unload(ns_email_alert),
 
     manual_failover_test_teardown(Config, PidMap).
 
@@ -668,3 +694,14 @@ enable_auto_failover_test(_SetupConfig, PidMap) ->
 
     auto_failover:enable(120, 1, []),
     ?assertEqual(1000, get_auto_failover_tick_period(AutoFailoverPid)).
+
+auto_failover_index_safety_check_failure_t(_SetupConfig, PidMap) ->
+    #{auto_failover := AutoFailoverPid} = PidMap,
+    perform_auto_failover(AutoFailoverPid),
+
+    %% Auto failover should not be possible
+    ?assertEqual([{c, index, "Safety check failed."}],
+        get_auto_failover_reported_errors(AutoFailoverPid)),
+
+    %% We should have sent an email alert (i.e. called log_unsafe_node).
+    ?assert(meck:called(ns_email_alert, alert, [auto_failover_node, '_', '_'])).
