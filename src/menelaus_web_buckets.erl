@@ -1743,8 +1743,20 @@ parse_validate_bucket_auto_compaction_settings(Params) ->
     end.
 
 validate_replicas_number(Params, IsNew) ->
+    ValueInParams = proplists:get_value("replicaNumber", Params),
+    ValueToCheck =
+        case {IsNew, ValueInParams} of
+            {true, undefined} ->
+                %% When creating a bucket and number of replicas isn't
+                %% specified, provide the default that will be used so
+                %% validation against min_replicas_count can be done.
+                %% Otherwise 'ignore' is used and validation doesn't occur.
+                integer_to_list(?DEFAULT_MEMBASE_NUM_REPLICAS);
+            {_, _} ->
+                ValueInParams
+        end,
     validate_with_missing(
-      proplists:get_value("replicaNumber", Params),
+      ValueToCheck,
       %% replicaNumber doesn't have
       %% default. Has to be given for
       %% creates, but may be omitted for
@@ -3743,6 +3755,19 @@ basic_bucket_params_screening_t() ->
                    <<"Replica number must be equal to or greater than 2">>}],
                  E27),
 
+    %% Cannot create a bucket using the default replicaNumber when it is
+    %% less than the minimum.
+    {_OK27_1, E27_1} = basic_bucket_params_screening(
+        true,
+        "bucket27_1",
+        [{"bucketType", "membase"},
+         {"ramQuota", "1024"},
+         {"storageBackend", "magma"}],
+        AllBuckets),
+    ?assertEqual([{replicaNumber,
+                   <<"Replica number must be equal to or greater than 2">>}],
+                 E27_1),
+
     %% Cannot update a bucket's replicaNumber to be less than the minimum.
     {_OK28, E28} = basic_bucket_params_screening(
                      false, "third",
@@ -3763,6 +3788,14 @@ basic_bucket_params_screening_t() ->
         AllBuckets),
     ?assertEqual([], E29),
     ?assertEqual({num_replicas, 2}, proplists:lookup(num_replicas, OK29)),
+
+    %% Reset to default value to not affect downstream tests.
+    meck:expect(ns_config, read_key_fast,
+                fun (min_replicas_count, _) ->
+                        0;
+                    (_, Default) ->
+                        Default
+                end),
 
     %% Cannot create a bucket with enableCrossClusterVersioning specified
     {_OK30, E30} = basic_bucket_params_screening(

@@ -571,7 +571,9 @@ class BucketTestSetBase(testlib.BaseTestSet):
             # Replica Number
             # ------------------------------------------------------------------
 
-            self.test_params['replicaNumber'] = [None]
+            # Only 0 is valid with just_validate, since otherwise it will
+            # default to 1, and warn about not enough nodes
+            self.test_params['replicaNumber'] = [None, 0]
 
             # A warning is given as an error when just validating an update of
             # replicaNumber, so we don't test this case
@@ -1068,7 +1070,8 @@ class BucketTestSetBase(testlib.BaseTestSet):
     def add_required_fields(self, request_data):
         data = {
             "name": self.get_next_name(),
-            "ramQuota": 256
+            "ramQuota": 256,
+            "replicaNumber": 0  # To avoid 'not enough data servers' warning
         }
         for key, value in request_data.items():
             data[key] = value
@@ -1236,10 +1239,12 @@ class BucketTestSetBase(testlib.BaseTestSet):
 
     def replica_number_error(self, test_data, is_creation, just_validate):
         field = "replicaNumber"
-        if field in test_data:
-            num = test_data[field]
+        if is_creation or field in test_data:
+            # replicaNumber defaults to 1
+            num = test_data.get(field, 1)
             if test_data.get('bucketType') == "memcached":
-                return {field:
+                if field in test_data:
+                    return {field:
                             "replicaNumber is not valid for memcached buckets"}
             elif not isinstance(num, int):
                 return {field:
@@ -1824,6 +1829,10 @@ class BucketTestSetBase(testlib.BaseTestSet):
             errors.update({"replicaNumber":
                                "Warning: changing replica number may require "
                                "rebalance."})
+        if ("replicaNumber" not in errors and errors and not is_creation and not just_validate and test_data.get("replicaNumber", 1) > self.num_nodes - 1):
+            errors.update({"replicaNumber":
+                           "Warning: you do not have enough data servers or "
+                           "server groups to support this number of replicas."})
         return errors
 
     def gen_params(self, good, just_validate, test_param):

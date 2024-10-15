@@ -987,7 +987,7 @@ get_vp_window_hrs(BucketConfig) ->
 new_bucket_default_params(membase) ->
     [{type, membase},
      {num_vbuckets, get_default_num_vbuckets()},
-     {num_replicas, 1},
+     {num_replicas, ?DEFAULT_MEMBASE_NUM_REPLICAS},
      {ram_quota, 0},
      {replication_topology, star},
      {repl_type, dcp},
@@ -996,7 +996,7 @@ new_bucket_default_params(memcached) ->
     Nodes = ns_cluster_membership:service_active_nodes(kv),
     [{type, memcached},
      {num_vbuckets, 0},
-     {num_replicas, 0},
+     {num_replicas, ?DEFAULT_MEMCACHED_NUM_REPLICAS},
      {servers, Nodes},
      {map, []},
      {ram_quota, 0}].
