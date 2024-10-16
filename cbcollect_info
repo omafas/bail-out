@@ -1967,7 +1967,10 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
             make_cbas("select * from `Metadata`.`AssignedRole`"),
             make_cbas("select * from `Metadata`.`Privilege`"),
             *make_golang_profile_tasks('Analytics', local_token_creds_fun,
-                                       cbas_parent_port, 'analytics')
+                                       cbas_parent_port, 'analytics'),
+            UnixTask("Analytics thread dump (jstack -l)",
+                     "jps -l | grep com.couchbase | cut -f 1 -d ' ' | xargs -n1 jstack -l",
+                     log_file="analytics_jstack.log")
         ]
 
     eventing_tasks = []
@@ -2688,7 +2691,9 @@ def main():
 
     bindir = os.path.join(options.root, 'bin')
     if os.name == 'posix':
+        javabindir = os.path.join(options.root, 'lib', 'cbas', 'runtime', 'bin')
         path = [bindir,
+                javabindir,
                 '/opt/couchbase/bin',
                 os.environ['PATH'],
                 '/bin',
