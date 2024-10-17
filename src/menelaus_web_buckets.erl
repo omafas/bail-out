@@ -1262,9 +1262,33 @@ validate_ram(#ram_summary{this_alloc = Alloc, this_used = Used}) ->
     end.
 
 additional_bucket_params_validation(Params, Ctx) ->
-    lists:append([validate_replicas_and_durability(Params, Ctx),
+    lists:append([maybe_validate_replicas_and_durability(Params, Ctx),
                   validate_magma_ram_quota(Params, Ctx),
                   validate_pitr_params(Params, Ctx)]).
+
+maybe_validate_replicas_and_durability(Params, Ctx) ->
+    %% MB-63888: When we fail over a node we set servers in the Bucket config
+    %% to the post-failover servers. We're using that config whenever we call
+    %% get_nodes(Ctx) and the bucket already exists. If we have configured
+    %% durability_min_level in the past, have failed over enough nodes that only
+    %% one KV node remains, and attempt to update any other bucket config then
+    %% we would fail with a not enough servers error. This isn't great, so we're
+    %% going to skip this check unless the user tries to change
+    %% durability_min_level or num_replicas.
+    DurabilityLevelParams = proplists:get_value(durability_min_level, Params),
+    NumReplicasParams = proplists:get_value(num_replicas, Params),
+
+    DurabilityLevelConfigured = get_existing_bucket_config(durability_min_level,
+                                                           Ctx),
+    NumReplicasConfigured = get_existing_bucket_config(num_replicas, Ctx),
+    case (DurabilityLevelParams =:= undefined orelse
+          DurabilityLevelParams =:= DurabilityLevelConfigured) andalso
+         (NumReplicasParams =:= undefined orelse
+          NumReplicasParams =:= NumReplicasConfigured) of
+        true -> [];
+        false ->
+            validate_replicas_and_durability(Params, Ctx)
+    end.
 
 validate_replicas_and_durability(Params, Ctx) ->
     NumReplicas = get_value_from_parms_or_bucket(num_replicas, Params, Ctx),
@@ -4201,6 +4225,71 @@ validate_dura_min_level_before_server_list_populated_test() ->
                    <<"You do not have enough data servers to support this "
                      "durability level">>}],
                  Errors),
+    meck:unload(ns_config).
+
+validate_dura_min_level_change_when_only_one_kv_node_active_test() ->
+    meck:new(ns_config, [passthrough]),
+    meck:expect(ns_config,
+                read_key_fast, fun(_, Default) -> Default end),
+    BucketConfig = [{servers, [node1]},
+                    {desired_servers, [node1]},
+                    {num_replicas, 1},
+                    {durability_min_level, majority}],
+    Ctx = #bv_ctx{
+             bucket_config=BucketConfig,
+             new = false
+            },
+
+    %% Attempt to increase durability_min_level to persistToMajority,
+    %% should not work, not enough replicas
+    Params0 = [{durability_min_level, persistToMajority}],
+    Errors0 = additional_bucket_params_validation(Params0, Ctx),
+    ?assertEqual(
+       [{durability_min_level,
+         <<"You do not have enough data servers to support this durability "
+           "level">>}],
+       Errors0),
+
+    %% Attempt to set durability_min_level to none, should be fine
+    Params1 = [{durability_min_level, none}],
+    Errors1 = additional_bucket_params_validation(Params1, Ctx),
+    ?assertEqual([], Errors1),
+
+    %% We should be able to change things like ram_quota
+    Params2 = [{ram_quota, 4 * ?MIB}],
+    Errors2 = additional_bucket_params_validation(Params2, Ctx),
+    ?assertEqual([], Errors2),
+
+    %% We should be able to change things like replicas too, provided we change
+    %% it to 0.
+    Params3 = [{num_replicas, 0}],
+    Errors3 = additional_bucket_params_validation(Params3, Ctx),
+    ?assertEqual([], Errors3),
+
+    %% But if we use an invalid value for num_replicas that should fail
+    Params4 = [{num_replicas, 2}],
+    Errors4 = additional_bucket_params_validation(Params4, Ctx),
+    ?assertEqual(
+       [{durability_min_level,
+         <<"You do not have enough data servers to support this durability "
+           "level">>}], Errors4),
+
+    Params5 = [{num_replicas, 3}],
+    Errors5 = additional_bucket_params_validation(Params5, Ctx),
+    ?assertEqual(
+       [{durability_min_level,
+         <<"Durability minimum level cannot be specified with 3 replicas">>}],
+       Errors5),
+
+    %% We can specify values and skip the check if they are the same
+    Params6 = [{num_replicas, 1}],
+    Errors6 = additional_bucket_params_validation(Params6, Ctx),
+    ?assertEqual([], Errors6),
+
+    Params7 = [{durability_min_level, majority}],
+    Errors7 = additional_bucket_params_validation(Params7, Ctx),
+    ?assertEqual([], Errors7),
+
     meck:unload(ns_config).
 
 get_conflict_resolution_type_and_thresholds_test() ->
