@@ -1077,7 +1077,7 @@ num_replicas_warnings_validation(Ctx, NReplicas) ->
             true ->
                 []
         end ++
-        case get_existing_num_replicas(Ctx) of
+        case get_existing_bucket_config(num_replicas, Ctx) of
             undefined -> [];
             NReplicas -> [];
             _ -> ["changing replica number may require rebalance"]
@@ -1097,10 +1097,11 @@ num_replicas_warnings_validation(Ctx, NReplicas) ->
             [{replicaNumber, ?l2b("Warning: " ++ Msg ++ ".")}]
     end.
 
-get_existing_num_replicas(#bv_ctx{new = false, bucket_config = BucketConfig})
+get_existing_bucket_config(Param,
+                           #bv_ctx{new = false, bucket_config = BucketConfig})
   when BucketConfig =/= false ->
-    ns_bucket:num_replicas(BucketConfig, undefined);
-get_existing_num_replicas(_) ->
+    proplists:get_value(Param, BucketConfig);
+get_existing_bucket_config(_, _) ->
     undefined.
 
 handle_bucket_flush(_PoolId, Id, Req) ->
@@ -1284,7 +1285,7 @@ validate_replicas_and_durability(Params, Ctx) ->
                          "durability level">>}];
         {_, _, _} -> []
     end ++
-        case get_existing_num_replicas(Ctx) of
+        case get_existing_bucket_config(num_replicas, Ctx) of
             undefined ->
                 [];
             NumReplicas ->
