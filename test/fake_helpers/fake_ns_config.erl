@@ -198,6 +198,35 @@ meck_setup_getters() ->
                 end),
 
 
+    meck:expect(ns_config, search_node,
+                fun(Node, Snapshot, Key) ->
+                        fetch_node(Node, Snapshot, Key)
+                end),
+
+
+    meck:expect(ns_config, search_prop,
+                fun(Snapshot, Key, SubKey, DefaultSubVal) ->
+                        fetch_prop(Snapshot, Key, SubKey, DefaultSubVal)
+                end),
+
+    meck:expect(ns_config, search_node_prop,
+                fun(?NS_CONFIG_LATEST_MARKER, Key, SubKey, Default) ->
+                        fetch_node_prop(node(), ?NS_CONFIG_LATEST_MARKER, Key,
+                                        SubKey, Default);
+                   (Node, Snapshot, Key, SubKey) when is_atom(Node) ->
+                        fetch_node_prop(Node, Snapshot, Key, SubKey, undefined);
+                   (Snapshot, Key, SubKey, Default) ->
+                        fetch_node_prop(node(), Snapshot, Key, SubKey, Default)
+                end),
+
+
+    meck:expect(ns_config, search_node_prop,
+                fun(Node, Snapshot, Key, SubKey, DefaultSubVal) ->
+                        fetch_node_prop(Node, Snapshot, Key, SubKey,
+                                        DefaultSubVal)
+                end),
+
+
     meck:expect(ns_config, search_node_with_default,
                 fun(Key, Default) ->
                         fetch_with_default_from_latest_snapshot(Key, Default)
@@ -243,7 +272,10 @@ store_ets_snapshot(Snapshot) ->
     ns_config:do_announce_changes(Diff).
 
 fetch_from_snapshot(Snapshot, Key)  ->
-    {value, proplists:get_value(Key, Snapshot)}.
+    case proplists:get_value(Key, Snapshot, not_found) of
+        not_found -> false;
+        V -> {value, V}
+    end.
 
 fetch_from_latest_snapshot(Key) ->
     fetch_from_snapshot(get_ets_snapshot(), Key).
@@ -256,3 +288,31 @@ fetch_with_default(Snapshot, Key, Default) ->
 
 fetch_with_default_from_latest_snapshot(Key, Default) ->
     fetch_with_default(get_ets_snapshot(), Key, Default).
+
+fetch_node_prop(Node, ?NS_CONFIG_LATEST_MARKER, Key, SubKey, Default) ->
+    fetch_node_prop(Node, get_ets_snapshot(), Key, SubKey, Default);
+fetch_node_prop(Node, Snapshot, Key, SubKey, Default) ->
+    case fetch_node(Node, Snapshot, Key) of
+        {value, List} ->
+            case proplists:lookup(SubKey, List) of
+                none -> fetch_prop(Snapshot, Key, SubKey, Default);
+                {SubKey, Val} -> Val
+            end;
+        false -> Default
+    end.
+
+fetch_node(Node, Snapshot, Key) ->
+    case fetch_from_snapshot(Snapshot, {node, Node, Key}) of
+        {value, _} = V -> V;
+        false -> fetch_from_snapshot(Snapshot, Key)
+    end.
+
+fetch_prop(?NS_CONFIG_LATEST_MARKER, Key, SubKey, DefaultSubVal) ->
+    fetch_prop(get_ets_snapshot(), Key, SubKey, DefaultSubVal);
+fetch_prop(Snapshot, Key, SubKey, DefaultSubVal) ->
+    case fetch_from_snapshot(Snapshot, Key) of
+        {value, PropList} ->
+            proplists:get_value(SubKey, PropList, DefaultSubVal);
+        false ->
+            DefaultSubVal
+    end.
