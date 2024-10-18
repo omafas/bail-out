@@ -1447,9 +1447,15 @@ def make_product_task(guts, initargs_path, memcached_pass, options):
             make_cbas("select * from `Metadata`.`Link`"),
             *make_golang_profile_tasks('Analytics', memcached_pass,
                                        cbas_parent_port, 'analytics'),
-            UnixTask("Analytics thread dump (jstack -l)",
-                     "jps -l | grep com.couchbase | cut -f 1 -d ' ' | xargs -n1 jstack -l",
-                     log_file="analytics_jstack.log")
+            UnixTask("Analytics thread dump",
+                     "pgrep -f java.*couchbase[^*]*Driver | xargs -r -n1 jstack -l",
+                     log_file="analytics_jstack.log"),
+            UnixTask("Analytics JVM flags",
+                     "pgrep -f java.*couchbase[^*]*Driver | xargs -r -I{} jcmd {} VM.flags -all",
+                     log_file="analytics_jvm.log"),
+            UnixTask("Analytics JVM info)",
+                     "pgrep -f java.*couchbase[^*]*Driver | xargs -r -I{} jcmd {} VM.info",
+                     log_file="analytics_jvm.log")
         ]
 
     eventing_tasks = []
