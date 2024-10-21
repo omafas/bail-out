@@ -49,11 +49,16 @@
           {{service | mnFormatServices}}
           {{(serversListItemDetailsCtl.getServiceQuota(service)|mnFormatQuantity) || 'unknown'}}
           {{$last ? '' : '| '}}
+        </span>
       </div>
       <div
          ng-repeat="service in (node.services | filter:serversListItemDetailsCtl.isPathPresent | mnOrderServices)">
         <strong>{{service | mnFormatServices}} Storage Path:</strong>
         {{serversListItemDetailsCtl.getServicePath(service)}}
+      </div>
+      <div ng-if="node.services.includes('kv') || node.services.includes('index') || node.services.includes('fts')">
+         <strong>{{'index' | mnFormatServices}} Storage Path:</strong>
+         {{serversListItemDetailsCtl.getServicePath('index')}}
       </div>
       <div ng-show="serversCtl.nodeCertificates[node.configuredHostname].warnings">
         <div

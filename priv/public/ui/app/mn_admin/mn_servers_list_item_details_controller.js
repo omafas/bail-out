@@ -104,6 +104,10 @@ function mnServersListItemDetailsController($scope, mnServersListItemDetailsServ
       return !!vm.server.details.storage.hdd[0].path;
     case "cbas":
       return !!vm.server.details.storage.hdd[0].cbas_dirs;
+    // the index path is used for Views, GSI, and FTS, so we show that path in a different block
+    case "fts":
+    case "index":
+      return;
     default:
       return !!vm.server.details.storage.hdd[0][service + "_path"];
     }
