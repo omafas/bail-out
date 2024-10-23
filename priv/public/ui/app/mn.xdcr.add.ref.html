@@ -248,6 +248,83 @@ licenses/APL2.txt.
           </div>
         </div>
       </div>
+      <div>
+        <label>Network Type
+          <span
+             class="fa-stack icon-info"
+             [ngbTooltip]="networkType"
+             triggers="click"
+             placement="top">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+        </label>
+        <ng-template #networkType>
+          <div class="formrow margin-bottom-half">
+            <p>If an external network has been configured for the target cluster, you can choose from the following options.</p>
+            <p>The optional network_type flag determines whether "internal" or "alternate" IP addresses are used when communicating with the target cluster.</p>
+            <p>A value of "default" enforces the use of internal IP addresses.</p>
+            <p>A value of "external" enforces the use of alternate IP addresses, whenever possible.</p>
+            <p>For information on alternate addresses, see
+              <a
+                 href="https://docs.couchbase.com/server/{{majorMinorVersion | async}}/xdcr-reference/xdcr-security-and-networking.html#using-alternate-addresses"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 [mnSpinner]="majorMinorVersion | async">
+                Using Alternate Addresses</a>.
+              <a
+                 href="https://docs.couchbase.com/server/{{majorMinorVersion | async}}/rest-api/rest-xdcr-create-ref.html"
+                 rel="noopener noreferrer"
+                 target="_blank">Learn More</a></p>
+          </div>
+        </ng-template>
+        <div class="checkbox-list">
+          <div>
+            <input
+               type="radio"
+               value=""
+               id="network_type_auto"
+               formControlName="network_type">
+            <label
+               for="network_type_auto"
+               class="checkbox">
+              Auto
+            </label>
+            <p class="text-smaller desc block indent-1-5">Based on entered hostname</p>
+          </div>
+          <div>
+            <input
+               type="radio"
+               value="external"
+               id="network_type_external"
+               formControlName="network_type">
+            <label
+               for="network_type_external"
+               class="checkbox">
+              Force using alternate address
+            </label>
+            <p class="text-smaller desc block indent-1-5">Use network_type=external</p>
+          </div>
+          <div>
+            <input
+               type="radio"
+               value="default"
+               id="network_type_default"
+               formControlName="network_type">
+            <label
+               for="network_type_default"
+               class="checkbox">
+              Force using internal address
+            </label>
+            <p class="text-smaller desc block indent-1-5">Use network_type=default</p>
+          </div>
+        </div>
+        <div
+           class="error"
+           [hidden]="!(postRemoteClusters.error | async)?.network_type">
+          {{(postRemoteClusters.error | async)?.network_type}}
+        </div>
+      </div>
       <div class="formrow margin-top-2">
         <label>Check Connection (optional)</label>
         <p>The connection check can take up to 1 minute.</p>

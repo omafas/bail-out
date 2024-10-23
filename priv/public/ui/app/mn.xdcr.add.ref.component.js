@@ -16,6 +16,7 @@ import {merge} from 'rxjs';
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnFormService} from "./mn.form.service.js";
 import {MnPoolsService} from './mn.pools.service.js';
+import {MnAdminService} from './mn.admin.service.js';
 import {MnXDCRService} from './mn.xdcr.service.js';
 import {clone} from 'ramda';
 import template from "./mn.xdcr.add.ref.html";
@@ -36,14 +37,17 @@ class MnXDCRAddRefComponent extends MnLifeCycleHooksToStream {
   static get parameters() { return [
     MnFormService,
     MnPoolsService,
+    MnAdminService,
     MnXDCRService,
     NgbActiveModal
   ]}
 
-  constructor(mnFormService, mnPoolsService, mnXDCRService, activeModal) {
+  constructor(mnFormService, mnPoolsService, mnAdminService, mnXDCRService, activeModal) {
     super();
 
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
+    this.compatVersion80 = mnAdminService.stream.compatVersion80;
+    this.majorMinorVersion = mnAdminService.stream.majorMinorVersion;
     this.postRemoteClusters = mnXDCRService.stream.postRemoteClusters;
     this.postXdcr = mnXDCRService.stream.postRemoteClusters;
     this.postXdcrConnectionPreCheck = mnXDCRService.stream.postXdcrConnectionPreCheck;
@@ -63,7 +67,8 @@ class MnXDCRAddRefComponent extends MnLifeCycleHooksToStream {
                      encryptionType: null,
                      certificate: "",
                      clientCertificate: "",
-                     clientKey: ""})
+                     clientKey: "",
+                     network_type: ""})
       .setPackPipe(map(this.pack.bind(this)))
       .setPostRequest(this.postRemoteClusters)
       .clearErrors()

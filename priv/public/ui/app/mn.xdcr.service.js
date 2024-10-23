@@ -282,6 +282,9 @@ class MnXDCRService {
       cluster.hostname += ":8091";
     }
 
+    if (cluster.network_type) {
+      requestBodyFields.push("network_type");
+    }
     if (cluster.demandEncryption) {
       requestBodyFields.push("demandEncryption");
       requestBodyFields.push("certificate");
