@@ -704,7 +704,8 @@ graceful_failover_test_setup(SetupConfig) ->
     %% made during that.
     rebalance_test_mock_setup(),
 
-    mock_helpers:setup_mocks([rebalance_quirks], Pids).
+    mock_helpers:setup_mocks([rebalance_quirks,
+                              ns_pubsub], Pids).
 
 rebalance_test_mock_setup() ->
     fake_ns_config:update_snapshot(rebalance_out_delay_seconds, 0),

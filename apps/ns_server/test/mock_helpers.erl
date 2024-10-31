@@ -145,8 +145,7 @@ compat_mode_manager(PidMap) ->
     PidMap#{?FUNCTION_NAME => CompatModeManagerPid}.
 
 auto_failover(PidMap) ->
-    PidMap0 = setup_mocks([compat_mode_events,
-                           ns_pubsub], PidMap),
+    PidMap0 = setup_mocks([compat_mode_events], PidMap),
 
     {ok, AutoFailoverPid} = auto_failover:start_link(),
     PidMap0#{?FUNCTION_NAME => AutoFailoverPid}.
