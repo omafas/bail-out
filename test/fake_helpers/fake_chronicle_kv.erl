@@ -75,9 +75,9 @@ update_snapshot(Key, Value) ->
 -spec update_snapshot(map()) -> true.
 update_snapshot(Map) when is_map(Map) ->
     NewKVs = maps:map(
-        fun(_Key, Value) ->
-            add_rev_to_value(Value)
-        end, Map),
+               fun(_Key, Value) ->
+                       add_rev_to_value(Value)
+               end, Map),
     OldSnapshot = get_ets_snapshot(),
     NewSnapshot = maps:merge(OldSnapshot, NewKVs),
     store_ets_snapshot(NewSnapshot).
@@ -111,59 +111,60 @@ meck_setup_chronicle_kv() ->
     meck_setup_chronicle_kv_setters().
 
 meck_setup_chronicle_kv_getters() ->
-    meck:expect(chronicle_kv, get_snapshot,
-        fun (_Fetchers, _Opts) ->
-                %% Don't care about fetchers, return the entire config. We
-                %% should be using lookup functions to get specific keys
-                %% anyways so this should just work, and we don't care about
-                %% perf here.
-                get_ets_snapshot()
-        end),
+    meck:expect(
+      chronicle_kv, get_snapshot,
+      fun (_Fetchers, _Opts) ->
+              %% Don't care about fetchers, return the entire config. We
+              %% should be using lookup functions to get specific keys
+              %% anyways so this should just work, and we don't care about
+              %% perf here.
+              get_ets_snapshot()
+      end),
 
 
     meck:expect(chronicle_kv, ro_txn,
-        fun(_Name, _Fun, _Opts) ->
-                {ok, {get_ets_snapshot(), no_rev}}
-        end),
+                fun(_Name, _Fun, _Opts) ->
+                        {ok, {get_ets_snapshot(), no_rev}}
+                end),
 
 
     meck:expect(chronicle_kv, txn_get_many,
-        fun(Keys, Txn) ->
-            get_keys_for_txn(Keys, Txn)
-        end),
+                fun(Keys, Txn) ->
+                        get_keys_for_txn(Keys, Txn)
+                end),
 
 
     meck:expect(chronicle_kv, get,
-        fun(_Name, Key) ->
-                fetch_from_latest_snapshot(Key)
-        end),
+                fun(_Name, Key) ->
+                        fetch_from_latest_snapshot(Key)
+                end),
     meck:expect(chronicle_kv, get,
-        fun(_Name, Key, #{}) ->
-                fetch_from_latest_snapshot(Key)
-        end).
+                fun(_Name, Key, #{}) ->
+                        fetch_from_latest_snapshot(Key)
+                end).
 
 meck_setup_chronicle_kv_setters() ->
     meck:expect(chronicle_kv, transaction,
-        fun(Name, Keys, Fun) ->
-            transaction(Name, Keys, Fun, #{})
-        end),
+                fun(Name, Keys, Fun) ->
+                        transaction(Name, Keys, Fun, #{})
+                end),
 
     meck:expect(chronicle_kv, transaction,
-        fun(Name, Keys, Fun, Opts) ->
-            transaction(Name, Keys, Fun, Opts)
-        end),
+                fun(Name, Keys, Fun, Opts) ->
+                        transaction(Name, Keys, Fun, Opts)
+                end),
 
     meck:expect(chronicle_kv, txn,
-        fun(Name, Fun, Opts) ->
-            transaction(Name, [], Fun, Opts)
-        end),
+                fun(Name, Fun, Opts) ->
+                        transaction(Name, [], Fun, Opts)
+                end),
 
 
     meck:expect(chronicle_kv, set,
-        fun(_Name, Key, Value) ->
-            update_snapshot(Key, Value),
-            {ok, 1}
-        end).
+                fun(_Name, Key, Value) ->
+                        update_snapshot(Key, Value),
+                        {ok, 1}
+                end).
 
 %% ----------------------------------
 %% Internal - getter/setter functions
@@ -205,9 +206,9 @@ get_keys_for_txn(_Keys, _Snapshot) ->
 
 do_commits(Commits) ->
     NewMap = lists:foldl(
-        fun({set, Key, Value}, Acc) ->
-            Acc#{Key => Value}
-        end, #{}, Commits),
+               fun({set, Key, Value}, Acc) ->
+                       Acc#{Key => Value}
+               end, #{}, Commits),
     update_snapshot(NewMap).
 
 transaction(_Name, Keys, Fun, _Opts) ->
