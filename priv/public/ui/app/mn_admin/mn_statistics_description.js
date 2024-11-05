@@ -1004,7 +1004,7 @@ function get76CompatDesc() {
         },
         "index_storage_lss_fragmentation": {
           unit: "percent",
-          title: "Index Memory Fragmentation",
+          title: "Index Disk Fragmentation",
           desc: "The fraction of garbage data present in the logs",
           metric: {name: "index_storage_lss_fragmentation"},
         },
