@@ -50,6 +50,7 @@
 -export([setup_cluster_compat_version/1]).
 
 -define(TABLE_NAME, fake_chronicle_kv).
+-define(FAKE_HISTORY_REV, <<"fake">>).
 
 %% --------------------
 %% API - Setup/Teardown
@@ -123,10 +124,23 @@ meck_setup_chronicle_kv_getters() ->
 
 
     meck:expect(chronicle_kv, ro_txn,
+                fun(_Name, Fun) ->
+                        {ok,
+                            {Fun(get_ets_snapshot()),
+                                make_rev(get_snapshot_seqno())}}
+                end),
+    meck:expect(chronicle_kv, ro_txn,
                 fun(_Name, _Fun, _Opts) ->
-                        {ok, {get_ets_snapshot(), no_rev}}
+                        {ok,
+                            {get_ets_snapshot(),
+                                make_rev(get_snapshot_seqno())}}
                 end),
 
+
+    meck:expect(chronicle_kv, txn_get,
+                fun(Key, Txn) ->
+                        fetch_from_snapshot(Txn, Key, [])
+                end),
 
     meck:expect(chronicle_kv, txn_get_many,
                 fun(Keys, Txn) ->
@@ -141,6 +155,12 @@ meck_setup_chronicle_kv_getters() ->
     meck:expect(chronicle_kv, get,
                 fun(_Name, Key, #{}) ->
                         fetch_from_latest_snapshot(Key)
+                end),
+
+    meck:expect(chronicle_kv, get_full_snapshot,
+                fun(_Name) ->
+                        {ok,
+                         {get_ets_snapshot(), make_rev(get_snapshot_seqno())}}
                 end).
 
 meck_setup_chronicle_kv_setters() ->
@@ -159,6 +179,10 @@ meck_setup_chronicle_kv_setters() ->
                         transaction(Name, [], Fun, Opts)
                 end),
 
+    meck:expect(chronicle_kv, txn,
+                fun(Name, Fun) ->
+                        transaction(Name, [], Fun, [])
+                end),
 
     meck:expect(chronicle_kv, set,
                 fun(_Name, Key, Value) ->
@@ -175,13 +199,32 @@ get_ets_snapshot() ->
         [] -> maps:new()
     end.
 
+get_snapshot_seqno() ->
+    case ets:lookup(?TABLE_NAME, snapshot_seqno) of
+        [{snapshot_seqno, Value}] -> Value;
+        [] -> 0
+    end.
+
 store_ets_snapshot(Snapshot) ->
-    ets:insert(?TABLE_NAME, {snapshot, Snapshot}).
+    Seqno = maps:fold(
+              fun(_Key, {_Value, {_, Seqno}}, Acc) ->
+                      max(Seqno, Acc)
+              end, 0, Snapshot),
+    store_ets_snapshot(Snapshot, Seqno).
+store_ets_snapshot(Snapshot, Seqno) ->
+    ets:insert(?TABLE_NAME, {snapshot, Snapshot}),
+    ets:insert(?TABLE_NAME, {snapshot_seqno, Seqno}).
+
+add_rev_to_value(Value, Seqno) ->
+    {Value, make_rev(Seqno)}.
 
 add_rev_to_value(Value) ->
-    %% Chronicle stores revs, we won't bother with the actual values here,
-    %% but we need the correct format.
-    {Value, 1}.
+    %% Chronicle stores revs, we won't bother with the actual history rev here,
+    %% but we do use the seqno in some places/tests.
+    {Value, make_rev(get_snapshot_seqno() + 1)}.
+
+make_rev(Seqno) ->
+    {?FAKE_HISTORY_REV, Seqno}.
 
 fetch_from_latest_snapshot(Key) ->
     fetch_from_latest_snapshot(Key, #{}).
@@ -205,11 +248,16 @@ get_keys_for_txn(_Keys, _Snapshot) ->
     get_ets_snapshot().
 
 do_commits(Commits) ->
-    NewMap = lists:foldl(
-               fun({set, Key, Value}, Acc) ->
-                       Acc#{Key => Value}
-               end, #{}, Commits),
-    update_snapshot(NewMap).
+    {NewMap, NewSeqno} = lists:foldl(
+        fun({set, Key, Value}, {Snapshot, Seqno}) ->
+                NewSeqno = Seqno + 1,
+                {Snapshot#{Key => add_rev_to_value(Value, NewSeqno)}, NewSeqno};
+           ({delete, Key}, {Snapshot, Seqno}) ->
+               NewSeqno = Seqno + 1,
+               {maps:remove(Key, Snapshot), NewSeqno}
+        end, {get_ets_snapshot(), get_snapshot_seqno()}, Commits),
+
+    store_ets_snapshot(NewMap, NewSeqno).
 
 transaction(_Name, Keys, Fun, _Opts) ->
     Snapshot = get_keys_for_txn(Keys, {txn_slow, get_ets_snapshot()}),
@@ -220,10 +268,10 @@ transaction(_Name, Keys, Fun, _Opts) ->
         %% expanded in the future if necessary
         {commit, Commits} ->
             do_commits(Commits),
-            {ok, 1};
+            {ok, {?FAKE_HISTORY_REV, get_snapshot_seqno()}};
         {commit, Commits, Results} ->
             do_commits(Commits),
-            {ok, 1, Results};
+            {ok, {?FAKE_HISTORY_REV, get_snapshot_seqno()}, Results};
         {abort, Error} ->
             Error
     end.
