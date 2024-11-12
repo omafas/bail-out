@@ -416,10 +416,10 @@ sync_quorum(Timeout) ->
 -ifdef(TEST).
 
 setup() ->
-    fake_chronicle_kv:new().
+    fake_chronicle_kv:setup().
 
 teardown(_) ->
-    fake_chronicle_kv:unload().
+    fake_chronicle_kv:teardown().
 
 get_dir_content(Dir) ->
     get_dir_content(Dir, true).

@@ -32,7 +32,7 @@ dcp_test_setup(#{nodes := Nodes,
                  buckets := Buckets,
                  connections := Conns} = _SetupCfg) ->
     fake_ns_config:setup(),
-    fake_chronicle_kv:new(),
+    fake_chronicle_kv:setup(),
 
     set_conn_count_for_buckets(Buckets, Conns),
 
@@ -90,7 +90,7 @@ dcp_test_teardown(_SetupCfg, PidMap) ->
 
     meck:unload(ns_memcached),
 
-    fake_chronicle_kv:unload(),
+    fake_chronicle_kv:teardown(),
     fake_ns_config:teardown().
 
 set_replication_for_buckets(Buckets, Replications) ->

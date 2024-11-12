@@ -98,7 +98,7 @@ basic_test() ->
 
     meck:new(chronicle_compat_events, [passthrough]),
     meck:expect(chronicle_compat_events, subscribe, fun(_) -> ok end),
-    fake_chronicle_kv:new(),
+    fake_chronicle_kv:setup(),
     fake_chronicle_kv:update_snapshot(?JWT_SIGNING_KEYS_KEY, generate_keys()),
     fake_chronicle_kv:update_snapshot(ns_bucket:root(), []),
 
@@ -120,7 +120,7 @@ basic_test() ->
                                  password_expired = false}, _}, RV1),
 
     gen_server:stop(CachePid),
-    fake_chronicle_kv:unload(),
+    fake_chronicle_kv:teardown(),
     fake_ns_config:teardown(),
     meck:unload(chronicle_compat_events).
 

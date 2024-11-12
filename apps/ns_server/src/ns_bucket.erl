@@ -3375,7 +3375,7 @@ get_max_buckets_test_() ->
              <- Tests]}.
 
 uuid2bucket_key_test() ->
-    fake_chronicle_kv:new(),
+    fake_chronicle_kv:setup(),
     meck:new(cluster_compat_mode, [passthrough]),
     try
         Root = root(),
@@ -3423,7 +3423,7 @@ uuid2bucket_key_test() ->
                        PropsKey2 := {props2, {<<"fake">>, _}},
                        EncrAtRestKey2 := {encr_props2, {<<"fake">>, _}},
                        CollectionsKey2 := {collections2, {<<"fake">>, _}}},
-                    get_snapshot(all)),
+                     get_snapshot(all)),
         ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}}},
                      get_snapshot("UnknownBucket", [uuid])),
         ?assertEqual(1, map_size(get_snapshot("UnknownBucket", [uuid]))),
@@ -3445,11 +3445,11 @@ uuid2bucket_key_test() ->
 
         %% Testing all_keys_by_uuid
         Fetcher = fun (Txn) ->
-                      BucketKeys = [root()] ++
-                                   all_keys_by_uuid([BucketUUID1, "Unknown"],
-                                                    [props, uuid],
-                                                    Txn),
-                       chronicle_compat:txn_get_many(BucketKeys, Txn)
+                          BucketKeys = [root()] ++
+                              all_keys_by_uuid([BucketUUID1, "Unknown"],
+                                               [props, uuid],
+                                               Txn),
+                          chronicle_compat:txn_get_many(BucketKeys, Txn)
                   end,
         Snapshot1 = chronicle_compat:get_snapshot([Fetcher], #{}),
         ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}},
@@ -3486,7 +3486,7 @@ uuid2bucket_key_test() ->
                        PropsKey2 := {props2, {<<"fake">>, _}},
                        EncrAtRestKey2 := {encr_props2, {<<"fake">>, _}},
                        CollectionsKey2 := {collections2, {<<"fake">>, _}}},
-                    get_snapshot(all)),
+                     get_snapshot(all)),
         ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}}},
                      get_snapshot("UnknownBucket", [uuid])),
         ?assertEqual(1, map_size(get_snapshot("UnknownBucket", [uuid]))),
@@ -3519,7 +3519,7 @@ uuid2bucket_key_test() ->
                                                      Snapshot2))
     after
         meck:unload(cluster_compat_mode),
-        fake_chronicle_kv:unload()
+        fake_chronicle_kv:teardown()
     end.
 
 -endif.
