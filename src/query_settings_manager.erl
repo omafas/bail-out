@@ -181,6 +181,12 @@ curl_whitelist_settings_lens() ->
 
 -ifdef(TEST).
 config_upgrade_test() ->
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
+
     CmdList = config_upgrade_to_76([]),
     [{set, {metakv, Meta}, Data}] = CmdList,
     ?assertEqual(<<"/query/settings/config">>, Meta),
@@ -193,8 +199,6 @@ config_upgrade_test() ->
 
     %% Upgrade to 7.6 for provisioned profile should update n1ql-feat-ctrl
     %% to disable sequential scans.
-
-    meck:new(config_profile, [passthrough]),
     meck:expect(config_profile, get_bool,
                 fun ({n1ql, sequential_scan_disabled}) ->
                         true
@@ -239,14 +243,21 @@ quota_test_fun(Number) when is_number(Number) ->
 %% different.
 n1ql_quota_test_() ->
     {setup,
-     fun () -> meck:new(cluster_compat_mode, [passthrough]),
-               meck:expect(cluster_compat_mode, is_cluster_76,
-                           fun () -> true end),
-               meck:expect(cluster_compat_mode,
-                           get_ns_config_compat_version,
-                           fun () -> ?VERSION_76 end)
+     fun () ->
+             meck:new(config_profile, [passthrough]),
+             meck:expect(config_profile, get,
+                         fun () ->
+                                 ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                         end),
+             meck:new(cluster_compat_mode, [passthrough]),
+             meck:expect(cluster_compat_mode, is_cluster_76,
+                         fun () -> true end),
+             meck:expect(cluster_compat_mode,
+                         get_ns_config_compat_version,
+                         fun () -> ?VERSION_76 end)
      end,
      fun (_X) ->
+             meck:unload(config_profile),
              meck:unload(cluster_compat_mode)
      end,
      %% Keep in mind there is no validation on this function, but it will be

@@ -384,8 +384,14 @@ config_upgrade_settings(Config, OldVersion, NewVersion) ->
         io_lib:format("{\"indexer.default.enable_shard_affinity\": ~p}",
                       [__TRUE_FALSE])).
 default_test() ->
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
     Versions = [?MIN_SUPPORTED_VERSION, ?VERSION_76],
-    lists:foreach(fun(V) -> default_versioned(V) end, Versions).
+    lists:foreach(fun(V) -> default_versioned(V) end, Versions),
+    meck:unload(config_profile).
 
 default_versioned(Version) ->
     Keys = fun (L) -> lists:sort([K || {K, _} <- L]) end,

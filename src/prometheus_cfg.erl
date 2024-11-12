@@ -1885,6 +1885,11 @@ generate_prometheus_test_config(ExtraConfig, Services) ->
     [{F, yaml:preprocess(Yaml)} || {F, Yaml} <- Configs].
 
 default_config_test() ->
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
     [{_, DefaultMainCfg}, {RulesFile, DefaultRulesCfg}] =
         generate_prometheus_test_config([], [kv]),
     RulesFileBin = list_to_binary(RulesFile),
@@ -1916,9 +1921,15 @@ default_config_test() ->
     ?assertMatch(
       #{groups := [#{interval := <<"10s">>,
                      rules := [_|_]}]},
-      DefaultRulesCfg).
+      DefaultRulesCfg),
+    meck:unload(config_profile).
 
 prometheus_config_test() ->
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
     MainConfig =
         fun (StatsSettings, NodeServices) ->
                 ExtraConfig = [{stats_settings, StatsSettings}],
@@ -1972,10 +1983,14 @@ prometheus_config_test() ->
                              scrape_interval := <<"42s">>}]},
       MainConfig([{prometheus_metrics_enabled, true},
                   {prometheus_metrics_scrape_interval, 42}], [kv])),
-
-    ok.
+    meck:unload(config_profile).
 
 prometheus_derived_metrics_config_test() ->
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
     RulesConfig =
         fun (StatsSettings, NodeServices) ->
                 ExtraConfig = [{stats_settings, StatsSettings}],
@@ -2048,9 +2063,14 @@ prometheus_derived_metrics_config_test() ->
       #{groups := [#{interval := <<"42s">>}]},
       RulesConfig([{derived_metrics_interval, 42}], [kv])),
 
-    ok.
+    meck:unload(config_profile).
 
 prometheus_config_afamily_test() ->
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
     ExtraConfig = [{{node, ?NODE, address_family}, inet6}],
     [{_, Cfg}, _] = generate_prometheus_test_config(ExtraConfig, [kv]),
     ?assert(is_binary(yaml:encode(Cfg))),
@@ -2067,7 +2087,8 @@ prometheus_config_afamily_test() ->
                            #{job_name := <<"kv_high_cardinality">>,
                              static_configs :=
                                [#{targets := [<<"[::1]:11280">>]}]}]},
-      Cfg).
+      Cfg),
+    meck:unload(config_profile).
 
 prometheus_basic_decimation_test() ->
     Now = floor(os:system_time(seconds) / 60) * 60,

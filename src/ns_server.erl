@@ -35,7 +35,15 @@ start(_Type, _Args) ->
     setup_env(),
     setup_static_config(),
     init_logging(),
-    setup_server_profile(),
+    ns_babysitter:setup_server_profile(),
+
+    %% We load the config_profile in babysitter as well, but since we need to
+    %% be able to restart ns_server, it makes more sense for the continuity
+    %% checker to run on ns_server than babysitter. Running it on both also
+    %% doesn't seem necessary and this maintains the same behavior as previous
+    %% releases.
+    config_profile_continuity_checker(
+      path_config:component_path(data, ?EXISTING_PROFILE_FILE)),
 
     %% To initialize logging static config must be setup thus this weird
     %% machinery is required to log messages from setup_static_config().
@@ -77,38 +85,6 @@ setup_env() ->
                         end, Values)
               end, EnvArgs)
     end.
-
-setup_server_profile() ->
-    ProfileName = case os:getenv("CB_FORCE_PROFILE") of
-                      Str when is_list(Str), length(Str) > 0 -> Str;
-                      _ -> config_profile:load()
-                  end,
-    {Data, N} = case application:get_env(ns_server, config_path) of
-                    {ok, Path} ->
-                        File = filename:join(filename:dirname(Path),
-                                             string:join([ProfileName, "_profile"],
-                                                         "")),
-                        case (catch load_config(File)) of
-                            {'EXIT', Err} ->
-                                {config_profile:default(),
-                                 case ProfileName =/= ?DEFAULT_PROFILE_STR of
-                                     true ->
-                                         ?log_warning("Could not load config profile '~p', loading 'default'.. Error: ~p",
-                                                      [ProfileName, Err]),
-                                         ?DEFAULT_PROFILE_STR;
-                                     false ->
-                                         ProfileName
-                                 end};
-                            Config ->
-                                {Config, ProfileName}
-                        end;
-                    _ ->
-                        {config_profile:default(), ?DEFAULT_PROFILE_STR}
-                end,
-    ?log_debug("Using profile '~s': ~p", [N, Data]),
-    config_profile:set_data(Data),
-    config_profile_continuity_checker(
-      path_config:component_path(data, ?EXISTING_PROFILE_FILE)).
 
 config_profile_continuity_checker(File) ->
     CurrentProfile = config_profile:name(),

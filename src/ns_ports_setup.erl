@@ -132,8 +132,9 @@ create_erl_node_spec(Type, Args, EnvArgsVar, ErlangArgs) ->
                           "disk_sink_opts" -> true;
                           "ssl_ciphers" -> true;
                           "net_kernel_verbosity" -> true;
+                          "config_path" -> true;
                           _ -> false
-                      end] ++ [{config_profile, config_profile:get()}],
+                      end],
     EnvArgs = Args ++ EnvArgsTail,
 
     AllArgs = PathArgs ++ ErlangArgs,

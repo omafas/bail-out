@@ -1302,12 +1302,18 @@ do_handle_set_recovery_type(Req, Type, Params) ->
 parse_validate_services_list_test() ->
     meck:new(cluster_compat_mode, [passthrough]),
     meck:expect(cluster_compat_mode, is_enterprise, fun () -> true end),
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
     {error, _} = parse_validate_services_list(""),
     ?assertEqual({ok, [index, kv, n1ql]},
                  parse_validate_services_list("n1ql,kv,index")),
     {ok, [kv]} = parse_validate_services_list("kv"),
     {error, _} = parse_validate_services_list("n1ql,kv,s"),
     ?assertMatch({error, _}, parse_validate_services_list("neeql,kv")),
+    meck:unload(config_profile),
     meck:unload(cluster_compat_mode).
 
 hostname_parsing_test() ->

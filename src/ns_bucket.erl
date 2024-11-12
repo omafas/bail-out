@@ -2506,7 +2506,7 @@ sorting_fn_test_() ->
        end} || {Expected, Given} <- LL]}.
 
 get_max_buckets_test_() ->
-    MeckModules = [ns_config, ns_cluster_membership, ns_doctor],
+    MeckModules = [ns_config, ns_cluster_membership, ns_doctor, config_profile],
     Nodes = [node1, node2],
 
     Tests =
@@ -2521,6 +2521,10 @@ get_max_buckets_test_() ->
 
     {setup, fun() ->
                     meck:new(MeckModules, [passthrough]),
+                    meck:expect(config_profile, get,
+                                fun () ->
+                                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                                end),
                     meck:expect(ns_cluster_membership, service_active_nodes,
                                 fun (kv) -> Nodes end)
             end,

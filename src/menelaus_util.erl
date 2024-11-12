@@ -909,12 +909,17 @@ response_headers_test() ->
 
 assert_config_profile_flag_test() ->
     %% implied 'default' profile
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () -> ?DEFAULT_EMPTY_PROFILE_FOR_TESTS end),
+
     ?assertEqual({web_exception, 400,
                   "Operation not allowed in this config profile", []},
                  catch(assert_config_profile_flag(
                          disable_auto_rebalance_settings))),
     ?assertEqual(ok,
                  assert_not_config_profile_flag(
-                   disable_auto_rebalance_settings)).
+                   disable_auto_rebalance_settings)),
+    meck:unload(config_profile).
 
 -endif.

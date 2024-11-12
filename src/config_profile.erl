@@ -13,7 +13,6 @@
 -export([set_data/1,
          name/0,
          get/0,
-         get/1,
          search/1,
          search/2,
          get_value/2,
@@ -21,8 +20,7 @@
          is_serverless/0,
          is_provisioned/0,
          load/0,
-         load/1,
-         default/0]).
+         load/1]).
 
 -define(PROFILE_FILE, "/etc/couchbase.d/config_profile").
 
@@ -39,11 +37,7 @@ name() ->
 
 -spec(get() -> list()).
 get() ->
-    config_profile:get(?DEFAULT_PROFILE_DATA).
-
--spec(get(list()) -> list()).
-get(Default) ->
-    persistent_term:get(?CONFIG_PROFILE, Default).
+    persistent_term:get(?CONFIG_PROFILE).
 
 -spec(get_value(term(), term()) -> term()).
 get_value(Key, Default) ->
@@ -119,14 +113,9 @@ load(?PROFILE_FILE = Path) ->
             ?DEFAULT_PROFILE_STR;
         {ok, <<_:1/binary, _/binary>> = Binary} ->
             string:trim(binary_to_list(Binary));
-        {error, enoent} ->
-            ?log_warning("Could not load profile file (~p) because it does not exist",
-                         [Path]),
-            ?DEFAULT_PROFILE_STR;
-        {error, Reason} ->
-            erlang:error(Reason)
+        {error, Err} ->
+            ?log_warning("Could not load profile file (~p) due to error: ~p."
+                         " Returning 'default'.",
+                         [Path, Err]),
+            ?DEFAULT_PROFILE_STR
     end.
-
--spec(default() -> [{name, string()}]).
-default() ->
-    ?DEFAULT_PROFILE_DATA.

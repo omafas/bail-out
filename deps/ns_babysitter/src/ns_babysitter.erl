@@ -13,6 +13,8 @@
 
 -export([start/2, stop/1]).
 
+-export([setup_server_profile/0]).
+
 -include("ns_common.hrl").
 -include_lib("ale/include/ale.hrl").
 
@@ -68,6 +70,10 @@ start(_, _) ->
     true = os:unsetenv("http_proxy"),
     true = os:unsetenv("https_proxy"),
 
+    %% Sets config_profile for babysitter context. Does NOT run continuity
+    %% checker so babysitter will allow different profiles. That said, it will
+    %% crash as soon as ns_server is attempted if the profile has changed.
+    setup_server_profile(),
     ns_babysitter_sup:start_link().
 
 log_pending() ->
@@ -79,11 +85,44 @@ log_pending() ->
             log_pending()
     end.
 
+setup_server_profile() ->
+    ProfileName = case os:getenv("CB_FORCE_PROFILE") of
+                      Str when is_list(Str), length(Str) > 0 -> Str;
+                      _ -> config_profile:load()
+                  end,
+    {Data, N} = case application:get_env(ns_server, config_path) of
+                    {ok, Path} ->
+                        File = filename:join(filename:dirname(Path),
+                                             string:join([ProfileName,
+                                                          "_profile"],
+                                                         "")),
+
+                        %% Server will crash if profile file cannot be loaded.
+                        {load_config(File), ProfileName};
+                    _ ->
+                        exit("FATAL: ns_server application env does not "
+                             "contain config_path.")
+                end,
+    ?log_debug("Using profile '~s': ~p", [N, Data]),
+    config_profile:set_data(Data).
+
+load_config(Path) ->
+    case file:consult(Path) of
+        {ok, T} when is_list(T) ->
+            T;
+        {error, Reason} ->
+            Msg = io_lib:format("failed to read static config: ~s with error: "
+                                "~p. It must be readable file with list of "
+                                "pairs~n", [Path, Reason]),
+            erlang:error(lists:flatten(Msg))
+    end.
+
 get_config_path() ->
     case application:get_env(ns_server, config_path) of
         {ok, V} -> V;
         _ ->
-            erlang:error("config_path parameter for ns_server application is missing!")
+            erlang:error("config_path parameter for ns_server application is "
+                         "missing!")
     end.
 
 setup_static_config() ->

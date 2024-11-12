@@ -404,7 +404,11 @@ basic_test_teardown() ->
 basic_test_() ->
     {setup,
      fun () ->
-             basic_test_setup()
+             basic_test_setup(),
+             meck:expect(config_profile, get,
+                         fun () ->
+                                 ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                         end)
      end,
      fun(_) ->
              basic_test_teardown()

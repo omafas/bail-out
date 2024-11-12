@@ -1940,7 +1940,12 @@ cidr_mask(IP, Bits) ->
 community_allowed_topologies_test() ->
     %% Test to help catch changes in community topologies that don't
     %% maintain backwards compatibility
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
     ?assertEqual(community_allowed_topologies(),
-                 [[kv],[index,kv,n1ql],[fts,index,kv,n1ql]]).
-
+                 [[kv],[index,kv,n1ql],[fts,index,kv,n1ql]]),
+    meck:unload(config_profile).
 -endif.

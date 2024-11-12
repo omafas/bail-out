@@ -1405,11 +1405,15 @@ setup_meck() ->
         fun () -> true end),
     meck:new(ns_config, [passthrough]),
     meck:expect(ns_config, search_node_with_default,
-                fun (_, Default) -> Default end).
+                fun (_, Default) -> Default end),
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () -> ?DEFAULT_EMPTY_PROFILE_FOR_TESTS end).
 
 teardown_meck() ->
     meck:unload(cluster_compat_mode),
-    meck:unload(ns_config).
+    meck:unload(ns_config),
+    meck:unload(config_profile).
 
 filter_out_invalid_roles_test() ->
     Roles = [{role1, [{"bucket1", <<"id1">>}]},
@@ -2045,10 +2049,16 @@ produce_roles_by_permission_test_() ->
              meck:expect(cluster_compat_mode, get_compat_version,
                          fun () -> ?LATEST_VERSION_NUM end),
              meck:expect(cluster_compat_mode, is_developer_preview,
-                         fun () -> false end)
+                         fun () -> false end),
+             meck:new(config_profile, [passthrough]),
+             meck:expect(config_profile, get,
+                         fun () ->
+                                 ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                         end)
      end,
      fun (_) ->
-             meck:unload(cluster_compat_mode)
+             meck:unload(cluster_compat_mode),
+             meck:unload(config_profile)
      end,
      [{"security permission",
        Test([admin, ro_admin, security_admin_external, security_admin_local],

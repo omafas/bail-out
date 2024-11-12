@@ -1411,6 +1411,11 @@ update_manifest_test_setup() ->
 
     meck:expect(cluster_compat_mode, is_cluster_72, fun () -> true end),
     meck:expect(cluster_compat_mode, is_cluster_76, fun () -> true end),
+    meck:expect(cluster_compat_mode, is_enterprise, fun () -> true end),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
     meck:expect(config_profile, get_bool,
                 fun (enable_metered_collections) -> false end),
 

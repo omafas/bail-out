@@ -133,8 +133,14 @@ config_upgrade_to_76(Config) ->
 
 -ifdef(TEST).
 defaults_test() ->
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
     Versions = [?MIN_SUPPORTED_VERSION, ?VERSION_76],
-    lists:foreach(fun(V) -> default_versioned(V) end, Versions).
+    lists:foreach(fun(V) -> default_versioned(V) end, Versions),
+    meck:unload(config_profile).
 
 default_versioned(Version) ->
     Keys = fun (L) -> lists:sort([K || {K, _} <- L]) end,
@@ -147,6 +153,11 @@ default_versioned(Version) ->
                  Keys(general_settings_defaults(Version))).
 
 config_upgrade_test() ->
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
     CmdList = config_upgrade_to_76([]),
     [{set, {metakv, Meta}, Data}] = CmdList,
     ?assertEqual(<<"/analytics/settings/config">>, Meta),
@@ -154,6 +165,7 @@ config_upgrade_test() ->
                    "\"analytics.settings.blob_storage_prefix\":\"\","
                    "\"analytics.settings.blob_storage_region\":\"\","
                    "\"analytics.settings.blob_storage_scheme\":\"\"}">>,
-                 Data).
+                 Data),
+    meck:unload(config_profile).
     %% TODO: add upgrade test w/ columnar profile
 -endif.
