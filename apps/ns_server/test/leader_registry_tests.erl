@@ -9,6 +9,8 @@
 
 -module(leader_registry_tests).
 
+-export([setup/0, cleanup/1]).
+
 -include_lib("eunit/include/eunit.hrl").
 
 setup() ->

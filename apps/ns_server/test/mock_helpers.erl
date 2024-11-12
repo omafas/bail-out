@@ -42,6 +42,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("ns_common/include/cut.hrl").
 
+-include("ns_common.hrl").
+
 %% Export everything, we need to export the functions that set up the
 %% mocks/processes so that we can call them from the test setup functions so
 %% most everything must be exported anyway.
@@ -98,12 +100,13 @@ setup_mock(Module, PidMap) ->
 %%%===================================================================
 
 leader_registry(PidMap) ->
-    PidMap0 = setup_mocks([ns_pubsub],
-                          PidMap),
+    %% Note, this won't work if we have already set up fake_ns_pubsub, but we
+    %% are going to get rid of that anyway in future changes.
+    leader_registry_tests:setup(),
+    gen_event:sync_notify(leader_events, {new_leader, node()}),
 
-    {ok, LeaderRegistryPid} = leader_registry:start_link(),
-    gen_server:cast(LeaderRegistryPid, {new_leader, node()}),
-    PidMap0#{?FUNCTION_NAME => LeaderRegistryPid}.
+    PidMap#{?FUNCTION_NAME => whereis(?FUNCTION_NAME),
+            leader_events => whereis(leader_events)}.
 
 auto_reprovision(PidMap) ->
     %% TODO: Nothing needs auto_reprovision to be enabled yet, just running,
@@ -142,7 +145,8 @@ compat_mode_manager(PidMap) ->
     PidMap#{?FUNCTION_NAME => CompatModeManagerPid}.
 
 auto_failover(PidMap) ->
-    PidMap0 = setup_mocks([compat_mode_events], PidMap),
+    PidMap0 = setup_mocks([compat_mode_events,
+                           ns_pubsub], PidMap),
 
     {ok, AutoFailoverPid} = auto_failover:start_link(),
     PidMap0#{?FUNCTION_NAME => AutoFailoverPid}.
