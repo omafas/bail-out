@@ -75,6 +75,12 @@ licenses/APL2.txt.
         <strong>Minimum Durability Level:</strong>
         {{bucket.durabilityMinLevel}}
       </div>
+      <div
+         *ngIf="isEnterprise | async"
+         class="nowrap">
+        <strong>Cross Cluster Versioning:</strong>
+        {{bucket.enableCrossClusterVersioning ? 'Enabled' : 'Disabled'}}
+      </div>
     </div>
 
     <div class="cbui-table-meters buckets">

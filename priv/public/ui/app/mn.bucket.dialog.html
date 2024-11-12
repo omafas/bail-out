@@ -548,6 +548,40 @@ licenses/APL2.txt.
           </div>
         </div>
 
+        <div [hidden]="!(isEnterprise | async) || !bucket">
+          <label class="inline">Enable Cross Cluster Versioning</label>
+          <ng-template #crossClusterVersioningTooltip>
+            <p>The Cross Cluster Versioning setting cannot be disabled after it is enabled.</p>
+            <p>See the documentation for enableCrossClusterVersioning and the dependent features for important details
+              on how to correctly enable this setting.
+            </p>
+          </ng-template>
+          <span
+             [ngbTooltip]="crossClusterVersioningTooltip"
+             triggers="click"
+             class="fa-stack icon-info"
+             placement="right">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow checkbox-list">
+            <input
+               formControlName="enableCrossClusterVersioning"
+               type="checkbox"
+               id="for-enable-cross-cluster-versioning">
+            <label for="for-enable-cross-cluster-versioning">Enable</label>
+            <div
+               class="warning text-smaller">
+              Warning: You cannot disable after enabling.
+            </div>
+            <div
+               class="error margin-bottom-half"
+               [hidden]="!(httpError | async)?.errors?.enableCrossClusterVersioning">
+              {{(httpError | async)?.errors?.enableCrossClusterVersioning}}
+            </div>
+          </div>
+        </div>
+
         <label class="inline">Flush</label>
         <ng-template #flushTooltip>
           When flushed, ALL items in the bucket are removed as soon as possible. NOTE: This does not immediately show in item count statistics with memcached buckets.

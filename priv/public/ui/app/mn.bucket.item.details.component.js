@@ -18,6 +18,7 @@ import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnTasksService} from './mn.tasks.service.js';
 import {MnAdminService} from './mn.admin.service.js';
 import {MnBucketsService} from './mn.buckets.service.js';
+import {MnPoolsService} from './mn.pools.service.js';
 import {MnPermissions} from './ajs.upgraded.providers.js';
 
 import {MnBucketDialogComponent} from './mn.bucket.dialog.component.js';
@@ -46,18 +47,20 @@ class MnBucketItemDetailsComponent extends MnLifeCycleHooksToStream {
       MnBucketsService,
       MnAdminService,
       MnTasksService,
+      MnPoolsService,
       MnPermissions,
       NgbModal
     ];
   }
 
-  constructor(mnBucketsService, mnAdminService, mnTasksService, mnPermissions, modalService) {
+  constructor(mnBucketsService, mnAdminService, mnTasksService, mnPoolsService, mnPermissions, modalService) {
     super();
 
     this.permissions = mnPermissions.stream;
     this.mnTasksService = mnTasksService;
     this.mnBucketsService = mnBucketsService;
     this.modalService = modalService;
+    this.isEnterprise = mnPoolsService.stream.isEnterprise;
 
     let currentBucket = this.mnOnChanges
       .pipe(filter(v => v !== undefined),

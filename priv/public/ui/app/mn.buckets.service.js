@@ -77,6 +77,12 @@ class MnBucketsService {
                                 propEq('bucketType', 'ephemeral')]))),
             shareReplay({refCount: true, bufferSize: 1}));
 
+    this.stream.bucketsCrossClusterVersioningEnabled = this.stream.getBuckets
+    .pipe(
+          map(filter(propEq('enableCrossClusterVersioning', true))),
+          map(buckets => buckets.map(bucket => bucket.name)),
+          shareReplay({refCount: true, bufferSize: 1}));
+
     this.stream.getBucketsPool =
       combineLatest(this.stream.bucketsUri,
                     timer(0, 4000),
@@ -386,7 +392,8 @@ class MnBucketsService {
       durabilityMinLevel: 'none',
       storageBackend: 'couchstore',
       autoCompactionDefined: false,
-      autoCompactionSettings
+      autoCompactionSettings,
+      enableCrossClusterVersioning: false,
     };
   }
 
@@ -410,6 +417,7 @@ class MnBucketsService {
       durabilityMinLevel: bucket.durabilityMinLevel,
       storageBackend: bucket.storageBackend,
       autoCompactionDefined: !!bucket.autoCompactionSettings,
+      enableCrossClusterVersioning: !!bucket.enableCrossClusterVersioning,
     };
 
     let autoCompaction = this.mnSettingsAutoCompactionService.getSettingsSource(

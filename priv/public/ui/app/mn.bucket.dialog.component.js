@@ -134,7 +134,10 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
             size: null}),
           parallelDBAndViewCompaction: null,
           purgeInterval: null,
-          timePeriodFlag: null})}))
+          timePeriodFlag: null
+        }),
+      enableCrossClusterVersioning: false,
+      }))
       .setSource(formData)
       .setPackPipe(pipe(withLatestFrom(this.compatVersion55, this.isEnterprise),
                    map(this.packData.bind(this))))
@@ -254,6 +257,10 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
                  this.maybeDisableField(field, false));
 
       (['threadsNumber','evictionPolicy']).forEach(this.threadsEvictionWarning.bind(this));
+    }
+
+    if ((this.bucket && this.bucket.enableCrossClusterVersioning) || !this.bucket) {
+      this.maybeDisableField('enableCrossClusterVersioning', false);
     }
 
     let usersByPermission =
@@ -433,6 +440,9 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
     copyProperties(['ramQuotaMB', 'flushEnabled']);
     saveData.flushEnabled = saveData.flushEnabled ? 1 : 0;
 
+    if (isEnterprise && !(this.bucket && this.bucket.enableCrossClusterVersioning)) {
+      copyProperty('enableCrossClusterVersioning');
+    }
     return saveData;
   }
 }
