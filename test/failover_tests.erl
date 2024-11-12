@@ -101,7 +101,7 @@ manual_failover_test_setup(SetupConfig) ->
                 end),
 
     fake_ns_config:setup(),
-    fake_chronicle_kv:new(),
+    fake_chronicle_kv:setup(),
 
     fake_ns_config:setup_cluster_compat_version(?LATEST_VERSION_NUM),
     fake_chronicle_kv:setup_cluster_compat_version(?LATEST_VERSION_NUM),
@@ -137,7 +137,7 @@ failover_test_teardown(_Config, PidMap) ->
 
     meck:unload(),
 
-    fake_chronicle_kv:unload(),
+    fake_chronicle_kv:teardown(),
     fake_ns_config:teardown().
 
 manual_failover_t(_SetupConfig, _R) ->

@@ -18,9 +18,6 @@
 %% trivial due to the extra features that chronicle has (i.e. writing to
 %% files and replicating config).
 %%
-%% This module exposes a meck like interface to create and unload the
-%% required mocks (i.e. fake_ns_config:new(), fake_ns_config:unload()).
-%%
 %% All config is stored in an ets table as a map (similarly to chronicle).
 %%
 %% This helper is minimal, it was written to solve an issue for a specific
@@ -29,20 +26,20 @@
 %% future users to simply add the additional interface functions required.
 %%
 %% Use should be as follows:
-%%     1) fake_chronicle_kv:new(),
+%%     1) fake_chronicle_kv:setup(),
 %%     2a) Merge a map into the snapshot
 %%         fake_chronicle_kv:update_snapshot(#{}),
 %%     2b) Upsert an individual key value pair to the snapshot
 %%         fake_chronicle_kv:update_snapshot(auto_failover_cfg, []),
 %%     3) Perform test
-%%     4) fake_chronicle_kv:unload(),
+%%     4) fake_chronicle_kv:teardown(),
 -module(fake_chronicle_kv).
 
 -include("ns_test.hrl").
 
 %% API
--export([new/0,
-         unload/0,
+-export([setup/0,
+         teardown/0,
          update_snapshot/1,
          update_snapshot/2]).
 
@@ -55,7 +52,7 @@
 %% --------------------
 %% API - Setup/Teardown
 %% --------------------
-new() ->
+setup() ->
     ets:new(?TABLE_NAME, [public, named_table]),
     meck_setup(),
 
@@ -64,7 +61,7 @@ new() ->
     {ok, _} = gen_event:start_link({local, chronicle_kv:event_manager(kv)}),
     {ok, _} = chronicle_compat_events:start_link().
 
-unload() ->
+teardown() ->
     ets:delete(?TABLE_NAME),
 
     Pid = whereis(chronicle_compat_events),
