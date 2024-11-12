@@ -57,10 +57,25 @@
 %% --------------------
 new() ->
     ets:new(?TABLE_NAME, [public, named_table]),
-    meck_setup().
+    meck_setup(),
+
+    fake_ns_config:setup_ns_config_events(),
+
+    {ok, _} = gen_event:start_link({local, chronicle_kv:event_manager(kv)}),
+    {ok, _} = chronicle_compat_events:start_link().
 
 unload() ->
     ets:delete(?TABLE_NAME),
+
+    Pid = whereis(chronicle_compat_events),
+    unlink(Pid),
+    misc:terminate_and_wait(Pid, shutdown),
+
+    P1 = whereis(chronicle_kv:event_manager(kv)),
+    unlink(P1),
+    misc:terminate_and_wait(P1, shutdown),
+
+    fake_ns_config:teardown_ns_config_events(),
 
     ?meckUnload(ns_node_disco),
     ?meckUnload(chronicle_kv).
@@ -127,14 +142,14 @@ meck_setup_chronicle_kv_getters() ->
     meck:expect(chronicle_kv, ro_txn,
                 fun(_Name, Fun) ->
                         {ok,
-                            {Fun(get_ets_snapshot()),
-                                make_rev(get_snapshot_seqno())}}
+                         {Fun(get_ets_snapshot()),
+                          make_rev(get_snapshot_seqno())}}
                 end),
     meck:expect(chronicle_kv, ro_txn,
                 fun(_Name, Fun, _Opts) ->
                         {ok,
-                            {Fun(get_ets_snapshot()),
-                                make_rev(get_snapshot_seqno())}}
+                         {Fun(get_ets_snapshot()),
+                          make_rev(get_snapshot_seqno())}}
                 end),
 
 
@@ -162,6 +177,11 @@ meck_setup_chronicle_kv_getters() ->
                 fun(_Name) ->
                         {ok,
                          {get_ets_snapshot(), make_rev(get_snapshot_seqno())}}
+                end),
+
+    meck:expect(chronicle_kv, event_manager,
+                fun(Name) ->
+                        list_to_atom(atom_to_list(Name) ++ "-events")
                 end).
 
 meck_setup_chronicle_kv_setters() ->
