@@ -999,6 +999,7 @@ put_user_validators(Req, GetUserIdFun, GroupCheckFun, ValidatePassword) ->
 
     [validator:touch(name, _),
      validate_user_groups(groups, GroupCheckFun, Req, _),
+     validator:default(roles, [], _),
      validate_roles(roles, _),
      validator_verify_security_roles_access(roles, Req, ?SECURITY_WRITE,
                                             ExtraRolesFun, _)] ++
@@ -1070,6 +1071,8 @@ validator_verify_security_roles_access(RolesName, Req, Permission,
                                        ExtraRolesFun, State) ->
     ExtraRoles = ExtraRolesFun(State),
     validator:validate(
+      %% If there are no 'roles' in the request then the following will
+      %% not get called. As a result "ExtraRoles" will not be verified.
       fun (Roles) ->
           AllRoles = lists:usort(Roles ++ ExtraRoles),
           verify_security_roles_access(Req, Permission, AllRoles)
