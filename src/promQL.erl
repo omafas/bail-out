@@ -96,7 +96,24 @@ parse_value(B) ->
     try
         binary_to_float(B)
     catch
-        _:_ -> binary_to_integer(B)
+        _:_ ->
+            try
+                binary_to_integer(B)
+            catch
+                %% Erlang doesn't parse E notation without decimal places, such
+                %% as "3e8", so we try to fix it, just in case this was why we
+                %% failed
+                _:_ -> parse_e_notation(B)
+            end
+    end.
+
+parse_e_notation(B) ->
+    case binary:split(B, <<"e">>) of
+        [M, E] ->
+            binary_to_float(<<M/binary, ".0e", E/binary>>);
+        _ ->
+            [M, E] = binary:split(B, <<"E">>),
+            binary_to_float(<<M/binary, ".0E", E/binary>>)
     end.
 
 format_promql(AST) ->
@@ -446,4 +463,23 @@ merge_test() ->
                                              {[{eq, <<"name">>, <<"v1">>}]}]}]}),
                  <<"f({name=`v1`},{name=`v2`}) or f({name=`v2`},{name=`v1`})">>).
 
+parse_value_test() ->
+    ?assertEqual(parse_value(<<"1">>), 1),
+    ?assertEqual(parse_value(<<"-1">>), -1),
+    ?assertEqual(parse_value(<<"1.0">>), 1.0),
+    ?assertEqual(parse_value(<<"1.01">>), 1.01),
+    ?assertEqual(parse_value(<<"1e0">>), 1.0),
+    ?assertEqual(parse_value(<<"-1e0">>), -1.0),
+    ?assertEqual(parse_value(<<"-1.0e0">>), -1.0),
+    ?assertEqual(parse_value(<<"1.0e1">>), 10.0),
+    ?assertEqual(parse_value(<<"-1.0e-1">>), -0.1),
+    ?assertEqual(parse_value(<<"-10.0e0">>), -10.0),
+    ?assertEqual(parse_value(<<"+1.0e0">>), 1.0),
+    ?assertEqual(parse_value(<<"+1E0">>), 1.0),
+
+    %% Test the broken built-in behaviour, to remind us if this gets fixed, so
+    %% we can remove our extra handling (function wrapping is required so that
+    %% the compiler doesn't complain about the expected error)
+    X = fun () -> <<"1e0">> end,
+    ?assertError(badarg, binary_to_float(X())).
 -endif.
