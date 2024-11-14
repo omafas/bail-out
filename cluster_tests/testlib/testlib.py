@@ -380,6 +380,10 @@ def put_succ(cluster_or_node, path, expected_code=200, **kwargs):
     return request('PUT', cluster_or_node, path, expected_code, **kwargs)
 
 
+def put_fail(cluster_or_node, path, expected_code, **kwargs):
+    return request('PUT', cluster_or_node, path, expected_code=expected_code,
+                   **kwargs)
+
 def patch_succ(cluster_or_node, path, expected_code=200, **kwargs):
     return request('PATCH', cluster_or_node, path, expected_code, **kwargs)
 

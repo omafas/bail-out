@@ -67,6 +67,37 @@ class UsersTestSet(testlib.BaseTestSet):
         delete_user(self.cluster, 'local', user)
         assert_wrong_password(self.cluster, user, password3)
 
+    # This test verifies a user with security_admin_local cannot create
+    # a user in a group that has an admin role. This would be a privilege
+    # escalation.
+    def prevent_role_elevation_test(self):
+        user = "localusersecurityadmin"
+        name = testlib.random_str(10)
+        password = testlib.random_str(10)
+        put_user(self.cluster, 'local', user, password=password,
+                 roles='security_admin_local', full_name=name, groups='',
+                 validate_user_props=True)
+        assert_authn_and_roles(self.cluster, user, password,
+                               ['security_admin_local'])
+
+        # Create a secure group
+        testlib.put_succ(self.cluster, f'/settings/rbac/groups/securegroup',
+                         data={'roles': 'admin'})
+
+        # Try to create a user in the secure group. This will fail as a
+        # 'security_admin_local' role cannot create a user with an 'admin'
+        # role...even doing it indirectly via a 'group'.
+        testlib.put_fail(self.cluster,
+                         f'/settings/rbac/users/local/securityAdminFail',
+                         403, data={'groups': 'securegroup',
+                                    'password': testlib.random_str(10)},
+                         auth=(user, password))
+
+        # Delete user and group
+        delete_user(self.cluster, 'local', user)
+        testlib.delete_succ(self.cluster,
+                            f'/settings/rbac/groups/securegroup')
+
 
 def put_user(cluster_or_node, domain, userid, password=None, roles=None,
              full_name=None, groups=None, validate_user_props=False):
