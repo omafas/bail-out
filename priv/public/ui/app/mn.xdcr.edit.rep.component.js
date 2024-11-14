@@ -73,7 +73,7 @@ class MnXDCREditRepComponent extends MnLifeCycleHooksToStream {
   ngOnInit() {
     var thisReplicationSettings = this.createGetSettingsReplicationsPipe(this.item.id);
     this.replicationSettings =
-      combineLatest(this.getSettingsReplications,
+      combineLatest(this.getSettingsReplications.pipe(map(this.unpackMobileSetting)),
                     thisReplicationSettings)
       .pipe(map(function (source) {
         if (source[1].collectionsMigrationMode) {
@@ -102,6 +102,7 @@ class MnXDCREditRepComponent extends MnLifeCycleHooksToStream {
                      optimisticReplicationThreshold: null,
                      statsInterval: null,
                      networkUsageLimit: null,
+                     mobile: false,
                      logLevel: null})
       .setPackPipe(pipe(
         withLatestFrom(this.isEnterprise, this.compatVersion55, this.filterFormHelper.group.valueChanges),
@@ -129,6 +130,8 @@ class MnXDCREditRepComponent extends MnLifeCycleHooksToStream {
             pluck("name"),
             first());
     this.toBucket = this.item.target.split('buckets/')[1];
+
+    this.sourceBucket = new BehaviorSubject(this.item.source);
 
     this.explicitMappingRules = new BehaviorSubject({});
     this.explicitMappingMigrationRules = new BehaviorSubject({});
@@ -211,5 +214,23 @@ class MnXDCREditRepComponent extends MnLifeCycleHooksToStream {
     this.isMigrationMode = migrationMode.valueChanges.pipe(startWith(v.collectionsMigrationMode));
     let explicitMappingMode = this.form.group.get("collectionsExplicitMapping");
     this.isExplicitMappingMode = explicitMappingMode.valueChanges.pipe(startWith(v.collectionsExplicitMapping));
+
+    this.unpackMobileSetting(v);
+  }
+
+  unpackMobileSetting(v) {
+    switch (v.mobile) {
+      case "Active": {
+        this.form?.group.get('mobile').patchValue(true);
+        v.mobile = true;
+        break;
+      }
+      default: {
+        this.form?.group.get('mobile').patchValue(false);
+        v.mobile = false;
+        break;
+      }
+    }
+    return v;
   }
 }

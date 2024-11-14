@@ -48,6 +48,11 @@ licenses/APL2.txt.
          [group]="form.group"
          [bucket]="item.source"></mn-xdcr-mapping>
 
+      <mn-xdcr-mobile-setting
+         [group]="form.group"
+         [fromBucket]="sourceBucket">
+      </mn-xdcr-mobile-setting>
+
       <mn-xdcr-settings
          [form]="form"
          [validationRequest]="postSettingsReplicationsValidation"

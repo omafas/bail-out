@@ -87,6 +87,7 @@ class MnXDCRAddRepComponent extends MnLifeCycleHooksToStream {
                      optimisticReplicationThreshold: null,
                      statsInterval: null,
                      networkUsageLimit: null,
+                     mobile: false,
                      logLevel: null});
 
     this.isSaveButtonDisabled =
@@ -117,6 +118,10 @@ class MnXDCRAddRepComponent extends MnLifeCycleHooksToStream {
         });
       });
 
+    this.getSettingsReplications
+      .pipe(takeUntil(this.mnOnDestroy))
+      .subscribe(this.unpackReplicationSettings.bind(this));
+
     this.filterRegexpGroup = formBuilder.group({
       docId: "",
       filterExpression: "",
@@ -146,4 +151,18 @@ class MnXDCRAddRepComponent extends MnLifeCycleHooksToStream {
       .subscribe(resetMappingRules.bind(this));
 
   }
+
+  unpackReplicationSettings(v) {
+    switch (v.mobile) {
+      case "Active": {
+        this.form.group.get('mobile').patchValue(true);
+        break;
+      }
+      default: {
+        this.form.group.get('mobile').patchValue(false);
+        break;
+      }
+    }
+  }
+
 }

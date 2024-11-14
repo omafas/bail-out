@@ -25,7 +25,7 @@ import { MnXDCRItemComponent } from "./mn.xdcr.item.component.js";
 import { MnXDCRItemDetailsComponent,
          MnReplicationStatus } from "./mn.xdcr.item.details.component.js";
 import { MnXDCRRefItemComponent } from "./mn.xdcr.ref.item.component.js";
-
+import { MnXDCRMobileSettingComponent } from "./mn.xdcr.mobile.setting.component.js";
 
 import { MnXDCRAddRefComponent } from "./mn.xdcr.add.ref.component.js";
 import { MnXDCRAddRepComponent } from "./mn.xdcr.add.rep.component.js";
@@ -136,7 +136,8 @@ class MnXDCRModule {
         MnXDCRFilterComponent,
         MnXDCRErrorsComponent,
         MnReplicationStatus,
-        MnXDCRRepMessageComponent
+        MnXDCRRepMessageComponent,
+        MnXDCRMobileSettingComponent
       ],
       imports: [
         NgbModule,

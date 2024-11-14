@@ -212,6 +212,14 @@ class MnXDCRService {
     }
     settings.replicationType = "continuous";
 
+    if (!isEnterprise) {
+      delete settings.mobile;
+    } else if (settings.mobile) {
+      settings.mobile = 'Active';
+    } else {
+      settings.mobile = 'Off';
+    }
+
     return settings;
   }
 
