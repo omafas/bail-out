@@ -15,7 +15,7 @@
          buckets_interesting/0,
          buckets_interesting/1,
          for_alerts/0,
-         for_resource_management/0,
+         for_resource_management/1,
          total_active_logical_data_size/1,
          for_storage_mode_migration/2,
          current_items_total/1,
@@ -185,12 +185,19 @@ for_alerts() ->
                    fun({{_, Name}, Value}) -> {Name, Value} end,
                    Res)).
 
-for_resource_management() ->
-    List = [{<<"kv_resident_ratio">>,
-             promQL:preformatted(?KvResidentRatioQuery)},
-            {<<"kv_data_size">>, promQL:preformatted(?KvDataSizeTBQuery)},
-            {<<"index_resident_ratio">>,
-             promQL:preformatted(?IndexResidentRatioQuery)}],
+for_resource_management(Keys) ->
+    List = lists:map(
+             fun (Key) ->
+                     {Key,
+                      case Key of
+                          <<"kv_resident_ratio">> ->
+                              promQL:preformatted(?KvResidentRatioQuery);
+                          <<"kv_data_size">> ->
+                              promQL:preformatted(?KvDataSizeTBQuery);
+                          <<"index_resident_ratio">> ->
+                              promQL:preformatted(?IndexResidentRatioQuery)
+                      end}
+             end, Keys),
     QueryAsts = lists:map(
                   fun({NewName, Query}) ->
                           promQL:named(NewName, Query)
