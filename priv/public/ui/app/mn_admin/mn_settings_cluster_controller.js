@@ -26,6 +26,7 @@ import mnXDCRService from "./mn_xdcr_service.js";
 import mnMemoryQuotaService from "../components/directives/mn_memory_quota/mn_memory_quota_service.js";
 import mnClusterConfigurationService from "../mn_wizard/mn_cluster_configuration/mn_cluster_configuration_service.js";
 import template from "./mn_settings_cluster_confirmation_dialog.html";
+import allXDCRLogLevelsTemplate from "./mn_settings_cluster_all_xdcr_log_levels_dialog.html";
 
 export default 'mnSettingsCluster';
 
@@ -42,11 +43,13 @@ angular.module('mnSettingsCluster', [
   mnXDCRService,
   mnSettingsClusterService,
   mnClusterConfigurationService,
-]).controller('mnSettingsClusterController', ["$scope", "$q", "$uibModal", "mnPoolDefault", "mnMemoryQuotaService", "mnSettingsClusterService", "mnHelper", "mnPromiseHelper", "mnClusterConfigurationService", "mnXDCRService", mnSettingsClusterController]);
+]).controller('mnSettingsClusterController', ["$scope", "$q", "$uibModal", "$ocLazyLoad", "mnPoolDefault", "mnMemoryQuotaService", "mnSettingsClusterService", "mnHelper", "mnPromiseHelper", "mnClusterConfigurationService", "mnXDCRService", mnSettingsClusterController]);
 
-function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMemoryQuotaService, mnSettingsClusterService, mnHelper, mnPromiseHelper, mnClusterConfigurationService, mnXDCRService) {
+function mnSettingsClusterController($scope, $q, $uibModal, $ocLazyLoad, mnPoolDefault, mnMemoryQuotaService, mnSettingsClusterService, mnHelper, mnPromiseHelper, mnClusterConfigurationService, mnXDCRService) {
   var vm = this;
   vm.saveVisualInternalSettings = saveVisualInternalSettings;
+  vm.onSelectAllXDCRLogLevels = onSelectAllXDCRLogLevels;
+  vm.showAllXDCRLogLevels = showAllXDCRLogLevels;
   vm.reloadState = mnHelper.reloadState;
   vm.itemsSelect = [...Array(65).keys()].slice(1);
 
@@ -95,6 +98,9 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
 
     queries.push(promise1);
 
+    if (vm.replicationSettings.genericServicesLogLevel) {
+      vm.replicationSettings.genericServicesLogLevel = JSON.stringify(vm.replicationSettings.genericServicesLogLevel);
+    }
     promise6 = mnPromiseHelper(vm,
                                mnXDCRService.postSettingsReplications(vm.replicationSettings))
       .catchErrors("replicationSettingsErrors")
@@ -258,6 +264,25 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
       mnSettingsClusterService.getInitChecker().every(v => v());
 
   }
+  function onSelectAllXDCRLogLevels(selectedOption) {
+    vm.XDCRServices.map(XDCRService => vm.replicationSettings.genericServicesLogLevel[XDCRService] = selectedOption);
+  }
+  async function showAllXDCRLogLevels() {
+    await import("./mn_settings_cluster_all_xdcr_log_levels_dialog_controller.js");
+    await $ocLazyLoad.load({name: 'mnSettingsClusterAllXDCRLogLevelsDialogController'});
+    $uibModal.open({
+      template: allXDCRLogLevelsTemplate,
+      controller: 'mnSettingsClusterAllXDCRLogLevelsDialogController as allXDCRLogLevelsDialogCtl',
+      resolve: {
+        logLevels: function() {
+          return vm.replicationSettings.genericServicesLogLevel;
+        },
+        initialLogLevels: function() {
+          return vm.initialServicesLogLevels;
+        }
+      }
+    });
+  }
   function activate() {
     mnSettingsClusterService.clearSubmitCallbacks();
     mnSettingsClusterService.clearInitChecker();
@@ -288,6 +313,13 @@ function mnSettingsClusterController($scope, $q, $uibModal, mnPoolDefault, mnMem
     if ($scope.rbac.cluster.xdcr.settings.read) {
       mnXDCRService.getSettingsReplications().then(function (rv) {
         vm.replicationSettings = rv.data;
+        vm.initialServicesLogLevels = _.clone(vm.replicationSettings.genericServicesLogLevel);
+        vm.XDCRServices = Object.keys(vm.replicationSettings.genericServicesLogLevel);
+        vm.replicationSettings.xdcrAllLogLevels =
+          Object.values(vm.replicationSettings.genericServicesLogLevel).every(logLevel => logLevel === vm.replicationSettings.genericServicesLogLevel[vm.XDCRServices[0]]) ?
+            vm.replicationSettings.genericServicesLogLevel[vm.XDCRServices[0]] :
+            null;
+        vm.logValues = ["Info", "Trace", "Debug", "Error"];
       });
     }
 

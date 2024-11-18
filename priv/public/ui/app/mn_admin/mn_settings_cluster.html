@@ -775,20 +775,93 @@
         </div>
 
         <div class="formrow margin-top-1-5" ng-if="rbac.cluster.xdcr.settings.read">
-          <label for="xdcr_maximum_processes">XDCR Maximum Processes</label>
-          <input
-             type="text"
-             autocorrect="off"
-             spellcheck="false"
-             autocapitalize="off"
-             ng-disabled="!rbac.cluster.settings.write"
-             id="xdcr_maximum_processes"
-             ng-model="settingsClusterCtl.replicationSettings.goMaxProcs"
-             class="input-small input-short-1">
+          <label>XDCR Settings</label>
+          <div class="flex flex-items-center flex-gap-5">
+            <div class="">XDCR Maximum Processes</div>
+            <input
+               type="text"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off"
+               ng-disabled="!rbac.cluster.settings.write"
+               id="xdcr_maximum_processes"
+               ng-model="settingsClusterCtl.replicationSettings.goMaxProcs"
+               class="input-small input-short-1">
+          </div>
           <div
              class="error error-form"
              ng-show="!!settingsClusterCtl.replicationSettingsErrors.goMaxProcs">
             {{settingsClusterCtl.replicationSettingsErrors.goMaxProcs}}
+          </div>
+          <div
+             ng-if="rbac.cluster.settings.read"
+             class="disclosure margin-top-half"
+             ng-class="{disclosed: settingsClusterCtl.showXDCRLogLevelSettings}"
+             ng-click="settingsClusterCtl.showXDCRLogLevelSettings = !settingsClusterCtl.showXDCRLogLevelSettings">
+            XDCR Generic Services Log Level
+          </div>
+          <div
+             ng-show="settingsClusterCtl.showXDCRLogLevelSettings"
+             class="indent-1-5">
+            <div class="formrow">
+              <span class="flex flex-items-center flex-gap-5 margin-bottom-half">
+                <span class="text-medium">Select log level for all services </span>
+                <mn-select
+                   class="fix-width-1-5"
+                   ng-model="settingsClusterCtl.replicationSettings.xdcrAllLogLevels"
+                   values="settingsClusterCtl.logValues"
+                   on-select="settingsClusterCtl.onSelectAllXDCRLogLevels(selectedOption)">
+                </mn-select>
+              </span>
+              <div class="cbui-table">
+                <div class="cbui-table-header flex-left">
+                  <span class="cbui-table-cell flex-grow-half min-width-4">
+                    <span
+                       class="cbui-table-cell flex-grow-half min-width-4">
+                      XDCR service name
+                    </span>
+                  </span>
+                  <span class="cbui-table-cell flex-grow-half max-width-3">
+                    log level
+                  </span>
+                </div>
+                <div class="max-height-280 overflow-scroll">
+                  <section
+                     ng-repeat="serviceName in settingsClusterCtl.XDCRServices"
+                     class="padding-top-half padding-bottom-half">
+                    <span class="flex flex-items-center">
+                      <span class="cbui-table-cell flex-grow-half margin-left-1-5 min-width-4">
+                         {{serviceName}}
+                         <span
+                            ng-if="serviceName === 'Default'"
+                            class="fa-stack icon-info"
+                            uib-tooltip-html="'Default covers any log messages that are not<br/>captured by the rest of the listed services.'"
+                            tooltip-placement="auto right"
+                            tooltip-trigger="mouseenter">
+                           <span class="icon fa-circle-thin fa-stack-2x"></span>
+                           <span class="icon fa-info fa-stack-1x"></span>
+                         </span>
+                      </span>
+                      <span class="cbui-table-cell flex-grow-half wrap max-width-3">
+                        <mn-select
+                           ng-model="settingsClusterCtl.replicationSettings.genericServicesLogLevel[serviceName]"
+                           values="settingsClusterCtl.logValues"
+                           open-on-top="$index >= settingsClusterCtl.XDCRServices.length - 4">
+                        </mn-select>
+                      </span>
+                    </span>
+                  </section>
+                </div>
+                <div class="margin-top-1-5">
+                  <a ng-click="settingsClusterCtl.showAllXDCRLogLevels()">View entire log levels list</a>
+                </div>
+                <div
+                   class="error error-form"
+                   ng-show="!!settingsClusterCtl.replicationSettingsErrors.genericServicesLogLevel">
+                  {{settingsClusterCtl.replicationSettingsErrors.genericServicesLogLevel}}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
