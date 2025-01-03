@@ -653,5 +653,26 @@ class TestTaskSystem(unittest.TestCase):
 
             shutil.rmtree(tempdir)
 
+    def test_large_file(self):
+        tempdir = tempfile.mkdtemp()
+
+        outfile = f"{tempdir}/testdir.zip"
+        runner = TaskRunner(outfile, prefix="aaaa",
+                            salt_value="abcdefg", tmp_dir=tempdir)
+
+        tasks: List[Task] = [
+            # Reads 8 bytes
+            UnixTask(
+                "Compress small input",
+                ["dd", "if=/dev/zero", "bs=8", "count=1"],
+                log_file="small.log"),
+            # Reads more than 4 GiB, which requires the ZIP64 extension
+            UnixTask(
+                "Compress large input",
+                ["dd", "if=/dev/zero", "bs=1M", "count=4097"],
+                log_file="large.log")]
+        runner.run_tasks(*tasks)
+        runner.close()
+
 if __name__ == "__main__":
     unittest.main()
