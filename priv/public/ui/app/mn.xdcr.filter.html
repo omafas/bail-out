@@ -8,6 +8,30 @@ be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 -->
 
+<ng-template #filterExpressionTemplate>
+  <p class="text-smaller">You may filter for values and x-attributes in addition to key names.
+    If the filter matches, the document will be replicated; otherwise the document
+    won’t be replicated.</p>
+  <p class="text-smaller">See the XDCR documentation for possible filter expressions
+    (NOTE: regex pattern-matching and many N1QL statements are supported, but there
+    are some unique aspects to the XDCR filtering language).</p>
+  <p class="text-smaller">You may test if your
+    filter expression matches a document by entering the document ID in the test field.</p>
+  <p class="text-smaller">IMPORTANT: The filter expression does not apply to document delete operations or expirations;
+    the filter expression will not stop any deletes or expirations from replicating.
+    This is true even if the filter expression only applies to the document ID.
+  </p>
+</ng-template>
+
+<ng-template #binaryDocumentsTemplate>
+  The Filter Binary Documents option is used to specify whether binary documents should be replicated.<br />
+  If the option is selected, binary documents are not replicated, regardless of whether a filter expression is applied.<br />
+  If the option is not selected, the behavior depends on the conditions noted in the
+  <a href="https://docs.couchbase.com/server/{{majorMinorVersion | async}}/manage/manage-xdcr/filter-xdcr-replication.html#filtering-binary-documents"
+     target="_blank"
+     rel="noopener noreferrer">documentation</a>.
+</ng-template>
+
 <ng-template #filterBinaryOffTemplate>
   <span>
     Binary documents are not replicated.
@@ -43,12 +67,7 @@ licenses/APL2.txt.
     <label class="inline margin-right-quarter">Filter Expression</label>
     <span
        class="fa-stack icon-info"
-       ngbTooltip="You may filter for values and x-attributes in addition to key names.
-              If the filter matches, the document will be replicated; otherwise the document
-              won’t be replicated. See the XDCR documentation for possible filter expressions
-              (NOTE: regex pattern-matching and many N1QL statements are supported, but there
-              are some unique aspects to the XDCR filtering language). You may test if your
-              filter expression matches a document by entering the document ID in the test field."
+       [ngbTooltip]="filterExpressionTemplate"
        placement="right"
        container="body">
       <span class="icon fa-circle-thin fa-stack-2x"></span>
@@ -125,7 +144,20 @@ licenses/APL2.txt.
         <label for="for-save-continue-replicating">Save & continue replicating</label>
       </div>
 
-      <label class="margin-top-1">Deletion Filters</label>
+      <span class="block">
+        <label class="margin-top-1 inline margin-right-quarter">Deletion Filters</label>
+        <span
+           class="fa-stack icon-info"
+           ngbTooltip="IMPORTANT: Any filter expression defined above does not apply to document delete operations or expirations,
+             i.e. the filter expression will not stop any deletes or expirations from replicating.
+             This is true even if the filter expression only applies to the document ID.
+             Document deletions and expirations are only replicated to the mapped target collections."
+           placement="right"
+           container="body">
+          <span class="icon fa-circle-thin fa-stack-2x"></span>
+          <span class="icon fa-info fa-stack-1x"></span>
+        </span>
+      </span>
       <input
          type="checkbox"
          value="index"
@@ -182,23 +214,34 @@ licenses/APL2.txt.
         </span>
       </div>
 
-    <label class="margin-top-1">Binary Documents</label>
-    <input
+      <span class="block">
+        <label class="inline margin-right-quarter">Binary Documents</label>
+        <span
+           class="fa-stack icon-info"
+           [ngbTooltip]="binaryDocumentsTemplate"
+           placement="right"
+           triggers="click"
+           container="body">
+          <span class="icon fa-circle-thin fa-stack-2x"></span>
+          <span class="icon fa-info fa-stack-1x"></span>
+        </span>
+      </span>
+
+      <input
         type="checkbox"
         id="for-filter-binary"
         formControlName="filterBinary">
-    <label for="for-filter-binary" class="margin-right-quarter">
+      <label for="for-filter-binary" class="margin-right-quarter">
         Filter Binary Documents
-    </label>
-    <span
+      </label>
+      <span
         class="fa-stack icon-info"
         [ngbTooltip]="xdcrGroup.get('filterBinary').value ? filterBinaryOnTemplate : filterBinaryOffTemplate"
         placement="right"
         container="body">
-    <span class="icon fa-circle-thin fa-stack-2x"></span>
-    <span class="icon fa-info fa-stack-1x"></span>
-    </span>
-
+        <span class="icon fa-circle-thin fa-stack-2x"></span>
+        <span class="icon fa-info fa-stack-1x"></span>
+      </span>
     </div>
   </div>
 </div>

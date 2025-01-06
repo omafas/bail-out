@@ -61,6 +61,7 @@ class MnXDCRFilterComponent extends MnLifeCycleHooksToStream {
       mnXDCRService.stream.postSettingsReplications;
     this.compatVersion70 =
       mnAdminService.stream.compatVersion70;
+    this.majorMinorVersion = mnAdminService.stream.majorMinorVersion;
 
     this.mnKeyspaceSelectorService = mnKeyspaceSelectorService;
 
