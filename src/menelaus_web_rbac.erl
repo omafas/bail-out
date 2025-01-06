@@ -1124,6 +1124,7 @@ do_store_user({User, Domain} = Identity, Props, Req) ->
             ?log_debug("User added - ~p:~p, ~p.",
                        [ns_config_log:tag_user_name(User), Domain,
                         SanitizedUser]),
+            ns_audit:password_change(Req, Identity),
             event_log:add_log(user_added, [{user, SanitizedUser},
                                            {domain, Domain}]),
             ok;
