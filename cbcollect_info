@@ -1963,9 +1963,6 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
             make_cbas("select * from `Metadata`.`Bucket`"),
             make_cbas("select * from `Metadata`.`Link`"),
             make_cbas("select * from `Metadata`.`Nodegroup`"),
-            make_cbas("select * from `Metadata`.`Role`"),
-            make_cbas("select * from `Metadata`.`AssignedRole`"),
-            make_cbas("select * from `Metadata`.`Privilege`"),
             *make_golang_profile_tasks('Analytics', local_token_creds_fun,
                                        cbas_parent_port, 'analytics'),
             UnixTask("Analytics thread dump",
@@ -1978,6 +1975,13 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
                      "pgrep -f java.*couchbase[^*]*Driver | xargs -r -I{} jcmd {} VM.info",
                      log_file="analytics_jvm.log")
         ]
+        profile = get_profile_name(guts)
+        if profile == "columnar":
+            cbas_tasks.extend([
+                make_cbas("select * from `Metadata`.`Role`"),
+                make_cbas("select * from `Metadata`.`AssignedRole`"),
+                make_cbas("select * from `Metadata`.`Privilege`")
+        ])
 
     eventing_tasks = []
     eventing_port = read_guts(guts, "eventing_http_port")
@@ -2571,26 +2575,28 @@ def get_prometheus_stats(guts):
 
     return get_prometheus_stats_from_disk(guts)
 
-def resolve_config_profile_path(profile_path, base_dir):
-    with open(profile_path, "r") as f:
-        line = f.readline()
-        filename = f"{line.strip()}_profile"
-        return (filename,
-                os.path.join(os.path.join(os.path.dirname(base_dir),
-                                          "etc/couchbase/"), filename))
-
-def make_config_profile_task(guts):
+def get_profile_name(guts):
     data_dir = read_guts(guts, "path_config_datadir")
-    lib_path = read_guts(guts, "path_config_libdir")
     existing_profile = os.path.join(data_dir, "existing_profile")
     try:
-        profile, path = resolve_config_profile_path(existing_profile, lib_path)
-        log(f"Collecting configuration profile: {profile}")
-        return [CollectFileTask(f"Collecting {profile}", path)]
+        with open(existing_profile, "r") as f:
+            line = f.readline()
+            return line.strip()
     except IOError as e:
         log(f"Failed to read 'existing_profile' file from path: "
             f"{existing_profile}. Raw error: {e.strerror}")
-    return []
+    return None
+
+def make_config_profile_task(guts):
+    lib_path = read_guts(guts, "path_config_libdir")
+    profile = get_profile_name(guts)
+    if profile == None:
+        return []
+    filename = f"{profile}_profile"
+    path = os.path.join(os.path.join(os.path.dirname(lib_path),
+                        "etc/couchbase/"), filename)
+    log(f"Collecting configuration profile: {profile}")
+    return [CollectFileTask(f"Collecting {profile}", path)]
 
 def main():
     # ask all tools to use C locale (MB-12050)
