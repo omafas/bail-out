@@ -886,6 +886,88 @@ upgrade_from_7_2_with_password_test() ->
             end)
       end).
 
+upgrade_from_7_6_test_() ->
+    %% This file name and file content are copied from test 7.6 node.
+    %% We can't use default_data_key_path() here because path should be 7.6 path
+    DKeyWPass = <<"PQClXd7LPk4UgKcXuAKjg3+q9/dzCoZ3CZLNpmKtnn"
+                   "oJblYKVGRkQzY6w/r7yDjJNV7BF+Ng9RXPT8nKKrMA">>,
+    DKeyNoPass = <<"PQDBdqFxpLMpdTd9go+BxsjwlXIY+MQiOuvz7TE2mS"
+                   "3jsGF5FjkS3rGaHEiG9lznJ43uiLNKghb8cBj4IG8A">>,
+    DKeyPath = filename:join(path_config:component_path(data, "config"),
+                             "encrypted_data_keys"),
+
+    GetSalt =
+        fun () ->
+            {ok, NewDKeyData} = file:read_file(DKeyPath),
+            {NewDKeyProps} = ejson:decode(NewDKeyData),
+            NewKeysData = proplists:get_value(<<"data">>, NewDKeyProps),
+            ?assert(size(NewKeysData) > 0),
+            IsEncrypted = proplists:get_value(<<"encrypted">>, NewDKeyProps),
+            ?assert(IsEncrypted),
+            Salt = proplists:get_value(<<"lockkeySalt">>, NewDKeyProps),
+            ?assert(size(Salt) > 0),
+            base64:decode(Salt)
+        end,
+    DefaultSalt = <<20, 183, 239, 38, 44, 214, 22, 141>>,
+    %% When we change password, the lock key salt should change
+    ChangePassVerify = fun (Pid, Pass) ->
+                           ok = change_password(Pid, Pass),
+                           ?assert(GetSalt() =/= DefaultSalt)
+                       end,
+    %% When data key is rotated, the lock key salt should not change
+    %% The format of the datakey file should change to the new format
+    RotateDataKeyVerify = fun (Pid) ->
+                              ok = rotate_data_key(Pid),
+                              ?assert(GetSalt() == DefaultSalt)
+                          end,
+
+    [?_test(upgrade_from_7_6_test_base(DKeyPath, DKey, Pass, VerifyFun))
+     || {DKey, Pass} <- [{DKeyWPass, "test"}, {DKeyNoPass, undefined}],
+        VerifyFun <- [fun (P) -> ChangePassVerify(P, "test2") end,
+                      fun (P) -> ChangePassVerify(P, "test") end,
+                      fun (P) -> ChangePassVerify(P, "") end,
+                      RotateDataKeyVerify]].
+
+upgrade_from_7_6_test_base(DKeyPath, OldDataKeyData, MasterPass, VerifyFun) ->
+
+    %% We can't use cfg_to_json/1 here, because it can change in future versions
+    Cfg = {[{encryptionService,
+             {[{keyStorageType, file},
+               {keyStorageSettings,
+                {[{path, iolist_to_binary(DKeyPath)},
+                  {encryptWithPassword, true},
+                  {passwordSource, env},
+                  {passwordSettings,
+                   {[{envName, <<"CB_MASTER_PASSWORD">>}]}}]}}]}}]},
+
+    memorize_hidden_pass(?HIDE(undefined)),
+    ok = filelib:ensure_dir(DKeyPath),
+
+    with_password_sent(
+      "wrong", MasterPass,
+      fun () ->
+          %% We can't use with_gosecrets/2 here, because it would remove
+          %% the data key file
+          with_tmp_cfg(
+            undefined,
+            fun (CfgPath) ->
+                ok = file:write_file(CfgPath, ejson:encode(Cfg)),
+                ok = file:write_file(DKeyPath, base64:decode(OldDataKeyData)),
+                {ok, Pid} = start_link(CfgPath),
+                try
+                    Data = rand:bytes(512),
+                    {ok, Encrypted} = encrypt(Pid, Data),
+                    {ok, Data} = decrypt(Pid, Encrypted),
+                    Res = VerifyFun(Pid),
+                    {ok, Data} = decrypt(Pid, Encrypted),
+                    Res
+                after
+                    unlink(Pid),
+                    exit(Pid, shutdown)
+                end
+            end)
+      end).
+
 change_password_memorization_test() ->
     with_tmp_datakey_cfg(
       fun (Cfg) ->
@@ -1008,6 +1090,8 @@ with_tmp_datakey_cfg(Fun) ->
         os:unsetenv("CB_MASTER_PASSWORD")
     end.
 
+with_password_sent(_WrongPassword, undefined, Fun) ->
+    Fun();
 with_password_sent(WrongPassword, CorrectPassword, Fun) ->
     Parent = self(),
     Ref = make_ref(),

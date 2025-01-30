@@ -44,8 +44,9 @@ const nIterations = 4096
 
 var hmacFun = sha1.New
 
-var salt = [8]byte{20, 183, 239, 38, 44, 214, 22, 141}
-var emptyString = []byte("")
+var backwardCompatSalt = [8]byte{20, 183, 239, 38, 44, 214, 22, 141}
+
+const saltSize = 8
 
 type encryptionService struct {
 	initialized    bool
@@ -56,12 +57,14 @@ type encryptionService struct {
 }
 
 var ErrKeysDoNotExist = errors.New("keys do not exist")
+var ErrInvalidJson = errors.New("invalid json")
 
 type ErrReadKeysError struct {
 	e error
 }
 
 func (s ErrReadKeysError) Error() string { return s.e.Error() }
+func (s ErrReadKeysError) Unwrap() error { return s.e }
 
 type secretIface interface {
 	read([]byte) error
@@ -70,6 +73,7 @@ type secretIface interface {
 	getPasswordState() string
 	getSecret() *secret
 	setSecret(*secret) error
+	setSecretWithNewPassword(*secret, []byte) error
 	getStorageId() string
 	sameSettings(interface{}) bool
 }
@@ -87,7 +91,8 @@ type keysInFile struct {
 type keysInEncryptedFile struct {
 	settings          map[string]interface{}
 	lockkey           []byte // derived from password
-	isDefaultPassword bool   // true if the password is default (empty)
+	lockkeySalt       []byte
+	isDefaultPassword bool // true if the password is default (empty)
 	keysInFile
 }
 
@@ -106,6 +111,13 @@ type EncryptionServiceSettings struct {
 
 type Config struct {
 	EncryptionSettings EncryptionServiceSettings `json:"encryptionService"`
+}
+
+type DataKeyFileJson struct {
+	Version     int    `json:"version"`
+	Data        []byte `json:"data"`
+	Encrypted   bool   `json:"encrypted"`
+	LockkeySalt []byte `json:"lockkeySalt,omitempty"`
 }
 
 func main() {
@@ -377,16 +389,23 @@ func initFilePassword(settings map[string]interface{}, password []byte) ([]byte,
 	return passwordToUse, nil
 }
 
-func saveDatakey(datakeyFile string, dataKey, backupDataKey []byte) error {
-	data := combineDataKeys(dataKey, backupDataKey)
+func saveDatakey(datakeyFile string, combinedKeysData []byte, encrypted bool, lockkeySalt []byte) error {
 	datakeyDir := filepath.Dir(datakeyFile)
 	err := os.MkdirAll(datakeyDir, 0755)
 	if err != nil {
-		msg := fmt.Sprintf("failed to create dir for data key \"%s\": %s",
-			datakeyDir, err.Error)
-		return errors.New(msg)
+		return fmt.Errorf("failed to create dir for data key \"%s\": %s", datakeyDir, err.Error())
 	}
-	err = atomicWriteFile(datakeyFile, data, 0640)
+	toMarshal := DataKeyFileJson{
+		Version:     0,
+		Data:        combinedKeysData,
+		Encrypted:   encrypted,
+		LockkeySalt: lockkeySalt,
+	}
+	fileData, err := json.Marshal(toMarshal)
+	if err != nil {
+		return fmt.Errorf("failed to marshal datakeys: %s", err.Error())
+	}
+	err = atomicWriteFile(datakeyFile, fileData, 0640)
 	if err != nil {
 		msg := fmt.Sprintf("failed to write datakey file \"%s\": %s",
 			datakeyFile, err.Error)
@@ -395,7 +414,32 @@ func saveDatakey(datakeyFile string, dataKey, backupDataKey []byte) error {
 	return nil
 }
 
-func readDatakey(datakeyFile string) ([]byte, []byte, error) {
+func readDatakey(datakeyFile string) ([]byte, bool, []byte, error) {
+	data, err := os.ReadFile(datakeyFile)
+	if os.IsNotExist(err) {
+		log_dbg("file %s does not exist", datakeyFile)
+		return nil, false, nil, ErrKeysDoNotExist
+	} else if err != nil {
+		msg := fmt.Sprintf("failed to read datakey file \"%s\": %s",
+			datakeyFile, err)
+		return nil, false, nil, ErrReadKeysError{e: errors.New(msg)}
+	}
+
+	var dataKeyFileJson DataKeyFileJson
+	err = json.Unmarshal(data, &dataKeyFileJson)
+	if err != nil {
+		log_dbg("Failed to parse json in data key file: %s", err.Error())
+		return nil, false, nil, ErrReadKeysError{e: ErrInvalidJson}
+	}
+
+	if dataKeyFileJson.Version != 0 {
+		return nil, false, nil, ErrReadKeysError{e: fmt.Errorf("Not supported version of datakey file: %d", dataKeyFileJson.Version)}
+	}
+
+	return dataKeyFileJson.Data, dataKeyFileJson.Encrypted, dataKeyFileJson.LockkeySalt, nil
+}
+
+func readDatakeyBackwardCompat(datakeyFile string) ([]byte, []byte, error) {
 	data, err := os.ReadFile(datakeyFile)
 	if os.IsNotExist(err) {
 		log_dbg("file %s does not exist", datakeyFile)
@@ -412,7 +456,11 @@ func readDatakey(datakeyFile string) ([]byte, []byte, error) {
 }
 
 func createRandomKey() []byte {
-	dataKey := make([]byte, keySize)
+	return generateRandomBytes(keySize)
+}
+
+func generateRandomBytes(size int) []byte {
+	dataKey := make([]byte, size)
 	if _, err := io.ReadFull(rand.Reader, dataKey); err != nil {
 		panic(err.Error())
 	}
@@ -593,8 +641,14 @@ func (s *encryptionService) cmdCleanupSecrets(oldCfgBytes []byte) {
 	replySuccess()
 }
 
-func generateLockKey(password []byte) []byte {
-	return pbkdf2.Key(password, salt[:], nIterations, keySize, hmacFun)
+func generateLockKey(password []byte) ([]byte, []byte) {
+	salt := generateRandomBytes(saltSize)
+	lockkey := generateLockKeyWithSalt(password, salt)
+	return lockkey, salt
+}
+
+func generateLockKeyWithSalt(password []byte, salt []byte) []byte {
+	return pbkdf2.Key(password, salt, nIterations, keySize, hmacFun)
 }
 
 func encrypt(key []byte, data []byte) []byte {
@@ -655,7 +709,8 @@ func log_dbg(str string, args ...interface{}) {
 // Implementation of secretIface for keysInFile
 
 func (keys *keysInFile) setSecret(s *secret) error {
-	err := saveDatakey(keys.filePath, s.key, s.backupKey)
+	combinedKeysData := combineDataKeys(s.key, s.backupKey)
+	err := saveDatakey(keys.filePath, combinedKeysData, false, nil)
 	if err != nil {
 		return err
 	}
@@ -663,8 +718,12 @@ func (keys *keysInFile) setSecret(s *secret) error {
 	return nil
 }
 
-func (keys *keysInFile) read(password []byte) error {
-	key, backupKey, err := readDatakey(keys.filePath)
+func (keys *keysInFile) setSecretWithNewPassword(s *secret, password []byte) error {
+	return keys.setSecret(s)
+}
+
+func (keys *keysInFile) readBackwardCompat(password []byte) error {
+	key, backupKey, err := readDatakeyBackwardCompat(keys.filePath)
 	if err != nil {
 		return err
 	}
@@ -674,8 +733,36 @@ func (keys *keysInFile) read(password []byte) error {
 		keys.secret.backupKey = nil
 	}
 	keys.secret.key = key
-	log_dbg("read encryption keys from '%s' (%d byte main key, "+
+	log_dbg("backward compat read encryption keys from '%s' (%d byte main key, "+
 		"and %d byte backup key)", keys.filePath, len(key), len(backupKey))
+	return nil
+}
+
+func (keys *keysInFile) read(password []byte) error {
+	keysData, encrypted, _, err := readDatakey(keys.filePath)
+	if err != nil {
+		var readErr ErrReadKeysError
+		if errors.As(err, &readErr) {
+			if errors.Is(errors.Unwrap(readErr), ErrInvalidJson) {
+				log_dbg("Failed to parse datakey file, will try old format")
+				return keys.readBackwardCompat(password)
+			}
+		}
+		return err
+	}
+	if encrypted {
+		return errors.New("data keys are not expected to be encrypted")
+	}
+	key, keysData := readField(keysData)
+	backup, _ := readField(keysData)
+	if len(backup) > 0 {
+		keys.secret.backupKey = backup
+	} else {
+		keys.secret.backupKey = nil
+	}
+	keys.secret.key = key
+	log_dbg("read encryption keys from '%s' (%d byte main key, "+
+		"and %d byte backup key)", keys.filePath, len(key), len(backup))
 	return nil
 }
 
@@ -722,14 +809,12 @@ func (keys *keysInFile) sameSettings(param interface{}) bool {
 func (keys *keysInEncryptedFile) setSecret(s *secret) error {
 	newSecret := secret{}
 	copySecretStruct(s, &newSecret)
-	encryptedKey := encrypt(keys.lockkey, newSecret.key)
-	var encryptedBackup []byte
-	if newSecret.backupKey == nil {
-		encryptedBackup = nil
-	} else {
-		encryptedBackup = encrypt(keys.lockkey, newSecret.backupKey)
+	if len(keys.lockkey) == 0 {
+		return fmt.Errorf("can't encrypt datakey, empty lockkey")
 	}
-	err := saveDatakey(keys.filePath, encryptedKey, encryptedBackup)
+	combinedKeysData := combineDataKeys(newSecret.key, newSecret.backupKey)
+	encryptedKeysData := encrypt(keys.lockkey, combinedKeysData)
+	err := saveDatakey(keys.filePath, encryptedKeysData, true, keys.lockkeySalt)
 	if err != nil {
 		return err
 	}
@@ -737,22 +822,38 @@ func (keys *keysInEncryptedFile) setSecret(s *secret) error {
 	return nil
 }
 
-func (keys *keysInEncryptedFile) read(password []byte) error {
+func (keys *keysInEncryptedFile) setSecretWithNewPassword(s *secret, password []byte) error {
 	passwordToUse, err := initFilePassword(keys.settings, password)
 	if err != nil {
 		return err
 	}
+	oldLockkey := keys.lockkey
+	oldLockkeySalt := keys.lockkeySalt
+	keys.lockkey, keys.lockkeySalt = generateLockKey(passwordToUse)
 
-	// Note: Must be set even if readDatakey returns ErrKeysDoNotExist
-	// beucase later if the data key doesn't exist we will need the lock key
-	// in order to encrypt newly generated data key
-	keys.lockkey = generateLockKey(passwordToUse)
+	err = keys.setSecret(s)
+
+	if err != nil {
+		keys.lockkey = oldLockkey
+		keys.lockkeySalt = oldLockkeySalt
+		return err
+	}
 	keys.isDefaultPassword = (len(passwordToUse) == 0)
+	return nil
+}
 
-	encryptedKey, encryptedBackup, err := readDatakey(keys.filePath)
+func (keys *keysInEncryptedFile) readBackwardCompat(password []byte) error {
+	encryptedKey, encryptedBackup, err := readDatakeyBackwardCompat(keys.filePath)
 	if err != nil {
 		return err
 	}
+	passwordToUse, err := initFilePassword(keys.settings, password)
+	if err != nil {
+		return err
+	}
+	keys.isDefaultPassword = (len(passwordToUse) == 0)
+	keys.lockkeySalt = backwardCompatSalt[:]
+	keys.lockkey = generateLockKeyWithSalt(passwordToUse, keys.lockkeySalt)
 
 	key, err := decrypt(keys.lockkey, encryptedKey)
 	if err != nil {
@@ -771,26 +872,63 @@ func (keys *keysInEncryptedFile) read(password []byte) error {
 		keys.secret.backupKey = nil
 	}
 
-	log_dbg("read encryption keys from '%s' (%d byte main key, "+
+	log_dbg("backward compat read encryption keys from '%s' (%d byte main key, "+
 		"and %d byte backup key)",
 		keys.filePath, len(encryptedKey), len(encryptedBackup))
 	return nil
 }
 
-func (keys *keysInEncryptedFile) changePassword(password []byte) error {
+func (keys *keysInEncryptedFile) read(password []byte) error {
+	keysEncryptedData, encrypted, lockkeySalt, err := readDatakey(keys.filePath)
+	if err != nil {
+		var readErr ErrReadKeysError
+		if errors.As(err, &readErr) {
+			if errors.Is(errors.Unwrap(readErr), ErrInvalidJson) {
+				log_dbg("Failed to parse datakey file, will try old format")
+				return keys.readBackwardCompat(password)
+			}
+		}
+		return err
+	}
+	if !encrypted {
+		return errors.New("data keys are expected to be encrypted")
+	}
+	// Calling initFilePassword after reading the file because
+	// in case if file doesn't exist we don't want the password script
+	// to be called twice
 	passwordToUse, err := initFilePassword(keys.settings, password)
 	if err != nil {
 		return err
 	}
-	oldLockkey := keys.lockkey
-	keys.lockkey = generateLockKey(passwordToUse)
-	err = keys.setSecret(keys.getSecret())
-	if err != nil {
-		keys.lockkey = oldLockkey
-		return err
-	}
+
 	keys.isDefaultPassword = (len(passwordToUse) == 0)
+	keys.lockkeySalt = lockkeySalt
+	keys.lockkey = generateLockKeyWithSalt(passwordToUse, keys.lockkeySalt)
+	keysData, err := decrypt(keys.lockkey, keysEncryptedData)
+
+	if err != nil {
+		return ErrReadKeysError{e: fmt.Errorf("key decrypt failed: %s", err.Error())}
+	}
+
+	key, keysData := readField(keysData)
+	backup, _ := readField(keysData)
+
+	log_dbg("read encryption keys from '%s' (%d byte main key, "+
+		"and %d byte backup key)",
+		keys.filePath, len(key), len(backup))
+
+	keys.secret.key = key
+	if len(backup) > 0 { // to avoid having empty slice
+		keys.secret.backupKey = backup
+	} else {
+		keys.secret.backupKey = nil
+	}
+
 	return nil
+}
+
+func (keys *keysInEncryptedFile) changePassword(password []byte) error {
+	return keys.setSecretWithNewPassword(keys.getSecret(), password)
 }
 
 func (keys *keysInEncryptedFile) getPasswordState() string {
@@ -807,13 +945,16 @@ func (keys *keysInEncryptedFile) sameSettings(param interface{}) bool {
 	}
 	oldsecret := keys2.secret
 	oldLockkey := keys2.lockkey
+	oldLockkeySalt := keys2.lockkeySalt
 	oldIsDefaultPass := keys2.isDefaultPassword
 	keys2.secret = keys.secret
 	keys2.lockkey = keys.lockkey
+	keys2.lockkeySalt = keys.lockkeySalt
 	keys2.isDefaultPassword = keys.isDefaultPassword
 	defer func() {
 		keys2.secret = oldsecret
 		keys2.lockkey = oldLockkey
+		keys2.lockkeySalt = oldLockkeySalt
 		keys2.isDefaultPassword = oldIsDefaultPass
 	}()
 	return reflect.DeepEqual(keys, keys2)
@@ -831,6 +972,10 @@ func (keys *keysViaScript) setSecret(s *secret) error {
 	}
 	copySecretStruct(s, &keys.secret)
 	return nil
+}
+
+func (keys *keysViaScript) setSecretWithNewPassword(s *secret, password []byte) error {
+	return keys.setSecret(s)
 }
 
 func (keys *keysViaScript) read(password []byte) error {
@@ -969,7 +1114,7 @@ func copySecret(from, to secretIface, password []byte) (string, error) {
 				"the secret that is in use")
 		}
 	}
-	err = to.setSecret(from.getSecret())
+	err = to.setSecretWithNewPassword(from.getSecret(), password)
 	if err != nil {
 		return "", err
 	}
@@ -987,13 +1132,18 @@ func saveKeys(keys secretIface, key, backup []byte) error {
 	return keys.setSecret(&newSecret)
 }
 
+func saveKeysWithNewPassword(keys secretIface, key, backup, password []byte) error {
+	newSecret := secret{key: key, backupKey: backup}
+	return keys.setSecretWithNewPassword(&newSecret, password)
+}
+
 // Note: keys must be a pointer to a struct
 func readOrCreateKeys(keys secretIface, password []byte) error {
 	err := keys.read(password)
 	if errors.Is(err, ErrKeysDoNotExist) {
 		log_dbg("Generating secret")
 		key := createRandomKey()
-		return saveKeys(keys, key, nil)
+		return saveKeysWithNewPassword(keys, key, nil, password)
 	}
 	return err
 }
