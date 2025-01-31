@@ -216,6 +216,18 @@ func combineDataKeys(key1, key2 []byte) []byte {
 	return append(encodeKey(key1), encodeKey(key2)...)
 }
 
+func unwrapDataKeys(data []byte) ([]byte, []byte, error) {
+	key, data2, err := readField(data)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid datakeys: %s", err.Error())
+	}
+	backup, _, err := readField(data2)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid datakeys: %s", err.Error())
+	}
+	return key, backup, nil
+}
+
 func (s *encryptionService) processCommand() {
 	command, data := s.readCommand()
 
@@ -449,9 +461,10 @@ func readDatakeyBackwardCompat(datakeyFile string) ([]byte, []byte, error) {
 			datakeyFile, err)
 		return nil, nil, ErrReadKeysError{e: errors.New(msg)}
 	}
-
-	key, data := readField(data)
-	backup, _ := readField(data)
+	key, backup, err := unwrapDataKeys(data)
+	if err != nil {
+		return nil, nil, ErrReadKeysError{e: err}
+	}
 	return key, backup, nil
 }
 
@@ -467,9 +480,18 @@ func generateRandomBytes(size int) []byte {
 	return dataKey
 }
 
-func readField(b []byte) ([]byte, []byte) {
+func readField(b []byte) ([]byte, []byte, error) {
+	if len(b) == 0 {
+		return nil, nil, errors.New("empty data")
+	}
 	size := b[0]
-	return b[1 : size+1], b[size+1:]
+	if len(b) < int(size)+1 {
+		return nil, nil, errors.New("data too short")
+	}
+	if size == 0 {
+		return nil, b[size+1:], nil
+	}
+	return b[1 : size+1], b[size+1:], nil
 }
 
 func (s *encryptionService) cmdGetKeyRef() {
@@ -727,12 +749,8 @@ func (keys *keysInFile) readBackwardCompat(password []byte) error {
 	if err != nil {
 		return err
 	}
-	if len(backupKey) > 0 {
-		keys.secret.backupKey = backupKey
-	} else {
-		keys.secret.backupKey = nil
-	}
 	keys.secret.key = key
+	keys.secret.backupKey = backupKey
 	log_dbg("backward compat read encryption keys from '%s' (%d byte main key, "+
 		"and %d byte backup key)", keys.filePath, len(key), len(backupKey))
 	return nil
@@ -753,14 +771,12 @@ func (keys *keysInFile) read(password []byte) error {
 	if encrypted {
 		return errors.New("data keys are not expected to be encrypted")
 	}
-	key, keysData := readField(keysData)
-	backup, _ := readField(keysData)
-	if len(backup) > 0 {
-		keys.secret.backupKey = backup
-	} else {
-		keys.secret.backupKey = nil
+	key, backup, err := unwrapDataKeys(keysData)
+	if err != nil {
+		return ErrReadKeysError{e: err}
 	}
 	keys.secret.key = key
+	keys.secret.backupKey = backup
 	log_dbg("read encryption keys from '%s' (%d byte main key, "+
 		"and %d byte backup key)", keys.filePath, len(key), len(backup))
 	return nil
@@ -910,19 +926,17 @@ func (keys *keysInEncryptedFile) read(password []byte) error {
 		return ErrReadKeysError{e: fmt.Errorf("key decrypt failed: %s", err.Error())}
 	}
 
-	key, keysData := readField(keysData)
-	backup, _ := readField(keysData)
+	key, backup, err := unwrapDataKeys(keysData)
+	if err != nil {
+		return ErrReadKeysError{e: err}
+	}
 
 	log_dbg("read encryption keys from '%s' (%d byte main key, "+
 		"and %d byte backup key)",
 		keys.filePath, len(key), len(backup))
 
 	keys.secret.key = key
-	if len(backup) > 0 { // to avoid having empty slice
-		keys.secret.backupKey = backup
-	} else {
-		keys.secret.backupKey = nil
-	}
+	keys.secret.backupKey = backup
 
 	return nil
 }

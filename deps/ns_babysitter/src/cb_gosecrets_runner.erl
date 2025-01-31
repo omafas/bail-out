@@ -886,6 +886,93 @@ upgrade_from_7_2_with_password_test() ->
             end)
       end).
 
+invalid_datakey_test() ->
+    DKeyPath7_6 = filename:join(path_config:component_path(data, "config"),
+                                "encrypted_data_keys"),
+    DKeyPathActual = default_data_key_path(env),
+    Cfg7_6 = {[{encryptionService,
+                {[{keyStorageType, file},
+                  {keyStorageSettings,
+                   {[{path, iolist_to_binary(DKeyPath7_6)},
+                     {encryptWithPassword, true},
+                     {passwordSource, env},
+                     {passwordSettings,
+                      {[{envName, <<"CB_MASTER_PASSWORD">>}]}}]}}]}}]},
+
+    CfgActual = cfg_to_json([]),
+
+%%    Example of correct data for empty password
+%%    {"version": 0,
+%%     "data": "AN4tJ93IHmbBK7jQhjujZBH3AhgKeCOIHZpBhjjkbB3ETrt"
+%%             "npb/ilq96iEHambXrwkf0NWKTwoH+TosGDkNy",
+%%     "encrypted": true,
+%%     "lockkeySalt": "v76gOte7tV8="}
+
+    BadData = <<"{\"data\": \"bad\", "  %% Bad base64
+                 "\"version\": 0, "
+                 "\"encrypted\": true, "
+                 "\"lockkeySalt\": \"v76gOte7tV8=\"}">>,
+    BadSalt = <<"{\"data\": \"AN4tJ93IHmbBK7jQhjujZBH3AhgKeCOIHZpBhjjkbB3ETrt"
+                             "npb/ilq96iEHambXrwkf0NWKTwoH+TosGDkNy\", "
+                 "\"version\": 0, "
+                 "\"encrypted\": true,"
+                 "\"lockkeySalt\": \"bad\"}">>,
+    BadEncr = <<"{\"data\": \"AN4tJ93IHmbBK7jQhjujZBH3AhgKeCOIHZpBhjjkbB3ETrt"
+                             "npb/ilq96iEHambXrwkf0NWKTwoH+TosGDkNy\", "
+                 "\"version\": 0, "
+                 "\"encrypted\": false, "
+                 "\"lockkeySalt\": \"v76gOte7tV8=\"}">>,
+    BadJson = <<"{\"data\": \"AN4tJ93IHmbBK7jQhjujZBH3AhgKeCOIHZpBhjjkbB3ETrt"
+                             "npb/ilq96iEHambXrwkf0NWKTwoH+TosGDkNy\", "
+                 "\"version\": 0, "
+                 "\"encrypted\": true, "
+                 "\"lockkeySalt\": \"v76gOte7tV8=\"">>,
+
+
+    invalid_datakey_test_base(Cfg7_6, DKeyPath7_6, <<255, 1, 3>>,
+                              "invalid datakeys: data too short"),
+    invalid_datakey_test_base(Cfg7_6, DKeyPath7_6, <<2, 1, 3, 255, 1,2,3>>,
+                              "invalid datakeys: data too short"),
+    invalid_datakey_test_base(Cfg7_6, DKeyPath7_6, <<2, 1, 3>>,
+                              "invalid datakeys: empty data"),
+    invalid_datakey_test_base(Cfg7_6, DKeyPath7_6, <<>>,
+                              "invalid datakeys: empty data"),
+
+    %% Note that in many cases below it returns "data too short", because
+    %% it falls back to the old format, and the data turns out to be too short
+    invalid_datakey_test_base(CfgActual, DKeyPathActual, BadData,
+                              "invalid datakeys: data too short"),
+    invalid_datakey_test_base(CfgActual, DKeyPathActual, BadSalt,
+                              "invalid datakeys: data too short"),
+    invalid_datakey_test_base(CfgActual, DKeyPathActual, BadEncr,
+                              "data keys are expected to be encrypted"),
+    invalid_datakey_test_base(CfgActual, DKeyPathActual, BadJson,
+                              "invalid datakeys: data too short").
+
+invalid_datakey_test_base(Cfg, DKeyPath, DKeyData, ExpectedError) ->
+    %% We can't use with_gosecrets/2 here, because it would remove
+    %% the data key file
+    with_tmp_cfg(
+      undefined,
+      fun (CfgPath) ->
+          ok = file:write_file(CfgPath, ejson:encode(Cfg)),
+          ok = file:write_file(DKeyPath, DKeyData),
+          P = spawn(fun () ->
+                        {error, {R, _}} = start_link(CfgPath),
+                        erlang:error(R)
+                    end),
+          MRef = erlang:monitor(process, P),
+          receive
+              {'DOWN', MRef, process, _, Reason} ->
+                  ?assertMatch({{gosecrets_init_failed, ExpectedError}, _},
+                               Reason)
+          after 30000 ->
+                  erlang:demonitor(MRef, [flush]),
+                  misc:terminate_and_wait(P, shutdown),
+                  ?assert(false)
+          end
+      end).
+
 upgrade_from_7_6_test_() ->
     %% This file name and file content are copied from test 7.6 node.
     %% We can't use default_data_key_path() here because path should be 7.6 path
