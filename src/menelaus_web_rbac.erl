@@ -463,6 +463,7 @@ handle_get_user(Domain, UserId, Req) ->
                 false ->
                     menelaus_util:reply_json(Req, <<"Unknown user.">>, 404);
                 true ->
+                    verify_domain_access(Req, Identity, read),
                     verify_security_roles_access(
                       Req, ?SECURITY_READ, menelaus_users:get_roles(Identity)),
                     ns_audit:rbac_info_retrieved(Req, users),
@@ -1060,7 +1061,7 @@ validate_roles(Name, State) ->
 handle_put_user_with_identity({_UserId, Domain} = Identity, Req) ->
     validator:handle(
       fun (Values) ->
-              verify_domain_access(Req, Identity),
+              verify_domain_access(Req, Identity, write),
               reply(do_store_user(Identity, Values, Req), Req)
       end, Req, form, put_user_validators(Req,
                                           fun (_) -> Identity end,
@@ -1093,9 +1094,9 @@ get_security_roles() ->
     [R || {R, _} <- menelaus_roles:get_security_roles(
                       ns_bucket:get_snapshot(all, [collections, uuid]))].
 
-verify_domain_access(Req, {_UserId, Domain})
+verify_domain_access(Req, {_UserId, Domain}, Access)
   when Domain =:= local orelse Domain =:= external ->
-    Permission = get_domain_access_permission(write, Domain),
+    Permission = get_domain_access_permission(Access, Domain),
     menelaus_util:require_permission(Req, Permission).
 
 do_store_user({User, Domain} = Identity, Props, Req) ->
@@ -1140,7 +1141,7 @@ handle_delete_user(Domain, UserId, Req) ->
             verify_security_roles_access(
               Req, ?SECURITY_WRITE, menelaus_users:get_roles(Identity)),
 
-            verify_domain_access(Req, Identity),
+            verify_domain_access(Req, Identity, write),
 
             case menelaus_users:delete_user(Identity) of
                 {commit, _} ->
@@ -2375,7 +2376,7 @@ validate_backup_users(Name, GroupsName, Req, State) ->
              case domain_to_atom(D) of
                  unknown -> {error, io_lib:format("invalid domain: ~s", [D])};
                  DAtom ->
-                    verify_domain_access(Req, {"", DAtom}),
+                    verify_domain_access(Req, {"", DAtom}, write),
                     {value, DAtom}
              end
          end, domain, _),

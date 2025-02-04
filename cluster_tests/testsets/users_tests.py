@@ -99,6 +99,34 @@ class UsersTestSet(testlib.BaseTestSet):
                             f'/settings/rbac/groups/securegroup')
 
 
+    # This test verifies a user with security_admin_external role cannot
+    # get info for a local user.
+    def witness_for_mb65113_test(self):
+        user = "externalsecurityadmin"
+        name = testlib.random_str(10)
+        password = testlib.random_str(10)
+        put_user(self.cluster, 'local', user, password=password,
+                 roles='security_admin_external', full_name=name, groups='',
+                 validate_user_props=True)
+
+        # Create a local user.
+        user2 = "eventingadmin"
+        name2 = testlib.random_str(10)
+        password2 = testlib.random_str(10)
+        put_user(self.cluster, 'local', user2, password=password2,
+                 roles='eventing_admin', full_name=name2, groups='',
+                 validate_user_props=True)
+
+        # Verify info on local user cannot be obtained
+        testlib.get_fail(self.cluster,
+                         f'/settings/rbac/users/local/{user2}',
+                         expected_code=403, auth=(user, password))
+
+        # Clean up users created by this test
+        delete_user(self.cluster, 'local', user)
+        delete_user(self.cluster, 'local', user2)
+
+
 def put_user(cluster_or_node, domain, userid, password=None, roles=None,
              full_name=None, groups=None, validate_user_props=False):
     data = {}
