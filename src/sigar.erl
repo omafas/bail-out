@@ -249,14 +249,7 @@ get_global_stats(StatsMap) ->
     MemUsed = get_number(StatsMap, <<"mem_used">>),
     {MemLimit, _} = memory_quota:choose_limit(MemTotal, MemUsed,
                                               {CGMemLimit, CGMemUsed}),
-    %% Suppressing dialyzer warning here
-    %% Dialyzer thinks that system_info can't return 'unknown', while according
-    %% to doc it seems like it actually can. So, in order to avoid a warning
-    %% the value is compared with 0 insead of explicit match to 'unknown'
-    HostCoresAvailable = case erlang:system_info(logical_processors_online) of
-                             P when is_number(P), P > 0 -> P;
-                             _ -> 0
-                         end,
+    HostCoresAvailable = get_number(StatsMap, <<"num_cpus">>),
     CoresAvailable = case maps:get(<<"num_cpu_prc">>, CgroupsInfo, undefined) of
                          N when is_number(N) ->
                              %% do not round it, cpu utilization will break
