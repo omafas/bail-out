@@ -23,6 +23,13 @@
         [reply_json/2,
          reply_json/3]).
 
+%% We are encoding our base64 parameters directly into the config rather than
+%% storing the raw value. This lets us handle parameters on this node even if
+%% other nodes in the cluster are an older version correctly, as the base64
+%% encoded version will still be sent to memcached on those nodes, rather than
+%% a non-encoded version.
+-define(BASE64_PARAMS, [dcp_disconnect_when_stuck_name_regex]).
+
 supported_setting_names() ->
     [{max_connections, {int, 2000, ?MC_MAXINT}},
      {num_reader_threads, fun validate_num_threads/1},
@@ -52,7 +59,9 @@ supported_extra_setting_names() ->
      {reqs_per_event_high_priority, {int, 0, ?MC_MAXINT}},
      {reqs_per_event_med_priority, {int, 0, ?MC_MAXINT}},
      {reqs_per_event_low_priority, {int, 0, ?MC_MAXINT}},
-     {threads, {int, 0, ?MC_MAXINT}}].
+     {threads, {int, 0, ?MC_MAXINT}},
+     {dcp_disconnect_when_stuck_timeout_seconds, {int, 0, ?MC_MAXINT}},
+     {dcp_disconnect_when_stuck_name_regex, string}].
 
 parse_validate_node("self") ->
     parse_validate_node(atom_to_list(node()));
@@ -109,12 +118,18 @@ map_settings(SettingNames, Settings) ->
                   false ->
                       [];
                   {_, Value0} ->
-                      Value = case is_list(Value0) of
-                                  true ->
-                                      list_to_binary(Value0);
-                                  false ->
-                                      Value0
-                              end,
+                      Value =
+                          case lists:member(Name, ?BASE64_PARAMS) of
+                              true ->
+                                  base64:decode(Value0);
+                              false ->
+                                  case is_list(Value0) of
+                                      true ->
+                                          list_to_binary(Value0);
+                                      false ->
+                                          Value0
+                                  end
+                          end,
                       [{Name, Value}]
               end
       end, SettingNames).
@@ -205,7 +220,22 @@ continue_handle_post(Req, Params, SettingsKey, ExtraConfigKey) ->
         [_|_] ->
             reply_json(Req, {struct, InvalidParams}, 400);
         [] ->
-            KVs = [{K, V} || {K, {ok, V}} <- ParsedParams],
+            KVs0 = [{K, V} || {K, {ok, V}} <- ParsedParams],
+            %% We are encoding our base64 parameters directly into the config
+            %% rather than storing the raw value. This lets us handle parameters
+            %% on this node even if other nodes in the cluster are an older
+            %% version correctly, as the base64 encoded version will still be
+            %% sent to memcached on those nodes, rather than a non-encoded
+            %% version.
+            KVs = lists:map(
+                    fun ({Name, Value}) ->
+                            case lists:member(Name, ?BASE64_PARAMS) of
+                                true ->
+                                    {Name, base64:encode(Value)};
+                                false ->
+                                    {Name, Value}
+                            end
+                    end, KVs0),
             {OS, NS} = case update_config(
                               supported_setting_names(), SettingsKey, KVs) of
                            {commit, _, {OS0, NS0}} ->
