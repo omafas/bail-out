@@ -1332,22 +1332,29 @@ update_bucket_props(Type, OldStorageMode, BucketName, Props) ->
             {exit, {not_found, BucketName}, []}
     end.
 
-maybe_delete_cas_props(PrevProps, NewProps) ->
-    PrevCcvEn =
+maybe_delete_cas_props(CurrProps, UpdtProps) ->
+    CurrCcvEn =
         proplists:get_value(cross_cluster_versioning_enabled,
-                            PrevProps, false),
-    NewCcvEn =
+                            CurrProps, false),
+
+    UpdtCcvEn =
         proplists:get_value(cross_cluster_versioning_enabled,
-                            NewProps, false),
+                            UpdtProps, undefined),
 
-    maybe_delete_cas_props_inner(PrevCcvEn, NewCcvEn, NewProps).
 
-maybe_delete_cas_props_inner(_PrevCcvEn, false = _CurrCcvEn, Props) ->
+    case {CurrCcvEn, UpdtCcvEn} of
+        {_, undefined} ->
+            {UpdtProps, []};
+        {true, true} ->
+            throw({error, cc_versioning_already_enabled});
+        _ ->
+            maybe_delete_cas_props_inner(UpdtCcvEn, UpdtProps)
+        end.
+
+maybe_delete_cas_props_inner(false = _CcvEn, Props) ->
     {Props, [vbuckets_max_cas]};
-maybe_delete_cas_props_inner(false = _PrevCcvEn, true = _CurrCcvEn, Props) ->
-    {Props, []};
-maybe_delete_cas_props_inner(true = _PrevCcvEn, true = _CurrCcvEn, _Props) ->
-    throw({error, cc_versioning_already_enabled}).
+maybe_delete_cas_props_inner(true = _CcvEn, Props) ->
+    {Props, []}.
 
 update_bucket_props_inner(Type, OldStorageMode, BucketName, Props) ->
     {ok, BucketConfig} = get_bucket(BucketName),
