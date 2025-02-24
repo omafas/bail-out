@@ -110,18 +110,39 @@ extract_ui_auth_token(Req) ->
             not_ui
     end.
 
--spec generate_auth_cookie(mochiweb_request(), auth_token()) -> {string(), string()}.
-generate_auth_cookie(Req, Token) ->
+maybe_get_username_for_ui_cookie(#authn_res{identity = {"", _}}) ->
+    undefined;
+maybe_get_username_for_ui_cookie(#authn_res{identity = {Name, _}}) ->
+    case ns_config:read_key_fast(include_username_in_ui_cookie, false) of
+        true -> Name;
+        false -> undefined
+    end.
+
+maybe_add_username_to_ui_cookie(Token, Username) ->
+    case Username of
+        undefined ->
+            Token;
+        _ ->
+            EncodedName = base64:encode(Username),
+            io_lib:format("~s-~s", [Token, EncodedName])
+    end.
+
+-spec generate_auth_cookie(mochiweb_request(), auth_token(),
+                           rbac_user_id() | undefined) ->
+          {string(), string()}.
+generate_auth_cookie(Req, Token0, Username) ->
     Options = [{path, "/"}, {http_only, true}],
     SslOptions = case mochiweb_request:get(socket, Req) of
                      {ssl, _} -> [{secure, true}];
                      _ -> ""
                  end,
-    mochiweb_cookies:cookie(ui_auth_cookie_name(Req), Token, Options ++ SslOptions).
+    Token1 = maybe_add_username_to_ui_cookie(Token0, Username),
+    mochiweb_cookies:cookie(ui_auth_cookie_name(Req), Token1,
+                            Options ++ SslOptions).
 
 -spec kill_auth_cookie(mochiweb_request()) -> {string(), string()}.
 kill_auth_cookie(Req) ->
-    {Name, Content} = generate_auth_cookie(Req, ""),
+    {Name, Content} = generate_auth_cookie(Req, "", undefined),
     {Name, Content ++ "; expires=Thu, 01 Jan 1970 00:00:00 GMT"}.
 
 -spec complete_uilogout(mochiweb_request()) ->
@@ -146,7 +167,9 @@ maybe_refresh_token(Req) ->
                 nothing ->
                     [];
                 {new_token, NewToken} ->
-                    [generate_auth_cookie(Req, NewToken)]
+                    Username = maybe_get_username_for_ui_cookie(
+                        get_authn_res(Req)),
+                    [generate_auth_cookie(Req, NewToken, Username)]
             end
     end.
 
@@ -465,7 +488,8 @@ uilogin_phase2(Req, UISessionType, UISessionName,
                     Token = menelaus_ui_auth:start_ui_session(UISessionType,
                                                               UISessionName,
                                                               AuthnRes),
-                    CookieHeader = generate_auth_cookie(Req, Token),
+                    Username = maybe_get_username_for_ui_cookie(AuthnRes),
+                    CookieHeader = generate_auth_cookie(Req, Token, Username),
                     ns_audit:login_success(store_authn_res(AuthnRes, Req)),
                     {ok, [CookieHeader]};
                 AuthzRes when AuthzRes == forbidden; AuthzRes == auth_failure ->

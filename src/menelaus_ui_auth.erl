@@ -39,8 +39,25 @@ start_ui_session(UISessionType, SessionName,
     token_server:generate(?MODULE, SessionInfo, ExpirationDatetimeUTC).
 
 -spec maybe_refresh(auth_token()) -> nothing | {new_token, auth_token()}.
-maybe_refresh(Token) ->
+maybe_refresh(TokenMaybeWithUser) ->
+    {Token, _User} = parse_token_and_user_claim(TokenMaybeWithUser),
     token_server:maybe_refresh(?MODULE, Token).
+
+parse_token_and_user_claim(TokenMaybeWithUser) ->
+    case TokenMaybeWithUser of
+        undefined -> {TokenMaybeWithUser, undefined};
+        _ ->
+            case string:split(TokenMaybeWithUser, "-") of
+                [T] -> {T, undefined};
+                [T, Base64User] ->
+                    try base64:decode(Base64User) of
+                        U -> {T, binary_to_list(U)}
+                    catch _:_ ->
+                            %% Reject request if non-base64
+                            {T, false}
+                    end
+            end
+    end.
 
 -spec get_token_node(auth_token() | undefined) ->
         {Node :: atom(), auth_token() | undefined}.
@@ -54,14 +71,37 @@ get_token_node(Token) ->
     end.
 
 -spec check(auth_token() | undefined) -> false | {ok, term()}.
-check(Token) ->
+check(TokenMaybeWithUser) ->
+    {Token, UserClaim} = parse_token_and_user_claim(TokenMaybeWithUser),
     {Node, CleanToken} = get_token_node(Token),
+
     case token_server:check(?MODULE, CleanToken, Node) of
         false -> false;
         {ok, #uisession{authn_res = #authn_res{} = AuthnRes}} ->
-            {ok, AuthnRes};
+            case maybe_check_user_claim(UserClaim, AuthnRes) of
+                false -> false;
+                true -> {ok, AuthnRes}
+            end;
         {ok, Id} -> %% Pre-7.6 nodes will return Id
             {ok, (menelaus_auth:init_auth(Id))#authn_res{type = ui}}
+    end.
+
+maybe_check_user_claim(UserClaim, AuthnRes) ->
+    case ns_config:read_key_fast(include_username_in_ui_cookie, false) of
+        false ->
+            true;
+        true ->
+            %% We must reject the user if it doesn't match the user from
+            %% the token
+            case {UserClaim, AuthnRes} of
+                {undefined, _} ->
+                    false;
+                {_, #authn_res{identity = {ActualUser, _}}}
+                  when ActualUser =:= UserClaim ->
+                    true;
+                _ ->
+                    false
+            end
     end.
 
 -spec reset() -> ok.
@@ -108,4 +148,3 @@ logout_by_session_name(Type, SessionName) ->
 logout_by_session_type(Type) ->
     Pattern = #uisession{type = Type, _ = '_'},
     token_server:purge(?MODULE, Pattern).
-

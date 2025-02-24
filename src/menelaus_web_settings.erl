@@ -677,7 +677,10 @@ conf(internal) ->
      {max_docs_limit, maxDocsLimit, ?DEFAULT_MAX_DOCS_LIMIT,
       get_number(?LOWEST_ALLOWED_MAX_DOCS_LIMIT,
                  ?HIGHEST_ALLOWED_MAX_DOCS_LIMIT)}
-    ];
+    ] ++
+        [{include_username_in_ui_cookie, includeUsernameInUICookie, false,
+          fun get_bool/1}];
+
 
 conf(developer_preview) ->
     [{developer_preview_enabled, enabled, false, fun only_true/1}];
