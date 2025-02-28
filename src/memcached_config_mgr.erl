@@ -567,7 +567,14 @@ generate_interfaces(MCDParams) ->
 
                   {[{port, GetPort(dedicated_ssl_port)},
                     {system, true},
-                    {tls, true}]}],
+                    {tls, true}]}] ++
+        case config_profile:get_value({memcached, mirror_ssl_port},
+                                      undefined) of
+            undefined -> [];
+            Port ->
+                [{[{port, Port},
+                   {tls, true}]}]
+        end,
 
     IPv4Interfaces = lists:map(
                        fun ({Props}) ->
