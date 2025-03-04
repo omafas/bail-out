@@ -1023,11 +1023,13 @@ class CollectFFDCFileTask(CollectFileTask):
                     rs.write(file_content)
                     file_content = src.read(READ_SIZE)
                 rs.flush()
+                rs.clear_wraparound()
             else:
                 while file_content:
                     outstream.write(file_content)
                     file_content = src.read(READ_SIZE)
-            outstream.flush()
+                outstream.flush()
+                outstream.clear_wraparound()
 
     def on_execute(self, outstream: Writer):
         try:
