@@ -1044,6 +1044,9 @@ class CollectFFDCFileTask(CollectFileTask):
         except FileNotFoundError:
             log(f"File doesn't exist: {self.output_file} -- ", new_line=False)
             return 1
+        except EOFError:
+            log(f"Incorrect end of file: {self.output_file} -- ", new_line=False)
+            return 1
 
 class MetaTask:
     subtasks: List["Task"] = []
