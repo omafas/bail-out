@@ -225,10 +225,21 @@ perform_loading_task(TaskId, Sample, Bucket, Quota, CacheDir, BucketState) ->
             end,
 
     Name = "cbimport_" ++ binary_to_list(TaskId),
-    Env = [{"CB_USERNAME", "@ns_server"},
-           {"CB_PASSWORD", ns_config_auth:get_password(special)} |
-           ns_ports_setup:build_cbauth_env_vars(ns_config:latest(), Name)],
-
+    Env0 = [{"CB_USERNAME", "@ns_server"},
+            {"CB_PASSWORD", ns_config_auth:get_password(special)}] ++
+        case ns_ssl_services_setup:client_cert_auth_state() of
+            State when State =:= "mandatory" ->
+                ClientPassFun = ns_secrets:get_pkey_pass(client_cert),
+                [{"CB_CLIENT_CERT",
+                  ns_ssl_services_setup:chain_file_path(client_cert)},
+                 {"CB_CLIENT_KEY",
+                  ns_ssl_services_setup:pkey_file_path(client_cert)},
+                 {"CB_CLIENT_KEY_PASSWORD", ClientPassFun()}];
+            _ ->
+                []
+        end,
+    Env = Env0 ++
+        ns_ports_setup:build_cbauth_env_vars(ns_config:latest(), Name),
     {Status, Output} = misc:run_external_tool(Cmd, Args, Env),
     case Status of
         0 ->
