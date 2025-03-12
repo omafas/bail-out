@@ -34,8 +34,9 @@ handle_get_trustedCAs(Req) ->
     menelaus_util:assert_is_enterprise(),
     %% Security admins should get all the information,
     %% Everybody else should get only certificates
-    Extended = menelaus_roles:is_allowed({[admin, security], read},
-                                         menelaus_auth:get_authn_res(Req)),
+    AuthRes = menelaus_auth:get_authn_res(Req),
+    Extended = menelaus_roles:is_allowed({[admin, security], read}, AuthRes),
+    Authenticated = not menelaus_auth:is_anonymous(AuthRes),
     Warnings = case Extended of
                     true -> ns_server_cert:get_warnings();
                     false -> []
@@ -65,22 +66,21 @@ handle_get_trustedCAs(Req) ->
                      Props ++
                          [{warnings, CAWarnings}, {nodes, CANodes}] ++
                          [{client_cert_nodes, ClientCertCANodes} || Is76],
-                     not Extended))
+                     Extended, Authenticated))
              end, ns_server_cert:trusted_CAs(props)),
     menelaus_util:reply_json(Req, Json).
 
 %% Leaving only info that can be extracted from certificates and ids
-maybe_filter_cert_props(Props, _ShouldFilter = true) ->
+maybe_filter_cert_props(Props, Extended, Authenticated) ->
     lists:filter(
       fun ({id, _}) -> true;
           ({pem, _}) -> true;
           ({subject, _}) -> true;
           ({not_before, _}) -> true;
           ({not_after, _}) -> true;
-          (_) -> false
-      end, Props);
-maybe_filter_cert_props(Props, _ShouldFilter = false) ->
-    Props.
+          ({type, _}) -> Extended orelse Authenticated;
+          (_) -> Extended
+      end, Props).
 
 handle_delete_trustedCA(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),

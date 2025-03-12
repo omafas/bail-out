@@ -23,6 +23,7 @@
 
 -export([has_permission/2,
          is_internal/1,
+         is_anonymous/1,
          filter_accessible_buckets/3,
          extract_auth/1,
          extract_identity_from_cert/1,
@@ -748,6 +749,10 @@ extract_identity_from_cert(CertDer) ->
                     Type
             end
     end.
+
+-spec is_anonymous(#authn_res{}) -> boolean().
+is_anonymous(#authn_res{identity = {"", anonymous}}) -> true;
+is_anonymous(#authn_res{}) -> false.
 
 -spec check_permission(#authn_res{}, rbac_permission() | no_check | local) ->
                               auth_failure | forbidden | allowed.
