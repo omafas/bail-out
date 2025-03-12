@@ -921,12 +921,15 @@ validate_otp_certs(client_cert, ChainPem, PKeyPem, PassphraseFun) ->
         false -> ok
     end;
 validate_otp_certs(node_cert, ChainPem, PKeyPem, PassphraseFun) ->
-    case cb_dist:external_encryption() of
+    Node = node(),
+    %% It doesn't make much sense to verify OTP connectivity for the case
+    %% when node is cb.local
+    NodenameSet = not misc:is_cb_local_nodename(Node),
+    case cb_dist:external_encryption() andalso NodenameSet of
         true ->
             with_test_otp_server(
               fun (Port) ->
                   Opts = [{port, Port}],
-                  Node = node(),
                   case ns_cluster:verify_otp_connectivity(Node, Opts) of
                       {ok, _} -> ok;
                       {error, _, {_Error, Msg}} ->
