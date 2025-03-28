@@ -248,7 +248,23 @@ ssl_minimum_protocol(Service) ->
     ssl_minimum_protocol(Service, ns_config:latest()).
 
 ssl_minimum_protocol(Service, Config) ->
-    get_sec_setting(Service, ssl_minimum_protocol, Config, 'tlsv1.2').
+    MinVsn = 'tlsv1.2',
+    Version = get_sec_setting(Service, ssl_minimum_protocol, Config, MinVsn),
+    case Service of
+        kv ->
+            SupportedVersions = memcached_config_mgr:supported_tls_versions(),
+            case lists:member(Version, SupportedVersions) of
+                true ->
+                    Version;
+                false ->
+                    ?log_warning("Unsupported TLS version ~p for service ~p. "
+                                 "Using default ~p",
+                                 [Version, Service, MinVsn]),
+                    MinVsn
+            end;
+        _ ->
+            Version
+    end.
 
 internal_ssl_minimum_protocol() ->
     internal_ssl_minimum_protocol(ns_config:latest()).

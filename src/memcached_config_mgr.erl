@@ -16,7 +16,8 @@
 
 %% API
 -export([start_link/0, trigger_tls_config_push/0,
-         memcached_port_pid/0]).
+         memcached_port_pid/0,
+         supported_tls_versions/0]).
 
 %% referenced from ns_config_default
 -export([get_minidump_dir/2, get_interfaces/2,
@@ -32,6 +33,15 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
+
+-define(TLS_VERSIONS, #{
+                        'tlsv1.2' => <<"TLS 1.2">>,
+                        'tlsv1.3' => <<"TLS 1.3">>
+                       }).
+
+-spec supported_tls_versions() -> [atom()].
+supported_tls_versions() ->
+    maps:keys(?TLS_VERSIONS).
 
 -record(state, {
           port_pid :: pid(),
@@ -149,6 +159,7 @@ is_notable_tls_config_key(ssl_minimum_protocol) -> true;
 is_notable_tls_config_key(client_cert_auth) -> true;
 is_notable_tls_config_key(cipher_suites) -> true;
 is_notable_tls_config_key(honor_cipher_order) -> true;
+is_notable_tls_config_key({security_settings, kv}) -> true;
 is_notable_tls_config_key(_) -> false.
 
 memcached_port_pid() ->
@@ -503,12 +514,8 @@ tls_config(Params) ->
     ChainPath =
         iolist_to_binary(ns_ssl_services_setup:chain_file_path(node_cert)),
     CAPath = iolist_to_binary(ns_ssl_services_setup:ca_file_path()),
-    MinVsn = case ns_ssl_services_setup:ssl_minimum_protocol(kv) of
-                 'tlsv1' -> <<"TLS 1">>;
-                 'tlsv1.1' -> <<"TLS 1.1">>;
-                 'tlsv1.2' -> <<"TLS 1.2">>;
-                 'tlsv1.3' -> <<"TLS 1.3">>
-             end,
+    MinVsn = maps:get(ns_ssl_services_setup:ssl_minimum_protocol(kv),
+                      ?TLS_VERSIONS),
     Ciphers = get_ssl_cipher_list([], Params),
     CipherOrder = ns_ssl_services_setup:honor_cipher_order(kv),
     Auth = proplists:get_value(state, ns_ssl_services_setup:client_cert_auth()),
