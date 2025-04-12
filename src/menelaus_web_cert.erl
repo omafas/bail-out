@@ -155,7 +155,7 @@ assert_old_CAs() ->
     end.
 
 handle_cluster_certificate_simple(Req) ->
-    Cert = lists:last(ns_server_cert:trusted_CAs(pem)),
+    Cert = hd(ns_server_cert:trusted_CAs(pem)),
     menelaus_util:reply_ok(Req, "text/plain", Cert).
 
 format_time(UTCSeconds) ->
@@ -253,7 +253,7 @@ handle_cluster_certificate_extended(Req) ->
               ({not_before, _}) -> false;
               ({id, _}) -> false;
               ({K, V}) -> {true, {K, V}}
-          end, lists:last(ns_server_cert:trusted_CAs(props))),
+          end, hd(ns_server_cert:trusted_CAs(props))),
     CertJson = jsonify_cert_props(CertProps),
     Warnings = [{translate_warning(W)} || W <- ns_server_cert:get_warnings()],
     menelaus_util:reply_json(Req, {[{cert, CertJson}, {warnings, Warnings}]}).
