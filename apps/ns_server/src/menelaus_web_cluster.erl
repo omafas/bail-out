@@ -947,30 +947,33 @@ validate_node(NodeArg) ->
             {ok, Node}
     end.
 
+validate_nodes(Nodes) ->
+    {Good, Bad} = lists:foldl(
+                    fun (Val, {G, B}) ->
+                            case validate_node(Val) of
+                                {ok, Node} -> {[Node | G], B};
+                                _ -> {G, [Val | B]}
+                            end
+                    end, {[], []}, Nodes),
+    case Bad of
+        [] ->
+            %% Remove duplicates.
+            {ok, lists:usort(Good)};
+        _ ->
+            {error, Bad}
+    end.
+
 parse_graceful_failover_args(Req) ->
     Params = mochiweb_request:parse_post(Req),
     parse_otp_nodes(Params).
 
 parse_otp_nodes(Params) ->
-    OtpNodes = proplists:lookup_all("otpNode", Params),
-    {Good, Bad} = lists:foldl(
-                    fun ({_Key, Val}, {G, B}) ->
-                            case validate_node(Val) of
-                                {ok, Node} -> {[Node | G], B};
-                                _ -> {G, [Val | B]}
-                            end
-                    end, {[], []}, OtpNodes),
-    case Bad of
-        [] ->
-            case Good of
-                [] ->
-                    {error, "No server specified."};
-                _ ->
-                    %% Remove duplicates.
-                    {ok, lists:usort(Good)}
-            end;
-        _ ->
-            {error, io_lib:format("Unknown server given: ~p", [Bad])}
+    OtpNodes = proplists:get_all_values("otpNode", Params),
+    case validate_nodes(OtpNodes) of
+        {ok, []} -> {error, "No server specified."};
+        {ok, Nodes} -> {ok, Nodes};
+        {error, BadNodes} ->
+            {error, io_lib:format("Unknown server given ~p", [BadNodes])}
     end.
 
 parse_hard_failover_args(Req) ->
@@ -981,6 +984,56 @@ parse_hard_failover_args(Req) ->
             {ok, Nodes, AllowUnsafe =:= "true"};
         Error ->
             Error
+    end.
+
+%% These parameters are used to determine if the state of the clsuter is the
+%% same as the caller expects it to be before we perform some topology changing
+%% operation.
+parse_expected_topology_params(Req, IsMorpheus) ->
+    Params = mochiweb_request:parse_post(Req),
+    ActiveNodes =
+        parse_list_param("activeNodes", Params, undefined),
+    InactiveFailedNodes =
+        parse_list_param("inactiveFailedNodes", Params, undefined),
+    InactiveAddedNodes =
+        parse_list_param("inactiveAddedNodes", Params, undefined),
+
+    case ActiveNodes =:= undefined andalso
+        InactiveFailedNodes =:= undefined andalso
+        InactiveAddedNodes =:= undefined of
+        true -> #{};
+        false ->
+            case IsMorpheus of
+                false ->
+                    {error,
+                     "Cannot use expected topology in pre-Morpheus cluster"};
+                true ->
+                    validate_expected_topology_nodes(ActiveNodes,
+                                                     InactiveFailedNodes,
+                                                     InactiveAddedNodes)
+            end
+    end.
+
+validate_expected_topology_nodes(
+  ActiveNodes, InactiveFailedNodes, InactiveAddedNodes) ->
+    {[Active, InactiveFailed, InactiveAdded], BadNodes} =
+        lists:mapfoldl(
+          fun(undefined, ErrorAcc) -> {[], ErrorAcc};
+             (Nodes, ErrorAcc) ->
+                  case validate_nodes(Nodes) of
+                      {error, BadNodes} -> {Nodes, ErrorAcc ++ BadNodes};
+                      {ok, ValidatedNodes} -> {ValidatedNodes, ErrorAcc}
+                  end
+          end, [], [ActiveNodes, InactiveFailedNodes, InactiveAddedNodes]),
+
+    case BadNodes of
+        [] ->
+            #{expected_topology =>
+                  #{active => Active,
+                    inactiveFailed => InactiveFailed,
+                    inactiveAdded => InactiveAdded}};
+        _ ->
+            {error, io_lib:format("Unknown servers given: ~p", [BadNodes])}
     end.
 
 -spec busy_reply(string(), ns_orchestrator:busy() | term()) ->
@@ -1059,6 +1112,8 @@ failover_reply({aborted, Map}) ->
                      end
              end, [], Map),
     {503, lists:flatten(Errs)};
+failover_reply(expected_topology_mismatch) ->
+    {400, "Expected topology mismatch"};
 failover_reply(Other) ->
     case busy_reply("failover", Other) of
         undefined ->
@@ -1087,9 +1142,26 @@ handle_start_hard_failover(false, Req) ->
 do_handle_start_hard_failover(Req, FailoverBody) ->
     case parse_hard_failover_args(Req) of
         {ok, Nodes, AllowUnsafe} ->
-            failover_audit_and_reply(
-              FailoverBody(Nodes, AllowUnsafe),
-              Req, Nodes, hard);
+            IsMorpheus = cluster_compat_mode:is_cluster_morpheus(),
+            case parse_expected_topology_params(Req, IsMorpheus) of
+                {error, Error} ->
+                    reply_text(Req, Error, 400);
+                Opts ->
+                    case IsMorpheus of
+                        false ->
+                            failover_audit_and_reply(
+                              FailoverBody(Nodes, AllowUnsafe),
+                              Req, Nodes, hard);
+                        true ->
+                            %% We will always use the new orchestrator API
+                            %% post-Morpheus such that we can eventually remove
+                            %% the old non-map API.
+                            failover_audit_and_reply(
+                              FailoverBody(Nodes, Opts#{allow_unsafe =>
+                                                            AllowUnsafe}),
+                              Req, Nodes, hard)
+                    end
+            end;
         {error, ErrorMsg} ->
             reply_text(Req, ErrorMsg, 400)
     end.
