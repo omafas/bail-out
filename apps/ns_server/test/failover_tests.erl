@@ -83,7 +83,9 @@ manual_failover_test_() ->
              {"Manual failover",
               fun manual_failover_t/2},
              {"Manual failover data loss due to stale config",
-              fun manual_failover_post_network_partition_stale_config/2}],
+              fun manual_failover_post_network_partition_stale_config/2},
+             {"Manual failover incorrect expected topology",
+              fun manual_failover_incorrect_expected_topology/2}],
 
     %% foreachx here to let us pass parameters to setup.
     {foreachx,
@@ -341,6 +343,84 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
     %% We should have gathered a quorum for the failover.
     ?assert(meck:called(leader_activities, run_activity,
                         [failover, majority, '_', '_'])).
+
+get_failover_complete_count() ->
+    Counters = chronicle_compat:get(counters, #{required => true}),
+    case proplists:get_value(failover_complete, Counters) of
+        undefined ->
+            0;
+        {_, CompletedCount} ->
+            CompletedCount
+    end.
+
+manual_failover_incorrect_expected_topology(_SetupConfig, _R) ->
+    ?log_info("Starting manual failover incorrect expected topology test"),
+    %% Need to trap the exit of the failover processes to avoid nuking the test
+    %% process when it exits.
+    erlang:process_flag(trap_exit, true),
+
+    %% Cannot failover with incorrect topologies, missing some nodes
+    ?assertEqual(
+       expected_topology_mismatch,
+       failover:start(['a'], #{expected_topology => #{active => ['a']}})),
+
+    %% And now we have the correct active nodes, but did not specify the other
+    %% fields. The REST API will default these to an empty list if any one
+    %% parameter is set, but we should still test this behaviour.
+    ?assertEqual(
+       expected_topology_mismatch,
+       failover:start(['a'],
+                      #{expected_topology => #{active => ['a', 'b', 'c']}})),
+
+    %% Invalid node in addition to the others
+    ?assertEqual(
+       expected_topology_mismatch,
+       failover:start(['a'],
+                      #{expected_topology =>
+                            #{active => ['a', 'b', 'c', 'not_valid'],
+                              inactiveFailed => [],
+                              inactiveAdded => []}})),
+
+    %% And now we can fail over.
+    {ok, FailoverPid} =
+        failover:start(['a'],
+                       #{expected_topology => #{active => ['a', 'b', 'c'],
+                                                inactiveFailed => [],
+                                                inactiveAdded => []}}),
+
+    %% Failover runs in a different process, wait for it to stop
+    misc:wait_for_process(FailoverPid, 1000),
+
+    ?assertEqual(1, get_failover_complete_count()),
+
+    %% Now, this is where it matters. Can we prevent the failover of b when we
+    %% think that a is still active?
+    ?assertEqual(
+       expected_topology_mismatch,
+       failover:start(['b'], #{expected_topology => #{active => ['a', 'b', 'c'],
+                                                      inactiveFailed => [],
+                                                      inactiveAdded => []}})),
+
+    %% Sanity check for inactiveAdded too
+    ?assertEqual(
+       expected_topology_mismatch,
+       failover:start(['b'],
+                      #{expected_topology => #{active => ['b', 'c'],
+                                               inactiveFailed => ['a'],
+                                               inactiveAdded => ['d']}})),
+
+    %% And we can continue to fail over another node.
+    {ok, FailoverPid2} =
+        failover:start(['b'], #{expected_topology => #{active => ['b', 'c'],
+                                                       inactiveFailed => ['a'],
+                                                       inactiveAdded => []}}),
+
+    %% Failover runs in a different process, wait for it to stop
+    misc:wait_for_process(FailoverPid2, 1000),
+
+    ?assertEqual(2, get_failover_complete_count()),
+
+    erlang:process_flag(trap_exit, false).
 
 add_nodes_to_setup_config(
     #{healthy_nodes := HealthyNodes,

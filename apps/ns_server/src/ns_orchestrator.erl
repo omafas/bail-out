@@ -289,11 +289,7 @@ stop_resume_bucket(Bucket) ->
           stopped_by_user |
           in_buckets_shutdown |
           {incompatible_with_previous, [atom()]} |
-          %% the following is needed just to trick the dialyzer;
-          %% otherwise it wouldn't let the callers cover what it
-          %% believes to be an impossible return value if all
-          %% other options are also covered
-          any().
+          expected_topology_mismatch.
 failover(Nodes, AllowUnsafe) when is_boolean(AllowUnsafe) ->
     %% Pre-Morpheus compat function clause.
     failover(Nodes, #{allow_unsafe => AllowUnsafe});
@@ -312,7 +308,8 @@ failover(Nodes, Options) when is_map(Options) ->
           unknown_node |
           inactive_node |
           in_buckets_shutdown |
-          {incompatible_with_previous, [atom()]}.
+          {incompatible_with_previous, [atom()]} |
+          expected_topology_mismatch.
 start_failover(Nodes, AllowUnsafe) when is_boolean(AllowUnsafe) ->
     %% Pre-Morpheus compat function clause.
     start_failover(Nodes, #{allow_unsafe => AllowUnsafe});
@@ -505,7 +502,8 @@ retry_rebalance(graceful_failover, Params, Id, Chk) ->
           inactive_node |
           last_node |
           {last_node_for_bucket, list()} |
-          {config_sync_failed, any()}.
+          {config_sync_failed, any()} |
+          expected_topology_mismatch.
 start_graceful_failover(Nodes) ->
     call({start_graceful_failover, Nodes}).
 
