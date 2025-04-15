@@ -259,8 +259,9 @@ def assert_cert_regenerated(node, prev_cert_before, is_client=False):
 
 
 def regenerate_certs(cluster, force_reset_ca=True, drop_uploaded_certs=True):
-    params = {'forceResetCACertificate': force_reset_ca,
-              'dropUploadedCertificates': drop_uploaded_certs}
+    params = {'forceResetCACertificate': 'true' if force_reset_ca else 'false',
+              'dropUploadedCertificates': 'true' if drop_uploaded_certs
+                                                 else 'false'}
     r = testlib.post_succ(cluster, '/controller/regenerateCertificate',
                           params=params)
     return r.text

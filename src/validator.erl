@@ -477,10 +477,7 @@ string(Name, Trim, State) ->
 
 boolean(Name, State) ->
     functools:chain(State,
-                    [convert(Name, fun (S) when is_atom(S) -> S; %% from json
-                                       (S) -> string:lowercase(S)
-                                   end, _),
-                     one_of(Name, [true, false], _),
+                    [one_of(Name, [true, false], _),
                      convert(Name, fun simple_term_to_atom/1, _)]).
 
 integer(Name, State) ->
