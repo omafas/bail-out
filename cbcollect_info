@@ -533,25 +533,32 @@ class RedactStream(Writer):
     _salt_value: str
     _filename: str
     _wraparound: List[str] = []
+    _skip_extension_check = False
 
     """
     The redaction stream - redacts lines of text that pass through it.
     """
 
-    def __init__(self, inner: WriterType, salt_value: str, filename: str):
+    def __init__(self, inner: WriterType, salt_value: str, filename: str,
+                 skip_extension_check=False):
         super().__init__()
         self._inner = inner
         self._salt_value = salt_value
         self._filename = filename
         self._wraparound = []
+        self._skip_extension_check = skip_extension_check
 
     def write(self, buf: ReadableBuffer) -> int:
         """
         Overridden write function of Writer. Decide whether or not to apply the
         redaction. Certain filetypes are categorically skipped (.gz, .dmp).
+
+        Note: the RedactStream can also have it skip this "extension check"
+        since it clashes with the FFDC collection task.
         """
         # skip binary files (don't redact)
-        if self._filename.endswith(BINARY_FILE_EXTS):
+        if not self._skip_extension_check \
+           and self._filename.endswith(BINARY_FILE_EXTS):
             return self.write_passthrough(buf)
 
         # normal redaction path
@@ -608,8 +615,11 @@ class RedactStream(Writer):
 
     def clear_wraparound(self):
         if self._wraparound:
-            self._inner.write(self.process_line(''.join(self._wraparound)))
+            write_readable_buffer(self.process_line(''.join(self._wraparound)),
+                                  self._inner)
             self._wraparound.clear()
+            if "clear_wraparound" in dir(self._inner):
+                self._inner.clear_wraparound()
 
     def flush(self):
         return self._inner.flush()
@@ -1018,7 +1028,8 @@ class CollectFFDCFileTask(CollectFileTask):
         if file_content:
             # only redact non-binary content (binary content should only be nested gzip)
             if self.redact and not file_content.startswith(b'\x1f\x8b'):
-                rs = RedactStream(outstream, self.salt_value, self.output_file)
+                rs = RedactStream(outstream, self.salt_value, self.output_file,
+                                  skip_extension_check=True)
                 while file_content:
                     rs.write(file_content)
                     file_content = src.read(READ_SIZE)
