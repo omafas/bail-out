@@ -105,7 +105,11 @@ manual_failover_test_setup(SetupConfig) ->
     setup_node_config(maps:get(nodes, SetupConfig)),
     setup_bucket_config(maps:get(buckets, SetupConfig)),
 
-    meck:new(leader_activities, [passthrough]),
+    meck:new(leader_activities),
+    meck:expect(leader_activities, run_activity,
+                fun(_Name, _Quorum, Body) ->
+                        Body()
+                end),
     meck:expect(leader_activities, run_activity,
                 fun(_Name, _Quorum, Body, _Opts) ->
                         Body()
@@ -153,7 +157,7 @@ manual_failover_test_setup(SetupConfig) ->
     gen_server:cast(LeaderRegistryPid, {new_leader, node()}),
 
     %% Janitor_agent mecks required to perform a full failover (with map).
-    meck:new(janitor_agent),
+    meck:new(janitor_agent, [passthrough]),
     meck:expect(janitor_agent, query_vbuckets,
                 fun(_,_,_,_) ->
                         %% We don't need to return anything useful for this
@@ -350,14 +354,17 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
     ?assert(meck:called(leader_activities, run_activity,
                         [failover, majority, '_', '_'])).
 
-get_failover_complete_count() ->
+get_counter(Name) ->
     Counters = chronicle_compat:get(counters, #{required => true}),
-    case proplists:get_value(failover_complete, Counters) of
+    case proplists:get_value(Name, Counters) of
         undefined ->
             0;
-        {_, CompletedCount} ->
-            CompletedCount
+        {_, Value} ->
+            Value
     end.
+
+get_failover_complete_count() ->
+    get_counter(failover_complete).
 
 manual_failover_incorrect_expected_topology(_SetupConfig, _R) ->
     ?log_info("Starting manual failover incorrect expected topology test"),
@@ -809,3 +816,106 @@ auto_failover_index_safety_check_failure_t(_SetupConfig, PidMap) ->
 
     %% We should have sent an email alert (i.e. called log_unsafe_node).
     ?assert(meck:called(ns_email_alert, alert, [auto_failover_node, '_', '_'])).
+
+graceful_failover_test_setup(SetupConfig) ->
+    Pids = auto_failover_test_setup(SetupConfig),
+
+    fake_chronicle_kv:update_snapshot(
+      server_groups,
+      [[{uuid, <<"0">>},
+        {name, <<"Group 1">>},
+        {nodes, ['a', 'b', 'c']}]]),
+
+    %% Graceful failover does a rebalance so we need to mock many of the calls
+    %% made during that.
+    rebalance_test_mock_setup(),
+
+    Pids.
+
+graceful_failover_test_teardown(Config, PidMap) ->
+    rebalance_test_mock_teardown(),
+    auto_failover_test_teardown(Config, PidMap).
+
+rebalance_test_mock_setup() ->
+    fake_ns_config:update_snapshot(rebalance_out_delay_seconds, 0),
+
+    meck:expect(chronicle_compat, push, fun(_) -> ok end),
+
+    %% Not worth mocking the component parts to make this work, we should not
+    %% have any quirks anyways.
+    meck:new(rebalance_quirks, [passthrough]),
+    meck:expect(rebalance_quirks, get_quirks, fun(_,_) -> [] end),
+
+    meck:expect(janitor_agent, prepare_nodes_for_rebalance,
+                fun(_,_,_) ->
+                        ok
+                end),
+
+    meck:expect(janitor_agent, get_mass_dcp_docs_estimate,
+                fun (_, _, VBs) ->
+                        {ok, lists:duplicate(length(VBs), {0, 0, random_state})}
+                end),
+
+    meck:expect(janitor_agent, inhibit_view_compaction,
+                fun (_, _, _) -> nack end),
+
+    meck:expect(janitor_agent, uninhibit_view_compaction,
+                fun (_, _, _, _) -> ok end),
+
+    meck:expect(janitor_agent, bulk_set_vbucket_state,
+                fun (_, _, _, _) -> ok end),
+
+    meck:expect(janitor_agent, initiate_indexing,
+                fun (_, _, _, _, _) -> ok end),
+
+    meck:expect(janitor_agent, wait_dcp_data_move,
+                fun (_, _, _, _, _) -> ok end),
+
+    meck:expect(janitor_agent, get_vbucket_high_seqno,
+                fun (_, _, _, _) -> 0 end),
+
+    meck:expect(janitor_agent, wait_seqno_persisted,
+                fun (_, _, _, _, _) -> ok end),
+
+    meck:expect(janitor_agent, set_vbucket_state,
+                fun (_, _, _, _, _, _, _, _) -> ok end),
+
+    meck:expect(janitor_agent, wait_index_updated,
+                fun (_, _, _, _, _) -> ok end),
+
+    meck:expect(janitor_agent, dcp_takeover,
+                fun (_, _, _, _, _) -> ok end).
+
+rebalance_test_mock_teardown() ->
+    meck:unload(rebalance_quirks).
+
+graceful_failover_test_() ->
+    Nodes = #{
+              'a' => {active, [kv]},
+              'b' => {active, [kv]},
+              'c' => {active, [kv]}
+             },
+    SetupArgs =
+        #{nodes => Nodes,
+          buckets => ["default"]},
+
+    Tests = [
+             {"Graceful failover", fun graceful_failover_t/2}
+            ],
+
+    %% foreachx here to let us pass parameters to setup.
+    {foreachx,
+     fun graceful_failover_test_setup/1,
+     fun graceful_failover_test_teardown/2,
+     [{SetupArgs, fun(T, R) ->
+                          {Name, ?_test(TestFun(T, R))}
+                  end} || {Name, TestFun} <- Tests]}.
+
+graceful_failover_t(_SetupConfig, _PidMap) ->
+    ok = ns_orchestrator:start_graceful_failover(['a']),
+
+    poll_for_counter_value(graceful_failover_success, 1),
+
+    {ok, BucketConfig} = ns_bucket:get_bucket("default"),
+    Servers = ns_bucket:get_servers(BucketConfig),
+    ?assertNot(lists:member('a', Servers)).

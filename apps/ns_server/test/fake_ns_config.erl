@@ -176,7 +176,9 @@ meck_setup_getters() ->
 
 
     meck:expect(ns_config, search_node,
-                fun(Node, Snapshot, Key) ->
+                fun(Node, ?NS_CONFIG_LATEST_MARKER, Key) ->
+                        fetch_node(Node, get_ets_snapshot(), Key);
+                   (Node, Snapshot, Key) ->
                         fetch_node(Node, Snapshot, Key)
                 end),
 
