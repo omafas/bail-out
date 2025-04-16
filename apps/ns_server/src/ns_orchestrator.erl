@@ -89,6 +89,7 @@
          ensure_janitor_run/2,
          rebalance_type2text/1,
          start_graceful_failover/1,
+         start_graceful_failover/2,
          request_janitor_run/1,
          get_state/1,
          prepare_fusion_rebalance/1,
@@ -492,7 +493,22 @@ retry_rebalance(graceful_failover, Params, Id, Chk) ->
     call({maybe_retry_graceful_failover,
           proplists:get_value(nodes, Params), Id, Chk}).
 
+%% Pre-Morpheus compat function. start_graceful_failover/2 is the new function.
 -spec start_graceful_failover([node()]) ->
+          ok |
+          in_progress |
+          in_recovery |
+          non_kv_node |
+          not_graceful |
+          unknown_node |
+          inactive_node |
+          last_node |
+          {last_node_for_bucket, list()} |
+          {config_sync_failed, any()}.
+start_graceful_failover(Nodes) ->
+    call({start_graceful_failover, Nodes}).
+
+-spec start_graceful_failover([node()], map()) ->
           ok |
           in_progress |
           in_recovery |
@@ -504,8 +520,8 @@ retry_rebalance(graceful_failover, Params, Id, Chk) ->
           {last_node_for_bucket, list()} |
           {config_sync_failed, any()} |
           expected_topology_mismatch.
-start_graceful_failover(Nodes) ->
-    call({start_graceful_failover, Nodes}).
+start_graceful_failover(Nodes, Opts) ->
+    call({start_graceful_failover, Nodes, Opts}).
 
 -spec stop_rebalance() -> ok | not_rebalancing.
 stop_rebalance() ->
@@ -908,12 +924,15 @@ idle({try_autofailover, Nodes, #{down_nodes := DownNodes} = Options},
                                   Options#{allow_unsafe => false})
     end;
 idle({start_graceful_failover, Nodes}, From, _State) ->
+    %% calls from pre-morpheus nodes
+    idle({start_graceful_failover, Nodes, #{}}, From, _State);
+idle({start_graceful_failover, Nodes, Opts}, From, _State) ->
     auto_rebalance:cancel_any_pending_retry_async("graceful failover"),
     {keep_state_and_data,
      [{next_event, {call, From},
-       {start_graceful_failover, Nodes, couch_uuids:random(),
+       {start_graceful_failover, Nodes, Opts, couch_uuids:random(),
         get_graceful_fo_chk()}}]};
-idle({start_graceful_failover, Nodes, Id, RetryChk}, From, _State) ->
+idle({start_graceful_failover, Nodes, Opts, Id, RetryChk}, From, _State) ->
     ActiveNodes = ns_cluster_membership:active_nodes(),
     NodesInfo = [{active_nodes, ActiveNodes},
                  {failover_nodes, Nodes},
@@ -923,7 +942,7 @@ idle({start_graceful_failover, Nodes, Id, RetryChk}, From, _State) ->
     {ok, ObserverPid} = ns_rebalance_observer:start_link(
                           Services, NodesInfo, Type, Id),
 
-    case ns_rebalancer:start_link_graceful_failover(Nodes) of
+    case ns_rebalancer:start_link_graceful_failover(Nodes, Opts) of
         {ok, Pid} ->
             ale:info(?USER_LOGGER,
                      "Starting graceful failover of nodes ~p. "
@@ -1256,6 +1275,8 @@ rebalancing({start_rebalance, _Params}, From, _State) ->
              "Not rebalancing because rebalance is already in progress.~n"),
     {keep_state_and_data, [{reply, From, in_progress}]};
 rebalancing({start_graceful_failover, _}, From, _State) ->
+    {keep_state_and_data, [{reply, From, in_progress}]};
+rebalancing({start_graceful_failover, _Nodes, _Options}, From, _State) ->
     {keep_state_and_data, [{reply, From, in_progress}]};
 rebalancing({start_graceful_failover, _, _, _}, From, _State) ->
     {keep_state_and_data, [{reply, From, in_progress}]};

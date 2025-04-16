@@ -31,7 +31,7 @@
          bucket_needs_rebalance_with_details/3,
          eject_nodes/1,
          maybe_cleanup_old_buckets/1,
-         start_link_graceful_failover/1,
+         start_link_graceful_failover/2,
          to_human_readable_reason/1,
          check_test_condition/2,
          rebalance_topology_aware_services/3,
@@ -1300,10 +1300,11 @@ build_transitional_chain_test() ->
                                           [b, c])).
 -endif.
 
-start_link_graceful_failover(Nodes) ->
-    proc_lib:start_link(erlang, apply, [fun run_graceful_failover/1, [Nodes]]).
+start_link_graceful_failover(Nodes, Opts) ->
+    proc_lib:start_link(erlang, apply,
+                        [fun run_graceful_failover/2, [Nodes, Opts]]).
 
-run_graceful_failover(Nodes) ->
+run_graceful_failover(Nodes, _Opts) ->
     chronicle_compat:pull(),
 
     case failover:is_possible(Nodes, #{}) of
