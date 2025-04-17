@@ -72,7 +72,8 @@ supported_extra_setting_names() ->
      {threads, {int, 0, ?MAX_32BIT_UNSIGNED_INT}},
      {dcp_disconnect_when_stuck_timeout_seconds,
         {int, 0, ?MAX_32BIT_UNSIGNED_INT}},
-     {dcp_disconnect_when_stuck_name_regex, string}].
+     {dcp_disconnect_when_stuck_name_regex, string},
+     {not_locked_returns_tmpfail, bool}].
 
 parse_validate_node("self") ->
     parse_validate_node(atom_to_list(node()));
