@@ -67,6 +67,8 @@ params(membase, BucketName, BucketConfig, MemQuota, UUID) ->
       DriftAheadThreshold},
      {"hlc_drift_behind_threshold_us", [no_param, {reload, vbucket}],
       DriftBehindThreshold},
+     {"workload_pattern_default", [{reload, flush}],
+      ns_bucket:workload_pattern_default(BucketConfig)},
      {"item_eviction_policy", maybe_restart(),
       get_eviction_policy(true, BucketConfig)},
      {"ephemeral_full_policy", [{reload, flush}],

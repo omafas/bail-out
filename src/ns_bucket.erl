@@ -113,6 +113,7 @@
          get_num_vbuckets/0,
          get_num_vbuckets/1,
          get_max_buckets/0,
+         workload_pattern_default/1,
          uuid_key/1,
          uuid/2,
          uuids/0,
@@ -862,6 +863,9 @@ get_num_vbuckets() ->
 
 get_num_vbuckets(BucketConfig) ->
     proplists:get_value(num_vbuckets, BucketConfig, get_num_vbuckets()).
+
+workload_pattern_default(BucketConfig) ->
+    proplists:get_value(workload_pattern_default, BucketConfig).
 
 new_bucket_default_params(membase) ->
     [{type, membase},
@@ -1647,7 +1651,8 @@ extract_bucket_props(Props) ->
                         magma_seq_tree_data_blocksize,
                         history_retention_seconds,
                         history_retention_bytes,
-                        history_retention_collection_default]],
+                        history_retention_collection_default,
+                        workload_pattern_default]],
           X =/= false].
 
 build_threshold({Percentage, Size}) ->
