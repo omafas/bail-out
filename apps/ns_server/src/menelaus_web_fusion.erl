@@ -15,10 +15,49 @@
 -include_lib("ns_common.hrl").
 -include_lib("ns_common/include/cut.hrl").
 
--export([handle_prepare_rebalance/1,
+-export([handle_get_settings/1,
+         handle_post_settings/1,
+         handle_prepare_rebalance/1,
          handle_upload_mounted_volumes/1,
          handle_get_active_guest_volumes/1,
          handle_sync_log_store/1]).
+
+settings() ->
+    [{"logStoreURI", #{type => {uri, ["s3", "local"]},
+                       cfg_key => [log_store_uri]}},
+     {"enableSyncThresholdMB", #{type => {int, 100, 100 * 1024},
+                                 cfg_key => [enable_sync_threshold_mb]}}].
+
+handle_get_settings(Req) ->
+    menelaus_util:assert_is_enterprise(),
+    menelaus_util:assert_is_morpheus(),
+    case fusion_uploaders:get_config() of
+        not_found ->
+            menelaus_util:reply_not_found(Req);
+        Props ->
+            menelaus_web_settings2:handle_get(
+              [], settings(), undefined, Props, Req)
+    end.
+
+handle_post_settings(Req) ->
+    menelaus_util:assert_is_enterprise(),
+    menelaus_util:assert_is_morpheus(),
+    menelaus_web_settings2:handle_post(
+      fun ([], Req1) ->
+              validator:report_errors_for_one(
+                Req1, [{'_', "Nothing to update"}], 400);
+          (Params, Req1) ->
+              case fusion_uploaders:update_config(
+                     [{K, V} || {[K], V} <- Params]) of
+                  {ok, _} ->
+                      menelaus_util:reply_json(Req1, [], 200);
+                  log_store_uri_locked ->
+                      validator:report_errors_for_one(
+                        Req1,
+                        [{logStoreURI, "Cannot be updated after fusion was "
+                          "enabled at least once"}], 400)
+              end
+      end, [], settings(), undefined, Req).
 
 -define(JANITOR_TIMEOUT, ?get_timeout(sync_log_store_janitor, 5000)).
 -define(SYNC_TIMEOUT, ?get_timeout(sync_log_store_chronicle_sync, 60000)).

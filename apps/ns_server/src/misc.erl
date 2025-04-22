@@ -3807,6 +3807,14 @@ parse_url(URL, Options) ->
         throw:{error, _} = Error -> Error
     end.
 
+is_valid_uri(URI, Schemes) ->
+    case string:tokens(URI, "://") of
+        [Scheme | _] ->
+            lists:member(Scheme, Schemes);
+        _ ->
+            false
+    end.
+
 -spec datetime_to_unix_timestamp(calendar:datetime()) -> integer().
 datetime_to_unix_timestamp(DateTime) ->
     calendar:datetime_to_gregorian_seconds(DateTime) -
@@ -3885,6 +3893,14 @@ parse_url_test() ->
                            [{scheme_defaults, [{<<"ldaps">>, 636}]},
                             {scheme_validation_fun, SchemeValidation},
                             {return, string}])).
+is_valid_uri_test() ->
+    Schemes = ["s3", "az", "gs"],
+    ?assert(is_valid_uri("s3://bucket/object", Schemes)),
+    ?assert(is_valid_uri("az://container/blob", Schemes)),
+    ?assert(is_valid_uri("gs://bucket/object", Schemes)),
+    ?assertNot(is_valid_uri("http://couchbase.com", Schemes)),
+    ?assertNot(is_valid_uri("/tmp/dir/", Schemes)).
+
 -endif.
 
 %% Returns ok if all results in a list are ok,

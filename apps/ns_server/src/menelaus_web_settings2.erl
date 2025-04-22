@@ -115,6 +115,9 @@ type_spec(not_supported) ->
 type_spec({url, SupportedSchemes}) ->
     #{validators => [string, validator:url(_, SupportedSchemes, _)],
       formatter => string};
+type_spec({uri, SupportedSchemes}) ->
+    #{validators => [string, validator:uri(_, SupportedSchemes, _)],
+      formatter => string};
 type_spec(certificate) ->
     #{validators => [string, fun validate_cert/2],
       formatter => fun (undefined) -> ignore;

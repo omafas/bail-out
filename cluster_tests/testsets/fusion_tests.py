@@ -43,6 +43,8 @@ class FusionTests(testlib.BaseTestSet):
         self.cluster.rebalance(self.cluster.connected_nodes[1:], wait=True,
                                verbose=True)
         self.cluster.wait_nodes_up()
+        testlib.diag_eval(self.cluster,
+                          'chronicle_kv:delete(kv, fusion_config).')
 
     @staticmethod
     def requirements():
@@ -139,6 +141,37 @@ class FusionTests(testlib.BaseTestSet):
 
         for node in otp_nodes.values():
             assert node in volumes
+
+    def initial_configuration_test(self):
+        testlib.get_fail(self.cluster, '/settings/fusion', expected_code=404)
+        testlib.post_fail(self.cluster, '/settings/fusion', expected_code=400,
+                          json={}),
+        testlib.post_fail(self.cluster, '/settings/fusion', expected_code=400,
+                          json={'something': 'something'}),
+        testlib.post_fail(self.cluster, '/settings/fusion', expected_code=400,
+                          json={'logStoreURI': 'http://something'}),
+        testlib.post_succ(self.cluster, '/settings/fusion',
+                          json={'logStoreURI': 's3://something'}),
+        testlib.post_succ(self.cluster, '/settings/fusion',
+                          json={'logStoreURI': 's3://something/else'}),
+        resp = testlib.get_succ(self.cluster, '/settings/fusion')
+        config = resp.json()
+        assert config == {'logStoreURI': 's3://something/else',
+                          'enableSyncThresholdMB': 1024}
+        testlib.post_fail(self.cluster, '/settings/fusion', expected_code=400,
+                          json={'enableSyncThresholdMB': 'something'}),
+        testlib.post_fail(self.cluster, '/settings/fusion', expected_code=400,
+                          json={'enableSyncThresholdMB': 10}),
+        testlib.post_fail(self.cluster, '/settings/fusion', expected_code=400,
+                          json={'enableSyncThresholdMB': 200000}),
+        testlib.post_succ(self.cluster, '/settings/fusion',
+                          json={'logStoreURI': 's3://something',
+                                'enableSyncThresholdMB': 5000}),
+        resp = testlib.get_succ(self.cluster, '/settings/fusion')
+        config = resp.json()
+        assert config == {'logStoreURI': 's3://something',
+                          'enableSyncThresholdMB': 5000}
+
 
 def assert_json_error(json, field, prefix):
     assert isinstance(json, dict)

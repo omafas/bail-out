@@ -590,6 +590,9 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["settings", "analytics"] ->
                     {{[settings, analytics], read},
                      fun menelaus_web_analytics:handle_settings_get/1};
+                ["settings", "fusion"] ->
+                    {{[admin, fusion], read},
+                     fun menelaus_web_fusion:handle_get_settings/1};
                 ["fusion", "activeGuestVolumes"] ->
                     {{[pools], read},
                      fun menelaus_web_fusion:handle_get_active_guest_volumes/1};
@@ -1122,6 +1125,9 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["settings", "analytics"] ->
                     {{[settings, analytics], write},
                      fun menelaus_web_analytics:handle_settings_post/1};
+                ["settings", "fusion"] ->
+                    {{[admin, fusion], write},
+                     fun menelaus_web_fusion:handle_post_settings/1};
                 ["_cbauth"] ->
                     {no_check, fun menelaus_cbauth:handle_cbauth_post/1};
                 ["_cbauth", "extractUserFromCert"] ->

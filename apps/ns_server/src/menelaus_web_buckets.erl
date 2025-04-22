@@ -1817,24 +1817,7 @@ validate_path_or_uri(Value, Param, ConfigKey) ->
     end.
 
 is_valid_cloud_uri(URI) ->
-    is_valid_uri(URI, ["s3", "az", "gs"]).
-
-is_valid_uri(URI, Schemes) ->
-    case string:tokens(URI, "://") of
-        [Scheme | _] ->
-            lists:member(Scheme, Schemes);
-        _ ->
-            false
-    end.
-
--ifdef(TEST).
-is_valid_uri_test() ->
-        ?assert(is_valid_cloud_uri("s3://bucket/object")),
-        ?assert(is_valid_cloud_uri("az://container/blob")),
-        ?assert(is_valid_cloud_uri("gs://bucket/object")),
-        ?assertNot(is_valid_cloud_uri("http://couchbase.com")),
-        ?assertNot(is_valid_cloud_uri("/tmp/dir/")).
--endif.
+    misc:is_valid_uri(URI, ["s3", "az", "gs"]).
 
 is_writable_dir(Dir) ->
     case misc:is_absolute_path(Dir) of
@@ -3593,7 +3576,7 @@ parse_validate_fusion_logstore_uri(
                 undefined ->
                     ignore;
                 Value ->
-                    case is_valid_uri(Value, ["s3", "local"]) of
+                    case misc:is_valid_uri(Value, ["s3", "local"]) of
                         true ->
                             {ok, magma_fusion_logstore_uri, Value};
                         false ->

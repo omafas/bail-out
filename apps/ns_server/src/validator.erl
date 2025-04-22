@@ -71,6 +71,7 @@
          is_json/1,
          extract_internal/3,
          url/3,
+         uri/3,
          regex/2,
          mutually_exclusive/3,
          non_empty_string/2,
@@ -927,6 +928,17 @@ url(Name, Schemes, State) ->
               {ok, _} -> ok;
               {error, _} -> {error, "Invalid URL"}
           end
+      end, Name, State).
+
+uri(Name, Schemes, State) ->
+    validate(
+      fun (Str) ->
+              case misc:is_valid_uri(Str, Schemes) of
+                  true ->
+                      ok;
+                  false ->
+                      {error, "Invalid URI"}
+              end
       end, Name, State).
 
 regex(Name, State) ->

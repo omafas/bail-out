@@ -22,7 +22,9 @@
          build_initial/1,
          get_moves/1,
          get_current/1,
-         fail_nodes/2]).
+         fail_nodes/2,
+         get_config/0,
+         update_config/1]).
 
 %% incremented starting from 1 with each uploader change
 %% The purpose of Term is to help
@@ -164,3 +166,45 @@ fail_nodes(Uploaders, FailedNodes) ->
          false ->
              {N, C}
      end || {N, C} <- Uploaders].
+
+config_key() ->
+    fusion_config.
+
+default_config() ->
+    [{enable_sync_threshold_mb, 1024},
+     {state, disabled},
+     {log_store_uri_locked, false}].
+
+-spec get_config() -> proplists:proplist() | not_found.
+get_config() ->
+    case chronicle_kv:get(kv, config_key()) of
+        {ok, {Config, _}} ->
+            Config;
+        {error, not_found} ->
+            not_found
+    end.
+
+-spec update_config(proplists:proplist()) ->
+          {ok, chronicle:revision()} | log_store_uri_locked.
+update_config(Params) ->
+    chronicle_kv:transaction(
+      kv, [config_key()],
+      fun (Snapshot) ->
+              Config =
+                  case maps:find(config_key(), Snapshot) of
+                      error ->
+                          default_config();
+                      {ok, {V, _R}} ->
+                          V
+                  end,
+              URI = proplists:get_value(log_store_uri, Params),
+              case proplists:get_bool(log_store_uri_locked, Config) andalso
+                  URI =/= undefined andalso
+                  URI =/= proplists:get_value(log_store_uri, Config) of
+                  true ->
+                      {abort, log_store_uri_locked};
+                  false ->
+                      {commit, [{set, config_key(),
+                                 misc:update_proplist(Config, Params)}]}
+              end
+      end).
