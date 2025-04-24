@@ -24,6 +24,7 @@
          get_current/1,
          fail_nodes/2,
          get_config/0,
+         get_status/0,
          update_config/1]).
 
 %% incremented starting from 1 with each uploader change
@@ -36,6 +37,8 @@
 -type move() :: same | uploader().
 -type moves() :: [move()].
 -type fast_forward_info() :: {moves(), uploaders()}.
+-type state() ::
+        disabled | disabling | enabled | enabling | stopped | stopping.
 
 -export_type([fast_forward_info/0, uploaders/0]).
 
@@ -183,6 +186,18 @@ get_config() ->
         {error, not_found} ->
             not_found
     end.
+
+get_config_with_default() ->
+    case get_config() of
+        not_found ->
+            default_config();
+        Config ->
+            Config
+    end.
+
+-spec get_status() -> [{state, state()}].
+get_status() ->
+    [{state, proplists:get_value(state, get_config_with_default())}].
 
 -spec update_config(proplists:proplist()) ->
           {ok, chronicle:revision()} | log_store_uri_locked.

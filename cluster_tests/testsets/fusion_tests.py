@@ -52,6 +52,12 @@ class FusionTests(testlib.BaseTestSet):
                                     min_num_nodes=2, num_connected=1,
                                     num_vbuckets=16, buckets=[])]
 
+    def assert_state(self, expected):
+        resp = testlib.get_succ(self.cluster, '/fusion/status')
+        status = resp.json()
+        assert isinstance(status, dict)
+        assert status['state'] == expected
+
     def empty_bucket_1_replica_smoke_test(self):
         self.empty_bucket_smoke_test_code(1, 16)
 
@@ -59,6 +65,7 @@ class FusionTests(testlib.BaseTestSet):
         self.empty_bucket_smoke_test_code(0, 8)
 
     def empty_bucket_smoke_test_code(self, num_replicas, expected_num_volumes):
+        self.assert_state('disabled')
         second_node = self.cluster.spare_node()
 
         self.cluster.create_bucket(
@@ -143,6 +150,7 @@ class FusionTests(testlib.BaseTestSet):
             assert node in volumes
 
     def initial_configuration_test(self):
+        self.assert_state('disabled')
         testlib.get_fail(self.cluster, '/settings/fusion', expected_code=404)
         testlib.post_fail(self.cluster, '/settings/fusion', expected_code=400,
                           json={}),
@@ -172,6 +180,7 @@ class FusionTests(testlib.BaseTestSet):
         assert config == {'logStoreURI': 's3://something',
                           'enableSyncThresholdMB': 5000}
 
+        self.assert_state('disabled')
 
 def assert_json_error(json, field, prefix):
     assert isinstance(json, dict)

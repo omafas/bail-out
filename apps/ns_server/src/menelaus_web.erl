@@ -593,6 +593,9 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["settings", "fusion"] ->
                     {{[admin, fusion], read},
                      fun menelaus_web_fusion:handle_get_settings/1};
+                ["fusion", "status"] ->
+                    {{[admin, fusion], read},
+                     fun menelaus_web_fusion:handle_get_status/1};
                 ["fusion", "activeGuestVolumes"] ->
                     {{[pools], read},
                      fun menelaus_web_fusion:handle_get_active_guest_volumes/1};

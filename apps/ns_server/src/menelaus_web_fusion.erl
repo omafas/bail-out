@@ -17,6 +17,7 @@
 
 -export([handle_get_settings/1,
          handle_post_settings/1,
+         handle_get_status/1,
          handle_prepare_rebalance/1,
          handle_upload_mounted_volumes/1,
          handle_get_active_guest_volumes/1,
@@ -58,6 +59,11 @@ handle_post_settings(Req) ->
                           "enabled at least once"}], 400)
               end
       end, [], settings(), undefined, Req).
+
+handle_get_status(Req) ->
+    menelaus_util:assert_is_enterprise(),
+    menelaus_util:assert_is_morpheus(),
+    menelaus_util:reply_json(Req, {fusion_uploaders:get_status()}, 200).
 
 -define(JANITOR_TIMEOUT, ?get_timeout(sync_log_store_janitor, 5000)).
 -define(SYNC_TIMEOUT, ?get_timeout(sync_log_store_chronicle_sync, 60000)).
