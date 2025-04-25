@@ -31,7 +31,17 @@ server(Label) ->
     list_to_atom(atom_to_list(?MODULE) ++ "-" ++ Label).
 
 start_monitor(Label, Version, Pid, Params) ->
-    gen_server:start_monitor({local, server(Label)}, ?MODULE,
+    ServerName = server(Label),
+    case whereis(ServerName) of
+        undefined ->
+            ok;
+        ExistingPid ->
+            erlang:exit(ExistingPid, new_instance_created),
+            ?log_warning("Waiting for existing ~p worker ~p to terminate",
+                         [Label, ExistingPid]),
+            misc:wait_for_process(ExistingPid, infinity)
+    end,
+    gen_server:start_monitor({local, ServerName}, ?MODULE,
                              [Label, Version, Pid, Params], []).
 
 notify(Pid, Info) ->
