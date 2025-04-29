@@ -27,6 +27,7 @@
 -define(GZIP_COMPRESSION, 3).
 -define(ZSTD_COMPRESSION, 4).
 -define(BZIP2_COMPRESSION, 5).
+-define(GZIP_FORMAT, 16#10).
 
 -export([%% Encryption/decryption functions:
          encrypt/3,
@@ -89,7 +90,7 @@
                           iv_atomic_counter :: atomics:atomics_ref() ,
                           offset :: non_neg_integer(),
                           compression_state :: undefined |
-                                               {zlib, none | sync | full,
+                                               {deflate, none | sync | full,
                                                 zlib:zstream()}}).
 
 -record(file_decr_state, {vsn :: non_neg_integer(),
@@ -97,15 +98,16 @@
                           key :: cb_deks:dek(),
                           offset = 0 :: non_neg_integer(),
                           decompression_state :: undefined |
-                                                 {zlib, zlib:zstream()}}).
+                                                 {deflate, zlib:zstream()}}).
 
 -type dek_snapshot() :: #dek_snapshot{}.
 -type encryption_type() :: config_encryption | log_encryption |
                            audit_encryption.
 -type fetch_deks_res() :: {ok, #dek_snapshot{}} | {error, term()}.
--type compression_cfg() :: {zlib,
-                            Level :: pos_integer(),
-                            Flush :: none | sync | full} | undefined.
+-type encr_compression_cfg() :: {zlib,
+                                 Level :: pos_integer(),
+                                 Flush :: none | sync | full} | undefined.
+-type decr_compression_cfg() :: gzip | undefined.
 
 %%%===================================================================
 %%% API
@@ -132,13 +134,13 @@ atomic_write_file(Path, Data, DekSnapshot) ->
 
 -spec atomic_write_file(string(), binary() | iolist(), #dek_snapshot{},
                         #{max_chunk_size => pos_integer(),
-                          compression => compression_cfg()}) ->
+                          encr_compression => encr_compression_cfg()}) ->
           ok | {error, term()}.
 atomic_write_file(Path, List, DekSnapshot, Opts) when is_list(List) ->
     atomic_write_file(Path, iolist_to_binary(List), DekSnapshot, Opts);
 atomic_write_file(Path, Bytes, DekSnapshot, Opts) when is_binary(Bytes) ->
     MaxChunkSize = maps:get(max_chunk_size, Opts, 65536),
-    Compression = maps:get(compression, Opts, undefined),
+    Compression = maps:get(encr_compression, Opts, undefined),
     misc:atomic_write_file(
       Path,
       fun (IODevice) ->
@@ -146,7 +148,8 @@ atomic_write_file(Path, Bytes, DekSnapshot, Opts) when is_binary(Bytes) ->
       end).
 
 -spec reencrypt_file(string(), string(), #dek_snapshot{},
-                     #{compression => compression_cfg(),
+                     #{encr_compression => encr_compression_cfg(),
+                       decr_compression => decr_compression_cfg(),
                        ignore_incomplete_last_chunk => boolean(),
                        allow_decrypt => boolean()}) ->
           ok | {error, term()}.
@@ -157,7 +160,8 @@ atomic_write_file(Path, Bytes, DekSnapshot, Opts) when is_binary(Bytes) ->
 %%
 %% Note2: By default, this function assumes that the source file is encrypted
 %% and will error out if reencryption is attempted on a decrypted file, unless
-%% "allow_decrypt" option is used. The option is described in Note5.
+%% "allow_decrypt" option is used. allow_decrypt" is described in Note5 in more
+%% detail.
 %%
 %% Note3: If the file is encrypted with historic key, current active key will be
 %% used for reencryption.
@@ -165,7 +169,7 @@ atomic_write_file(Path, Bytes, DekSnapshot, Opts) when is_binary(Bytes) ->
 %% Note4: If DS does not have active key, the file will be reencrypted with the
 %% same key as before, if allow_decrypt option is not true.
 %%
-%% Note5: "allow_decrypt" option specifically allows:
+%% Note5: "allow_decrypt" option, if not false, specifically allows:
 %%          a) The file to be decrypted if encryption is
 %%             disabled(no active key), hence the resulting file will be left
 %%             decrypted in that case.
@@ -173,6 +177,11 @@ atomic_write_file(Path, Bytes, DekSnapshot, Opts) when is_binary(Bytes) ->
 %%             and thus will reencrypt any decrypted file based on active key.
 %%             If encryption is disabled(no active key), the decrypted file will
 %%             be left decrypted as expected in that case.
+%%          c) Defaults to false which means option is not used
+%%          d) Lastly when using "allow_decrypt" one can further specify if the
+%%             decrypted files should be gzip compressed or not by setting
+%%             decr_compression => gzip | undefined. By default decrypted files
+%%             are left uncompressed
 reencrypt_file(FromPath, ToPath, DS, Opts) ->
     AllowDecr = maps:get(allow_decrypt, Opts, false),
     EncrEnabled = get_dek_id(DS) =/= undefined,
@@ -211,7 +220,8 @@ reencrypt_file(FromPath, ToPath, DS, Opts) ->
 
 reencrypt_file_to_iodevice(IODevice, FromPath, DS, Opts) ->
     IgnoreIncomplete = maps:get(ignore_incomplete_last_chunk, Opts, false),
-    AllowDecryptOps = maps:get(allow_decrypt, Opts, false),
+    AllowDecrypted = maps:get(allow_decrypt, Opts, false),
+
     maybe
         {ok, {Header, State}} ?= file_encrypt_init(DS, Opts),
         case file:write(IODevice, Header) of
@@ -233,7 +243,7 @@ reencrypt_file_to_iodevice(IODevice, FromPath, DS, Opts) ->
                         end, State, DS,
                         #{read_chunk_size => 65536,
                           ignore_incomplete_last_chunk => IgnoreIncomplete,
-                          check_encrypted => AllowDecryptOps}),
+                          allow_decrypted => AllowDecrypted}),
                 case Res of
                     {ok, FinalState} ->
                         FinalData = file_encrypt_finish(FinalState),
@@ -253,23 +263,42 @@ reencrypt_file_to_iodevice(IODevice, FromPath, DS, Opts) ->
 file_encrypt_init(DekSnapshot) ->
     file_encrypt_init(DekSnapshot, #{}).
 
--spec file_encrypt_init(#dek_snapshot{}, #{compression => compression_cfg()}) ->
+-spec file_encrypt_init(#dek_snapshot{},
+                        #{encr_compression => encr_compression_cfg(),
+                          decr_compression => decr_compression_cfg()}) ->
           {ok, {binary(), #file_encr_state{}}} | {error, term()}.
 file_encrypt_init(#dek_snapshot{active_key = #{type := error}}, _) ->
     {error, key_not_available};
 file_encrypt_init(#dek_snapshot{active_key = ActiveKey,
                                 iv_random = IVRandom,
                                 iv_atomic_counter = IVCounter}, Opts) ->
+    CompressOption =
+       case ActiveKey of
+           undefined ->
+               maps:get(decr_compression, Opts, undefined);
+           _ ->
+               maps:get(encr_compression, Opts, undefined)
+       end,
 
     Salt = crypto:strong_rand_bytes(16),
     {CompressionType, CompressionState} =
-        case {maps:get(compression, Opts, undefined), ActiveKey} of
-            {undefined, _} -> {?NO_COMPRESSION, undefined};
-            {_, undefined} -> {?NO_COMPRESSION, undefined};
-            {{zlib, Level, Flush}, _} ->
+        case CompressOption of
+            undefined ->
+                {?NO_COMPRESSION, undefined};
+            {zlib, Level, Flush} ->
                 Z = zlib:open(),
                 zlib:deflateInit(Z, Level),
-                {?ZLIB_COMPRESSION, {zlib, Flush, Z}}
+                {?ZLIB_COMPRESSION, {deflate, Flush, Z}};
+            gzip ->
+                Z = zlib:open(),
+                %% Although we could pass these in parameters via options
+                %% for gzip compression, no strong need right now so they are
+                %% fixed here to keep the usage simpler
+                Level = 8,
+                Flush = none,
+                zlib:deflateInit(Z, default, deflated, 15 bor ?GZIP_FORMAT,
+                                 Level, default),
+                {?GZIP_COMPRESSION, {deflate, Flush, Z}}
         end,
     Header =
         case ActiveKey of
@@ -331,8 +360,16 @@ file_encrypt_cont(Path, FileSize,
 
 -spec file_encrypt_chunk(erlang:iodata(), #file_encr_state{}) ->
           {erlang:iodata(), #file_encr_state{}}.
-file_encrypt_chunk(Data, #file_encr_state{key = undefined} = State) ->
+file_encrypt_chunk(
+    Data, #file_encr_state{key = undefined,
+                           compression_state = undefined} = State) ->
     {Data, State};
+file_encrypt_chunk(
+    Data, #file_encr_state{key = undefined,
+                           compression_state = CompressionState} = State) ->
+    {deflate, Flush, Z} = CompressionState,
+    CompressedData = zlib:deflate(Z, Data, Flush),
+    {CompressedData, State};
 file_encrypt_chunk(Data, State) ->
     maybe
         {empty, false} ?= {empty, misc:iolist_is_empty(Data)},
@@ -344,7 +381,7 @@ file_encrypt_chunk(Data, State) ->
         AD = file_assoc_data(State),
         CompressedData = case CompressionState of
                              undefined -> Data;
-                             {zlib, Flush, Z} -> zlib:deflate(Z, Data, Flush)
+                             {deflate, Flush, Z} -> zlib:deflate(Z, Data, Flush)
                          end,
         {empty, false} ?= {empty, misc:iolist_is_empty(CompressedData)},
         {ok, Chunk} = encrypt_internal(CompressedData, AD, IVRandom, IVAtomic,
@@ -362,7 +399,7 @@ file_encrypt_chunk(Data, State) ->
 file_encrypt_finish(#file_encr_state{compression_state = undefined}) ->
     <<>>;
 file_encrypt_finish(
-        #file_encr_state{compression_state = {zlib, _, Z}} = State) ->
+        #file_encr_state{compression_state = {deflate, _, Z}} = State) ->
     FinalData = zlib:deflate(Z, <<>>, finish),
     ok = zlib:deflateEnd(Z),
     zlib:close(Z),
@@ -465,14 +502,14 @@ read_file(Path, DekKind) ->
                Deks :: #dek_snapshot{},
                Opts :: #{read_chunk_size => pos_integer(),
                          ignore_incomplete_last_chunk => boolean(),
-                         check_encrypted => boolean()}.
+                         allow_decrypted => boolean()}.
 read_file_chunks(Path, Fun, AccInit, Deks, Opts) ->
     ReadChunkSize = maps:get(read_chunk_size, Opts, 65536),
     IgnoreIncomplete = maps:get(ignore_incomplete_last_chunk, Opts, false),
 
-    %% If check_encrypted option is not set, the file will processed with
-    %% default assumption that it is encrypted
-    IsEncrypted = case maps:get(check_encrypted, Opts, false) of
+    %% If allow_decrypted option is not set to true, the file will processed
+    %% with default assumption that it is encrypted.
+    IsEncrypted = case maps:get(allow_decrypted, Opts, false) of
                       true ->
                           is_file_encrypted(Path);
                       false ->
@@ -564,7 +601,7 @@ file_decrypt_init(Data, GetKeyFun) when is_function(GetKeyFun, 1) ->
                 ?ZLIB_COMPRESSION ->
                     Z = zlib:open(),
                     ok = zlib:inflateInit(Z),
-                    {ok, {zlib, Z}};
+                    {ok, {deflate, Z}};
                 _ ->
                     {error, {unsupported_compression_type, CompressionType}}
             end,
@@ -597,7 +634,7 @@ file_decrypt_next_chunk(Data, State) ->
                     case DecompressionState of
                         undefined ->
                             {ok, {NewState, DecryptedData, Rest}};
-                        {zlib, Z} ->
+                        {deflate, Z} ->
                             Inflated = zlib:inflate(Z, DecryptedData),
                             {ok, {NewState, Inflated, Rest}}
                     end;
@@ -612,7 +649,7 @@ file_decrypt_next_chunk(Data, State) ->
 -spec file_decrypt_finish(#file_decr_state{}) -> ok | {error, incomplete_data}.
 file_decrypt_finish(#file_decr_state{decompression_state = undefined}) ->
     ok;
-file_decrypt_finish(#file_decr_state{decompression_state = {zlib, Z}}) ->
+file_decrypt_finish(#file_decr_state{decompression_state = {deflate, Z}}) ->
     try
         ok = zlib:inflateEnd(Z)
     catch
@@ -964,7 +1001,8 @@ encrypt_to_file(IODevice, Bytes, MaxChunkSize, Compression, DekSnapshot) ->
         end,
     maybe
         {ok, {Header, State}} ?= file_encrypt_init(
-                                   DekSnapshot, #{compression => Compression}),
+                                   DekSnapshot,
+                                   #{encr_compression => Compression}),
         ok ?= file:write(IODevice, Header),
         ok ?= WriteChunks(Bytes, State)
     end.
@@ -1167,7 +1205,7 @@ decrypt_file_data_test() ->
         decrypt_file_data(<<?ENCRYPTED_FILE_MAGIC, 0, 23, 0, 0, 0, 0, 36,
                             LongData/binary>>, DS).
 
-read_write_file_test() ->
+read_write_encr_file_test() ->
     Path = path_config:tempfile("cb_crypto_test", ".tmp"),
     Bin = iolist_to_binary(lists:seq(0,255)),
     DS = generate_test_deks(),
@@ -1205,6 +1243,55 @@ read_write_file_test() ->
         file:delete(Path)
     end.
 
+read_write_decr_file_test() ->
+    Path = path_config:tempfile("cb_crypto_test", ".tmp"),
+    Bin = iolist_to_binary(lists:seq(0,255)),
+    DS0 = generate_test_deks(),
+    {_, AllDeks} = get_all_deks(DS0),
+    DS = create_deks_snapshot(undefined, AllDeks, undefined),
+    Opt = #{allow_decrypted => true},
+    try
+        ok = misc:atomic_write_file(Path, Bin),
+        {raw, Bin} = read_file(Path, DS),
+        ok = atomic_write_file(Path, Bin, DS, #{max_chunk_size => 7}),
+        {raw, Bin} = read_file(Path, DS),
+        %% Note that chunks are actually reversed here:
+        {ok, Chunks1} = read_file_chunks(Path,
+                                         fun (C, Acc) -> {ok, [C | Acc]} end,
+                                         [], DS, Opt#{read_chunk_size => 11}),
+        {ok, Chunks2} = read_file_chunks(Path,
+                                         fun (C, Acc) -> {ok, [C | Acc]} end,
+                                         [], DS, Opt#{read_chunk_size => 7}),
+        {ok, Chunks3} = read_file_chunks(Path,
+                                         fun (C, Acc) -> {ok, [C | Acc]} end,
+                                         [], DS, Opt#{read_chunk_size => 3}),
+        {ok, Chunks4} = read_file_chunks(Path,
+                                         fun (C, Acc) -> {ok, [C | Acc]} end,
+                                         [], DS,
+                                         Opt#{read_chunk_size => 1000000000}),
+
+        %% allow_decrypted is not passed in here, it should error out
+        {error,unknown_magic,[]} =
+            read_file_chunks(Path,
+                             fun (C, Acc) -> {ok, [C | Acc]} end,
+                             [], DS, #{read_chunk_size => 3}),
+
+        %% allow_decrypted is explicitly false in here, it should error out
+        {error,unknown_magic,[]} =
+            read_file_chunks(Path,
+                             fun (C, Acc) -> {ok, [C | Acc]} end,
+                             [], DS, #{read_chunk_size => 3,
+                                       allow_decrypted => false}),
+
+        %% If we concatenate all chunks, we should get the original data
+        Bin = iolist_to_binary(lists:reverse(Chunks1)),
+        Bin = iolist_to_binary(lists:reverse(Chunks2)),
+        Bin = iolist_to_binary(lists:reverse(Chunks3)),
+        Bin = iolist_to_binary(lists:reverse(Chunks4))
+    after
+        file:delete(Path)
+    end.
+
 read_write_compressed_file_test_() ->
     Bin = rand:bytes(1024 * 1024),
     DS = generate_test_deks(),
@@ -1220,7 +1307,7 @@ read_write_compressed_file_test_parametrized(Bin, DS, WriteChunkSize,
     try
         ok = atomic_write_file(Path, Bin, DS,
                                #{max_chunk_size => WriteChunkSize,
-                                 compression => {zlib, Level, FlushType}}),
+                                 encr_compression => {zlib, Level, FlushType}}),
         {decrypted, Bin} = read_file(Path, DS),
         %% Note that chunks are actually reversed here:
         {ok, Chunks1} = read_file_chunks(
@@ -1302,8 +1389,70 @@ reencrypt_with_opts_mix_test() ->
         %% Encrypt file with encr_compression but with an empty DS hence the
         %% resulting file should be decrypted, and it should not be compressed
         ok = atomic_write_file(Path, Data, DSEmptyActive,
-                               #{compression => {zlib, 5, none}}),
-        ?assert(Data =:= ReadFileData(Path, []))
+                               #{encr_compression => {zlib, 5, none}}),
+        ?assert(Data =:= ReadFileData(Path, [])),
+
+        %% Encrypt a file and reencrypt it with allow_decrypt=true and no
+        %% decr_compression option and with no active key DS, and ensure
+        %% resulting file is unencrypted and not compressed
+        ok = atomic_write_file(Path, Data, DS,
+                               #{encr_compression => {zlib, 5, none}}),
+
+        %% Note: The encr_compression option is a no OP here since allow_decrypt
+        %% is used with an emptyDS and thus the resulting file will be
+        %% unencrypted, and since there is no decr_compression option, we
+        %% verify that it must not be compressed
+        ok = reencrypt_file(Path, Path, DSEmptyActive,
+                            #{allow_decrypt => true,
+                              encr_compression => {zlib, 5, none}}),
+        {ok, DataRead0} = misc:raw_read_file(Path),
+        ?assert(Data =:= DataRead0),
+
+        %% Now try reencrypt on an encrypted file, but with explicit option of
+        %% decr_compression => undefined combined with allow_decrypt => true,
+        %% and using emptyDS, the result must be a decrypted file that is not
+        %% compressed(the same as no decr_compression opt being specified)
+        ok = atomic_write_file(Path, Data, DS,
+                               #{encr_compression => {zlib, 5, none}}),
+        ok = reencrypt_file(Path, Path, DSEmptyActive,
+                            #{allow_decrypt => true,
+                              encr_compression => {zlib, 5, none},
+                              decr_compression => undefined}),
+        {ok, DataRead0} = misc:raw_read_file(Path),
+        ?assert(Data =:= DataRead0),
+
+        %% Try to encrypt file with active DS but without the allow_decrypt
+        %% option, by default reencrypt_file() defined behavior is that only
+        %% encrypted files be passed to it, so it should error out in this
+        %% case
+        Rv = reencrypt_file(Path, Path, DS, #{}),
+        ?assertEqual(Rv, {error,unknown_magic}),
+
+        %% Now rencrypt the decrypted file with allow_decrypt => true using
+        %% active key DS, and the decrypted file should get re-encrypted into
+        %% an encrypted file
+        ok = reencrypt_file(Path, Path, DS,
+                            #{allow_decrypt => true}),
+        ?assert(is_file_encrypted(Path)),
+
+        %% Take the encrypted file and reencrypt it with zlib compression and
+        %% finally reencrypt it again with emptyDS and allow_decrypt => true,
+        %% and decr_compression => gzip. The resulting file should be
+        %% unencrypted and gzip compressed, we should be able to read the
+        %% data from this file via "compressed" option using file:open() and
+        %% the resulting data should match exactly the original source data
+        ok = reencrypt_file(Path, Path, DS,
+                            #{encr_compression => {zlib, 5, none}}),
+        ?assert(is_file_encrypted(Path)),
+        ok = reencrypt_file(Path, Path, DSEmptyActive,
+                            #{allow_decrypt => true,
+                              decr_compression => gzip,
+                              encr_compression => {zlib, 5, none}}),
+        ?assertNot(is_file_encrypted(Path)),
+        CompressedData = ReadFileData(Path, []),
+        UnCompressed = ReadFileData(Path, [compressed]),
+        ?assertNot(CompressedData =:= Data),
+        ?assert(UnCompressed =:= Data)
     after
         file:delete(Path)
     end.
@@ -1366,9 +1515,9 @@ reencrypt_file_test_() ->
     DSEmptyActive = create_deks_snapshot(undefined, AllDeks, undefined),
     FromOpts = [#{max_chunk_size => N} || N <- [293, 1031, 7829, 1024 * 1024,
                                                 1024 * 1024 * 100]],
-    ToOpts = [#{compression => undefined},
-              #{compression => {zlib, 1, full}},
-              #{compression => {zlib, 5, none}}],
+    ToOpts = [#{encr_compression => undefined},
+              #{encr_compression => {zlib, 1, full}},
+              #{encr_compression => {zlib, 5, none}}],
     [?_test(reencrypt_file_test_parametrized(Bin, From, To, DS, ReencryptDS))
      || From <- FromOpts, To <- ToOpts, ReencryptDS <- [DS, DSEmptyActive]].
 
@@ -1393,7 +1542,7 @@ reencrypt_file_negative_cases_test() ->
     WrongDSNoActive = create_deks_snapshot(undefined, AllDeks2, WrongDS),
     Path1 = path_config:tempfile("cb_crypto_reencrypt_file_test1", ".tmp"),
     Path2 = path_config:tempfile("cb_crypto_reencrypt_file_test2", ".tmp"),
-    Opts = #{compression => undefined},
+    Opts = #{encr_compression => undefined},
 
     try
         {error, enoent} = reencrypt_file(Path1, Path2, DS, Opts),

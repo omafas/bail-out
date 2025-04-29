@@ -476,7 +476,7 @@ compress(true, Name, Path, Opts0) ->
             %% to reencrypt the file (we should not decrypt this file in this
             %% case).
             DS = ale:get_sink_ds(Name),
-            Opts = Opts0#{compression => {zlib, 5, none},
+            Opts = Opts0#{encr_compression => {zlib, 5, none},
                           ignore_incomplete_last_chunk => true},
             ok ?= ale:reencrypt_file(Path, CompressPth, DS, Opts),
             ok ?= RenameFunc(CompressPth, Path)
