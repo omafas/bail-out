@@ -444,27 +444,79 @@ do_open_file(Path, #file_info{inode = Inode}) ->
             Error
     end.
 
-compress(false, _Name, UncompressPth, _Opts) ->
+compress(false = _IsEncrypted, _Name, UncompressPth) ->
     CompressPth = UncompressPth ++ ".gz",
     compress_file(UncompressPth, CompressPth);
-compress(true, Name, Path, Opts0) ->
+compress(true = _IsEncrypted, Name, Path) ->
+    reencrypt_and_compress(Name, Path, #{}).
+
+reencrypt_and_compress(Name, Path, Opts) ->
     CompressPth = Path ++ ".tmp",
+
+    IsGzipMagicHeader =
+        fun(FileName) ->
+                {ok, F} = file:open(FileName, [read, raw, binary]),
+                try
+                    case file:read(F, 2) of
+                        {ok, <<16#1f, 16#8b>>} ->
+                            true;
+                        _ ->
+                            false
+                    end
+                after
+                    file:close(F)
+                end
+        end,
+
+    RenameEnsureGzExtention =
+        fun(ResultFilePath, OrigPath) ->
+                case filename:extension(OrigPath) of
+                    ".gz" ->
+                        file:rename(ResultFilePath, OrigPath);
+                    _ ->
+                        NewPath = OrigPath ++ ".gz",
+                        maybe
+                            ok ?= file:rename(ResultFilePath, NewPath),
+                            ok ?= file:delete(OrigPath)
+                        end
+                end
+        end,
+
+    RenameStripGzExtention =
+        fun(ResultFilePath, OrigPath) ->
+                case filename:extension(OrigPath) of
+                    ".gz" ->
+                        NewPath = filename:rootname(OrigPath),
+                        maybe
+                            ok ?= file:rename(ResultFilePath, NewPath),
+                            ok ?= file:delete(OrigPath)
+                        end;
+                    _  ->
+                        file:rename(ResultFilePath, OrigPath)
+                end
+        end,
 
     %% When re-encrypting and compressing an unencrypted ".gz" file, we need to
     %% remove the .gz extension to match existing file convention for
-    %% encrypted files
+    %% encrypted files. If the resulting file is a gzip decrypted, we need to
+    %% ensure we add the .gz extension
     RenameFunc =
-        fun(FromPath, ToPath) ->
-            case filename:extension(ToPath) of
-                ".gz" ->
-                    NewToPath = filename:rootname(ToPath),
-                    maybe
-                        ok ?= file:rename(FromPath, NewToPath),
-                        ok ?= file:delete(ToPath)
-                    end;
-                _ ->
-                    file:rename(FromPath, ToPath)
-            end
+        fun(ResultFilePath, OrigPath, RencrOpts) ->
+                %% If a file was re-encrypted with allow_decrypt true and with
+                %% decr_compression as gzip and the resulting file was
+                %% a decrypted file and has a valid gzip magic header, it
+                %% is safe to say that file is a gzip format file
+                DecrWithGzip =
+                    maps:get(allow_decrypt, RencrOpts, false) andalso
+                    maps:get(decr_compression, RencrOpts, false) =:= gzip,
+                case DecrWithGzip andalso
+                     not ale:is_file_encrypted(ResultFilePath) andalso
+                     IsGzipMagicHeader(ResultFilePath)  of
+                    true ->
+                        RenameEnsureGzExtention(ResultFilePath, OrigPath);
+                    false ->
+                        RenameStripGzExtention(ResultFilePath, OrigPath)
+                end
         end,
 
     try
@@ -476,10 +528,10 @@ compress(true, Name, Path, Opts0) ->
             %% to reencrypt the file (we should not decrypt this file in this
             %% case).
             DS = ale:get_sink_ds(Name),
-            Opts = Opts0#{encr_compression => {zlib, 5, none},
-                          ignore_incomplete_last_chunk => true},
-            ok ?= ale:reencrypt_file(Path, CompressPth, DS, Opts),
-            ok ?= RenameFunc(CompressPth, Path)
+            RencrOpts = Opts#{encr_compression => {zlib, 5, none},
+                              ignore_incomplete_last_chunk => true},
+            ok ?= ale:reencrypt_file(Path, CompressPth, DS, RencrOpts),
+            ok ?= RenameFunc(CompressPth, Path, RencrOpts)
         else
             {error, key_not_found} ->
                 %% We don't have a key for this file anymore, so we can't
@@ -502,7 +554,7 @@ maybe_compress_post_rotate(#worker_state{sink_name = Name,
     IsEncrypted = ale:is_file_encrypted(UncompressedPath),
     time_stat(Name, compression_time,
               fun () ->
-                      compress(IsEncrypted, Name, UncompressedPath, #{})
+                      compress(IsEncrypted, Name, UncompressedPath)
               end);
 maybe_compress_post_rotate(_) ->
     ok.
@@ -692,8 +744,9 @@ process_drop_dek_work(DekIdsToDrop, WorkSzThresh,
 
     ReEncrFn =
         fun(FPath, Size, DekIds, {FilesAndDeks, InUse, AccSize, Errors}) ->
-                case compress(true, SinkName, FPath,
-                              #{allow_decrypt => true}) of
+                case reencrypt_and_compress(
+                       SinkName, FPath, #{allow_decrypt => true,
+                                          decr_compression => gzip}) of
                     ok ->
                         NewDekIds = ale:get_in_use_deks([FPath]),
                         NewFilesAndDeks = [{FPath, NewDekIds} | FilesAndDeks],
