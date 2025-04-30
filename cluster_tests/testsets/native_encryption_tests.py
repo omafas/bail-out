@@ -85,6 +85,13 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         set_min_dek_gc_interval(self.cluster, None)
         set_dek_info_update_interval(self.cluster, None)
         set_min_timer_interval(self.cluster, None)
+        # In teardown we disable encryption for logs, here we drop deks
+        # to ensure that absolutely all deks are unencrypted
+        drop_deks(self.cluster, 'log')
+        testlib.poll_for_condition(
+            lambda: assert_logs_unencrypted(self.cluster, ["debug.log"],
+                                            check_suffixes=['*']),
+            sleep_time=1, attempts=50, retry_on_assert=True, verbose=True)
 
     def test_teardown(self):
         set_cfg_encryption(self.cluster, 'nodeSecretManager', -1)
@@ -1436,14 +1443,67 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                f'deks have changed, old deks: {dek_ids1}, new deks: {dek_ids3}'
 
     def encrypted_logs_test(self):
+        logs = ["debug.log", "ns_couchdb.log", "babysitter.log"]
+
+        def encrypted(suffixes):
+            return assert_logs_encrypted(self.cluster, logs,
+                                         check_suffixes=suffixes)
+        def unencrypted(suffixes):
+            return assert_logs_unencrypted(self.cluster, logs,
+                                           check_suffixes=suffixes)
+        def poll(func):
+            testlib.poll_for_condition(func, sleep_time=1, attempts=50,
+                                       retry_on_assert=True, verbose=True)
+        def dek_ids(filename):
+            return get_log_file_dek_ids(self.cluster, filename)
+
+        def assert_logs_dek_ids(log_suffix, dek_id_assert_func):
+            for l in logs:
+                assert_log_file_dek_ids(self.cluster, l, log_suffix,
+                                        dek_id_assert_func)
+
+        # make sure that debug.log is unencrypted
+        poll(lambda: unencrypted(['']))
+
         set_log_encryption(self.cluster, 'nodeSecretManager', -1)
-        testlib.poll_for_condition(
-            lambda: assert_logs_encrypted(self.cluster),
-            sleep_time=0.3, attempts=50, retry_on_assert=True, verbose=True)
+        # debug.log      - encrypted
+        # debug.log.1.gz - unencrypted
+        poll(lambda: (encrypted(['']), unencrypted(['.1.gz'])))
+
+        # debug.log      - unencrypted
+        # debug.log.1    - encrypted
+        # debug.log.2.gz - unencrypted
         set_log_encryption(self.cluster, 'disabled', -1)
-        testlib.poll_for_condition(
-            lambda: assert_logs_unencrypted(self.cluster),
-            sleep_time=0.3, attempts=50, retry_on_assert=True, verbose=True)
+        poll(lambda: (unencrypted(['', '.2.gz']), encrypted(['.1'])))
+
+        # debug.log      - encrypted
+        # debug.log.1.gz - unencrypted
+        # debug.log.2    - encrypted
+        # debug.log.3.gz - unencrypted
+        set_log_encryption(self.cluster, 'nodeSecretManager', -1)
+        poll(lambda: (encrypted(['', '.2']), unencrypted(['.1.gz', '.3.gz'])))
+        ids = dek_ids("debug.log")
+        assert_logs_dek_ids('.2', lambda id: id in ids)
+        assert_logs_dek_ids('', lambda id: id in ids)
+
+        # debug.log      - encrypted
+        # debug.log.1    - encrypted
+        # debug.log.2    - encrypted
+        # debug.log.3    - encrypted
+        testlib.post_succ(self.cluster,
+                          '/controller/forceEncryptionAtRest/log')
+        poll(lambda: encrypted(['.*']))
+
+        assert_logs_dek_ids('*', lambda id: id in ids)
+
+        # All logs are still encrypted but deks should change
+        drop_deks(self.cluster, 'log')
+        poll(lambda: assert_logs_dek_ids('*', lambda id: id not in ids))
+
+        # all logs are unencrypted now
+        set_log_encryption(self.cluster, 'disabled', -1)
+        drop_deks(self.cluster, 'log')
+        poll(lambda: unencrypted(['.*']))
 
     def stored_keys_file_encrypted_test(self):
         # verify that tokens file is encrypted and that it can be decrypted
@@ -2249,17 +2309,55 @@ def assert_bucket_deks_have_changed(cluster, bucket, min_time=None,
 
     return dek_ids
 
+def assert_logs_encrypted(cluster, *args, **kwargs):
+    assert_logs_encryption(cluster, True, *args, **kwargs)
 
-def assert_logs_encrypted(cluster):
+
+def assert_logs_unencrypted(cluster, *args, **kwargs):
+    assert_logs_encryption(cluster, False, *args, **kwargs)
+
+
+def assert_logs_encryption(cluster, must_be_encrypted, files_to_check,
+                           check_suffixes=None):
+    if check_suffixes is None:
+        check_suffixes = [""]
     for n in cluster.connected_nodes:
-        debug_log_path = Path(n.logs_path()) / 'debug.log'
-        assert_file_encrypted(debug_log_path)
+        for file_to_check in files_to_check:
+            for suffix in check_suffixes:
+                found = False
+                for f in Path(n.logs_path()).glob(file_to_check + suffix):
+                    found = True
+                    if must_be_encrypted:
+                        assert_file_encrypted(f)
+                    else:
+                        assert_file_unencrypted(f)
+                assert found, f'file {file_to_check + suffix} not found'
+    return True
 
 
-def assert_logs_unencrypted(cluster):
+def get_log_file_dek_ids(cluster, file):
+    dek_ids = []
     for n in cluster.connected_nodes:
-        debug_log_path = Path(n.logs_path()) / 'debug.log'
-        assert_file_unencrypted(debug_log_path)
+        dek_ids.append(get_file_dek_id(Path(n.logs_path()) / file))
+    return sorted(dek_ids)
+
+
+def assert_log_file_dek_ids(cluster, file, suffix, assert_dek_ids_func):
+    for n in cluster.connected_nodes:
+        found = False
+        for f in Path(n.logs_path()).glob(file + suffix):
+            found = True
+            assert_dek_ids_func(get_file_dek_id(f))
+        assert found, f'file {file + suffix} not found'
+
+
+def get_file_dek_id(path):
+    key_id_start = 28
+    key_id_len = 36
+    assert_file_encrypted(path)
+    with open(path, 'rb') as f:
+        head = f.read(key_id_start + key_id_len)
+        return head[key_id_start:key_id_start+key_id_len]
 
 
 def assert_file_encrypted(path):
@@ -2280,8 +2378,9 @@ def assert_file_unencrypted(path):
         magic_len = len(encrypted_file_magic)
         magic = f.read(magic_len)
         print(f'magic: {magic}')
-        assert len(magic) == magic_len, \
-               f'file is too short ({len(magic)} bytes read)'
+        # Note that we have to treat empty files as unencrypted because
+        # empty unencrypted log will have empty len and we don't want to
+        # wait until something is written to it.
         assert magic != encrypted_file_magic, \
                f'file {path} seems to be encrypted, ' \
                f'first {magic_len} bytes are {magic}'
