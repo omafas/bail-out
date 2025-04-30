@@ -263,9 +263,10 @@ file_encrypt_init(#dek_snapshot{active_key = ActiveKey,
 
     Salt = crypto:strong_rand_bytes(16),
     {CompressionType, CompressionState} =
-        case maps:get(compression, Opts, undefined) of
-            undefined -> {?NO_COMPRESSION, undefined};
-            {zlib, Level, Flush} ->
+        case {maps:get(compression, Opts, undefined), ActiveKey} of
+            {undefined, _} -> {?NO_COMPRESSION, undefined};
+            {_, undefined} -> {?NO_COMPRESSION, undefined};
+            {{zlib, Level, Flush}, _} ->
                 Z = zlib:open(),
                 zlib:deflateInit(Z, Level),
                 {?ZLIB_COMPRESSION, {zlib, Flush, Z}}
@@ -1274,6 +1275,35 @@ validate_encr_file_test() ->
               Data3/binary>>,
         ok = misc:atomic_write_file(Path, InvalidFileData),
         ?assertNot(validate_encr_file(Path))
+    after
+        file:delete(Path)
+    end.
+
+reencrypt_with_opts_mix_test() ->
+    Path = path_config:tempfile("reencrypt_with_opts_mix_test", ".tmp"),
+    Size = 10 * 1024 * 1024,
+    Data = rand:bytes(Size),
+    DS = generate_test_deks(),
+    {_, AllDeks} = get_all_deks(DS),
+    DSEmptyActive = create_deks_snapshot(undefined, AllDeks, undefined),
+
+    ReadFileData =
+        fun (P, Opts) ->
+            {ok, IO} = file:open(P, [raw, binary] ++ Opts),
+            try
+                {ok, Data1} = file:read(IO, Size+100),
+                Data1
+            after
+                file:close(IO)
+            end
+        end,
+
+    try
+        %% Encrypt file with encr_compression but with an empty DS hence the
+        %% resulting file should be decrypted, and it should not be compressed
+        ok = atomic_write_file(Path, Data, DSEmptyActive,
+                               #{compression => {zlib, 5, none}}),
+        ?assert(Data =:= ReadFileData(Path, []))
     after
         file:delete(Path)
     end.
