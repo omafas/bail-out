@@ -50,20 +50,20 @@ setup_node_config(NodesMap) ->
 %% config which nodes have the data service).
 -spec setup_bucket_config(list()) -> true.
 setup_bucket_config(Buckets) ->
-    KVNodes = ns_cluster_membership:service_active_nodes(kv),
-
-    %% Asserting length of KV nodes, we create a simple vBucket map and that
-    %% may not be valid with more nodes. That can be improved later if
-    %% necessary.
-    ?assert(length(KVNodes) =< 4),
-
     fake_chronicle_kv:update_snapshot(bucket_names, Buckets),
+
+    AllNodes = ns_cluster_membership:nodes_wanted(),
+    AllKVNodes = ns_cluster_membership:service_nodes(AllNodes, kv),
+    ActiveKVNodes = ns_cluster_membership:service_active_nodes(kv),
+
+    %% Using a simple generated map with 4 vBuckets and 1 replica (2 copies).
+    Map0 = mb_map:random_map(4, 2, AllKVNodes),
+    Map = mb_map:promote_replicas(Map0, AllKVNodes -- ActiveKVNodes),
 
     Val = [
            {type, membase},
-           {servers, KVNodes},
-           %% map is 1 vBucket, all nodes in a single chain
-           {map, [KVNodes]}
+           {servers, ActiveKVNodes},
+           {map, Map}
           ],
 
     fake_chronicle_kv:update_snapshot(
@@ -163,19 +163,25 @@ manual_failover_test_setup(SetupConfig) ->
                 end),
 
     meck:expect(janitor_agent, fetch_vbucket_states,
-                fun(0, _) ->
+                fun(VBucket, _) ->
                         %% We need to return some semi-valid vBucket stat map
                         %% from this. We might use a couple of different maps
                         %% for this test, so here we will generate it from
                         %% the map (assuming only 1 vBucket).
                         {ok, BucketConfig} = ns_bucket:get_bucket("default"),
-                        [[Active | Replicas]] =
-                            proplists:get_value(map, BucketConfig),
+                        ArrayMap = array:from_list(
+                                     proplists:get_value(map, BucketConfig)),
+                        [Active | Replicas] = array:get(VBucket, ArrayMap),
                         Seqnos = [{high_prepared_seqno, 1},
                                   {high_seqno, 1}],
                         A = [{Active, active, Seqnos}],
                         R = [{Replica, replica, Seqnos} || Replica <- Replicas],
                         A ++ R
+                end),
+
+    meck:expect(janitor_agent, find_vbucket_state,
+                fun(Node, States) ->
+                        meck:passthrough([Node, States])
                 end),
 
     meck:expect(janitor_agent, apply_new_bucket_config,

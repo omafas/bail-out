@@ -682,6 +682,7 @@ map_strip([], _, _) ->
 %% @private
 %% @doc Generate a random valid replication chain.
 random_chain(0, _) -> [];
+random_chain(_, []) -> [];
 random_chain(NumCopies, Nodes) ->
     Node = lists:nth(rand:uniform(length(Nodes)), Nodes),
     Nodes1 = case Node of
