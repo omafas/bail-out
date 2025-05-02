@@ -533,6 +533,21 @@ get_tick_period(Timeout) ->
         Value -> Value
     end.
 
+trim_nodes_for_failover(Nodes, S) ->
+    case S#state.disable_max_count of
+        true -> {Nodes, S};
+        false ->
+            TrimmedNodes = trim_nodes(Nodes, S),
+            case Nodes -- TrimmedNodes of
+                [] ->
+                    {TrimmedNodes, S};
+                NotFailedOver ->
+                    {TrimmedNodes,
+                     maybe_report_max_node_reached(
+                       Nodes, NotFailedOver, max_nodes_error_msg(S), S)}
+            end
+    end.
+
 process_action({mail_too_small, Service, SvcNodes, {Node, _UUID}},
                S, _, _, _) ->
     ?log_info_and_email(
@@ -577,21 +592,41 @@ process_action({failover, NodesWithUUIDs}, S, DownNodes, NodeStatuses,
                _Snapshot)
   when is_list(NodesWithUUIDs) ->
     Nodes = [N || {N, _} <- NodesWithUUIDs],
-    {Nodes1, S1} =
-        case S#state.disable_max_count of
-            true -> {Nodes, S};
-            false ->
-                TrimmedNodes = trim_nodes(Nodes, S),
-                case Nodes -- TrimmedNodes of
-                    [] ->
-                        {TrimmedNodes, S};
-                    NotFailedOver ->
-                        {TrimmedNodes,
-                         maybe_report_max_node_reached(
-                           Nodes, NotFailedOver, max_nodes_error_msg(S), S)}
-                end
-        end,
-    failover_nodes(Nodes1, S1, DownNodes, NodeStatuses).
+    DownNodeNames = [N || {N, _, _} <- DownNodes],
+    Snapshot = failover:get_snapshot(),
+
+    KVNodes = ns_cluster_membership:service_nodes(Snapshot, Nodes, kv),
+    CheckServiceSafety = KVNodes =:= [] orelse trim_needed(Nodes, S),
+
+    case CheckServiceSafety of
+        true ->
+            {ValidNodes, UnsafeNodes} =
+                validate_services_safety(Snapshot, Nodes, DownNodeNames,
+                                         KVNodes),
+            case ValidNodes of
+                [] ->
+                    %% We are not failing anything over, we just need to report
+                    %% the error and return the new state
+                    lists:foldl(fun log_unsafe_node/2, S, UnsafeNodes);
+                _ ->
+                    %% MB-66630:
+                    %% Can't skip safety check since these checks are done
+                    %% outside of a leader activity (not majority) and/or stale
+                    %% config.
+                    {Nodes1, S1} = trim_nodes_for_failover(ValidNodes, S),
+                    trigger_autofailover(Nodes1, NodeStatuses,
+                                         DownNodeNames, DownNodes,
+                                         #{skip_safety_check => true}, S1)
+            end;
+        false ->
+            trigger_autofailover(Nodes, NodeStatuses, DownNodeNames, DownNodes,
+                                 #{}, S)
+    end.
+
+trim_needed(_Nodes, #state{disable_max_count = true}) ->
+    false;
+trim_needed(Nodes, #state{max_count = Max}) ->
+    length(Nodes) > Max.
 
 trim_nodes(Nodes, #state{count = Count, max_count = Max}) ->
     lists:sublist(Nodes, Max - Count).
@@ -625,36 +660,6 @@ maybe_report_max_node_reached(AllNodes, NotFailedOver, ErrMsg, S) ->
             note_reported(max_node_reached, S);
         false ->
             S
-    end.
-
-failover_nodes([], S, _DownNodes, _NodeStatuses) ->
-    S;
-failover_nodes(Nodes, S, DownNodes, NodeStatuses) ->
-    DownNodeNames = [N || {N, _, _} <- DownNodes],
-    try_autofailover(Nodes, DownNodeNames, DownNodes,
-                     NodeStatuses, S).
-
-try_autofailover(Nodes, DownNodeNames, DownNodes, NodeStatuses,
-                 State) ->
-    case ns_cluster_membership:service_nodes(Nodes, kv) of
-        [] ->
-            Snapshot = failover:get_snapshot(),
-            {ValidNodes, UnsafeNodes} =
-                validate_services_safety(Snapshot, Nodes, DownNodeNames, []),
-            case ValidNodes of
-                [] ->
-                    %% We are not failing anything over, we just need to report
-                    %% the error and return the new state
-                    lists:foldl(fun log_unsafe_node/2, State,
-                                UnsafeNodes);
-                _ ->
-                    trigger_autofailover(ValidNodes, NodeStatuses,
-                                         DownNodeNames, DownNodes,
-                                         #{skip_safety_check => true}, State)
-            end;
-        _ ->
-            trigger_autofailover(Nodes, NodeStatuses, DownNodeNames,
-                                 DownNodes, #{}, State)
     end.
 
 trigger_autofailover(Nodes, NodeStatuses, DownNodeNames, DownNodes, Opts,

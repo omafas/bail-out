@@ -629,7 +629,10 @@ perform_auto_failover(AutoFailoverPid) ->
     %% be in a down state for n ticks at any point.
     fake_ns_config:update_snapshot(auto_failover_tick_period, 100000),
     AutoFailoverPid ! tick_period_updated,
-    auto_failover:enable(1, 5, []),
+
+    Config = auto_failover:get_cfg(),
+    MaxCount = proplists:get_value(max_count, Config, 5),
+    auto_failover:enable(1, MaxCount, []),
 
     %% Part of our test, we should not have any reported errors yet.
     ?assertEqual([],
@@ -1051,3 +1054,138 @@ graceful_failover_post_network_partition_stale_config(SetupConfig, _R) ->
 
     ok = ns_orchestrator:start_graceful_failover(['a']),
     ?assert(poll_for_counter_value(graceful_failover_fail, 1)).
+
+multi_node_maxcount_test_config() ->
+    #{buckets => ["default"],
+      healthy_nodes =>
+          [{'a', [kv]}, {'b', [index]}, {'c', [fts]}],
+      unhealthy_nodes => [{'d', [index]}, {'e', [fts]}]}.
+
+kv_maxcount_test_config() ->
+    #{buckets => ["default"],
+      healthy_nodes => [{'a', [kv]}, {'d', [kv]}, {'e', [index]}],
+      unhealthy_nodes => [{'b', [index]}, {'c', [kv, index]}]}.
+
+multi_node_failover_maxcount_test_() ->
+    SetupArgs = multi_node_maxcount_test_config(),
+    SetupConfig = build_setup_config(SetupArgs),
+
+    Tests = [
+             {"Multi-node failover maxCount test",
+              fun multi_node_failover_maxcount_test/2}
+            ],
+
+    %% foreachx here to let us pass parameters to setup.
+    {foreachx,
+     fun auto_failover_multi_node_maxcount_setup/1,
+     fun auto_failover_multi_node_maxcount_teardown/2,
+     [{SetupConfig, fun(T, R) ->
+                            {Name, ?_test(TestFun(T, R))}
+                    end} || {Name, TestFun} <- Tests]}.
+
+kv_maxcount_failover_test_() ->
+    SetupArgs = kv_maxcount_test_config(),
+    SetupConfig = build_setup_config(SetupArgs),
+
+    Tests = [
+             {"KV node failover with max count test",
+              fun kv_maxcount_failover_test/2}
+            ],
+
+    {foreachx,
+     fun auto_failover_multi_node_maxcount_setup/1,
+     fun auto_failover_multi_node_maxcount_teardown/2,
+     [{SetupConfig, fun(T, R) ->
+                            {Name, ?_test(TestFun(T, R))}
+                    end} || {Name, TestFun} <- Tests]}.
+
+multi_node_failover_maxcount_test(_SetupConfig, Pids) ->
+    #{auto_failover := AutoFailoverPid} = Pids,
+
+    perform_auto_failover(AutoFailoverPid),
+
+    ?assert(poll_for_counter_value(failover_complete, 1)),
+
+    ?assert(meck:called(service_api, is_safe, [index, '_']),
+            "service_api:is_safe should be called for index service"),
+
+    %% FTS node must have been failed over but not index (unsafe)
+    ?assert(
+       lists:member(
+         'e',
+         ns_cluster_membership:get_nodes_with_status(inactiveFailed)),
+       "FTS node 'e' should have been failed over"),
+    ?assert(lists:member('d',
+                         ns_cluster_membership:get_nodes_with_status(active)),
+            "Index node 'd' should NOT have been failed over"),
+
+    ?assert(meck:called(service_janitor, complete_service_failover, [fts]),
+            "Expected service_janitor:complete_service_failover to be called "
+            "for FTS service"),
+
+    ?assertNot(meck:called(service_janitor, complete_service_failover, [index]),
+               "service_janitor:complete_service_failover should not be called "
+               "for index service").
+
+kv_maxcount_failover_test(_SetupConfig, Pids) ->
+    #{auto_failover := AutoFailoverPid} = Pids,
+
+    perform_auto_failover(AutoFailoverPid),
+
+    %% Wait for failover to complete
+    ?assert(poll_for_counter_value(failover_complete, 1)),
+
+    ?assert(meck:called(service_api, is_safe, [index, '_']),
+            "service_api:is_safe should be called for index service"),
+
+    FailedOverNodes =
+        ns_cluster_membership:get_nodes_with_status(inactiveFailed),
+    ?assertEqual(['c'], FailedOverNodes,
+                 "Only node 'c' should be failed over"),
+
+    %% Verify that node 'b' remained active
+    ?assert(lists:member('b',
+                         ns_cluster_membership:get_nodes_with_status(active)),
+            "Node 'b' should NOT be failed over because it's unsafe").
+
+auto_failover_multi_node_maxcount_setup(SetupConfig) ->
+    Pids = auto_failover_test_setup(SetupConfig),
+
+    fake_ns_config:update_snapshot(
+      [{auto_failover_cfg,
+        [{enabled, false},
+         {timeout, 1},
+         {count, 0},
+         {max_count, 1},
+         {failover_preserve_durability_majority, true}]}]),
+
+    %% Mock pick_service_node to always return the local node so RPC calls work
+    meck:new(ns_cluster_membership, [passthrough]),
+    meck:expect(ns_cluster_membership, pick_service_node,
+                fun(_Snapshot, _Service, _DownNodes) ->
+                        node()
+                end),
+
+    meck:new(service_api, [passthrough]),
+    meck:expect(service_api, is_safe,
+                fun(index, _) ->
+                        {error, "Index service unsafe for testing"};
+                   (_, _) -> ok
+                end),
+
+    meck:new(service_manager, [passthrough]),
+    meck:expect(service_manager, failover,
+                fun(_Service, _Nodes, _Opts) -> ok end),
+
+    meck:new(service_janitor, [passthrough]),
+    meck:expect(service_janitor, complete_service_failover,
+                fun(_) -> ok end),
+
+    Pids.
+
+auto_failover_multi_node_maxcount_teardown(Config, PidMap) ->
+    meck:unload(ns_cluster_membership),
+    meck:unload(service_api),
+    meck:unload(service_manager),
+    meck:unload(service_janitor),
+    auto_failover_test_teardown(Config, PidMap).
