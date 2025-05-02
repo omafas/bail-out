@@ -833,7 +833,7 @@
         "help": "Rate at which CPUs overran their quota",
         "added": "7.2.0",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_cgroup_seconds_total": {
@@ -873,7 +873,7 @@
         "help": "Idle CPU utilization rate in the host",
         "added": "7.2.4",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_host_other_rate": {
@@ -881,7 +881,7 @@
         "help": "Other (not idle/user/sys/irq/stolen) CPU utilization rate in the host",
         "added": "7.2.4",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_host_seconds_total": {
@@ -902,7 +902,7 @@
         "help": "System CPU utilization rate in the host",
         "added": "7.1.1",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_host_user_rate": {
@@ -910,7 +910,7 @@
         "help": "User space CPU utilization rate in the host",
         "added": "7.1.1",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_host_utilization_rate": {
@@ -918,7 +918,7 @@
         "help": "CPU utilization rate in the host",
         "added": "7.1.1",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_irq_rate": {
@@ -926,7 +926,7 @@
         "help": "IRQ rate",
         "added": "7.0.0",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_stolen_rate": {
@@ -934,7 +934,7 @@
         "help": "CPU stolen rate",
         "added": "7.0.0",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_sys_rate": {
@@ -942,7 +942,7 @@
         "help": "System CPU utilization rate in the control group",
         "added": "7.0.0",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_throttled_rate": {
@@ -950,7 +950,7 @@
         "help": "Rate at which CPUs were throttled",
         "added": "7.2.0",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_user_rate": {
@@ -958,7 +958,7 @@
         "help": "User space CPU utilization rate in the control group",
         "added": "7.0.0",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_cpu_utilization_rate": {
@@ -966,7 +966,7 @@
         "help": "CPU utilization rate in the control group",
         "added": "7.0.0",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release",
+        "notes": "Will be removed in a future release",
         "stability": "committed"
     },
     "sys_disk_queue": {
@@ -1130,7 +1130,7 @@
         "help": "Amount of system memory free, excluding buffers/cache",
         "added": "7.0.0",
         "deprecated": "8.0.0",
-        "notes": "Will be removed in the 8.1 release. Use sys_mem_free_sys",
+        "notes": "Will be removed in a future release. Use sys_mem_free_sys",
         "unit": "bytes",
         "stability": "committed"
     },
@@ -1139,7 +1139,7 @@
         "help": "System memory limit",
         "added": "7.0.0",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in the 8.0 release. Use sys_mem_total or sys_mem_cgroup_limit",
+        "notes": "Will be removed in a future release. Use sys_mem_total or sys_mem_cgroup_limit",
         "unit": "bytes",
         "stability": "committed"
     },
@@ -1244,7 +1244,7 @@
         "help": "CPU utilization rate, by process",
         "added": "7.0.0",
         "deprecated": "7.6.0",
-        "notes": "Will be removed in  8.0. Use irate of sysproc_cpu_seconds_total for user/sys modes.",
+        "notes": "Will be removed in a future release. Use irate of sysproc_cpu_seconds_total for user/sys modes.",
         "stability": "committed",
         "labels": [
             {
