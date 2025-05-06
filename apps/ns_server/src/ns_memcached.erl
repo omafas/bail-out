@@ -45,6 +45,10 @@
 -define(MAGMA_CREATION_TIMEOUT, ?get_timeout(magma_creation, 300000)).
 -define(SET_KEYS_TIMEOUT,       ?get_timeout(set_keys, 30000)).
 -define(PRUNE_KEYS_TIMEOUT,       ?get_timeout(prune_keys, 30000)).
+-define(REENCRYPT_BUCKET_METADATA_TIMEOUT,
+        ?get_timeout(reencrypt_bucket_metadata, 3000)).
+-define(GET_METADATA_FILE_DEK_IDS_TIMEOUT,
+        ?get_timeout(get_metadata_file_dek_ids, 3000)).
 
 -define(RECBUF, ?get_param(recbuf, 64 * 1024)).
 -define(SNDBUF, ?get_param(sndbuf, 64 * 1024)).
@@ -425,6 +429,13 @@ handle_call({mark_warmed, DataIngress}, _From, #state{status=Status,
     {reply, Reply, State#state{status=NewStatus}};
 handle_call(warmup_stats, _From, State) ->
     {reply, State#state.warmup_stats, State};
+handle_call(maybe_reencrypt_bucket_metadata, _From,
+            #state{bucket = Bucket, bucket_uuid = BucketUUID} = State) ->
+    {ok, DS} = cb_crypto:fetch_deks_snapshot({bucketDek, Bucket}),
+    {reply, maybe_reencrypt_bucket_metadata(Bucket, BucketUUID, DS), State};
+handle_call(get_metadata_file_dek_ids, _From,
+            #state{bucket_uuid = BucketUUID} = State) ->
+    {reply, get_metadata_file_dek_ids_direct(BucketUUID), State};
 handle_call(Msg, From, State) ->
     StartTS = os:timestamp(),
     NewState = queue_call(Msg, From, StartTS, State),
@@ -1659,6 +1670,9 @@ do_ensure_bucket(Sock, Bucket, BConf, false, JWT, BucketUUID) ->
             %% stat request should never succeed, which makes removal
             %% impossible.
             {ok, DS} = cb_crypto:fetch_deks_snapshot({bucketDek, Bucket}),
+
+            ok = write_bucket_metadata(Bucket, BucketUUID, DS),
+
             {ActiveDek, Deks} = cb_crypto:get_all_deks(DS),
             {Engine, ConfigString, ConfigStringForLogging} =
                 memcached_bucket_config:start_params(BConf, ActiveDek, Deks,
@@ -1945,8 +1959,10 @@ set_active_dek_for_bucket(Bucket, _ActiveDek) ->
     {ok, DeksSnapshot} = cb_crypto:fetch_deks_snapshot({bucketDek, Bucket}),
     NsMemcachedExists = (whereis(server(Bucket)) =/= undefined),
     case set_active_dek(Bucket, DeksSnapshot) of
-        ok -> ok;
-        {error, not_found} -> %% bucket does not exist
+        ok ->
+            %% if bucket exists in memcached, ns_memcached should also exist
+            maybe_reencrypt_bucket_metadata(Bucket);
+        {error, not_found} -> %% bucket does not exist (in memcached!)
             case NsMemcachedExists of
                 true ->
                     %% ns_memcached is running, we should retry when bucket
@@ -1958,7 +1974,8 @@ set_active_dek_for_bucket(Bucket, _ActiveDek) ->
                     %% If bucket needs to be created, ns_memcached will create
                     %% it and use newest keys. If bucket doesn't need to be
                     %% created (e.g. it is failed over), there is no need to
-                    %% notify memcached at all.
+                    %% notify memcached at all. The same is true for the bucket
+                    %% metadata file.
                     %% Note that it is important that we check if ns_memcached
                     %% is running before calling set_active_dek, otherwise it is
                     %% possible that ns_memcached creates the bucket with old
@@ -1976,6 +1993,49 @@ set_active_dek_for_bucket(Bucket, _ActiveDek) ->
         {error, E} ->
             {error, E}
     end.
+
+maybe_reencrypt_bucket_metadata(BucketName) ->
+    Server = server(BucketName),
+    try
+        gen_server:call(Server, maybe_reencrypt_bucket_metadata,
+                        ?REENCRYPT_BUCKET_METADATA_TIMEOUT)
+    catch
+        exit:timeout ->
+            {error, timeout};
+        exit:{noproc, {gen_server, call,
+                       [Server, maybe_reencrypt_bucket_metadata, _]}} ->
+            {error, retry}
+    end.
+
+maybe_reencrypt_bucket_metadata(BucketName, BucketUUID, DeksSnapshot) ->
+    CurrentActiveDekId = cb_crypto:get_dek_id(DeksSnapshot),
+    case get_metadata_file_dek_ids_direct(BucketUUID) of
+        {ok, [CurrentActiveDekId]} ->
+            %% Metadata file exists and active dek id is the same as the
+            %% current active dek id, no need to reencrypt
+            ok;
+        {ok, _} ->
+            %% Metadata file exists and active dek id is different,
+            %% rewrite the file
+            write_bucket_metadata(BucketName, BucketUUID, DeksSnapshot);
+        {error, E} ->
+            ?log_error("Failed to get dek ids for metadata file for bucket ~p: ~p",
+                       [BucketUUID, E]),
+            {error, E}
+    end.
+
+write_bucket_metadata(BucketName, BucketUUID, DeksSnapshot) ->
+    DBSubDir = ns_storage_conf:this_node_bucket_dbdir(BucketUUID),
+    BucketMetadataFile = bucket_metadata_file(DBSubDir),
+    ok = filelib:ensure_dir(BucketMetadataFile),
+
+    ?log_debug("Writing bucket ~p metadata file: ~s",
+               [BucketName, BucketMetadataFile]),
+
+    BucketMetadata = {[{name, iolist_to_binary(BucketName)},
+                       {uuid, ns_bucket:uuid(BucketName, direct)}]},
+    cb_crypto:atomic_write_file(BucketMetadataFile,
+                                ejson:encode(BucketMetadata), DeksSnapshot).
 
 set_active_dek(TypeOrBucket, DeksSnapshot) ->
     ?log_debug("Setting active encryption key id for ~p: ~p...",
@@ -2034,10 +2094,11 @@ prune_log_or_audit_encr_keys(Type, KeyIds) ->
 
 sanitize_in_use_keys(InUseKeys) ->
     lists:map(fun (<<"unencrypted">>) -> ?NULL_DEK;
+                  (undefined) -> ?NULL_DEK;
                   (K) -> K
               end, InUseKeys).
 
-get_dek_ids_in_use(Bucket, StatsFn) ->
+get_encryption_key_ids_stat(Bucket, StatsFn) ->
     RV = perform_very_long_call(
            fun (Sock) ->
                    case mc_binary:quick_stats(Sock, <<"encryption-key-ids">>,
@@ -2074,25 +2135,51 @@ get_dek_ids_in_use(Bucket, StatsFn) ->
 
 get_dek_ids_in_use(Type) when Type =:= "@audit"; Type =:= "@logs" ->
     TypeBin = list_to_binary(Type),
-    get_dek_ids_in_use(undefined,
-                       fun (<<"encryption-key-ids">>, V, _Acc) ->
-                               %% Decoded Format:
-                               %%   {[{"<<@audit>>", ["<<key1>>", ...]},
-                               %%     {<<"@logs">>,  ["<<key1>>", ...]}]},
-                               {TypeAndKeys} = ejson:decode(V),
-                               lists:flatmap(
-                                 fun ({T, Keys}) when T =:= TypeBin ->
-                                         sanitize_in_use_keys(Keys);
-                                     ({_, _}) ->
-                                         []
-                                 end, TypeAndKeys)
-                       end);
+    get_encryption_key_ids_stat(
+      undefined,
+      fun (<<"encryption-key-ids">>, V, _Acc) ->
+              %% Decoded Format:
+              %%   {[{"<<@audit>>", ["<<key1>>", ...]},
+              %%     {<<"@logs">>,  ["<<key1>>", ...]}]},
+              {TypeAndKeys} = ejson:decode(V),
+              lists:flatmap(
+                fun ({T, Keys}) when T =:= TypeBin ->
+                        sanitize_in_use_keys(Keys);
+                    ({_, _}) ->
+                        []
+                end, TypeAndKeys)
+      end);
 get_dek_ids_in_use(BucketName) ->
-    get_dek_ids_in_use(BucketName,
-                       fun (<<"encryption-key-ids">>, V, _Acc) ->
-                               %% Format: ["key1", "key2", ...],
-                               sanitize_in_use_keys(ejson:decode(V))
-                       end).
+    maybe
+        {ok, DekIds} ?= get_encryption_key_ids_stat(
+                          BucketName,
+                          fun (<<"encryption-key-ids">>, V, _Acc) ->
+                                  %% Format: ["key1", "key2", ...],
+                                  sanitize_in_use_keys(ejson:decode(V))
+                          end),
+        {ok, MDFileDekIds} ?= get_metadata_file_dek_ids(BucketName),
+        {ok, lists:uniq(DekIds ++ sanitize_in_use_keys(MDFileDekIds))}
+    end.
+
+get_metadata_file_dek_ids(Bucket) ->
+    Server = server(Bucket),
+    try
+        gen_server:call(Server, get_metadata_file_dek_ids,
+                        ?GET_METADATA_FILE_DEK_IDS_TIMEOUT)
+    catch
+        exit:timeout ->
+            {error, timeout};
+        exit:{noproc, {gen_server, call,
+                       [Server, get_metadata_file_dek_ids, _]}} ->
+            ?log_debug("Can't get metadata file dek ids: ~p is not started...",
+                       [Server]),
+            {error, retry}
+    end.
+
+get_metadata_file_dek_ids_direct(BucketUUID) ->
+    DBSubDir = ns_storage_conf:this_node_bucket_dbdir(BucketUUID),
+    BucketMetadataFile = bucket_metadata_file(DBSubDir),
+    cb_crypto:get_file_dek_ids(BucketMetadataFile).
 
 get_bucket_stats(RootKey, StatKey, SubKey) ->
     perform_very_long_call(
@@ -2251,15 +2338,40 @@ get_config_stats(Bucket, SubKey) ->
       end, Bucket).
 
 drop_deks(BucketName, IdsToDrop, ContinuationId, Continuation) ->
-    ?log_debug("Initiating db compaction for bucket ~p in order to get rid of "
-               "old keys: ~p...", [BucketName, IdsToDrop]),
-    IdsToDropMcd = lists:map(fun (?NULL_DEK) -> <<"unencrypted">>;
-                                 (Id) -> Id
-                             end, IdsToDrop),
-    case compaction_api:partially_compact_db_files(
-           BucketName, IdsToDropMcd, ContinuationId, Continuation) of
-        ok -> {ok, started};
-        {error, Reason} -> {error, Reason}
+    maybe
+        ?log_debug("Initiating db compaction for bucket ~p in order to get rid "
+                   "of old keys: ~p...", [BucketName, IdsToDrop]),
+        IdsToDropMcd = lists:map(fun (?NULL_DEK) -> <<"unencrypted">>;
+                                     (Id) -> Id
+                                 end, IdsToDrop),
+        ok ?= drop_metadata_file_dek_ids(BucketName, IdsToDropMcd),
+        ok ?= compaction_api:partially_compact_db_files(
+                BucketName, IdsToDropMcd, ContinuationId, Continuation),
+        {ok, started}
+    end.
+
+drop_metadata_file_dek_ids(BucketName, IdsToDrop) ->
+    %% Metadata file should normally be already encrypted by the active key
+    %% so most likely there is nothing to do here.
+    %% Also, race with ns_memcached is ok here because:
+    %% 1. metadata file is written atomically
+    %% 2. ns_memcached can't encrypt it with older key than the current key,
+    %%    so even if it races with us, the file will get encrypted by
+    %%    the newer key
+    %% Why do we need to check metadata file first instead of just calling
+    %% ns_memcached? Because ns_memcached starts after cb_cluster_secrets
+    %% so it is possible that that ns_memcached doesn't exist yet.
+    maybe
+        BucketUUID = ns_bucket:uuid(BucketName, direct),
+        {ok, DekIds} ?= get_metadata_file_dek_ids_direct(BucketUUID),
+        TranslatedIds = lists:map(fun (undefined) -> ?NULL_DEK;
+                                      (Id) -> Id
+                                  end, DekIds),
+        ShouldRewrite = lists:any(lists:member(_, IdsToDrop), TranslatedIds),
+        case ShouldRewrite of
+            true -> maybe_reencrypt_bucket_metadata(BucketName);
+            false -> ok
+        end
     end.
 
 -spec get_fusion_storage_snapshot(bucket_name(), vbucket_id(), string(),
@@ -2352,3 +2464,6 @@ sync_fusion_log_store(Bucket, VBuckets) ->
                  [?cut(mc_client_binary:sync_fusion_log_store(Sock, VBucket)) ||
                      VBucket <- VBuckets])}
       end, Bucket).
+
+bucket_metadata_file(BucketDir) ->
+    filename:join([BucketDir, "cm", "bucket.metadata"]).
