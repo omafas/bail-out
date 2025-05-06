@@ -198,21 +198,15 @@ cleanup_with_membase_bucket_check_map(Bucket, Options, BucketConfig) ->
             ?log_info("janitor decided to generate initial vbucket map"),
             {Map, MapOpts} =
                 ns_rebalancer:generate_initial_map(Bucket, BucketConfig),
-            set_initial_map(Map, Servers, MapOpts, Bucket, BucketConfig),
+            set_initial_map(Map, Servers, MapOpts, Bucket),
 
             repeat_bucket_config_cleanup(Bucket, Options);
         _ ->
             {ok, BucketConfig}
     end.
 
-set_initial_map(Map, Servers, MapOpts, Bucket, BucketConfig) ->
-    case ns_rebalancer:unbalanced(Map, BucketConfig) of
-        false ->
-            ns_bucket:store_last_balanced_vbmap(Bucket, Map, MapOpts);
-        true ->
-            ok
-    end,
-
+set_initial_map(Map, Servers, MapOpts, Bucket) ->
+    ns_bucket:store_last_balanced_vbmap(Bucket, Map, MapOpts),
     ok = ns_bucket:set_initial_map(Bucket, Map, Servers, MapOpts).
 
 partition_param_results(Res) ->
