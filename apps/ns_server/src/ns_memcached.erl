@@ -85,7 +85,8 @@
                 control_queue :: pid() | undefined,
                 check_in_progress = false :: boolean(),
                 next_check_after = ?CHECK_INTERVAL :: integer(),
-                jwt_expires :: undefined | integer()
+                jwt_expires :: undefined | integer(),
+                bucket_uuid :: binary()
                }).
 
 %% external API
@@ -196,7 +197,8 @@ init(Bucket) ->
     {ok, ControlQueue} = work_queue:start_link(),
     work_queue:submit_work(
       ControlQueue, ?cut(run_connect_phase(Self, Bucket, WorkersCount))),
-
+    BucketUUID = ns_bucket:uuid(Bucket, direct),
+    true = is_binary(BucketUUID),
     State = #state{
                status = connecting,
                bucket = Bucket,
@@ -207,7 +209,8 @@ init(Bucket) ->
                heavy_calls_queue = Q,
                very_heavy_calls_queue = Q,
                running_fast = WorkersCount,
-               control_queue = ControlQueue
+               control_queue = ControlQueue,
+               bucket_uuid = BucketUUID
               },
     {ok, State}.
 
@@ -317,7 +320,7 @@ handle_call(status, From, #state{status = warmed} = State) ->
     handle_call(verify_warmup_status, From, State);
 handle_call(status, _From, #state{status = Status} = State) ->
     {reply, Status, State};
-handle_call(disable_traffic, _From, State) ->
+handle_call(disable_traffic, _From, #state{bucket_uuid = BucketUUID} = State) ->
     case State#state.status of
         Status when Status =:= warmed; Status =:= connected ->
             ?log_info("Disabling traffic and unmarking bucket as warmed"),
@@ -326,10 +329,9 @@ handle_call(disable_traffic, _From, State) ->
                     State2 = State#state{status=connected,
                                          start_time = os:timestamp()},
                     BucketName = State2#state.bucket,
-                    UUID = ns_bucket:uuid(BucketName, direct),
                     event_log:add_log(bucket_offline,
                                       [{bucket, list_to_binary(BucketName)},
-                                       {bucket_uuid, UUID}]),
+                                       {bucket_uuid, BucketUUID}]),
                     {reply, ok, State2};
                 {memcached_error, _, _} = Error ->
                     ?log_error("disabling traffic failed: ~p", [Error]),
@@ -383,6 +385,7 @@ handle_call(mark_warmed, From, State) ->
 handle_call({mark_warmed, DataIngress}, _From, #state{status=Status,
                                                       bucket=Bucket,
                                                       start_time=Start,
+                                                      bucket_uuid = BucketUUID,
                                                       sock=Sock} = State) ->
     {NewStatus, Reply} =
         case Status of
@@ -400,10 +403,9 @@ handle_call({mark_warmed, DataIngress}, _From, #state{status=Status,
                         Time = timer:now_diff(os:timestamp(), Start) div 1000000,
                         ?log_info("Bucket ~p marked as warmed in ~p seconds",
                                   [Bucket, Time]),
-                        UUID = ns_bucket:uuid(Bucket, direct),
                         event_log:add_log(bucket_online,
                                           [{bucket, list_to_binary(Bucket)},
-                                           {bucket_uuid, UUID},
+                                           {bucket_uuid, BucketUUID},
                                            {warmup_time, Time}]),
                         %% Make best effort to update the status of bucket
                         %% readiness on node.
@@ -852,8 +854,10 @@ issue_jwt() ->
     ?log_debug("Issue JWT ~p", [Payload]),
     {ok, JWT, Expires}.
 
-handle_info({connect_done, WorkersCount, RV}, #state{bucket = Bucket,
-                                                     status = OldStatus} = State) ->
+handle_info({connect_done, WorkersCount, RV},
+            #state{bucket = Bucket,
+                   status = OldStatus,
+                   bucket_uuid = BucketUUID} = State) ->
     gen_event:notify(buckets_events, {started, Bucket}),
     erlang:process_flag(trap_exit, true),
     Self = self(),
@@ -867,7 +871,7 @@ handle_info({connect_done, WorkersCount, RV}, #state{bucket = Bucket,
                     false ->
                         {ok, undefined, undefined}
                 end,
-            try ensure_bucket(Sock, Bucket, false, JWT) of
+            try ensure_bucket(Sock, Bucket, false, JWT, BucketUUID) of
                 ok ->
                     connecting = OldStatus,
 
@@ -986,7 +990,8 @@ handle_info(Message, #state{control_queue = undefined, status = Status,
     {noreply, State};
 handle_info(Message, #state{worker_features = WF, control_queue = Q,
                             bucket = Bucket, check_in_progress = false,
-                            jwt_expires = JWTExpires} = State)
+                            jwt_expires = JWTExpires,
+                            bucket_uuid = BucketUUID} = State)
   when Message =:= check_config_soon orelse Message =:= check_config ->
     misc:flush(check_config_soon),
     misc:flush(check_config),
@@ -1015,7 +1020,8 @@ handle_info(Message, #state{worker_features = WF, control_queue = Q,
               fun () ->
                       perform_very_long_call_with_timing(
                         Bucket, ensure_bucket,
-                        ensure_bucket(_, Bucket, true, JWT), [json]),
+                        ensure_bucket(_, Bucket, true, JWT, BucketUUID),
+                        [json]),
                       Self ! complete_check
               end),
             {noreply, State#state{check_in_progress = true,
@@ -1039,15 +1045,15 @@ handle_info(Msg, State) ->
 
 terminate(_Reason, #state{sock = still_connecting}) ->
     ?log_debug("Dying when socket is not yet connected");
-terminate(Reason, #state{bucket=Bucket, sock=Sock}) ->
+terminate(Reason, #state{bucket=Bucket, sock=Sock, bucket_uuid=BucketUUID}) ->
     try
-        do_terminate(Reason, Bucket, Sock)
+        do_terminate(Reason, Bucket, Sock, BucketUUID)
     after
         gen_event:notify(buckets_events, {stopped, Bucket}),
         ?log_debug("Terminated.")
     end.
 
-do_terminate(Reason, Bucket, Sock) ->
+do_terminate(Reason, Bucket, Sock, BucketUUID) ->
     Config = ns_config:get(),
     BucketConfigs = ns_bucket:get_buckets(),
     NoBucket = not lists:keymember(Bucket, 1, BucketConfigs),
@@ -1084,7 +1090,7 @@ do_terminate(Reason, Bucket, Sock) ->
             %% deleted
             DeleteData = NoBucket,
 
-            delete_bucket(Sock, Bucket, Force, DeleteData);
+            delete_bucket(Sock, Bucket, BucketUUID, Force, DeleteData);
         false ->
             %% if this is system shutdown bucket engine now can reliably
             %% delete all buckets as part of shutdown. if this is supervisor
@@ -1094,7 +1100,7 @@ do_terminate(Reason, Bucket, Sock) ->
                      "Check logs for details.", [ThisNode])
     end.
 
-delete_bucket(Sock, Bucket, Force, DeleteData) ->
+delete_bucket(Sock, Bucket, BucketUUID, Force, DeleteData) ->
     ?log_info("Deleting bucket ~p from memcached (force = ~p)",
               [Bucket, Force]),
 
@@ -1115,7 +1121,15 @@ delete_bucket(Sock, Bucket, Force, DeleteData) ->
         case DeleteData of
             true ->
                 ?log_debug("Proceeding into vbuckets dbs deletions"),
-                ns_couchdb_api:delete_databases_and_files(Bucket);
+                try
+                    ns_couchdb_api:delete_databases_and_files(Bucket)
+                catch
+                    Class:Exception ->
+                        ?log_error("Failed to delete couchdb bucket ~p: ~p",
+                                   [Bucket, {Class, Exception}])
+                end,
+                Dir = ns_storage_conf:this_node_bucket_dbdir(BucketUUID),
+                misc:rm_rf(Dir);
             false ->
                 ok
         end
@@ -1572,7 +1586,7 @@ do_connect(AgentName, Options) ->
             throw({T, E})
     end.
 
-ensure_bucket(Sock, Bucket, BucketSelected, JWT) ->
+ensure_bucket(Sock, Bucket, BucketSelected, JWT, BucketUUID) ->
     %% This testpoint simulates the case where the bucket is not selectable
     %% (returns enoent) but does exist so cannot be created.
     case simulate_slow_bucket_operation(Bucket, slow_bucket_creation,
@@ -1585,11 +1599,12 @@ ensure_bucket(Sock, Bucket, BucketSelected, JWT) ->
                 <<"paused">> ->
                     {error, bucket_paused};
                 _ ->
-                    ensure_bucket_inner(Sock, Bucket, BucketSelected, JWT)
+                    ensure_bucket_inner(Sock, Bucket, BucketSelected, JWT,
+                                        BucketUUID)
             end
     end.
 
-ensure_bucket_inner(Sock, Bucket, BucketSelected, JWT) ->
+ensure_bucket_inner(Sock, Bucket, BucketSelected, JWT, BucketUUID) ->
     %% Only catch exceptions when getting the bucket config. Once we're
     %% past that point and into the guts of this function there is code
     %% that may exit with reason {shutdown, reconfig} and that exit should
@@ -1610,7 +1625,8 @@ ensure_bucket_inner(Sock, Bucket, BucketSelected, JWT) ->
                     not_present
             end;
         BConf ->
-            case do_ensure_bucket(Sock, Bucket, BConf, BucketSelected, JWT) of
+            case do_ensure_bucket(Sock, Bucket, BConf, BucketSelected, JWT,
+                                  BucketUUID) of
                 ok ->
                     memcached_bucket_config:ensure_collections(Sock, BConf);
                 Error ->
@@ -1623,16 +1639,15 @@ ensure_bucket_inner(Sock, Bucket, BucketSelected, JWT) ->
             {E, R}
     end.
 
-do_ensure_bucket(Sock, Bucket, BConf, true, JWT) ->
+do_ensure_bucket(Sock, Bucket, BConf, true, JWT, _BucketUUID) ->
     ensure_selected_bucket(Sock, Bucket, BConf, JWT);
-do_ensure_bucket(Sock, Bucket, BConf, false, JWT) ->
+do_ensure_bucket(Sock, Bucket, BConf, false, JWT, BucketUUID) ->
     case select_and_ensure_bucket(Sock, Bucket, BConf, JWT) of
         ok ->
             ok;
         {memcached_error, key_enoent, _} ->
-            {ok, DBSubDir} =
-                ns_storage_conf:this_node_bucket_dbdir(Bucket),
-            ok = filelib:ensure_dir(DBSubDir),
+            DBSubDir = ns_storage_conf:this_node_bucket_dbdir(BucketUUID),
+            ok = filelib:ensure_path(DBSubDir),
 
             %% Note: cb_cluster_secrets should have deks created by this moment
             %% (we do sync with cb_cluster_secret before start_link for that).

@@ -363,18 +363,21 @@ start_guardrail_enforcer() ->
 start_janitor_agent() ->
     meck:expect(janitor_agent_sup, get_registry_pid,
                 fun (_) -> self() end),
+    BucketCfg = [{type, membase},
+                 {storage_mode, magma},
+                 {servers, ?NODES}],
     meck:expect(ns_bucket, get_bucket,
-                fun ("bucket1") ->
-                        {ok, [{type, membase},
-                              {storage_mode, magma},
-                              {servers, ?NODES}]}
-                end),
+                fun ("bucket1") -> {ok, BucketCfg} end),
+    meck:expect(ns_bucket, get_bucket,
+                fun ("bucket1", _) -> {ok, BucketCfg} end),
+    meck:expect(ns_bucket, get_snapshot,
+                fun (_) -> fake_chronicle_snapshot end),
     meck:expect(ns_config, get_timeout,
                 fun (_, Default) -> Default end),
     meck:expect(dcp_sup, nuke,
                 fun (_) -> ok end),
     meck:expect(ns_storage_conf, this_node_bucket_dbdir,
-                fun (_) -> {ok, ""} end),
+                fun (_, _) -> "" end),
     janitor_agent:start_link("bucket1").
 
 basic_test_setup() ->

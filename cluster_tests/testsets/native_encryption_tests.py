@@ -186,9 +186,10 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         bucket_props['encryptionAtRestKeyId'] = secret1_id
         self.cluster.create_bucket(bucket_props, sync=True)
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
 
         kek1_id = get_kek_id(self.random_node(), secret1_id)
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=1,
                                       verify_encryption_kek=kek1_id)
 
@@ -212,7 +213,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         kek2_id = get_kek_id(self.random_node(), secret2_id)
         # update is asynchronous, so we can't assume the dek gets reencrypted
         # immediately
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=1,
                                       verify_encryption_kek=kek2_id)
 
@@ -227,7 +228,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': -1},
                                    sync=True)
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=0)
         # Can't modify because the secret doesn't exist
         self.cluster.update_bucket({'name': self.bucket_name,
@@ -238,7 +240,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         kek1_id = get_kek_id(self.random_node(), secret1_id)
         # update is asynchronous, so we can't assume the dek gets reencrypted
         # immediately
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=1,
                                       verify_encryption_kek=kek1_id)
         for node in kv_nodes(self.cluster):
@@ -356,9 +358,10 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': secret2_id},
                                    sync=True)
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
 
         kek_id = get_kek_id(self.random_node(), secret2_id)
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=1,
                                       verify_encryption_kek=kek_id)
 
@@ -582,9 +585,10 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': secret1_id},
                                    sync=True)
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
 
         old_kek_id = get_kek_id(self.random_node(), secret1_id)
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=1,
                                       verify_encryption_kek=old_kek_id)
 
@@ -596,7 +600,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         # all the keys that are encrypted by the key that has been rotated
         # should be reencrypted
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=1,
                                       verify_encryption_kek=new_kek_id)
 
@@ -851,7 +855,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': secret_id},
                                    sync=True)
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=1)
 
         self.cluster.update_bucket({'name': self.bucket_name,
@@ -863,7 +868,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                     'encryptionAtRestDekRotationInterval': 0})
 
         # Verify that bucket has more than one dek now
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=lambda n: n > 1)
 
     def dont_remove_active_dek_test(self):
@@ -924,8 +929,9 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                         'ramQuota': 100,
                         'encryptionAtRestKeyId': aws_secret_id}
         self.cluster.create_bucket(bucket_props)
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
 
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=1,
                                       verify_encryption_kek=kek_id)
 
@@ -981,7 +987,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                          generated_secret_id),
                               verify_encryption_kek=new_kek_id,
                               verify_key_count=1)
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=1,
                                       verify_encryption_kek=new_kek_id)
 
@@ -1006,7 +1012,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         time.sleep(3)
 
-        verify_bucket_deks_files(self.cluster, self.bucket_name,
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
+        verify_bucket_deks_files(self.cluster, bucket_uuid,
                                  verify_key_count=lambda n: n <= 2)
 
         verify_dek_files(self.cluster, Path() / 'config' / 'deks',
@@ -1060,6 +1067,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         node_to_remove, secret_id = \
             self.prepare_cluster_for_node_readd_testing()
         original_services = node_to_remove.get_services()
+        bucket_uuid = self.cluster.get_bucket_uuid(self.sample_bucket)
 
         # Remove the node
         self.cluster.rebalance(ejected_nodes=[node_to_remove], wait=True,
@@ -1079,7 +1087,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         # not affect it
         poll_verify_bucket_deks_files(
             [node_to_remove],
-            self.sample_bucket,
+            bucket_uuid,
             verify_key_count=1)
 
         # Add the node back
@@ -1253,6 +1261,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def node_failover_and_add_back_base(self, recovery_type=None):
         node_to_failover, secret_id = \
             self.prepare_cluster_for_node_readd_testing()
+        bucket_uuid = self.cluster.get_bucket_uuid(self.sample_bucket)
 
         self.cluster.failover_node(node_to_failover,
                                    graceful=False,
@@ -1267,7 +1276,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         # the data
         poll_verify_bucket_deks_files(
             [node_to_failover],
-            self.sample_bucket,
+            bucket_uuid,
             verify_key_count=2)
 
         self.cluster.set_recovery_type(node_to_failover,
@@ -1278,7 +1287,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         # for the same reason as above node should have 3 deks now
         poll_verify_bucket_deks_files(
             [node_to_failover],
-            self.sample_bucket,
+            bucket_uuid,
             verify_key_count=3)
 
         self.cluster.rebalance(wait=True, verbose=True)
@@ -1286,8 +1295,9 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
     def drop_deks_test(self):
         self.load_and_assert_sample_bucket(self.cluster, self.sample_bucket)
+        bucket_uuid = self.cluster.get_bucket_uuid(self.sample_bucket)
         poll_verify_bucket_deks_files(self.cluster,
-                                      self.sample_bucket,
+                                      bucket_uuid,
                                       verify_key_count=0)
         secret_json = aws_test_secret(usage=['bucket-encryption'])
         aws_secret_id = create_secret(self.random_node(), secret_json)
@@ -1362,6 +1372,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': secret_id},
                                    sync=True)
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
         # Memorize deks in use (there should one on each kv node)
         dek_ids = assert_bucket_deks_have_changed(self.cluster,
                                                   self.bucket_name,
@@ -1377,7 +1388,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         # running compactions, so there always should be two deks: the one that
         # was used to encrypt data (the very first dek), and the one that is
         # active now.
-        poll_verify_bucket_deks_files(self.cluster, self.bucket_name,
+        poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
                                       verify_key_count=lambda n: n >= 2)
 
         # Change dek lifetime to 1 second and wait...
@@ -1410,10 +1421,12 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': secret_id1},
                                    sync=True)
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
+
         # Memorize deks in use (there should one on each kv node)
         dek_ids1 = poll_verify_bucket_deks_and_collect_ids(
                      self.cluster,
-                     self.bucket_name,
+                     bucket_uuid,
                      verify_key_count=1,
                      verify_encryption_kek=kek_id1)
 
@@ -1429,7 +1442,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         dek_ids2 = poll_verify_bucket_deks_and_collect_ids(
                      self.cluster,
-                     self.bucket_name,
+                     bucket_uuid,
                      verify_key_count=1,
                      verify_encryption_kek=new_kek_id1)
 
@@ -1443,7 +1456,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         dek_ids3 = poll_verify_bucket_deks_and_collect_ids(
                      self.cluster,
-                     self.bucket_name,
+                     bucket_uuid,
                      verify_key_count=1,
                      verify_encryption_kek=kek_id2)
 
@@ -2028,8 +2041,8 @@ def poll_verify_kek_files(*args, **kwargs):
       sleep_time=0.3, attempts=50, retry_on_assert=True, verbose=True)
 
 
-def verify_bucket_deks_files(cluster, bucket, **kwargs):
-    deks_path = Path() / 'data' / bucket / 'deks'
+def verify_bucket_deks_files(cluster, bucket_uuid, **kwargs):
+    deks_path = Path() / 'data' / bucket_uuid / 'deks'
 
     def is_kv_node(node):
         return Service.KV in node.get_services()
@@ -2389,10 +2402,11 @@ def get_bucket_deks_in_use(node, bucket):
 def assert_bucket_deks_have_changed(cluster, bucket, min_time=None,
                                     old_dek_ids=None, verify_key_count=None,
                                     **kwargs):
+    bucket_uuid = cluster.get_bucket_uuid(bucket)
     # checking that bucket deks have changed
     poll_verify_bucket_deks_files(
       cluster,
-      bucket,
+      bucket_uuid,
       verify_key_count=verify_key_count,
       verify_creation_time=lambda ct: ct >= min_time,
       verify_id=lambda n: n not in old_dek_ids,
@@ -2404,7 +2418,7 @@ def assert_bucket_deks_have_changed(cluster, bucket, min_time=None,
     assert len(dek_ids) > 0, f'bucket deks are empty: {dek_ids}'
     # ... and checking that on disk we have the same dek and nothing else
     poll_verify_bucket_deks_files(cluster,
-                                  bucket,
+                                  bucket_uuid,
                                   verify_key_count=verify_key_count,
                                   verify_id=lambda n: n in dek_ids,
                                   **kwargs)

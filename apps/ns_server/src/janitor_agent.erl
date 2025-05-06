@@ -688,7 +688,8 @@ init(BucketName) ->
     RegistryPid = janitor_agent_sup:get_registry_pid(BucketName),
     true = is_pid(RegistryPid),
 
-    {ok, BucketConfig} = ns_bucket:get_bucket(BucketName),
+    Snapshot = ns_bucket:get_snapshot(BucketName),
+    {ok, BucketConfig} = ns_bucket:get_bucket(BucketName, Snapshot),
     case ns_bucket:bucket_type(BucketConfig) of
         memcached ->
             ok;
@@ -702,7 +703,7 @@ init(BucketName) ->
     end,
 
     State = #state{bucket_name = BucketName,
-                   flushseq = read_flush_counter(BucketName),
+                   flushseq = read_flush_counter(BucketName, Snapshot),
                    rebalance_subprocesses_registry = RegistryPid},
     gen_server:enter_loop(?MODULE, [], State, {local, ServerName}).
 
@@ -1078,12 +1079,12 @@ spawn_rebalance_subprocess(
     {noreply,
      State#state{rebalance_subprocesses = [{From, Pid} | Subprocesses]}}.
 
-flushseq_file_path(BucketName) ->
-    {ok, DBSubDir} = ns_storage_conf:this_node_bucket_dbdir(BucketName),
+flushseq_file_path(BucketName, Snapshot) ->
+    DBSubDir = ns_storage_conf:this_node_bucket_dbdir(BucketName, Snapshot),
     filename:join(DBSubDir, "flushseq").
 
-read_flush_counter(BucketName) ->
-    FlushSeqFile = flushseq_file_path(BucketName),
+read_flush_counter(BucketName, Snapshot) ->
+    FlushSeqFile = flushseq_file_path(BucketName, Snapshot),
     case file:read_file(FlushSeqFile) of
         {ok, Contents} ->
             try list_to_integer(binary_to_list(Contents)) of
@@ -1109,7 +1110,8 @@ read_flush_counter_from_config(BucketName) ->
 
 consider_doing_flush(State) ->
     BucketName = State#state.bucket_name,
-    case ns_bucket:get_bucket(BucketName) of
+    Snapshot = ns_bucket:get_snapshot(BucketName),
+    case ns_bucket:get_bucket(BucketName, Snapshot) of
         {ok, BucketConfig} ->
             ConfigFlushSeq = proplists:get_value(flushseq, BucketConfig, 0),
             MyFlushSeq = State#state.flushseq,
@@ -1118,7 +1120,8 @@ consider_doing_flush(State) ->
                     ?log_info("Config flushseq ~p is greater than local "
                               "flushseq ~p. Going to flush",
                               [ConfigFlushSeq, MyFlushSeq]),
-                    perform_flush(State, BucketConfig, ConfigFlushSeq);
+                    perform_flush(State, BucketConfig, ConfigFlushSeq,
+                                  Snapshot);
                 false ->
                     case ConfigFlushSeq =/= MyFlushSeq of
                         true ->
@@ -1136,7 +1139,7 @@ consider_doing_flush(State) ->
     end.
 
 perform_flush(#state{bucket_name = BucketName} = State, BucketConfig,
-              ConfigFlushSeq) ->
+              ConfigFlushSeq, Snapshot) ->
     ?log_info("Doing local bucket flush"),
     {ok, VBStates} = ns_memcached:local_connected_and_list_vbuckets(BucketName),
     NewVBStates =
@@ -1157,13 +1160,13 @@ perform_flush(#state{bucket_name = BucketName} = State, BucketConfig,
     [ok = ns_memcached:sync_delete_vbucket(BucketName, VB)
      || {VB, _} <- VBStates],
     ?log_info("Local flush is done"),
-    save_flushseq(BucketName, ConfigFlushSeq),
+    save_flushseq(BucketName, ConfigFlushSeq, Snapshot),
     NewState.
 
-save_flushseq(BucketName, ConfigFlushSeq) ->
+save_flushseq(BucketName, ConfigFlushSeq, Snapshot) ->
     ?log_info("Saving new flushseq: ~p", [ConfigFlushSeq]),
     Cont = list_to_binary(integer_to_list(ConfigFlushSeq)),
-    misc:atomic_write_file(flushseq_file_path(BucketName), Cont).
+    misc:atomic_write_file(flushseq_file_path(BucketName, Snapshot), Cont).
 
 do_wait_seqno_persisted(Bucket, VBucket, SeqNo) ->
     case ns_memcached:wait_for_seqno_persistence(Bucket, VBucket, SeqNo) of
@@ -1638,15 +1641,18 @@ wait_for_memcached_test_setup() ->
                 end),
 
     meck:new(ns_bucket, [passthrough]),
+    BucketCfg = [{type, memcached}],
     meck:expect(ns_bucket, get_bucket,
-                fun(_) ->
-                        {ok, [{type, memcached}]}
-                end),
+                fun(_) -> {ok, BucketCfg} end),
+    meck:expect(ns_bucket, get_bucket,
+                fun(_, _) -> {ok, BucketCfg} end),
+    meck:expect(ns_bucket, get_snapshot,
+                fun (_) -> fake_chronicle_snapshot end),
 
     meck:new(ns_storage_conf),
     meck:expect(ns_storage_conf, this_node_bucket_dbdir,
-                fun(_) ->
-                        {ok, "/"}
+                fun(_, _) ->
+                        "/"
                 end),
 
     meck:new(ns_config, [passthrough]),

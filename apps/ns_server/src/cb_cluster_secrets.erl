@@ -2168,7 +2168,13 @@ destroy_dek_info(Kind, #state{deks_info = DeksInfo} = State) ->
     write_deks_cfg_file(NewState),
     self() ! calculate_dek_info,
     delete_kind_stats(Kind),
-    encryption_service:garbage_collect_keys(Kind, []),
+    try
+        encryption_service:garbage_collect_keys(Kind, [])
+    catch
+        error:bucket_not_found ->
+            ?log_debug("Failed to garbage collect keys for ~p: "
+                       "bucket not found", [Kind])
+    end,
     functools:chain(NewState,
                     [restart_dek_cleanup_timer(_),
                      restart_dek_rotation_timer(_)]).

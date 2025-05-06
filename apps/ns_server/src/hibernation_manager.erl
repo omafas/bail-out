@@ -471,8 +471,8 @@ meck_expect_ns_storage_conf() ->
                         {ok, "/data"}
                 end),
     meck:expect(ns_storage_conf, this_node_bucket_dbdir,
-                fun (Bucket) ->
-                        {ok, filename:join("/data", Bucket)}
+                fun (Bucket, _) ->
+                        filename:join("/data", Bucket)
                 end).
 
 force_unpause_via_process_failure_body(ProcessType) ->

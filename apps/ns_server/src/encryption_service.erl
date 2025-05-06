@@ -110,7 +110,8 @@ store_kek(Id, Key, KekIdToEncrypt, CreationDT, CanBeCached) ->
               CanBeCached).
 
 store_dek({bucketDek, Bucket}, Id, Key, KekIdToEncrypt, CreationDT) ->
-    store_dek(bucketDek, bucket_dek_id(Bucket, Id), Key, KekIdToEncrypt,
+    BucketUUID = ns_bucket:uuid(Bucket, direct),
+    store_dek(bucketDek, bucket_dek_id(BucketUUID, Id), Key, KekIdToEncrypt,
               CreationDT);
 store_dek(Kind, Id, Key, KekIdToEncrypt, CreationDT) ->
     store_key(Kind, Id, 'raw-aes-gcm', Key, KekIdToEncrypt, CreationDT, false).
@@ -156,7 +157,8 @@ format_kmip_key_params(#{host := Host,
 read_dek(Kind, DekId) ->
     {NewId, NewKind} = case Kind of
                            {bucketDek, Bucket} ->
-                               {bucket_dek_id(Bucket, DekId), bucketDek};
+                               BucketUUID = ns_bucket:uuid(Bucket, direct),
+                               {bucket_dek_id(BucketUUID, DekId), bucketDek};
                            _ ->
                                {DekId, Kind}
                        end,
@@ -888,7 +890,14 @@ key_path({bucketDek, Bucket}) ->
         undefined ->
             undefined;
         PathToDeks ->
-            iolist_to_binary(filename:join([PathToDeks, Bucket, "deks"]))
+            case ns_bucket:uuid(Bucket, direct) of
+                not_present ->
+                    erlang:error(bucket_not_found);
+                UUID ->
+                    UUIDStr = binary_to_list(UUID),
+                    iolist_to_binary(filename:join([PathToDeks, UUIDStr,
+                                                    "deks"]))
+            end
     end;
 %% Only bucketDek can change in config, other paths are static.
 %% Moreover we don't have ns_config started yet when we already need other
@@ -900,8 +909,9 @@ key_path(bucketDek) ->
 key_path(Kind) ->
     cb_gosecrets_runner:key_path(Kind, []).
 
-bucket_dek_id(Bucket, DekId) ->
-    iolist_to_binary(filename:join([Bucket, "deks", DekId])).
+bucket_dek_id(BucketUUID, DekId) ->
+    iolist_to_binary(filename:join([binary_to_list(BucketUUID), "deks",
+                                    DekId])).
 
 retired_keys_dir() ->
     filename:join(path_config:component_path(data), "retired_keys").

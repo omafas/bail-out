@@ -296,7 +296,7 @@ do_pause_bucket(#bucket_hibernation_op_args{
 
     ok = ns_memcached:pause_bucket(Bucket),
 
-    {ok, LocalPath0} = ns_storage_conf:this_node_bucket_dbdir(Bucket),
+    LocalPath0 = ns_storage_conf:this_node_bucket_dbdir(Bucket, direct),
     LocalPath = append_path_separator(LocalPath0),
 
     RemotePath = hibernation_utils:get_bucket_data_remote_path(

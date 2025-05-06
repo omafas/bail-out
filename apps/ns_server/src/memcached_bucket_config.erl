@@ -30,7 +30,7 @@
          get_current_collections_uid/1,
          format_mcd_keys/2]).
 
-params(membase, BucketName, BucketConfig, MemQuota, UUID) ->
+params(membase, BucketName, BucketConfig, MemQuota, UUID, DBSubDir) ->
     {DriftAheadThreshold, DriftBehindThreshold} =
         case ns_bucket:drift_thresholds(BucketConfig) of
             undefined ->
@@ -38,8 +38,6 @@ params(membase, BucketName, BucketConfig, MemQuota, UUID) ->
             {A, B} ->
                 {misc:msecs_to_usecs(A), misc:msecs_to_usecs(B)}
         end,
-
-    {ok, DBSubDir} = ns_storage_conf:this_node_bucket_dbdir(BucketName),
 
     [{"max_size", [{reload, flush}], MemQuota},
      {"dbname", [restart], DBSubDir},
@@ -115,7 +113,7 @@ params(membase, BucketName, BucketConfig, MemQuota, UUID) ->
         end
         ++ get_magma_bucket_config(BucketConfig);
 
-params(memcached, _BucketName, _BucketConfig, MemQuota, UUID) ->
+params(memcached, _BucketName, _BucketConfig, MemQuota, UUID, _DBSubDir) ->
     [{"cache_size", [], MemQuota},
      {"uuid", [], UUID}].
 
@@ -215,9 +213,11 @@ get(BucketName) ->
 
             MemQuota = proplists:get_value(ram_quota, BucketConfig),
             UUID = ns_bucket:uuid(BucketName, Snapshot),
+            DBSubDir = ns_storage_conf:this_node_bucket_dbdir(BucketName,
+                                                              Snapshot),
 
             Params = params(BucketType, BucketName, BucketConfig, MemQuota,
-                            UUID),
+                            UUID, DBSubDir),
 
             Engines = ns_config:search_node_prop(ns_config:latest(),
                                                  memcached, engines),

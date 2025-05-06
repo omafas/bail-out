@@ -27,6 +27,7 @@
          this_node_dbdir/0, this_node_ixdir/0, this_node_logdir/0,
          this_node_evdir/0,
          this_node_bucket_dbdir/1,
+         this_node_bucket_dbdir/2,
          delete_unused_buckets_db_files/0,
          delete_old_2i_indexes/0,
          setup_storage_paths/0,
@@ -90,11 +91,16 @@ get_db_and_ix_paths() ->
     {ok, IXDir} = this_node_ixdir(),
     {filename:join([DBDir]), filename:join([IXDir])}.
 
--spec this_node_bucket_dbdir(bucket_name()) -> {ok, string()}.
-this_node_bucket_dbdir(BucketName) ->
+-spec this_node_bucket_dbdir(bucket_name(), Snapshot :: map() | direct) ->
+          string().
+this_node_bucket_dbdir(BucketName, Snapshot) ->
+    <<_/binary>> = UUID = ns_bucket:uuid(BucketName, Snapshot),
+    this_node_bucket_dbdir(UUID).
+
+-spec this_node_bucket_dbdir(binary()) -> string().
+this_node_bucket_dbdir(UUID) ->
     {ok, DBDir} = this_node_dbdir(),
-    DBSubDir = filename:join(DBDir, BucketName),
-    {ok, DBSubDir}.
+    filename:join(DBDir, binary_to_list(UUID)).
 
 -spec this_node_logdir() -> {ok, string()} | {error, any()}.
 this_node_logdir() ->
@@ -558,48 +564,57 @@ extract_disk_stats_for_path(StatsList, Path0) ->
     extract_disk_stats_for_path_rec(SortedList, Path).
 
 %% scan data directory for bucket names
-bucket_names_from_disk() ->
+-spec bucket_dirs_from_disk() -> [string()].
+bucket_dirs_from_disk() ->
     {ok, DbDir} = this_node_dbdir(),
     Files = filelib:wildcard("*", DbDir),
-    lists:foldl(
-      fun (MaybeBucket, Acc) ->
-              Path = filename:join(DbDir, MaybeBucket),
-              case filelib:is_dir(Path) of
-                  true ->
-                      case ns_bucket:is_valid_bucket_name(MaybeBucket) of
-                          true ->
-                              [MaybeBucket | Acc];
-                          {error, _} ->
-                              Acc
-                      end;
-                  false ->
-                      Acc
+    lists:filter(
+      fun (MaybeBucketName) ->
+              Path = filename:join(DbDir, MaybeBucketName),
+              maybe
+                  %% Just making sure all filenames are flat strings.
+                  %% If the returned type is not a flat string, it may lead
+                  %% to bucket data deletion, so it is better to crash here
+                  %% than to silently delete data.
+                  {_, true} = {flat, misc:verify_list(MaybeBucketName,
+                                                      fun is_integer/1)},
+                  true ?= filelib:is_dir(Path),
+                  MaybeUUID = iolist_to_binary(MaybeBucketName),
+                  true ?= ns_bucket:is_valid_bucket_uuid(MaybeUUID) orelse
+                          ns_bucket:is_valid_bucket_name(MaybeBucketName),
+                  true
+              else
+                  {error, _} -> false;
+                  false -> false
               end
-      end, [], Files).
+      end, Files).
 
 buckets_in_use() ->
     Node = node(),
     Snapshot =
         chronicle_compat:get_snapshot(
-          [ns_bucket:fetch_snapshot(all, _, [props]),
+          [ns_bucket:fetch_snapshot(all, _, [props, uuid]),
            ns_cluster_membership:fetch_snapshot(_)],
           #{read_consistency => quorum}),
     Services = ns_cluster_membership:node_services(Snapshot, Node),
     BucketConfigs = ns_bucket:get_buckets(Snapshot),
-    case lists:member(kv, Services) of
-        true ->
-            ns_bucket:node_bucket_names_of_type(Node, membase,
-                                                BucketConfigs);
-        false ->
-            case ns_cluster_membership:get_cluster_membership(Node,
-                                                              Snapshot) of
-                active ->
-                    ns_bucket:get_bucket_names_of_type(membase,
-                                                       BucketConfigs);
-                _ ->
-                    []
-            end
-    end.
+    BucketNames =
+        case lists:member(kv, Services) of
+            true ->
+                ns_bucket:node_bucket_names_of_type(Node, membase,
+                                                    BucketConfigs);
+            false ->
+                case ns_cluster_membership:get_cluster_membership(Node,
+                                                                  Snapshot) of
+                    active ->
+                        ns_bucket:get_bucket_names_of_type(membase,
+                                                           BucketConfigs);
+                    _ ->
+                        []
+                end
+        end,
+    [{BucketName, ns_bucket:uuid(BucketName, Snapshot)}
+     || BucketName <- BucketNames].
 
 %% deletes all databases files for buckets not defined for this node
 %% note: this is called remotely
@@ -607,9 +622,46 @@ buckets_in_use() ->
 %% it's named a bit differently from other functions here; but this function
 %% is rpc called by older nodes; so we must keep this name unchanged
 delete_unused_buckets_db_files() ->
-    BucketsToDelete = bucket_names_from_disk() -- buckets_in_use(),
-    functools:sequence_([?cut(delete_unused_db_files(Bucket)) ||
-                            Bucket <- BucketsToDelete]).
+    ?log_debug("Deleting unused bucket db files"),
+    {BucketsInCfg, UUIDsInCfg} = lists:unzip(buckets_in_use()),
+    DirsOnDisk = bucket_dirs_from_disk(),
+    %% Starting from Morpheus bucket directory should be bucket uuid,
+    %% but in previous releases it was bucket name, so we need to support
+    %% both cases in case if that dir hasn't been migrated yet.
+    DirsToDelete = [D || D <- DirsOnDisk,
+                         not lists:member(D, BucketsInCfg),
+                         not lists:member(list_to_binary(D), UUIDsInCfg)],
+    functools:sequence_([?cut(memcached_delete_unused_buckets(BucketsInCfg))] ++
+                        [?cut(delete_unused_db_files(Dir)) ||
+                            Dir <- DirsToDelete]).
+
+memcached_delete_unused_buckets(BucketsInCfg) ->
+    maybe
+        Buckets = ns_memcached:get_all_buckets_details(),
+        true ?= is_list(Buckets),
+        BucketsInMemcached =
+            lists:filtermap(fun ({Props}) ->
+                            case proplists:get_value(<<"name">>, Props) of
+                                <<>> -> false;
+                                BucketName when is_binary(BucketName) ->
+                                    {true, binary_to_list(BucketName)}
+                            end
+                        end, Buckets),
+        BucketsToDelete = lists:usort(BucketsInMemcached) -- BucketsInCfg,
+        ?log_info("Buckets to delete on memcached: ~p", [BucketsToDelete]),
+        functools:sequence_([?cut(ensure_delete_command_sent(
+                                  Bucket,?ENSURE_DELETE_COMMAND_TIMEOUT)) ||
+                             Bucket <- BucketsToDelete])
+    else
+        {error, Reason} ->
+            ?log_error("Failed to get all buckets details from memcached. "
+                       "Reason = ~p", [Reason]),
+            {error, Reason};
+        {memcached_error, Reason, Msg} ->
+            ?log_error("Failed to get all buckets details from memcached. "
+                       "Reason = ~p, Msg = ~p", [Reason, Msg]),
+            {error, {memcached_error, Reason, Msg}}
+    end.
 
 ensure_delete_command_sent(Bucket, Timeout) ->
     case async:run_with_timeout(?cut(ensure_delete_command_sent(Bucket)),
@@ -640,35 +692,32 @@ ensure_delete_command_sent(Bucket) ->
             Error
     end.
 
-delete_unused_db_files(Bucket) ->
-    ?log_debug("Delete old data files for bucket ~p", [Bucket]),
-    case ensure_delete_command_sent(Bucket, ?ENSURE_DELETE_COMMAND_TIMEOUT) of
-        ok ->
-            ale:info(?USER_LOGGER, "Deleting old data files of bucket ~p",
-                     [Bucket]),
-            %% We need to destroy the DEKs before deleting the bucket files
-            %% otherwise the dek files will be deleted while we will continue
-            %% using them (they will stay in cb_cluster_secrets state).
-            %% Note that it is important to remove the bucket directory from
-            %% within the cb_cluster_secrets process because otherwise
-            %% cb_cluster_secrets can create new DEK files while we are
-            %% deleting the directory (which will lead to rm_rf failure or
-            %% removal of newly created DEK files).
-            cb_cluster_secrets:destroy_deks(
-              {bucketDek, Bucket},
-              fun () ->
-                  case ns_couchdb_api:delete_databases_and_files(Bucket) of
-                      ok ->
-                          ok;
-                      Other ->
-                          ?log_error("Failed to delete old data files for "
-                                     "bucket ~p. Error = ~p", [Bucket, Other]),
-                          Other
-                  end
-              end);
-        Error ->
-            Error
-    end.
+delete_unused_db_files(Dir) ->
+    %% Note that we are not sending delete_bucket command to memcached here
+    %% because we assume that all buckets are already deleted from memcached
+    ?log_debug("Delete old data files for bucket in dir ~p", [Dir]),
+    ale:info(?USER_LOGGER, "Deleting old data files of bucket in dir ~p",
+             [Dir]),
+    %% We need to destroy the DEKs before deleting the bucket files
+    %% otherwise the dek files will be deleted while we will continue
+    %% using them (they will stay in cb_cluster_secrets state).
+    %% Note that it is important to remove the bucket directory from
+    %% within the cb_cluster_secrets process because otherwise
+    %% cb_cluster_secrets can create new DEK files while we are
+    %% deleting the directory (which will lead to rm_rf failure or
+    %% removal of newly created DEK files).
+    cb_cluster_secrets:destroy_deks(
+        {bucketDek, Dir}, %% Assuming Dir is bucket uuid
+        fun () ->
+            case ns_couchdb_api:delete_databases_and_files(Dir) of
+                ok ->
+                    ok;
+                Other ->
+                    ?log_error("Failed to delete old data files "
+                               "dir ~p. Error = ~p", [Dir, Other]),
+                    Other
+            end
+        end).
 
 %% deletes @2i subdirectory in index directory of this node.
 %%

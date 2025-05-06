@@ -80,6 +80,7 @@
          is_persistent/1,
          is_ephemeral_bucket/1,
          is_valid_bucket_name/1,
+         is_valid_bucket_uuid/1,
          memcached_buckets_in_use/0,
          live_bucket_nodes/1,
          live_bucket_nodes_from_config/1,
@@ -1117,6 +1118,39 @@ is_valid_bucket_name_inner([Char | Rest]) ->
             end;
         _ -> {error, invalid}
     end.
+
+is_valid_bucket_uuid(BucketUUID) when is_binary(BucketUUID) ->
+    %% Bucket UUID is a 16-byte binary written as a 32-character hex string
+    maybe
+        32 ?= size(BucketUUID),
+        lists:all(fun (C) when C >= $0 andalso C =< $9;
+                               C >= $a andalso C =< $f;
+                               C >= $A andalso C =< $F -> true;
+                      (_) -> false
+                  end, binary_to_list(BucketUUID))
+    else
+        _ -> false
+    end;
+is_valid_bucket_uuid(_BucketUUID) ->
+    false.
+
+-ifdef(TEST).
+
+is_valid_bucket_uuid_test() ->
+    [?assert(is_valid_bucket_uuid(couch_uuids:random())) ||
+     _ <- lists:seq(1, 100)],
+    ?assert(is_valid_bucket_uuid(<<"7a3e8e249d8a2f9dabd757ec4dfcbc03">>)),
+    ?assert(is_valid_bucket_uuid(<<"7A3e8E249d8a2f9daBD757eC4dFcbc03">>)),
+    ?assertEqual(false, is_valid_bucket_uuid(<<"">>)),
+    ?assertEqual(false, is_valid_bucket_uuid(<<"123">>)),
+    ?assertEqual(false,
+                 is_valid_bucket_uuid(<<"7a3e8e249d8a2f9dabd757ec4dfcbc0g">>)),
+    ?assertEqual(false,
+                 is_valid_bucket_uuid(<<"7a3e8e249d8a2f9dabd757ec4dfcbc034">>)),
+    ?assertEqual(false,
+                 is_valid_bucket_uuid("7a3e8e249d8a2f9dabd757ec4dfcbc03")).
+
+-endif.
 
 -spec memcached_buckets_in_use() -> boolean().
 memcached_buckets_in_use() ->
@@ -2772,7 +2806,7 @@ get_encryption(BucketName, Scope, Snapshot) when Scope == cluster;
     case get_bucket(BucketName, Snapshot) of
         {ok, BucketConfig} ->
             IsNodeInServers = lists:member(node(), get_servers(BucketConfig)),
-            {ok, Dir} = ns_storage_conf:this_node_bucket_dbdir(BucketName),
+            Dir = ns_storage_conf:this_node_bucket_dbdir(BucketName, Snapshot),
             ExistsOnDisk = filelib:is_dir(Dir),
             Services = ns_cluster_membership:node_services(Snapshot, node()),
             IsKVNode = lists:member(kv, Services),

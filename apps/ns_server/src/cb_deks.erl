@@ -436,6 +436,7 @@ dek_config({bucketDek, Bucket}) ->
       chronicle_txn_keys =>
           [ns_bucket:root(),
            ns_bucket:sub_key(Bucket, props),
+           ns_bucket:uuid_key(Bucket),
            ns_bucket:sub_key(Bucket, encr_at_rest) |
            ns_cluster_membership:node_membership_keys(node())],
       required_usage => {bucket_encryption, Bucket}}.

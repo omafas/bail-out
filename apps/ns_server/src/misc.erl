@@ -3936,3 +3936,6 @@ many_to_one_result_test() ->
                                      {o3, ok},
                                      {o4, {error, e2}}])).
 -endif.
+
+verify_list(S, TypeCheckFun) ->
+    is_list(S) andalso lists:all(TypeCheckFun, S).
