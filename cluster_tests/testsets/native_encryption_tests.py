@@ -59,6 +59,11 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         assert non_kv_node is not None
         self.cluster.wait_for_orchestrator(non_kv_node)
 
+        # Bypass some stricter config validation restrictions to allow better
+        # flexibility for testing
+        set_ns_config_value(self.cluster, 'test_bypass_encr_cfg_restrictions',
+                            'true')
+
         # since master password is per-node, we should use the same node for
         # all HTTP requests in all tests that use node secret management (SM)
         self.sm_node = random.choice(self.cluster.connected_nodes)
@@ -92,6 +97,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
             lambda: assert_logs_unencrypted(self.cluster, ["debug.log"],
                                             check_suffixes=['*']),
             sleep_time=1, attempts=50, retry_on_assert=True, verbose=True)
+        set_ns_config_value(self.cluster, 'test_bypass_encr_cfg_restrictions',
+                            None)
 
     def test_teardown(self):
         set_cfg_encryption(self.cluster, 'nodeSecretManager', -1)
@@ -1522,6 +1529,44 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         data_dir = node.data_path()
         config_data_file = Path(data_dir) / 'config' / 'config.dat'
         assert_file_is_decryptable(node, config_data_file)
+
+    def dek_bad_settings_validation_test(self):
+        node = self.random_node()
+
+        # Currently we expect dek lifetime to be at least 5 minutes more
+        # than the rotation interval
+        margin_secs = 5 * 60
+
+        # disable bypass to enable full validation
+        set_ns_config_value(node, 'test_bypass_encr_cfg_restrictions',
+                            None)
+
+        try:
+            # Test config validation for just log encryption, the validation
+            # logic being tested here is shared with other types
+            set_log_encryption(node, 'nodeSecretManager', -1,
+                               dek_lifetime=100 + margin_secs - 1,
+                               dek_rotation=100, expected_code=400)
+            set_log_encryption(node, 'nodeSecretManager', -1,
+                               dek_lifetime=100 + margin_secs,
+                               dek_rotation=100)
+            set_log_encryption(node, 'nodeSecretManager', -1,
+                               dek_lifetime=10000, dek_rotation=0,
+                               expected_code=400)
+            set_log_encryption(node, 'nodeSecretManager', -1,
+                               dek_lifetime=0, dek_rotation=0)
+            set_log_encryption(node, 'nodeSecretManager', -1,
+                               dek_lifetime=0, dek_rotation=1)
+            set_log_encryption(node, 'nodeSecretManager', -1,
+                               dek_lifetime=1, dek_rotation=0,
+                               expected_code=400)
+            set_log_encryption(node, 'nodeSecretManager', -1,
+                               dek_lifetime=1, dek_rotation=1,
+                               expected_code=400)
+        finally:
+            # re-enable bypass
+            set_ns_config_value(node, 'test_bypass_encr_cfg_restrictions',
+                                'true')
 
 
 # Set master password and restart the cluster

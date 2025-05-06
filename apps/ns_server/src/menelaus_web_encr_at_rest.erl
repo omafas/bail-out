@@ -13,6 +13,8 @@
 -include_lib("ns_common/include/cut.hrl").
 -include("cb_cluster_secrets.hrl").
 
+-define(DEK_LIFETIME_ROTATION_MARGIN_SEC, (5 * 60)).
+
 -export([handle_get/2, handle_post/2, get_settings/1, handle_drop_keys/2,
          handle_bucket_drop_keys/2, build_bucket_encr_at_rest_info/2,
          format_encr_at_rest_info/1, handle_force_encr/2,
@@ -60,15 +62,66 @@ encr_secret_id(Param, EncrMethodName, EncrType) ->
                                        ok
                                end}}}.
 
-encr_dek_lifetime(Param, EncrType) ->
+encr_dek_lifetime(Param, RotIntervalName, EncrType) ->
+    DependsOnFn =
+        case ns_config:read_key_fast(test_bypass_encr_cfg_restrictions,
+                                     false) of
+            true ->
+                fun (_LifeTime, _RotIntrvl) -> ok end;
+            _ ->
+                fun (0 = _LifeTime, _RotIntrvl) ->
+                        ok;
+                    (_LifeTime, 0 = _RotIntrvl) ->
+                        {error,  "dekLifetime must be set to 0, if "
+                                 "dekRotationInterval is currently 0"};
+                    (LifeTime, RotIntrvl)
+                      when LifeTime <
+                           RotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
+                        Err = io_lib:format("dekLifetime must be a least ~p "
+                                            "seconds more than the current "
+                                            "dekRotationInterval value of ~p",
+                                            [?DEK_LIFETIME_ROTATION_MARGIN_SEC,
+                                             RotIntrvl]),
+                        {error, Err};
+                    (_, _) ->
+                        ok
+                end
+        end,
     {Param,
      #{cfg_key => [EncrType, dek_lifetime_in_sec],
-       type => {int, 0, max_uint64}}}.
+       type => {int, 0, max_uint64},
+       depends_on => #{RotIntervalName => DependsOnFn}}}.
 
-encr_dek_rotate_intrvl(Param, EncrType) ->
+encr_dek_rotate_intrvl(Param, LifetimeName, EncrType) ->
+    DependsOnFn =
+        case ns_config:read_key_fast(test_bypass_encr_cfg_restrictions,
+                                     false) of
+            true ->
+                fun (_RotIntrvl, _LifeTime) -> ok end;
+            _ ->
+                fun (_RotIntrvl, 0 = _LifeTime) ->
+                        ok;
+                    (0 = _RotIntrvl, _LifeTime) ->
+                        {error, "dekRotationInterval can't be set to 0 "
+                                "if dekLifetime is not currently 0"};
+                    (RotIntrvl, LifeTime)
+                      when LifeTime <
+                           RotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
+                        Err = io_lib:format("dekRotationInterval must be a "
+                                            "least ~p seconds less than the "
+                                            "current dekLifetime value of ~p",
+                                            [?DEK_LIFETIME_ROTATION_MARGIN_SEC,
+                                             LifeTime]),
+                        {error, Err};
+                    (_, _) ->
+                        ok
+                end
+        end,
+
     {Param,
      #{cfg_key => [EncrType, dek_rotation_interval_in_sec],
-       type => {int, 0, max_uint64}}}.
+       type => {int, 0, max_uint64},
+       depends_on => #{LifetimeName => DependsOnFn}}}.
 
 encr_deks_drop_date(Param, EncrType) ->
     {Param,
@@ -104,13 +157,19 @@ params() ->
      encr_secret_id("audit.encryptionKeyId", "audit.encryptionMethod",
                     audit_encryption),
 
-     encr_dek_lifetime("config.dekLifetime", config_encryption),
-     encr_dek_lifetime("log.dekLifetime", log_encryption),
-     encr_dek_lifetime("audit.dekLifetime", audit_encryption),
+     encr_dek_lifetime("config.dekLifetime",
+                       "config.dekRotationInterval", config_encryption),
+     encr_dek_lifetime("log.dekLifetime",
+                       "log.dekRotationInterval", log_encryption),
+     encr_dek_lifetime("audit.dekLifetime",
+                       "audit.dekRotationInterval", audit_encryption),
 
-     encr_dek_rotate_intrvl("config.dekRotationInterval", config_encryption),
-     encr_dek_rotate_intrvl("log.dekRotationInterval", log_encryption),
-     encr_dek_rotate_intrvl("audit.dekRotationInterval", audit_encryption),
+     encr_dek_rotate_intrvl("config.dekRotationInterval",
+                            "config.dekLifetime", config_encryption),
+     encr_dek_rotate_intrvl("log.dekRotationInterval",
+                            "log.dekLifetime", log_encryption),
+     encr_dek_rotate_intrvl("audit.dekRotationInterval",
+                            "audit.dekLifetime", audit_encryption),
 
      encr_deks_drop_date("config.dekLastDropDate", config_encryption),
      encr_deks_drop_date("log.dekLastDropDate", log_encryption),
