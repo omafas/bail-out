@@ -399,7 +399,8 @@ build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx) ->
       build_pitr_dynamic_bucket_info(BucketConfig),
       build_magma_bucket_info(BucketConfig),
       {conflictResolutionType,
-       ns_bucket:conflict_resolution_type(BucketConfig)}],
+       ns_bucket:conflict_resolution_type(BucketConfig)},
+      {workloadPatternDefault, ns_bucket:workload_pattern_default(BucketConfig)}],
      case cluster_compat_mode:is_enterprise() of
          true ->
              [{maxTTL, proplists:get_value(max_ttl, BucketConfig, 0)},
@@ -1517,7 +1518,8 @@ validate_membase_bucket_params(CommonParams, Params, Name,
          parse_validate_magma_seq_tree_data_blocksize(Params, BucketConfig,
                                                       Version, IsNew,
                                                       IsEnterprise,
-                                                      IsStorageModeMigration)
+                                                      IsStorageModeMigration),
+         parse_validate_workload_pattern_default(Params)
         | validate_bucket_auto_compaction_settings(Params)] ++
         parse_validate_limits(
           Params, BucketConfig, IsNew, AllowStorageLimit,
@@ -3060,6 +3062,26 @@ parse_validate_conflict_resolution_type(_Other) ->
     {error, conflictResolutionType,
      <<"Conflict resolution type must be 'seqno' or 'lww' or 'custom'">>}.
 
+%% We are not validating any compat mode here, we need to support this change in
+%% a maintenance release due to a memcached behaviour change.
+parse_validate_workload_pattern_default(Params) ->
+    Value = proplists:get_value("workloadPatternDefault", Params, undefined),
+    case Value of
+        "readHeavy" ->
+            {ok, workload_pattern_default, read_heavy};
+        "writeHeavy" ->
+            {ok, workload_pattern_default, write_heavy};
+        "mixed" ->
+            {ok, workload_pattern_default, mixed};
+        undefined ->
+            ignore;
+        _ ->
+            {error, workloadPatternDefault,
+             <<"Workload pattern default must be 'readHeavy', 'writeHeavy' or "
+               "'mixed'">>}
+    end.
+
+
 handle_compact_bucket(_PoolId, Bucket, Req) ->
     ok = compaction_api:force_compact_bucket(Bucket),
     reply(Req, 200).
@@ -3863,6 +3885,15 @@ basic_bucket_params_screening_t() ->
                    <<"Cross Cluster Versioning cannot be disabled once "
                      "it has been enabled">>}],
                  E32),
+
+    {_OK33, E33} = basic_bucket_params_screening(
+                     true,
+                     "bucket33",
+                     [{"bucketType", "membase"},
+                      {"ramQuota", "1024"},
+                      {"workloadPatternDefault", "readHeavy"}],
+                     AllBuckets),
+    ?assertEqual([], E33),
 
     %% Back to default action
     meck:expect(ns_config, read_key_fast,
