@@ -67,6 +67,40 @@ licenses/APL2.txt.
              [mnFocus]="focusFieldSubject">
         </div>
         <div class="formrow">
+           <label>Authentication</label>
+           <div class="radio-group">
+              <input
+                  type="radio"
+                  id="for_user_password"
+                  formControlName="clientCertAuth"
+                  value="false">
+              <label for="for_user_password">
+                 Username/Password
+              </label>
+              <input
+                  type="radio"
+                  id="for-certificate"
+                  formControlName="clientCertAuth"
+                  value="true">
+              <label for="for-certificate">
+                 Client Certificate
+                 <span
+                     class="fa-stack icon-info"
+                     [ngbTooltip]="clientCert"
+                     triggers="mouseenter"
+                     placement="top">
+                    <span class="icon fa-circle-thin fa-stack-2x"></span>
+                    <span class="icon fa-info fa-stack-1x"></span>
+                 </span>
+              </label>
+              <ng-template #clientCert>
+                <div>
+                  Use the client certificate already loaded in this Couchbase node.
+                </div>
+              </ng-template>
+           </div>
+        </div>
+        <div class="formrow" [hidden]="joinClusterForm.get('clusterAdmin.clientCertAuth').value === 'true'">
           <label for="secure-user">Cluster Admin Username</label>
           <input
             type="text"
@@ -77,7 +111,7 @@ licenses/APL2.txt.
             spellcheck="false"
             autocapitalize="off">
         </div>
-        <div class="formrow">
+        <div class="formrow" [hidden]="joinClusterForm.get('clusterAdmin.clientCertAuth').value === 'true'">
           <div class="column">
             <label for="secure-password">Cluster Admin Password</label>
             <input

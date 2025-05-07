@@ -73,12 +73,53 @@ licenses/APL2.txt.
         </span>
       </div>
 
-      <div class="formrow">
+       <div class="formrow">
+          <label>Authentication
+             <span
+                 class="fa-stack icon-info"
+                 uib-tooltip="Authentication is only necessary if the new node has already been initialized. If the new node has not been initialized, authentication settings are ignored."
+                 tooltip-trigger="mouseenter"
+                 tooltip-placement="top">
+                <span class="icon fa-circle-thin fa-stack-2x"></span>
+                <span class="icon fa-info fa-stack-1x"></span>
+             </span>
+          </label>
+          <input
+              type="radio"
+              id="auth-password"
+              ng-model="serversAddDialogCtl.addNodeConfig.credentials.clientCertAuth"
+              name="certValidation"
+              value="false" />
+          <label
+              for="auth-password">
+              Username/Password
+          </label>
+          <input
+              type="radio"
+              id="auth-cert"
+              ng-model="serversAddDialogCtl.addNodeConfig.credentials.clientCertAuth"
+              name="certValidation"
+              value="true" />
+          <label
+              for="auth-cert">
+             Client Certificate
+             <span
+                 class="fa-stack icon-info"
+                 uib-tooltip="Use the client certificate already loaded in the new Couchbase node."
+                 tooltip-trigger="mouseenter"
+                 tooltip-placement="top">
+                <span class="icon fa-circle-thin fa-stack-2x"></span>
+                <span class="icon fa-info fa-stack-1x"></span>
+             </span>
+          </label>
+       </div>
+
+      <div class="formrow" ng-if="serversAddDialogCtl.addNodeConfig.credentials.clientCertAuth === 'false'">
         <label for="user_inp" class="inline">Username&nbsp;</label>
         <small>a user with admin access to this server</small>
         <br>
         <input
-           ng-disabled="!!serversAddDialogCtl.postDiskStorageErrors"
+           ng-disabled="!!serversAddDialogCtl.postDiskStorageErrors || serversAddDialogCtl.addNodeConfig.credentials.clientCertAuth === 'true'"
            type="text"
            id="user_inp"
            ng-model="serversAddDialogCtl.addNodeConfig.credentials.user"
@@ -87,10 +128,10 @@ licenses/APL2.txt.
            autocapitalize="off">
       </div>
 
-      <div class="formrow">
+      <div class="formrow" ng-if="serversAddDialogCtl.addNodeConfig.credentials.clientCertAuth === 'false'">
         <label for="password_inp">Password</label>
         <input
-           ng-disabled="!!serversAddDialogCtl.postDiskStorageErrors"
+           ng-disabled="!!serversAddDialogCtl.postDiskStorageErrors || serversAddDialogCtl.addNodeConfig.credentials.clientCertAuth === 'true'"
            mn-autocomplete-off
            type="password"
            id="password_inp"

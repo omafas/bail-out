@@ -11,6 +11,7 @@ licenses/APL2.txt.
 export default mnServersAddDialogController;
 
 mnServersAddDialogController.$inject = ["$scope", "$rootScope", "$q", "$uibModal", "mnServersService", "$uibModalInstance", "mnHelper", "mnPromiseHelper", "groups", "mnClusterConfigurationService", "mnPoolDefault", "mnCertificatesService"];
+
 function mnServersAddDialogController($scope, $rootScope, $q, $uibModal, mnServersService, $uibModalInstance, mnHelper, mnPromiseHelper, groups, mnClusterConfigurationService, mnPoolDefault, mnCertificatesService) {
   var vm = this;
 
@@ -27,6 +28,7 @@ function mnServersAddDialogController($scope, $rootScope, $q, $uibModal, mnServe
     },
     credentials: {
       hostname: '',
+      clientCertAuth: 'true',
       user: 'Administrator',
       password: ''
     }
@@ -105,9 +107,16 @@ function mnServersAddDialogController($scope, $rootScope, $q, $uibModal, mnServe
         $uibModalInstance.close();
       }
     } else {
+      // don't send username/password if client cert auth is enabled
+      const creds = {...vm.addNodeConfig.credentials};
+      if (creds.clientCertAuth === 'true') {
+        delete creds.user;
+        delete creds.password;
+      }
+
       promise = mnServersService
         .addServer(vm.addNodeConfig.selectedGroup,
-                   vm.addNodeConfig.credentials,
+                   creds,
                    servicesList);
       if (vm.specifyDisk) {
         promise = promise.then(postDiskStorage);

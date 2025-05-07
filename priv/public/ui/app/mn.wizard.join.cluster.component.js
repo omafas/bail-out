@@ -10,8 +10,9 @@ licenses/APL2.txt.
 
 import {UIRouter} from '@uirouter/angular';
 import {Component, ChangeDetectionStrategy} from '@angular/core';
-import {filter, map, switchMap, withLatestFrom} from 'rxjs/operators';
+import {filter, map, switchMap, withLatestFrom, takeUntil} from 'rxjs/operators';
 import {BehaviorSubject, pipe, empty} from 'rxjs';
+import { Validators } from '@angular/forms';
 
 import {MnLifeCycleHooksToStream} from './mn.core.js';
 import {MnWizardService} from './mn.wizard.service.js';
@@ -55,6 +56,32 @@ class MnWizardJoinClusterComponent extends MnLifeCycleHooksToStream {
     this.joinClusterForm = mnWizardService.wizardForm.joinCluster;
     this.joinClusterHttp = mnWizardService.stream.joinClusterHttp;
 
+    const clusterAdminGroup = this.joinClusterForm.get('clusterAdmin');
+    const clientCertAuthControl = clusterAdminGroup.get('clientCertAuth');
+    const userControl = clusterAdminGroup.get('user');
+    const passwordControl = clusterAdminGroup.get('password');
+
+    // need to make user/password validation contingent on clientCertAuth
+    const updateUserValidation = (clientCertAuthValue) => {
+      if (clientCertAuthValue === 'true') {
+        userControl.clearValidators();
+        passwordControl.clearValidators();
+      } else {
+        userControl.setValidators(Validators.required);
+        passwordControl.setValidators(Validators.required);
+      }
+      userControl.updateValueAndValidity();
+      passwordControl.updateValueAndValidity();
+    };
+
+    // Set initial validation state
+    updateUserValidation(clientCertAuthControl.value);
+
+    // Subscribe to changes
+     clientCertAuthControl.valueChanges
+       .pipe(takeUntil(this.mnOnDestroy))
+       .subscribe(updateUserValidation);
+
     this.certificate = mnPoolsService.stream.isEnterprise
       .pipe(switchMap((v) => v ? mnSecurityService.stream.getCertificate : empty() ));
 
@@ -87,6 +114,10 @@ class MnWizardJoinClusterComponent extends MnLifeCycleHooksToStream {
         data.services = '';
         if (servicesValue.length) {
           data.services = mnWizardService.getServicesValues(services).join(",");
+        }
+        if (data.clientCertAuth === 'true') {
+          delete data.user;
+          delete data.password;
         }
         return data;
       }))
