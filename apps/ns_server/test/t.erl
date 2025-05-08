@@ -357,7 +357,7 @@ fake_loggers() ->
               ok = ale:start_logger(Logger, debug),
               ok = ale:add_sink(Logger, stderr)
       end,
-      ?LOGGERS).
+      [?NS_SERVER_TRACE_LOGGER] ++ ?LOGGERS).
 
 setup_paths() ->
     Prefix = config(prefix_dir),
