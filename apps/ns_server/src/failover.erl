@@ -262,14 +262,13 @@ buckets_failover_commits(BucketsPrep, FailedNodes, Snapshot) ->
                   %% updates from the past that may show up in the future
                   NewMap =:= [] orelse ns_bucket:validate_map(NewMap),
                   {Bucket,
-                   ns_bucket:update_servers_and_map(Bucket, _, FailedNodes,
-                                                    NewMap)};
+                   ns_bucket:update_servers_and_map_commits(
+                     _, FailedNodes, NewMap)};
              ({Bucket, #failover_params{bucket_map = [],
                                         bucket_type = memcached}}) ->
                   {Bucket,
                    ns_bucket:remove_servers_from_bucket(_, FailedNodes)}
           end, BucketsPrep),
-
 
     ns_bucket:get_commits_from_snapshot(BucketsUpdates, Snapshot).
 
@@ -368,6 +367,11 @@ failover_transaction_with_retries(Nodes, Options, _Rv, Retries) ->
     case failover_transaction(Nodes, BktPrepResults, SvcNodes, UnsafeNodes,
                               Snapshot, Options) of
         {ok, _, _}  = Rv ->
+            [ns_bucket:notify_map_update(Bucket, Config, NewMap) ||
+                {Bucket,
+                 #failover_params{bucket_map = NewMap,
+                                  bucket_config = Config,
+                                  bucket_type = membase}} <- BktPrepResults],
             Rv;
         {error, snapshot_rev_conflict} = Rv ->
             ?log_warning("Retrying transaction due to: ~p", [Rv]),
@@ -1440,9 +1444,9 @@ failover_transaction_test_body() ->
                           proplists:get_value(Bucket, MembaseExpectedMaps),
                       ?assertEqual(
                          1,
-                         meck:num_calls(ns_bucket, update_servers_and_map,
-                                        [Bucket, '_', FailedNodes,
-                                         ExpectedMap]));
+                         meck:num_calls(ns_bucket,
+                                        update_servers_and_map_commits,
+                                        ['_', FailedNodes, ExpectedMap]));
                   memcached ->
                       ?assertEqual(
                          1,

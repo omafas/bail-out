@@ -112,7 +112,8 @@
          update_buckets_for_delta_recovery/2,
          multi_prop_update/2,
          set_bucket_config/2,
-         update_servers_and_map/4,
+         update_servers_and_map_commits/3,
+         notify_map_update/3,
          validate_map/1,
          set_fast_forward_map/2,
          set_map_and_uploaders/3,
@@ -217,6 +218,9 @@
 -import(json_builder,
         [to_binary/1,
          prepare_list/1]).
+
+-type bucket_update_fun() ::
+        fun ((proplists:proplist()) -> proplists:proplist()).
 
 %%%===================================================================
 %%% API
@@ -1062,6 +1066,8 @@ display_type(Type, _) ->
 get_servers(BucketConfig) ->
     proplists:get_value(servers, BucketConfig).
 
+-spec set_bucket_config(bucket_name(), proplists:proplist()) ->
+          ok | not_found | {error, exceeded_retries}.
 set_bucket_config(Bucket, NewConfig) ->
     update_bucket_config(Bucket, fun (_) -> NewConfig end).
 
@@ -1855,19 +1861,26 @@ update_bucket_props(BucketName, Props, DeleteKeys) ->
 
 update_bucket_props_with_predicate(
   BucketName, Props, DeleteKeys, Predicate, SubKeys, Opts) ->
-    update_bucket_config(
-      BucketName,
-      fun (OldProps) ->
-              NewProps = lists:foldl(
-                           fun ({K, _V} = Tuple, Acc) ->
-                                   [Tuple | lists:keydelete(K, 1, Acc)]
-                           end, OldProps, Props),
-              NewProps1 = lists:foldl(
-                            fun (K, Acc) ->
-                                    lists:keydelete(K, 1, Acc)
-                            end, NewProps, DeleteKeys),
-              cleanup_bucket_props(NewProps1)
-      end, Predicate, SubKeys, Opts).
+    RV =
+        do_update_bucket_config(
+          BucketName,
+          fun (OldProps) ->
+                  NewProps = lists:foldl(
+                               fun ({K, _V} = Tuple, Acc) ->
+                                       [Tuple | lists:keydelete(K, 1, Acc)]
+                               end, OldProps, Props),
+                  NewProps1 = lists:foldl(
+                                fun (K, Acc) ->
+                                        lists:keydelete(K, 1, Acc)
+                                end, NewProps, DeleteKeys),
+                  cleanup_bucket_props(NewProps1)
+          end, Predicate, SubKeys, Opts),
+    case RV of
+        {ok, _} ->
+            ok;
+        Other ->
+            Other
+    end.
 
 set_auto_fields(CurBucketConfig, UpdatedBucketConfig) ->
     IsEnabled = fun (Id) -> Id /= ?SECRET_ID_NOT_SET end,
@@ -1885,18 +1898,17 @@ set_auto_fields(CurBucketConfig, UpdatedBucketConfig) ->
             UpdatedBucketConfig
     end.
 
-set_property_fun(Key, Value, Default, Fun) ->
-    fun (OldConfig) ->
-            Fun(proplists:get_value(Key, OldConfig, Default)),
-            lists:keystore(Key, 1, OldConfig, {Key, Value})
-    end.
-
-set_property(Bucket, Key, Value, Default, Fun) ->
-    ok = update_bucket_config(
-           Bucket, set_property_fun(Key, Value, Default, Fun)).
+set_property(Bucket, Key, Value, Default, NoteFun) ->
+    {ok, OldConfig} = do_set_property(Bucket, Key, Value),
+    NoteFun(proplists:get_value(Key, OldConfig, Default)).
 
 set_property(Bucket, Key, Value) ->
-    ok = update_bucket_config(Bucket, lists:keystore(Key, 1, _, {Key, Value})).
+    {ok, _} = do_set_property(Bucket, Key, Value),
+    ok.
+
+do_set_property(Bucket, Key, Value) ->
+    do_update_bucket_config(Bucket,
+                            lists:keystore(Key, 1, _, {Key, Value})).
 
 set_fast_forward_map(Bucket, Map) ->
     set_property(Bucket, fastForwardMap, Map, [],
@@ -1912,28 +1924,37 @@ validate_map(Map) ->
 
 -spec set_map_and_uploaders(bucket_name(), vbucket_map(),
                             fusion_uploaders:uploaders() | undefined) ->
-          {ok, chronicle:revision()} | not_found.
+          ok | not_found.
 set_map_and_uploaders(Bucket, Map, Uploaders) ->
     validate_map(Map),
-    NoteSetMap = master_activity_events:note_set_map(Bucket, Map, _),
-    MapSetter = set_property_fun(map, Map, [], NoteSetMap),
-    chronicle_kv:transaction(
-      kv, [sub_key(Bucket, props)],
-      fun (Snapshot) ->
-              case get_commits_from_snapshot([{Bucket, MapSetter}],
-                                             Snapshot) of
-                  [{abort, not_found}] ->
-                      {abort, not_found};
-                  Commits ->
-                      case Uploaders of
-                          undefined ->
-                              {commit, Commits};
-                          _ ->
-                              {commit, [{set, fusion_uploaders_key(Bucket),
-                                         Uploaders} | Commits]}
-                      end
-              end
-      end).
+    RV =
+        chronicle_kv:transaction(
+          kv, [sub_key(Bucket, props)],
+          fun (Snapshot) ->
+                  case get_commits_from_snapshot(
+                         [{Bucket, lists:keystore(map, 1, _, {map, Map})}],
+                         Snapshot) of
+                      [{abort, not_found}] ->
+                          {abort, not_found};
+                      Commits ->
+                          {ok, OldConfig} = get_bucket(Bucket, Snapshot),
+                          OldMap = proplists:get_value(map, OldConfig, []),
+                          case Uploaders of
+                              undefined ->
+                                  {commit, Commits, OldMap};
+                              _ ->
+                                  {commit, [{set, fusion_uploaders_key(Bucket),
+                                             Uploaders} | Commits], OldMap}
+                          end
+                  end
+          end),
+    case RV of
+        {ok, _, OldMap} ->
+            master_activity_events:note_set_map(Bucket, Map, OldMap),
+            ok;
+        Other ->
+            Other
+    end.
 
 validate_map_with_node_names(Snapshot, Servers) ->
     Nodes = chronicle_compat:get(Snapshot, nodes_wanted, #{default => []}),
@@ -1994,23 +2015,21 @@ set_initial_map_and_uploaders(Bucket, Map, Servers, MapOpts) ->
             Other
     end.
 
-set_restored_attributes_property(Bucket, Map, ServerList, Fun) ->
-    update_bucket_config(
-        Bucket,
-        fun (OldConfig) ->
-            OldConfig1 =
-                functools:chain(OldConfig,
-                                [proplists:delete(hibernation_state, _),
-                                 proplists:delete(servers, _)]),
-            Fun(proplists:get_value(map, OldConfig1, [])),
-            OldConfig1 ++ [{map, Map}, {servers, ServerList}]
-        end).
-
 set_restored_attributes(Bucket, Map, ServerList) ->
     validate_map(Map),
-    set_restored_attributes_property(Bucket, Map, ServerList,
-                                     master_activity_events:note_set_map(Bucket,
-                                     Map, _)).
+    {ok, OldBucketConfig} =
+        do_update_bucket_config(
+          Bucket,
+          fun (OldConfig) ->
+                  OldConfig1 =
+                      functools:chain(OldConfig,
+                                      [proplists:delete(hibernation_state, _),
+                                       proplists:delete(servers, _)]),
+                  OldConfig1 ++ [{map, Map}, {servers, ServerList}]
+          end),
+    master_activity_events:note_set_map(
+      Bucket, Map, proplists:get_value(map, OldBucketConfig, [])),
+    ok.
 
 set_map_opts(Bucket, Opts) ->
     set_property(Bucket, map_opts_hash, erlang:phash2(Opts)).
@@ -2042,18 +2061,22 @@ clear_hibernation_state(Bucket) ->
                    proplists:delete(hibernation_state, OldConfig)
            end).
 
-update_servers_and_map(Bucket, OldConfig, FailedNodes, NewMap) ->
+-spec update_servers_and_map_commits(
+        proplists:proplist(), [node()], vbucket_map()) ->
+          proplists:proplist().
+update_servers_and_map_commits(OldConfig, FailedNodes, NewMap) ->
     Servers = ns_bucket:get_servers(OldConfig),
     C1 = misc:update_proplist(OldConfig, [{servers, Servers -- FailedNodes},
                                           {fastForwardMap, undefined},
                                           {map, NewMap}]),
-    NewConfig = maybe_update_desired_servers(C1, FailedNodes),
+    maybe_update_desired_servers(C1, FailedNodes).
+
+notify_map_update(Bucket, OldConfig, NewMap) ->
     master_activity_events:note_set_ff_map(
       Bucket, undefined,
       proplists:get_value(fastForwardMap, OldConfig, [])),
     master_activity_events:note_set_map(
-      Bucket, NewMap, proplists:get_value(map, OldConfig, [])),
-    NewConfig.
+      Bucket, NewMap, proplists:get_value(map, OldConfig, [])).
 
 get_commits_from_snapshot(BucketsUpdates, Snapshot) ->
     lists:map(
@@ -2068,14 +2091,36 @@ get_commits_from_snapshot(BucketsUpdates, Snapshot) ->
       end, BucketsUpdates).
 
 % Update the bucket config atomically.
+-spec update_bucket_config(bucket_name(), bucket_update_fun()) ->
+          ok | not_found | {error, exceeded_retries}.
 update_bucket_config(BucketName, Fun) ->
-    update_bucket_config(BucketName, Fun, fun (_) -> ok end, [], #{}).
+    case do_update_bucket_config(BucketName, Fun) of
+        {ok, _} ->
+            ok;
+        Other ->
+            Other
+    end.
 
-update_bucket_config(BucketName, Fun, Predicate, Subkeys, Opts) ->
+do_update_bucket_config(BucketName, Fun) ->
+    case do_update_bucket_config(BucketName, Fun, fun (_) -> ok end, [], #{}) of
+        {ok, [{BucketName, OldConfig}]} ->
+            {ok, OldConfig};
+        Other ->
+            Other
+    end.
+
+do_update_bucket_config(BucketName, Fun, Predicate, Subkeys, Opts) ->
     update_buckets_config([{BucketName, Fun}], Predicate, Subkeys, Opts).
 
+-spec update_buckets_config([{bucket_name(), bucket_update_fun()}]) ->
+          ok | not_found | {error, exceeded_retries}.
 update_buckets_config(BucketsUpdates) ->
-    update_buckets_config(BucketsUpdates, fun (_) -> ok end, [], #{}).
+    case update_buckets_config(BucketsUpdates, fun (_) -> ok end, [], #{}) of
+        {ok, _} ->
+            ok;
+        Other ->
+            Other
+    end.
 
 update_buckets_config(BucketsUpdates, Predicate, SubKeys, Opts) ->
     RV =
@@ -2093,7 +2138,14 @@ update_buckets_config(BucketsUpdates, Predicate, SubKeys, Opts) ->
 
                           case lists:keyfind(abort, 1, Commits) of
                               false ->
-                                  {commit, Commits};
+                                  OldBuckets =
+                                      lists:map(
+                                        fun ({BN, _}) ->
+                                                {ok, BC} = get_bucket(
+                                                             BN, Snapshot),
+                                                {BN, BC}
+                                        end, BucketsUpdates),
+                                  {commit, Commits, OldBuckets};
                               Res ->
                                   Res
                           end;
@@ -2102,8 +2154,8 @@ update_buckets_config(BucketsUpdates, Predicate, SubKeys, Opts) ->
                   end
           end, Opts),
     case RV of
-        {ok, _} ->
-            ok;
+        {ok, _, Info} ->
+            {ok, Info};
         Other ->
             Other
     end.

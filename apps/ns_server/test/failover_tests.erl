@@ -927,8 +927,7 @@ graceful_failover_incorrect_expected_topology(_SetupConfig, _R) ->
 
     %% For this test we will force the map such that we can gracefully fail over
     %% two nodes, 'a' and 'c', without issue.
-    {ok, _} =
-        ns_bucket:set_map_and_uploaders("default", [['a', 'b']], undefined),
+    ok = ns_bucket:set_map_and_uploaders("default", [['a', 'b']], undefined),
 
     %% Need to trap the exit of the graceful failover processes to avoid nuking
     %% the test process when it exits.
