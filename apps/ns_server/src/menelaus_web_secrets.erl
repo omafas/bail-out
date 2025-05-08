@@ -19,6 +19,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+-define(IS_WRITABLE_TIMEOUT, ?get_timeout(is_writable, 60000)).
+
 -export([handle_get_secrets/1,
          handle_get_secret/2,
          handle_post_secret/1,
@@ -30,6 +32,9 @@
          handle_rotate/2,
          format_error/1,
          format_secret_props/1]).
+
+%% Can be called by other nodes
+-export([is_writable_remote/3]).
 
 handle_get_secrets(Req) ->
     All = cb_cluster_secrets:get_all(),
@@ -77,9 +82,11 @@ handle_put_secret(IdStr, Req) ->
             with_validated_secret(
               fun (Props) ->
                   maybe
+                      IsSecretWritableMFA = {?MODULE, is_writable_remote,
+                                             [Req, node()]},
                       %% replace_secret will check "old usages" inside txn
                       {ok, Res} ?= cb_cluster_secrets:replace_secret(
-                                     Id, Props, is_writable(_, Req)),
+                                     Id, Props, IsSecretWritableMFA),
                       Formatted = export_secret(Res),
                       ns_audit:set_encryption_secret(Req, Formatted),
                       menelaus_util:reply_json(Req, {Formatted}),
@@ -181,7 +188,8 @@ handle_delete_secret(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
     assert_is_morpheus(),
     Id = parse_id(IdStr),
-    case cb_cluster_secrets:delete_secret(Id, is_writable(_, Req)) of
+    IsSecretWritableMFA = {?MODULE, is_writable_remote, [Req, node()]},
+    case cb_cluster_secrets:delete_secret(Id, IsSecretWritableMFA) of
         {ok, Name} ->
             ns_audit:delete_encryption_secret(Req, Id, Name),
             menelaus_util:reply(Req, 200);
@@ -200,9 +208,10 @@ handle_delete_historical_key(IdStr, HistKeyIdStr, Req) ->
     assert_is_morpheus(),
     Id = parse_id(IdStr),
     HistKeyId = list_to_binary(HistKeyIdStr),
+    IsSecretWritableMFA = {?MODULE, is_writable_remote, [Req, node()]},
     case cb_cluster_secrets:delete_historical_key(Id,
                                                   HistKeyId,
-                                                  is_writable(_, Req)) of
+                                                  IsSecretWritableMFA) of
         {ok, Name} ->
             ns_audit:delete_historical_encryption_key(Req, Id, Name, HistKeyId),
             menelaus_util:reply(Req, 200);
@@ -839,6 +848,12 @@ assert_is_morpheus() ->
               400,
               <<"Not supported until cluster is fully Morpheus">>)
     end.
+
+is_writable_remote(Req, Node, Secret) when Node =:= node() ->
+    is_writable(Secret, Req);
+is_writable_remote(Req, Node, Secret) ->
+    erpc:call(Node, ?MODULE, is_writable_remote, [Req, Node, Secret],
+              ?IS_WRITABLE_TIMEOUT).
 
 -ifdef(TEST).
 

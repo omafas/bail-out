@@ -312,7 +312,8 @@ add_new_secret_internal(Props) ->
         {error, _} = Error -> Error
     end.
 
--spec replace_secret(secret_id(), map(), fun((secret_props()) -> boolean())) ->
+-spec replace_secret(secret_id(), map(),
+                     {M :: atom(), F :: atom(), A :: [term()]}) ->
           {ok, secret_props()} |
           {error, not_found | bad_encrypt_id() | bad_usage_change() |
                   forbidden | inconsistent_graph() |
@@ -323,13 +324,13 @@ replace_secret(Id, NewProps, IsSecretWritableFun) ->
                        [Id, NewProps, IsSecretWritableFun]}).
 
 -spec replace_secret_internal(secret_id(), map(),
-                              fun((secret_props()) -> boolean())) ->
+                              {M :: atom(), F :: atom(), A :: [term()]}) ->
           {ok, secret_props()} |
           {error, not_found | bad_encrypt_id() | bad_usage_change() |
                   forbidden | inconsistent_graph() |
                   encryption_service:stored_key_error() | bad_encrypt_id() |
                   no_quorum}.
-replace_secret_internal(Id, NewProps, IsSecretWritableFun) ->
+replace_secret_internal(Id, NewProps, IsSecretWritableMFA) ->
     %% Make sure we have most recent information about which secrets are in use
     %% This is needed for verification of 'usage' modification
     maybe_reset_deks_counters(),
@@ -339,7 +340,7 @@ replace_secret_internal(Id, NewProps, IsSecretWritableFun) ->
               maybe
                   Snapshot = fetch_snapshot_in_txn(Txn),
                   {ok, OldProps} ?= get_secret(Id, Snapshot),
-                  true ?= IsSecretWritableFun(OldProps),
+                  true ?= call_is_writable_mfa(IsSecretWritableMFA, [OldProps]),
                   Props = copy_static_props(OldProps, NewProps),
                   CurList = get_all(Snapshot),
                   {ok, FinalProps} ?= ensure_secret_encrypted_txn(Props,
@@ -373,17 +374,18 @@ replace_secret_internal(Id, NewProps, IsSecretWritableFun) ->
         {error, _} = Error -> Error
     end.
 
--spec delete_secret(secret_id(), fun((secret_props()) -> boolean())) ->
+-spec delete_secret(secret_id(), {M :: atom(), F :: atom(), A :: [term()]}) ->
           {ok, string()} | {error, not_found | secret_in_use() | forbidden |
                                    inconsistent_graph() | no_quorum}.
 delete_secret(Id, IsSecretWritableFun) ->
     execute_on_master({?MODULE, delete_secret_internal,
                        [Id, IsSecretWritableFun]}).
 
--spec delete_secret_internal(secret_id(), fun((secret_props()) -> boolean())) ->
+-spec delete_secret_internal(secret_id(),
+                             {M :: atom(), F :: atom(), A :: [term()]}) ->
           {ok, string()} | {error, not_found | secret_in_use() | forbidden |
                                    inconsistent_graph() | no_quorum}.
-delete_secret_internal(Id, IsSecretWritableFun) ->
+delete_secret_internal(Id, IsSecretWritableMFA) ->
     %% Make sure we have most recent information about which secrets are in use
     maybe_reset_deks_counters(),
     RV = chronicle_compat_txn(
@@ -392,7 +394,7 @@ delete_secret_internal(Id, IsSecretWritableFun) ->
                    Snapshot = fetch_snapshot_in_txn(Txn),
                    {ok, #{id := Id,
                           name := Name} = Props} ?= get_secret(Id, Snapshot),
-                   true ?= IsSecretWritableFun(Props),
+                   true ?= call_is_writable_mfa(IsSecretWritableMFA, [Props]),
                    ok ?= can_delete_secret(Props, Snapshot),
                    CurSecrets = get_all(Snapshot),
                    NewSecrets = lists:filter(
@@ -417,23 +419,29 @@ delete_secret_internal(Id, IsSecretWritableFun) ->
             {error, Reason}
     end.
 
--spec delete_historical_key(secret_id(), key_id(), fun((secret_props()) -> boolean())) ->
+-spec delete_historical_key(secret_id(), key_id(),
+                            {M :: atom(), F :: atom(), A :: [term()]}) ->
           {ok, string()} | {error, not_found | secret_in_use() | forbidden |
                                    inconsistent_graph() | no_quorum}.
 delete_historical_key(SecretId, HistKeyId, IsSecretWritableFun) ->
     execute_on_master({?MODULE, delete_historical_key_internal,
                        [SecretId, HistKeyId, IsSecretWritableFun]}).
 
--spec delete_historical_key_internal(secret_id(), key_id(),
-                                     fun((secret_props()) -> boolean())) ->
+-spec delete_historical_key_internal(
+        secret_id(), key_id(),
+        {M :: atom(), F :: atom(), A :: [term()]}) ->
           {ok, string()} | {error, not_found | secret_in_use() | forbidden |
                                    inconsistent_graph() | no_quorum |
                                    active_key}.
-delete_historical_key_internal(SecretId, HistKeyId, IsSecretWritableFun) ->
+delete_historical_key_internal(SecretId, HistKeyId, IsSecretWritableMFA) ->
     %% It is important to get the counters before we start dek info aggregation
     {_, CountersRev} = get_dek_counters(direct),
     case get_all_node_deks_info() of
         {ok, AllNodesDekInfo} ->
+            IsSecretWritableFun = fun (Props) ->
+                                      call_is_writable_mfa(IsSecretWritableMFA,
+                                                           [Props])
+                                  end,
             case delete_historical_key_internal(SecretId, HistKeyId,
                                                 IsSecretWritableFun,
                                                 AllNodesDekInfo,
@@ -4168,6 +4176,9 @@ handle_erpc_key_test_result(Res, Nodes) ->
         _ ->
             {error, {test_failed_for_some_nodes, Errors}}
     end.
+
+call_is_writable_mfa({M, F, A}, ExtraArgs) ->
+    erlang:apply(M, F, A ++ ExtraArgs).
 
 -ifdef(TEST).
 replace_secret_in_list_test() ->
