@@ -107,11 +107,11 @@ manual_failover_test_setup(SetupConfig) ->
 
     meck:new(leader_activities, [passthrough]),
     meck:expect(leader_activities, run_activity,
-        fun(_Name, _Quorum, Body, _Opts) ->
-            Body()
-        end),
+                fun(_Name, _Quorum, Body, _Opts) ->
+                        Body()
+                end),
     meck:expect(leader_activities, deactivate_quorum_nodes,
-        fun(_) -> ok end),
+                fun(_) -> ok end),
 
 
     meck:new(chronicle),
