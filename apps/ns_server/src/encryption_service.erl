@@ -109,8 +109,7 @@ store_kek(Id, Key, KekIdToEncrypt, CreationDT, CanBeCached) ->
     store_key(kek, Id, 'raw-aes-gcm', Key, KekIdToEncrypt, CreationDT,
               CanBeCached).
 
-store_dek({bucketDek, Bucket}, Id, Key, KekIdToEncrypt, CreationDT) ->
-    BucketUUID = ns_bucket:uuid(Bucket, direct),
+store_dek({bucketDek, BucketUUID}, Id, Key, KekIdToEncrypt, CreationDT) ->
     store_dek(bucketDek, bucket_dek_id(BucketUUID, Id), Key, KekIdToEncrypt,
               CreationDT);
 store_dek(Kind, Id, Key, KekIdToEncrypt, CreationDT) ->
@@ -156,8 +155,7 @@ format_kmip_key_params(#{host := Host,
 
 read_dek(Kind, DekId) ->
     {NewId, NewKind} = case Kind of
-                           {bucketDek, Bucket} ->
-                               BucketUUID = ns_bucket:uuid(Bucket, direct),
+                           {bucketDek, BucketUUID} ->
                                {bucket_dek_id(BucketUUID, DekId), bucketDek};
                            _ ->
                                {DekId, Kind}
@@ -885,19 +883,13 @@ select_files_to_retire_test() ->
 
 -endif.
 
-key_path({bucketDek, Bucket}) ->
+key_path({bucketDek, BucketUUID}) ->
     case key_path(bucketDek) of
         undefined ->
             undefined;
         PathToDeks ->
-            case ns_bucket:uuid(Bucket, direct) of
-                not_present ->
-                    erlang:error(bucket_not_found);
-                UUID ->
-                    UUIDStr = binary_to_list(UUID),
-                    iolist_to_binary(filename:join([PathToDeks, UUIDStr,
-                                                    "deks"]))
-            end
+            iolist_to_binary(
+              filename:join([PathToDeks, binary_to_list(BucketUUID), "deks"]))
     end;
 %% Only bucketDek can change in config, other paths are static.
 %% Moreover we don't have ns_config started yet when we already need other

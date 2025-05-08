@@ -839,9 +839,13 @@ class Cluster:
         return testlib.post_succ(self, "/diag/eval",
                                  data="erlang:get_cookie()").text
 
-    def get_bucket_uuid(self, bucket):
-        r = testlib.get_succ(self, f'/pools/default/b/{bucket}')
-        return r.json()['uuid']
+    def get_bucket_uuid(self, bucket, none_if_not_found=False):
+        r = testlib.get(self, f'/pools/default/buckets/{bucket}')
+        if r.status_code == 404 and none_if_not_found:
+            return None
+        assert r.status_code == 200, testlib.format_http_error(r, [200])
+        r = r.json()
+        return r['uuid']
 
     def get_node_from_hostname(self, hostname):
         nodes = [node for node in self._nodes if node.hostname() == hostname]

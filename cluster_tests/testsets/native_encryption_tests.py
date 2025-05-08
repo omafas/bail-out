@@ -69,6 +69,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         # all HTTP requests in all tests that use node secret management (SM)
         self.sm_node = random.choice(self.cluster.connected_nodes)
         self.bucket_name = testlib.random_str(8)
+        self.bucket_name2 = testlib.random_str(8)
         set_cfg_encryption(self.cluster, 'nodeSecretManager', -1)
         self.sample_bucket = "beer-sample"
         # Creating a few keys whose role is to just exist while other tests
@@ -104,7 +105,9 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def test_teardown(self):
         set_cfg_encryption(self.cluster, 'nodeSecretManager', -1)
         set_log_encryption(self.cluster, 'disabled', -1)
+        set_bucket_dek_limit(self.cluster, self.bucket_name, None)
         self.cluster.delete_bucket(self.bucket_name)
+        self.cluster.delete_bucket(self.bucket_name2)
         self.cluster.delete_bucket(self.sample_bucket)
         for s in get_secrets(self.cluster):
             if s['id'] not in self.pre_existing_ids:
@@ -114,7 +117,6 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                       'passwordSource': 'env'})
         change_password(self.sm_node, password='')
         set_cfg_dek_limit(self.cluster, None)
-        set_bucket_dek_limit(self.cluster, self.bucket_name, None)
         set_remove_hist_keys_interval(self.cluster, None)
 
     def random_node(self):
@@ -254,9 +256,21 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                     'encryptionAtRestKeyId': -1})
 
     def secret_not_allowed_to_encrypt_bucket_test(self):
-        secret1_json = auto_generated_secret(usage=['bucket-encryption-wrong'])
+        # Creating buckets so we can use 'bucket-encryption-<bucket_name>'
+        # in usage field of the secret
+        self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100})
+        self.cluster.create_bucket({'name': self.bucket_name2, 'ramQuota': 100})
+
+        secret1_json = auto_generated_secret(
+                         usage=[f'bucket-encryption-{self.bucket_name}',
+                                f'bucket-encryption-{self.bucket_name2}'])
         secret1_id = create_secret(self.random_node(), secret1_json)
 
+        self.cluster.delete_bucket(self.bucket_name)
+
+        # Re-creating bucket again and try using the secret, it should fail
+        # because the was supposed to encrypt previous incarnation of the bucket
+        # (bucket's uuid has changed)
         bucket_props = {'name': self.bucket_name,
                         'ramQuota': 100,
                         'encryptionAtRestKeyId': secret1_id}
@@ -268,13 +282,15 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         assert e == 'Encryption key can\'t encrypt this bucket', \
                f'unexpected error: {errors}'
 
-        secret1_json['usage'].append(f'bucket-encryption-{self.bucket_name}')
+        secret1_json['usage']= ['bucket-encryption',
+                                f'bucket-encryption-{self.bucket_name2}']
         update_secret(self.random_node(), secret1_id, secret1_json)
 
         # Now the secret should work fine for encryption
         self.cluster.create_bucket(bucket_props)
 
-        secret2_json = auto_generated_secret(usage=['bucket-encryption-wrong'])
+        secret2_json = auto_generated_secret(
+                         usage=[f'bucket-encryption-{self.bucket_name2}'])
         secret2_id = create_secret(self.random_node(), secret2_json)
 
         # Trying to change encryption secret to the one that can't encrypt
@@ -287,14 +303,14 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                f'unexpected error: {errors}'
 
         # Trying to forbid using this secret for our bucket encryption
-        del secret1_json['usage'][1]
+        secret1_json['usage'] = [f'bucket-encryption-{self.bucket_name2}']
         errors = update_secret(self.random_node(), secret1_id, secret1_json,
                                expected_code=400)
         assert errors['_'] == 'Can\'t modify usage as this key is in use', \
                f'unexpected error: {errors}'
 
-        # Trying again, but now we add permission to encrypt all buckets
-        secret1_json['usage'].append('bucket-encryption')
+        # Trying again, but now we add permission to encrypt this bucket
+        secret1_json['usage'].append(f'bucket-encryption-{self.bucket_name}')
         update_secret(self.random_node(), secret1_id, secret1_json)
 
 
@@ -993,19 +1009,23 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
     def dek_limit_test(self):
         set_cfg_dek_limit(self.cluster, 2)
-        set_bucket_dek_limit(self.cluster, self.bucket_name, 2)
 
-        secret = auto_generated_secret(
-                     usage=[f'bucket-encryption-{self.bucket_name}',
-                            'config-encryption'])
+        secret = auto_generated_secret(usage=['bucket-encryption',
+                                              'config-encryption'])
         secret_id = create_secret(self.random_node(), secret)
 
         set_cfg_encryption(self.random_node(), 'encryptionKey', secret_id,
                            dek_rotation=1)
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': secret_id,
-                                    'encryptionAtRestDekRotationInterval': 1},
+                                    'encryptionAtRestDekRotationInterval': 0},
                                    sync=True)
+        # Set the limit after bucket is created, otherwise we don't have
+        # bucket UUID yet
+        set_bucket_dek_limit(self.cluster, self.bucket_name, 2)
+
+        self.cluster.update_bucket({'name': self.bucket_name,
+                                    'encryptionAtRestDekRotationInterval': 1})
 
         time.sleep(3)
 
@@ -2318,7 +2338,11 @@ def set_cfg_dek_limit(cluster, n):
 
 
 def set_bucket_dek_limit(cluster, bucket, n):
-    key = '{cb_cluster_secrets, {max_dek_num, {bucketDek, "' + bucket + '"}}}'
+    uuid = cluster.get_bucket_uuid(bucket, none_if_not_found=True)
+    if uuid is None and n is None:
+        # The bucket doesn't exist, no point in resetting the limit
+        return
+    key = '{cb_cluster_secrets, {max_dek_num, {bucketDek, <<"' + uuid + '">>}}}'
     set_ns_config_value(cluster, key, n)
 
 
@@ -2376,7 +2400,7 @@ def verify_and_get_mcd_deks_in_use(cluster, bucket, verify_key_count=None):
     for node in cluster.connected_nodes:
         if Service.KV not in node.get_services():
             continue
-        deks = get_bucket_deks_in_use(node, bucket)
+        deks = get_bucket_deks_in_use(cluster, node, bucket)
         if verify_key_count is not None:
             assert len(deks) == verify_key_count, \
                    f'unexpected number of deks, expected: {verify_key_count}, '\
@@ -2386,10 +2410,11 @@ def verify_and_get_mcd_deks_in_use(cluster, bucket, verify_key_count=None):
     return res
 
 
-def get_bucket_deks_in_use(node, bucket):
+def get_bucket_deks_in_use(cluster, node, bucket):
+    bucket_uuid = cluster.get_bucket_uuid(bucket)
     r = testlib.diag_eval(node,
-                          '{ok, L} = ns_memcached:get_dek_ids_in_use("' +
-                          bucket + '"), {json, L}.')
+                          '{ok, L} = ns_memcached:get_dek_ids_in_use(<<"' +
+                          bucket_uuid + '">>), {json, L}.')
     print(f'ns_memcached:get_dek_ids_in_use("{bucket}") for {node} '
           f'returned {r.text}')
     ids = json.loads(r.text)

@@ -168,6 +168,8 @@
          uuid/2,
          uuids/0,
          uuids/1,
+         uuid2bucket/1,
+         uuid2bucket/2,
          buckets_with_data_on_this_node/0,
          activate_bucket_data_on_this_node/1,
          deactivate_bucket_data_on_this_node/1,
@@ -201,6 +203,7 @@
          update_bucket_config/2,
          update_buckets_config/1,
          all_keys/1,
+         all_keys/2,
          get_encryption/3,
          get_dek_lifetime/2,
          get_dek_rotation_interval/2,
@@ -2162,7 +2165,8 @@ update_buckets_config(BucketsUpdates, Predicate, SubKeys, Opts) ->
           kv,
           [?CHRONICLE_SECRETS_KEY] ++
           [sub_key(BucketName, SubKey) ||
-           {BucketName, _} <- BucketsUpdates, SubKey <- [props | SubKeys]],
+           {BucketName, _} <- BucketsUpdates,
+           SubKey <- [uuid, props | SubKeys]],
           fun (Snapshot) ->
                   case Predicate(Snapshot) of
                       ok ->
@@ -2445,6 +2449,15 @@ uuids() ->
 
 uuids(Snapshot) ->
     [{Name, uuid(Name, Snapshot)} || Name <- get_bucket_names(Snapshot)].
+
+uuid2bucket(UUID) ->
+    uuid2bucket(UUID, get_snapshot(all, [uuid])).
+
+uuid2bucket(UUID, Snapshot) ->
+    case lists:keyfind(UUID, 2, uuids(Snapshot)) of
+        {BucketName, _} -> {ok, BucketName};
+        false -> {error, not_found}
+    end.
 
 filter_out_unknown_buckets(BucketsWithUUIDs, Snapshot) ->
     lists:filter(fun ({Name, UUID}) ->
@@ -2793,82 +2806,96 @@ remove_bucket(BucketName) ->
 validate_encryption_secret(?SECRET_ID_NOT_SET, _Bucket, _Snapshot) ->
     ok;
 validate_encryption_secret(SecretId, Bucket, Snapshot) ->
-    case cb_cluster_secrets:ensure_can_encrypt_dek_kind(SecretId,
-                                                        {bucketDek, Bucket},
+    DekKind = case uuid(Bucket, Snapshot) of
+                  not_present -> %% Doesn't exist, maybe it is a new bucket
+                                 %% so we allow it if secret can encrypt any
+                                 %% bucket
+                      {bucketDek, <<"*">>};
+                  UUID when is_binary(UUID) ->
+                      {bucketDek, UUID}
+                  end,
+    case cb_cluster_secrets:ensure_can_encrypt_dek_kind(SecretId, DekKind,
                                                         Snapshot) of
         ok -> ok;
         {error, not_found} -> {error, secret_not_found};
         {error, not_allowed} -> {error, secret_not_allowed}
     end.
 
-get_encryption(BucketName, Scope, Snapshot) when Scope == cluster;
+get_encryption(BucketUUID, Scope, Snapshot) when Scope == cluster;
                                                  Scope == node ->
-    case get_bucket(BucketName, Snapshot) of
-        {ok, BucketConfig} ->
-            IsNodeInServers = lists:member(node(), get_servers(BucketConfig)),
-            Dir = ns_storage_conf:this_node_bucket_dbdir(BucketName, Snapshot),
-            ExistsOnDisk = filelib:is_dir(Dir),
-            Services = ns_cluster_membership:node_services(Snapshot, node()),
-            IsKVNode = lists:member(kv, Services),
-            case (Scope == cluster) orelse IsNodeInServers orelse
-                 (IsKVNode andalso ExistsOnDisk) of
-                true ->
-                    case proplists:get_value(encryption_secret_id, BucketConfig,
-                                             ?SECRET_ID_NOT_SET) of
-                        ?SECRET_ID_NOT_SET -> {ok, disabled};
-                        Id -> {ok, {secret, Id}}
-                    end;
-                false ->
-                    {error, not_found}
-            end;
-        not_present ->
-            {error, not_found}
-    end.
-
-get_dek_lifetime(BucketName, Snapshot) ->
-    case get_bucket(BucketName, Snapshot) of
-        {ok, BucketConfig} ->
-            Val = proplists:get_value(encryption_dek_lifetime, BucketConfig,
-                                      ?DEFAULT_DEK_LIFETIME_S),
-            case Val of
-                0 -> {ok, undefined};
-                _ -> {ok, Val}
-            end;
-        not_present ->
-            {error, not_found}
-    end.
-
-get_dek_rotation_interval(BucketName, Snapshot) ->
-    case get_bucket(BucketName, Snapshot) of
-        {ok, BucketConfig} ->
-            Val = proplists:get_value(encryption_dek_rotation_interval,
-                                      BucketConfig,
-                                      ?DEFAULT_DEK_ROTATION_INTERVAL_S),
-            case Val of
-                0 -> {ok, undefined};
-                _ -> {ok, Val}
-            end;
-        not_present ->
-            {error, not_found}
-    end.
-
-get_drop_keys_timestamp(Bucket, Snapshot) ->
     maybe
-        {ok, _} ?= get_bucket(Bucket, Snapshot),
-        {ok, #{dek_drop_datetime := DT}} ?=
-            chronicle_compat:get(Snapshot, sub_key(Bucket, encr_at_rest), #{}),
+        {ok, BucketName} ?= uuid2bucket(BucketUUID, Snapshot),
+        {ok, BucketConfig} ?= get_bucket(BucketName, Snapshot),
+        IsNodeInServers = lists:member(node(), get_servers(BucketConfig)),
+        Dir = ns_storage_conf:this_node_bucket_dbdir(BucketUUID),
+        ExistsOnDisk = filelib:is_dir(Dir),
+        Services = ns_cluster_membership:node_services(Snapshot, node()),
+        IsKVNode = lists:member(kv, Services),
+        %% Meaning of Scope:
+        %% When Scope == cluster, we check if encryption for this bucket is
+        %% enabled in general.
+        %% When Scope == node, we check if this bucket is encrypted on this
+        %% node (this node should have DEKs for this bucket)
+        case (Scope == cluster) orelse IsNodeInServers orelse
+             (IsKVNode andalso ExistsOnDisk) of
+            true ->
+                case proplists:get_value(encryption_secret_id, BucketConfig,
+                                            ?SECRET_ID_NOT_SET) of
+                    ?SECRET_ID_NOT_SET -> {ok, disabled};
+                    Id -> {ok, {secret, Id}}
+                end;
+            false ->
+                {error, not_found}
+        end
+    else
+        not_present ->
+            {error, not_found};
+        {error, R} ->
+            {error, R}
+    end.
+
+get_dek_lifetime(BucketUUID, Snapshot) ->
+    get_dek_interval(BucketUUID, Snapshot, encryption_dek_lifetime,
+                     ?DEFAULT_DEK_LIFETIME_S).
+
+get_dek_rotation_interval(BucketUUID, Snapshot) ->
+    get_dek_interval(BucketUUID, Snapshot, encryption_dek_rotation_interval,
+                     ?DEFAULT_DEK_ROTATION_INTERVAL_S).
+
+get_dek_interval(BucketUUID, Snapshot, PropName, Default) ->
+    maybe
+        {ok, BucketName} ?= uuid2bucket(BucketUUID, Snapshot),
+        {ok, BucketConfig} ?= get_bucket(BucketName, Snapshot),
+        Val = proplists:get_value(PropName, BucketConfig, Default),
+        case Val of
+            0 -> {ok, undefined};
+            _ -> {ok, Val}
+        end
+    else
+        not_present ->
+            {error, not_found};
+        {error, R} ->
+            {error, R}
+    end.
+
+get_drop_keys_timestamp(BucketUUID, Snapshot) ->
+    maybe
+        {ok, Bucket} ?= uuid2bucket(BucketUUID, Snapshot),
+        #{dek_drop_datetime := DT} ?=
+            chronicle_compat:get(Snapshot, sub_key(Bucket, encr_at_rest),
+                                 #{default => #{}}),
         {ok, DT}
     else
-        not_present -> {error, not_found};
-        {ok, #{}} -> {ok, undefined};
-        {error, not_found} -> {ok, undefined}
+        #{} -> {ok, undefined};
+        {error, R} -> {error, R}
     end.
 
-get_force_encryption_timestamp(Bucket, Snapshot) ->
+get_force_encryption_timestamp(BucketUUID, Snapshot) ->
     maybe
+        {ok, Bucket} ?= uuid2bucket(BucketUUID, Snapshot),
         {ok, Config} ?= get_bucket(Bucket, Snapshot),
-        {ok, Settings} ?=
-            chronicle_compat:get(Snapshot, sub_key(Bucket, encr_at_rest), #{}),
+        Settings = chronicle_compat:get(Snapshot, sub_key(Bucket, encr_at_rest),
+                                        #{default => #{}}),
         DropDT = maps:get(dek_drop_datetime, Settings, undefined),
         ForceDT = maps:get(force_encryption_datetime, Settings, DropDT),
         LastToggleDT = proplists:get_value(encryption_last_toggle_datetime,
@@ -2881,8 +2908,7 @@ get_force_encryption_timestamp(Bucket, Snapshot) ->
         end
     else
         not_present -> {error, not_found};
-        {ok, #{}} -> {ok, undefined};
-        {error, not_found} -> {ok, undefined}
+        {error, R} -> {error, R}
     end.
 
 %% fusion

@@ -447,7 +447,7 @@ do_build_nodes_info_fun(#ctx{ns_config = Config,
                  end,
                  build_failover_status(Snapshot, WantENode),
                  LimitsAndBucketPlacerInfoBuilder(WantENode)] ++
-                 build_encryption_at_rest_info(Bucket, InfoNode) ++
+                 build_encryption_at_rest_info(Bucket, Snapshot, InfoNode) ++
                    PerNodeStorageBackendBuilder(WantENode, Bucket),
 
             NodeHash = erlang:phash2(StableInfo),
@@ -463,7 +463,7 @@ do_build_nodes_info_fun(#ctx{ns_config = Config,
                            end])}
     end.
 
-build_encryption_at_rest_info(Bucket, NsDoctorInfo) ->
+build_encryption_at_rest_info(Bucket, Snapshot, NsDoctorInfo) ->
     NodeSupportsEncryptionAtRest =
         cb_cluster_secrets:node_supports_encryption_at_rest(NsDoctorInfo),
     case NodeSupportsEncryptionAtRest of
@@ -487,8 +487,10 @@ build_encryption_at_rest_info(Bucket, NsDoctorInfo) ->
             case Bucket of
                 undefined -> [];
                 _ ->
+                    BucketUUID = ns_bucket:uuid(Bucket, Snapshot),
                     BucketInfo = proplists:get_value(
-                                   {bucket_encryption, Bucket}, AllInfos, []),
+                                   {bucket_encryption, BucketUUID},
+                                   AllInfos, []),
                     [{bucketEncryptionAtRestInfo, Format(BucketInfo)}]
             end
     end.

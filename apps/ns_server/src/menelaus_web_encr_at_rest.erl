@@ -331,10 +331,10 @@ handle_bucket_drop_keys(Bucket, DropDeksTimeKey, AuditKey, Req) ->
           end
       end, AuditKey, Req).
 
-build_bucket_encr_at_rest_info(BucketName, BucketConfig) ->
+build_bucket_encr_at_rest_info(BucketUUID, BucketConfig) ->
     NodesInfo = ns_doctor:get_nodes(),
     Nodes = ns_bucket:get_servers(BucketConfig),
-    I = aggregated_EAR_info({bucket_encryption, BucketName}, NodesInfo, Nodes),
+    I = aggregated_EAR_info({bucket_encryption, BucketUUID}, NodesInfo, Nodes),
     format_encr_at_rest_info(I).
 
 format_encr_at_rest_info(Info) ->

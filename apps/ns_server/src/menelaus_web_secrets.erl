@@ -34,7 +34,7 @@
          format_secret_props/1]).
 
 %% Can be called by other nodes
--export([is_writable_remote/3]).
+-export([is_writable_remote/4]).
 
 handle_get_secrets(Req) ->
     All = cb_cluster_secrets:get_all(),
@@ -299,20 +299,26 @@ export_secret(#{type := DataType} = Props) ->
               (type, T) ->
                   T;
               (usage, UList) ->
-                  lists:map(
-                    fun ({bucket_encryption, "*"}) ->
-                            <<"bucket-encryption">>;
-                        ({bucket_encryption, BucketName}) ->
-                            iolist_to_binary([<<"bucket-encryption-">>,
-                                              BucketName]);
+                  lists:filtermap(
+                    fun ({bucket_encryption, <<"*">>}) ->
+                            {true, <<"bucket-encryption">>};
+                        ({bucket_encryption, BucketUUID}) ->
+                            case ns_bucket:uuid2bucket(BucketUUID) of
+                                {ok, BucketName} ->
+                                    {true, iolist_to_binary(
+                                             [<<"bucket-encryption-">>,
+                                              BucketName])};
+                                {error, not_found} ->
+                                    false
+                            end;
                         (config_encryption) ->
-                            <<"config-encryption">>;
+                            {true, <<"config-encryption">>};
                         (secrets_encryption) ->
-                            <<"KEK-encryption">>;
+                            {true, <<"KEK-encryption">>};
                         (audit_encryption) ->
-                            <<"audit-encryption">>;
+                            {true, <<"audit-encryption">>};
                         (log_encryption) ->
-                            <<"log-encryption">>
+                            {true, <<"log-encryption">>}
                     end, UList);
               (data, D) when DataType == ?GENERATED_KEY_TYPE ->
                   {format_auto_generated_key_data(D)};
@@ -408,9 +414,14 @@ validate_key_usage(Name, State) ->
       fun (Str) ->
           case iolist_to_binary(Str) of
               <<"bucket-encryption">> ->
-                  {value, {bucket_encryption, "*"}};
+                  {value, {bucket_encryption, <<"*">>}};
               <<"bucket-encryption-", N/binary>> when size(N) > 0 ->
-                  {value, {bucket_encryption, binary_to_list(N)}};
+                  case ns_bucket:uuid(binary_to_list(N), direct) of
+                      not_present ->
+                          {error, io_lib:format("Bucket ~s not found", [N])};
+                      BucketUUID when is_binary(BucketUUID) ->
+                          {value, {bucket_encryption, BucketUUID}}
+                  end;
               <<"KEK-encryption">> ->
                   {value, secrets_encryption};
               <<"config-encryption">> ->
@@ -649,25 +660,37 @@ validate_datetime_in_the_future(Name, State) ->
           end
       end, Name, State).
 
-usage_extra_permissions({bucket_encryption, "*"}, write) ->
+usage_extra_permissions({bucket_encryption, <<"*">>}, write, _Snapshot) ->
     %% Those who can create a bucket should be able to create a secret to
     %% encrypt that bucket
     [{[buckets], create}];
-usage_extra_permissions({bucket_encryption, "*"}, read) ->
+usage_extra_permissions({bucket_encryption, <<"*">>}, read, _Snapshot) ->
     %% Those who can view bucket list should be able to view the secrets
     %% that can encrypt buckets
     [{[{bucket, any}, settings], read}];
 
-usage_extra_permissions({bucket_encryption, B}, write) ->
+usage_extra_permissions({bucket_encryption, BucketUUID}, write, Snapshot) ->
     %% Those who can modify bucket settings should be able to create a secret
     %% that encrypts that specific bucket
-    [{[{bucket, B}, settings], write}];
-usage_extra_permissions({bucket_encryption, B}, read) ->
+    maybe
+        {ok, B} ?= ns_bucket:uuid2bucket(BucketUUID, Snapshot),
+        [{[{bucket, B}, settings], write}]
+    else
+        {error, not_found} ->
+            []
+    end;
+usage_extra_permissions({bucket_encryption, BucketUUID}, read, Snapshot) ->
     %% Those who can read bucket settings should be able to see secrets that
     %% can encrypt that specific bucket
-    [{[{bucket, B}, settings], read}];
+    maybe
+        {ok, B} ?= ns_bucket:uuid2bucket(BucketUUID, Snapshot),
+        [{[{bucket, B}, settings], read}]
+    else
+        {error, not_found} ->
+            []
+    end;
 
-usage_extra_permissions(Usage, _PermType)
+usage_extra_permissions(Usage, _PermType, _Snapshot)
                             when Usage =:= secrets_encryption;
                                  Usage =:= config_encryption;
                                  Usage =:= audit_encryption;
@@ -681,25 +704,42 @@ usage_extra_permissions(Usage, _PermType)
 -define(usage_read_perm, {[admin, security], read}).
 -define(usage_write_perm, {[admin, security], write}).
 
-is_usage_allowed(Usage, PermType, Req) ->
+is_usage_allowed(Usage, PermType, Req, Snapshot) ->
     FullAccessPerm = case PermType of
                          read -> ?usage_read_perm;
                          write -> ?usage_write_perm
                      end,
-    AllowedPerms = [FullAccessPerm | usage_extra_permissions(Usage, PermType)],
+    AllowedPerms = [FullAccessPerm | usage_extra_permissions(Usage, PermType,
+                                                             Snapshot)],
     lists:any(menelaus_auth:has_permission(_, Req), AllowedPerms).
 
 read_filter_secrets_by_permission(Secrets, Req) ->
     lists:filter(is_readable(_, Req), Secrets).
 
 is_readable(#{usage := Usages}, Req) ->
+    Snapshot = ns_bucket:get_snapshot(all, [uuid]),
+    ExistingUsages = only_existing_usages(Usages, Snapshot),
     menelaus_auth:has_permission(?usage_read_perm, Req) orelse
-       lists:any(is_usage_allowed(_, read, Req), Usages).
+       lists:any(is_usage_allowed(_, read, Req, Snapshot), ExistingUsages).
 
-is_writable(#{usage := Usages}, Req) ->
+is_writable(Secret, Req) ->
+    is_writable(Secret, Req, ns_bucket:get_snapshot(all, [uuid])).
+
+is_writable(#{usage := Usages}, Req, Snapshot) ->
+    ExistingUsages = only_existing_usages(Usages, Snapshot),
     menelaus_auth:has_permission(?usage_write_perm, Req) orelse
-        (Usages =/= [] andalso
-            lists:all(is_usage_allowed(_, write, Req), Usages)).
+        (ExistingUsages =/= [] andalso
+            lists:all(is_usage_allowed(_, write, Req, Snapshot), ExistingUsages)).
+
+only_existing_usages(Usages, Snapshot) ->
+    ExistingUUIDs = [U || {_, U} <- ns_bucket:uuids(Snapshot)],
+    lists:filter(fun ({bucket_encryption, <<"*">>}) ->
+                        true;
+                     ({bucket_encryption, UUID}) ->
+                        lists:member(UUID, ExistingUUIDs);
+                     (_) ->
+                        true
+                end, Usages).
 
 parse_id(Str) when is_list(Str) ->
     try list_to_integer(Str) of
@@ -782,17 +822,22 @@ format_error({test_failed_for_some_nodes, Errors}) ->
 format_error(Reason) ->
     lists:flatten(io_lib:format("~p", [Reason])).
 
+
 format_secrets_used_by_list(UsedByMap) ->
+    format_secrets_used_by_list(UsedByMap, direct).
+
+format_secrets_used_by_list(UsedByMap, Snapshot) ->
     UsedByCfg = maps:get(by_config, UsedByMap, []),
     Secrets = maps:get(by_secrets, UsedByMap, []),
     UsedByDeks = maps:get(by_deks, UsedByMap, []),
     Joined = fun (L) -> lists:join(", ", ["\"" ++ E ++ "\"" || E <- L]) end,
     FormatUsages =
         fun (Usages) ->
-                {Buckets, Other} = misc:partitionmap(
-                                     fun ({bucket_encryption, B}) -> {left, B};
-                                         (K) -> {right, K}
-                                     end, Usages),
+                {BucketsUUIDs, Other} =
+                    misc:partitionmap(
+                      fun ({bucket_encryption, BUUID}) -> {left, BUUID};
+                          (K) -> {right, K}
+                      end, Usages),
                 FormattedUsages = lists:map(fun (config_encryption) ->
                                                     "configuration";
                                                 (log_encryption) ->
@@ -800,6 +845,14 @@ format_secrets_used_by_list(UsedByMap) ->
                                                 (audit_encryption) ->
                                                     "audit"
                                             end, Other),
+                AllBuckets = maps:from_list(
+                               [{U, N} || {N, U} <- ns_bucket:uuids(Snapshot)]),
+                Buckets = lists:map(fun (B) ->
+                                            maps:get(B, AllBuckets,
+                                                     "deleted (id: " ++
+                                                     binary_to_list(B) ++
+                                                     ")")
+                                    end, BucketsUUIDs),
                 Buckets2 = Joined(Buckets),
                 BucketsStr =
                     case length(Buckets) of
@@ -850,18 +903,21 @@ assert_is_morpheus() ->
               <<"Not supported until cluster is fully Morpheus">>)
     end.
 
-is_writable_remote(Req, Node, Secret) when Node =:= node() ->
-    is_writable(Secret, Req);
-is_writable_remote(Req, Node, Secret) ->
-    erpc:call(Node, ?MODULE, is_writable_remote, [Req, Node, Secret],
+is_writable_remote(Req, Node, Secret, Snapshot) when Node =:= node() ->
+    is_writable(Secret, Req, Snapshot);
+is_writable_remote(Req, Node, Secret, Snapshot) ->
+    erpc:call(Node, ?MODULE, is_writable_remote, [Req, Node, Secret, Snapshot],
               ?IS_WRITABLE_TIMEOUT).
 
 -ifdef(TEST).
 
 format_secrets_used_by_list_test() ->
-    All = cb_deks:dek_cluster_kinds_list(#{bucket_names => {["b1", "b2"], 1}}),
+    Snapshot = #{bucket_names => {["b1", "b2"], 1},
+                 {bucket, "b1", uuid} => {<<"b1-uuid">>, 2},
+                 {bucket, "b2", uuid} => {<<"b2-uuid">>, 3}},
+    All = cb_deks:dek_cluster_kinds_list(Snapshot),
     Secrets = ["s1", "s2"],
-    F = ?cut(lists:flatten(format_secrets_used_by_list(_))),
+    F = ?cut(lists:flatten(format_secrets_used_by_list(_, Snapshot))),
     ?assertEqual("this key is configured to encrypt configuration, logs, "
                  "audit, buckets \"b1\", \"b2\"",
                  F(#{by_deks => All, by_config => All, by_secrets => []})),
@@ -887,14 +943,14 @@ format_secrets_used_by_list_test() ->
     ?assertEqual("this key is configured to encrypt configuration, "
                  "bucket \"b2\", keys \"s1\", \"s2\"; "
                  "it also still encrypts some data in bucket \"b1\"",
-                 F(#{by_deks => [configDek, {bucketDek, "b1"}],
-                     by_config => [{bucketDek, "b2"}, configDek],
+                 F(#{by_deks => [configDek, {bucketDek, <<"b1-uuid">>}],
+                     by_config => [{bucketDek, <<"b2-uuid">>}, configDek],
                      by_secrets => Secrets})),
     ?assertEqual("this key is configured to encrypt configuration, "
                  "bucket \"b2\", key \"s1\"; "
                  "it also still encrypts some data in bucket \"b1\"",
-                 F(#{by_deks => [configDek, {bucketDek, "b1"}],
-                     by_config => [{bucketDek, "b2"}, configDek],
+                 F(#{by_deks => [configDek, {bucketDek, <<"b1-uuid">>}],
+                     by_config => [{bucketDek, <<"b2-uuid">>}, configDek],
                      by_secrets => ["s1"]})).
 
 -endif.

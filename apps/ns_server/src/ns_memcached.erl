@@ -149,7 +149,7 @@
          maybe_add_impersonate_user_frame_info/2,
          delete_bucket/2,
          get_config_stats/2,
-         set_active_dek_for_bucket/2,
+         set_active_dek_for_bucket_uuid/2,
          set_active_dek/2,
          prune_log_or_audit_encr_keys/2,
          get_dek_ids_in_use/1,
@@ -431,7 +431,7 @@ handle_call(warmup_stats, _From, State) ->
     {reply, State#state.warmup_stats, State};
 handle_call(maybe_reencrypt_bucket_metadata, _From,
             #state{bucket = Bucket, bucket_uuid = BucketUUID} = State) ->
-    {ok, DS} = cb_crypto:fetch_deks_snapshot({bucketDek, Bucket}),
+    {ok, DS} = cb_crypto:fetch_deks_snapshot({bucketDek, BucketUUID}),
     {reply, maybe_reencrypt_bucket_metadata(Bucket, BucketUUID, DS), State};
 handle_call(get_metadata_file_dek_ids, _From,
             #state{bucket_uuid = BucketUUID} = State) ->
@@ -1669,7 +1669,7 @@ do_ensure_bucket(Sock, Bucket, BConf, false, JWT, BucketUUID) ->
             %% include the dek. But since the bucket is not created yet, that
             %% stat request should never succeed, which makes removal
             %% impossible.
-            {ok, DS} = cb_crypto:fetch_deks_snapshot({bucketDek, Bucket}),
+            {ok, DS} = cb_crypto:fetch_deks_snapshot({bucketDek, BucketUUID}),
 
             ok = write_bucket_metadata(Bucket, BucketUUID, DS),
 
@@ -1686,7 +1686,6 @@ do_ensure_bucket(Sock, Bucket, BConf, false, JWT, BucketUUID) ->
                               %% Use whatever the default value is
                               undefined
                       end,
-
             case mc_client_binary:create_bucket(Sock, Bucket, Engine,
                                                 ConfigString, Timeout) of
                 ok ->
@@ -1955,8 +1954,14 @@ set_tls_config(Config) ->
           end
       end).
 
-set_active_dek_for_bucket(Bucket, _ActiveDek) ->
-    {ok, DeksSnapshot} = cb_crypto:fetch_deks_snapshot({bucketDek, Bucket}),
+set_active_dek_for_bucket_uuid(BucketUUID, ActiveDek) ->
+    maybe
+        {ok, BucketName} ?= ns_bucket:uuid2bucket(BucketUUID),
+        set_active_dek_for_bucket(BucketName, BucketUUID, ActiveDek)
+    end.
+
+set_active_dek_for_bucket(Bucket, UUID, _ActiveDek) ->
+    {ok, DeksSnapshot} = cb_crypto:fetch_deks_snapshot({bucketDek, UUID}),
     NsMemcachedExists = (whereis(server(Bucket)) =/= undefined),
     case set_active_dek(Bucket, DeksSnapshot) of
         ok ->
@@ -2149,8 +2154,9 @@ get_dek_ids_in_use(Type) when Type =:= "@audit"; Type =:= "@logs" ->
                         []
                 end, TypeAndKeys)
       end);
-get_dek_ids_in_use(BucketName) ->
+get_dek_ids_in_use(BucketUUID) ->
     maybe
+        {ok, BucketName} ?= ns_bucket:uuid2bucket(BucketUUID),
         {ok, DekIds} ?= get_encryption_key_ids_stat(
                           BucketName,
                           fun (<<"encryption-key-ids">>, V, _Acc) ->
@@ -2337,20 +2343,21 @@ get_config_stats(Bucket, SubKey) ->
               end
       end, Bucket).
 
-drop_deks(BucketName, IdsToDrop, ContinuationId, Continuation) ->
+drop_deks(BucketUUID, IdsToDrop, ContinuationId, Continuation) ->
     maybe
+        {ok, BucketName} ?= ns_bucket:uuid2bucket(BucketUUID),
         ?log_debug("Initiating db compaction for bucket ~p in order to get rid "
                    "of old keys: ~p...", [BucketName, IdsToDrop]),
         IdsToDropMcd = lists:map(fun (?NULL_DEK) -> <<"unencrypted">>;
                                      (Id) -> Id
                                  end, IdsToDrop),
-        ok ?= drop_metadata_file_dek_ids(BucketName, IdsToDropMcd),
+        ok ?= drop_metadata_file_dek_ids(BucketName, BucketUUID, IdsToDropMcd),
         ok ?= compaction_api:partially_compact_db_files(
                 BucketName, IdsToDropMcd, ContinuationId, Continuation),
         {ok, started}
     end.
 
-drop_metadata_file_dek_ids(BucketName, IdsToDrop) ->
+drop_metadata_file_dek_ids(BucketName, BucketUUID, IdsToDrop) ->
     %% Metadata file should normally be already encrypted by the active key
     %% so most likely there is nothing to do here.
     %% Also, race with ns_memcached is ok here because:
@@ -2362,7 +2369,6 @@ drop_metadata_file_dek_ids(BucketName, IdsToDrop) ->
     %% ns_memcached? Because ns_memcached starts after cb_cluster_secrets
     %% so it is possible that that ns_memcached doesn't exist yet.
     maybe
-        BucketUUID = ns_bucket:uuid(BucketName, direct),
         {ok, DekIds} ?= get_metadata_file_dek_ids_direct(BucketUUID),
         TranslatedIds = lists:map(fun (undefined) -> ?NULL_DEK;
                                       (Id) -> Id

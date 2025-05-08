@@ -692,7 +692,7 @@ ensure_delete_command_sent(Bucket) ->
             Error
     end.
 
-delete_unused_db_files(Dir) ->
+delete_unused_db_files(Dir) when is_list(Dir) ->
     %% Note that we are not sending delete_bucket command to memcached here
     %% because we assume that all buckets are already deleted from memcached
     ?log_debug("Delete old data files for bucket in dir ~p", [Dir]),
@@ -707,7 +707,7 @@ delete_unused_db_files(Dir) ->
     %% deleting the directory (which will lead to rm_rf failure or
     %% removal of newly created DEK files).
     cb_cluster_secrets:destroy_deks(
-        {bucketDek, Dir}, %% Assuming Dir is bucket uuid
+        {bucketDek, list_to_binary(Dir)}, %% Assuming Dir is bucket uuid
         fun () ->
             case ns_couchdb_api:delete_databases_and_files(Dir) of
                 ok ->

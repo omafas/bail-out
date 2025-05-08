@@ -469,9 +469,11 @@ build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx) ->
      end,
      case cluster_compat_mode:is_cluster_morpheus() of
          true ->
+            Snapshot = menelaus_web_node:get_snapshot(Ctx),
+            BucketUUID = ns_bucket:uuid(Id, Snapshot),
             [{encryptionAtRestInfo,
               menelaus_web_encr_at_rest:build_bucket_encr_at_rest_info(
-                Id, BucketConfig)}];
+                BucketUUID, BucketConfig)}];
          false ->
             []
      end].

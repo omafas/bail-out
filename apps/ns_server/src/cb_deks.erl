@@ -40,7 +40,7 @@
                              disabled.
 -type dek_id() :: cb_cluster_secrets:key_id().
 -type dek_kind() :: kek | configDek | logDek | auditDek |
-                    {bucketDek, string()}.
+                    {bucketDek, BucketUUID :: binary()}.
 -type good_dek() :: #{id := dek_id(), type := 'raw-aes-gcm',
                       info := #{key := fun(() -> binary()),
                                encryption_key_id := cb_cluster_secrets:key_id(),
@@ -299,23 +299,27 @@ increment_dek_encryption_counter(Kind, SecretId, AllCounters) ->
 %% Returns a dek kind that is affected by a given chronicle key.
 %% Returns false otherwise.
 dek_chronicle_keys_filter(?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY) ->
-    [configDek, logDek, auditDek];
+    {dek_settings_updated, [configDek, logDek, auditDek]};
 dek_chronicle_keys_filter(Key) ->
-    MembershipKeys = ns_cluster_membership:node_membership_keys(node()),
-    lists:uniq(
-        case ns_bucket:sub_key_match(Key) of
-            {true, Bucket, props} -> [{bucketDek, Bucket}];
-            {true, Bucket, encr_at_rest} -> [{bucketDek, Bucket}];
-            {true, _Bucket, _} -> [];
-            false -> []
-        end ++
-        case lists:member(Key, MembershipKeys) of
-            true ->
-                Buckets = ns_bucket:get_bucket_names(direct),
-                [{bucketDek, B} || B <- Buckets];
-            false ->
-                []
-        end).
+    case ns_bucket:sub_key_match(Key) of
+        {true, Bucket, K} when K == props; K == encr_at_rest ->
+            case ns_bucket:uuid(Bucket, direct) of
+                not_present -> %% Deleted?
+                    check_for_deleted_keys;
+                UUID when is_binary(UUID) ->
+                    {dek_settings_updated, [{bucketDek, UUID}]}
+            end;
+        {true, _Bucket, _} -> ignore;
+        false ->
+            MembershipKeys = ns_cluster_membership:node_membership_keys(node()),
+            case lists:member(Key, MembershipKeys) of
+                true ->
+                    {dek_settings_updated,
+                     [{bucketDek, UUID} || {_, UUID} <- ns_bucket:uuids()]};
+                false ->
+                    ignore
+            end
+    end.
 
 %% encryption_method_callback - called to determine if encryption is enabled
 %% or not for that type of entity.
@@ -422,29 +426,24 @@ dek_config(auditDek) ->
       fetch_keys_callback => chronicle_compat:txn_get_many(
                                [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY], _),
       required_usage => audit_encryption};
-dek_config({bucketDek, Bucket}) ->
-    #{encryption_method_callback => ?cut(ns_bucket:get_encryption(Bucket,
+dek_config({bucketDek, BucketUUID}) ->
+    #{encryption_method_callback => ?cut(ns_bucket:get_encryption(BucketUUID,
                                                                   _1, _2)),
-      set_active_key_callback => ns_memcached:set_active_dek_for_bucket(Bucket,
-                                                                        _),
-      lifetime_callback => ns_bucket:get_dek_lifetime(Bucket, _),
-      rotation_int_callback => ns_bucket:get_dek_rotation_interval(Bucket, _),
-      drop_keys_timestamp_callback => ns_bucket:get_drop_keys_timestamp(Bucket,
-                                                                        _),
+      set_active_key_callback => ns_memcached:set_active_dek_for_bucket_uuid(
+                                   BucketUUID, _),
+      lifetime_callback => ns_bucket:get_dek_lifetime(BucketUUID, _),
+      rotation_int_callback => ns_bucket:get_dek_rotation_interval(
+                                 BucketUUID, _),
+      drop_keys_timestamp_callback => ns_bucket:get_drop_keys_timestamp(
+                                        BucketUUID, _),
       force_encryption_timestamp_callback =>
-          ns_bucket:get_force_encryption_timestamp(Bucket, _),
+          ns_bucket:get_force_encryption_timestamp(BucketUUID, _),
       get_ids_in_use_callback => fun () ->
-                                     ns_memcached:get_dek_ids_in_use(Bucket)
+                                     ns_memcached:get_dek_ids_in_use(BucketUUID)
                                  end,
-      drop_callback => drop_bucket_deks(Bucket, _),
-      fetch_keys_callback =>
-          chronicle_compat:txn_get_many(
-            [ns_bucket:root(),
-             ns_bucket:sub_key(Bucket, props),
-             ns_bucket:uuid_key(Bucket),
-             ns_bucket:sub_key(Bucket, encr_at_rest) |
-             ns_cluster_membership:node_membership_keys(node())], _),
-      required_usage => {bucket_encryption, Bucket}}.
+      drop_callback => drop_bucket_deks(BucketUUID, _),
+      fetch_keys_callback => get_bucket_chronicle_keys(BucketUUID, _),
+      required_usage => {bucket_encryption, BucketUUID}}.
 
 %% Returns all possible deks kinds for this cluster.
 %% The list was supposed to be static if not buckets. Buckets can be created and
@@ -453,9 +452,9 @@ dek_config({bucketDek, Bucket}) ->
 dek_cluster_kinds_list() ->
     dek_cluster_kinds_list(direct).
 dek_cluster_kinds_list(Snapshot) ->
-    Buckets = ns_bucket:get_bucket_names(Snapshot),
+    Buckets = ns_bucket:uuids(Snapshot),
     [configDek, logDek, auditDek] ++
-    [{bucketDek, B} || B <- Buckets].
+    [{bucketDek, UUID} || {_, UUID} <- Buckets].
 
 dek_kinds_list_existing_on_node(Snapshot) ->
     AllKinds = dek_cluster_kinds_list(Snapshot),
@@ -719,17 +718,35 @@ drop_audit_deks(DekIdsToDrop) ->
               ns_memcached:prune_log_or_audit_encr_keys("@audit", DekIdsToDrop)
       end, auditDek).
 
-drop_bucket_deks(Bucket, DekIds) ->
+drop_bucket_deks(BucketUUID, DekIds) ->
     Continuation = fun (_) ->
                        cb_cluster_secrets:dek_drop_complete(
-                           {bucketDek, Bucket}, ok)
+                           {bucketDek, BucketUUID}, ok)
                    end,
-    ns_memcached:drop_deks(Bucket, DekIds, cb_cluster_secrets, Continuation).
+    ns_memcached:drop_deks(BucketUUID, DekIds, cb_cluster_secrets,
+                           Continuation).
 
-kind2bin({bucketDek, B}) -> iolist_to_binary(["bucketDek_", B]);
+get_bucket_chronicle_keys(BucketUUID, Txn) ->
+    {ok, {Names, _}} = chronicle_compat:txn_get(ns_bucket:root(), Txn),
+    Snapshot = chronicle_compat:txn_get_many(
+                 [ns_bucket:root() | ns_bucket:all_keys(Names, [uuid])], Txn),
+    BucketKeys =
+        case ns_bucket:uuid2bucket(BucketUUID, Snapshot) of
+            {ok, Bucket} ->
+                [ns_bucket:sub_key(Bucket, props),
+                 ns_bucket:uuid_key(Bucket),
+                 ns_bucket:sub_key(Bucket, encr_at_rest)];
+            {error, not_found} ->
+                []
+        end,
+    chronicle_compat:txn_get_many(
+        [ns_bucket:root() | BucketKeys] ++
+         ns_cluster_membership:node_membership_keys(node()), Txn).
+
+kind2bin({bucketDek, UUID}) -> iolist_to_binary(["bucketDek_", UUID]);
 kind2bin(K) -> atom_to_binary(K).
 
-kind2datatype({bucketDek, B}) -> iolist_to_binary(["bucket_", B]);
+kind2datatype({bucketDek, UUID}) -> iolist_to_binary(["bucket_", UUID]);
 kind2datatype(bucketDek) -> <<"bucket_data">>;
 kind2datatype(kek) -> <<"keys">>;
 kind2datatype(configDek) -> <<"config">>;
