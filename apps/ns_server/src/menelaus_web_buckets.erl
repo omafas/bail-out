@@ -445,7 +445,11 @@ build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx) ->
                ns_bucket:get_num_dcp_connections(BucketConfig)},
               {dcpBackfillIdleProtectionEnabled,
                ns_bucket:get_dcp_backfill_idle_protection_enabled(
-                 BucketConfig)}] ++
+                 BucketConfig)},
+              {dcpBackfillIdleLimitSeconds,
+               ns_bucket:get_dcp_backfill_idle_limit_seconds(BucketConfig)},
+              {dcpBackfillIdleDiskThreshold,
+               ns_bucket:get_dcp_backfill_idle_disk_threshold(BucketConfig)}] ++
                  case ns_bucket:is_persistent(BucketConfig) of
                      true ->
                          [{accessScannerEnabled,
@@ -1656,6 +1660,10 @@ validate_membase_bucket_params(CommonParams, Params, Name,
                                                              BucketConfig,
                                                              IsNew,
                                                              IsMorpheus),
+         parse_validate_dcp_backfill_idle_limit_seconds(Params, IsNew,
+                                                        IsMorpheus),
+         parse_validate_dcp_backfill_idle_disk_threshold(Params, IsNew,
+                                                         IsMorpheus),
          parse_validate_workload_pattern_default(Params)
         | validate_bucket_auto_compaction_settings(Params)] ++
         parse_validate_limits(
@@ -3354,6 +3362,24 @@ parse_validate_dcp_backfill_idle_protection_enabled(Params, BCfg, IsNew,
                                      Result, IsNew,
                                      DefaultFun).
 
+parse_validate_dcp_backfill_idle_limit_seconds(Params, _IsNew,
+                                               false = _IsMorpheus) ->
+    parse_validate_param_not_supported(
+      "dcpBackfillIdleLimitSeconds", Params,
+      fun not_supported_until_morpheus_error/1);
+parse_validate_dcp_backfill_idle_limit_seconds(Params, IsNew, _IsMorpheus) ->
+    parse_validate_numeric_param(Params, dcpBackfillIdleLimitSeconds,
+                                 dcp_backfill_idle_limit_seconds, IsNew).
+
+parse_validate_dcp_backfill_idle_disk_threshold(Params, _IsNew,
+                                                false = _IsMorpheus) ->
+    parse_validate_param_not_supported(
+      "dcpBackfillIdleDiskThreshold", Params,
+      fun not_supported_until_morpheus_error/1);
+parse_validate_dcp_backfill_idle_disk_threshold(Params, IsNew, _IsMorpheus) ->
+    parse_validate_numeric_param(Params, dcpBackfillIdleDiskThreshold,
+                                 dcp_backfill_idle_disk_threshold, IsNew).
+
 parse_validate_threads_number(Params, IsNew) ->
     validate_with_missing(proplists:get_value("threadsNumber", Params),
                           "3", IsNew, fun parse_validate_threads_number/1).
@@ -4764,7 +4790,22 @@ basic_bucket_params_screening_t() ->
                       {"ramQuota", "1024"},
                       {"workloadPatternDefault", "readHeavy"}],
                      AllBuckets),
-    ?assertEqual([], E59).
+    ?assertEqual([], E59),
+
+    {_OK60, E60} = basic_bucket_params_screening(
+                     true, "bucket60",
+                     [{"bucketType", "membase"},
+                      {"ramQuota", "1024"},
+                      {"dcpBackfillIdleLimitSeconds", "-1"},
+                      {"dcpBackfillIdleDiskThreshold", "101"}],
+                     AllBuckets),
+    ?assertEqual(
+       [{dcpBackfillIdleLimitSeconds,
+         <<"The value of dcpBackfillIdleLimitSeconds (-1) must be in the "
+           "range 0 to 18446744073709551615 inclusive">>},
+        {dcpBackfillIdleDiskThreshold,
+         <<"The value of dcpBackfillIdleDiskThreshold (101) must be in the "
+           "range 0 to 100 inclusive">>}], E60).
 
 basic_bucket_params_screening_test_() ->
     {setup,

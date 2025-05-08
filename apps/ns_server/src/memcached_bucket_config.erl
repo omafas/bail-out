@@ -105,9 +105,13 @@ params(membase, BucketName, BucketConfig, MemQuota, UUID) ->
         case cluster_compat_mode:is_cluster_morpheus() of
             false -> [];
             true ->
-                [{"dcp_backfill_idle_protection_enabled", [{reload, vbucket}],
+                [{"dcp_backfill_idle_protection_enabled", [{reload, dcp}],
                   ns_bucket:get_dcp_backfill_idle_protection_enabled(
-                    BucketConfig)}]
+                    BucketConfig)},
+                 {"dcp_backfill_idle_limit_seconds", [{reload, dcp}],
+                  ns_bucket:get_dcp_backfill_idle_limit_seconds(BucketConfig)},
+                 {"dcp_backfill_idle_disk_threshold", [{reload, dcp}],
+                  ns_bucket:get_dcp_backfill_idle_disk_threshold(BucketConfig)}]
         end
         ++ get_magma_bucket_config(BucketConfig);
 

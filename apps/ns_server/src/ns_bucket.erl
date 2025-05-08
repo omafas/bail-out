@@ -159,6 +159,8 @@
          get_num_dcp_connections/1,
          get_dcp_backfill_idle_protection_enabled/1,
          get_dcp_backfill_idle_protection_default/1,
+         get_dcp_backfill_idle_limit_seconds/1,
+         get_dcp_backfill_idle_disk_threshold/1,
          workload_pattern_default/1,
          uuid_key/1,
          uuid/2,
@@ -592,7 +594,11 @@ attribute_default(Name) ->
         continuous_backup_location -> "";   % path or URI
         invalid_hlc_strategy -> error;      % atom
         hlc_max_future_threshold -> 3900;   % seconds (65 minutes)
-        dcp_connections_between_nodes -> 1  % pos_integer
+        dcp_connections_between_nodes -> 1; % pos_integer
+        dcp_backfill_idle_limit_seconds ->  % seconds (12 minutes)
+            720;
+        dcp_backfill_idle_disk_threshold -> % percentage
+            90
     end.
 
 %% The minimum value of the attribute.
@@ -604,7 +610,11 @@ attribute_min(Name) ->
         memory_high_watermark -> 51;        % percentage
         continuous_backup_interval -> 2;    % minutes
         hlc_max_future_threshold -> 10;     % seconds
-        dcp_connections_between_nodes -> 1  % pos_integer
+        dcp_connections_between_nodes -> 1; % pos_integer
+        dcp_backfill_idle_limit_seconds ->  % seconds
+            0;
+        dcp_backfill_idle_disk_threshold -> % percentage
+            0
     end.
 
 %% The maximum value of the attribute.
@@ -620,7 +630,10 @@ attribute_max(Name) ->
             ?MAX_32BIT_SIGNED_INT;                    % minutes
         hlc_max_future_threshold ->
             ?MAX_32BIT_SIGNED_INT;                    % seconds
-        dcp_connections_between_nodes -> 64           % pos_integer
+        dcp_connections_between_nodes -> 64;          % pos_integer
+        dcp_backfill_idle_limit_seconds ->
+            ?MAX_64BIT_UNSIGNED_INT;                  % unit seconds
+        dcp_backfill_idle_disk_threshold -> 100       % percentage
     end.
 
 membase_bucket_config_value_getter(Key, BucketConfig) ->
@@ -713,6 +726,16 @@ get_dcp_backfill_idle_protection_default(BucketConfig) ->
     %% function in the REST API that is used to determine if the bucket is
     %% ephemeral if we don't have a bucket config yet.
     not is_ephemeral_bucket(BucketConfig).
+
+-spec get_dcp_backfill_idle_limit_seconds(proplists:proplist()) -> integer().
+get_dcp_backfill_idle_limit_seconds(BucketConfig) ->
+    membase_bucket_config_value_getter(dcp_backfill_idle_limit_seconds,
+                                       BucketConfig).
+
+-spec get_dcp_backfill_idle_disk_threshold(proplists:proplist()) -> integer().
+get_dcp_backfill_idle_disk_threshold(BucketConfig) ->
+    membase_bucket_config_value_getter(dcp_backfill_idle_disk_threshold,
+                                       BucketConfig).
 
 %% returns bucket ram quota multiplied by number of nodes this bucket
 %% will reside after initial cleanup. I.e. gives amount of ram quota that will
@@ -2439,7 +2462,11 @@ chronicle_upgrade_bucket_to_morpheus(BucketName, ChronicleTxn) ->
                  {dcp_connections_between_nodes,
                   attribute_default(dcp_connections_between_nodes)},
                  {dcp_backfill_idle_protection_enabled,
-                  get_dcp_backfill_idle_protection_default(BucketConfig)}] ++
+                  get_dcp_backfill_idle_protection_default(BucketConfig)},
+                 {dcp_backfill_idle_limit_seconds,
+                  get_dcp_backfill_idle_limit_seconds(BucketConfig)},
+                 {dcp_backfill_idle_disk_threshold,
+                  get_dcp_backfill_idle_disk_threshold(BucketConfig)}] ++
                     case is_persistent(BucketConfig) of
                         true ->
                             [{access_scanner_enabled, true}];
@@ -2584,6 +2611,8 @@ extract_bucket_props(Props) ->
                          continuous_backup_interval,
                          continuous_backup_location,
                          dcp_connections_between_nodes,
+                         dcp_backfill_idle_limit_seconds,
+                         dcp_backfill_idle_disk_threshold,
                          magma_fusion_logstore_uri,
                          dcp_backfill_idle_protection_enabled]],
           X =/= false].
