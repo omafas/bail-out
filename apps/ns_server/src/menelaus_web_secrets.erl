@@ -649,56 +649,57 @@ validate_datetime_in_the_future(Name, State) ->
           end
       end, Name, State).
 
-is_usage_allowed({bucket_encryption, "*"}, write, Req) ->
+usage_extra_permissions({bucket_encryption, "*"}, write) ->
     %% Those who can create a bucket should be able to create a secret to
     %% encrypt that bucket
-    menelaus_auth:has_permission({[buckets], create}, Req) orelse
-    menelaus_auth:has_permission({[admin, security], write}, Req);
-is_usage_allowed({bucket_encryption, "*"}, read, Req) ->
+    [{[buckets], create}];
+usage_extra_permissions({bucket_encryption, "*"}, read) ->
     %% Those who can view bucket list should be able to view the secrets
     %% that can encrypt buckets
-    menelaus_auth:has_permission({[{bucket, any}, settings], read}, Req) orelse
-    menelaus_auth:has_permission({[admin, security], read}, Req);
+    [{[{bucket, any}, settings], read}];
 
-is_usage_allowed({bucket_encryption, B}, write, Req) ->
+usage_extra_permissions({bucket_encryption, B}, write) ->
     %% Those who can modify bucket settings should be able to create a secret
     %% that encrypts that specific bucket
-    menelaus_auth:has_permission({[{bucket, B}, settings], write}, Req) orelse
-    menelaus_auth:has_permission({[admin, security], write}, Req);
-is_usage_allowed({bucket_encryption, B}, read, Req) ->
+    [{[{bucket, B}, settings], write}];
+usage_extra_permissions({bucket_encryption, B}, read) ->
     %% Those who can read bucket settings should be able to see secrets that
     %% can encrypt that specific bucket
-    menelaus_auth:has_permission({[{bucket, B}, settings], read}, Req) orelse
-    menelaus_auth:has_permission({[admin, security], read}, Req);
+    [{[{bucket, B}, settings], read}];
 
-is_usage_allowed(secrets_encryption, write, Req) ->
-    menelaus_auth:has_permission({[admin, security], write}, Req);
-is_usage_allowed(secrets_encryption, read, Req) ->
-    menelaus_auth:has_permission({[admin, security], read}, Req);
+usage_extra_permissions(Usage, _PermType)
+                            when Usage =:= secrets_encryption;
+                                 Usage =:= config_encryption;
+                                 Usage =:= audit_encryption;
+                                 Usage =:= log_encryption ->
+    [].
 
-is_usage_allowed(config_encryption, write, Req) ->
-    menelaus_auth:has_permission({[admin, security], write}, Req);
-is_usage_allowed(config_encryption, read, Req) ->
-    menelaus_auth:has_permission({[admin, security], read}, Req);
+%% These permissions give access to all secrets (all usages)
+%% For some usages, there are also relaxed permissions (e.g. bucket admins
+%% should be able to read/write encryption keys that are meant to encrypt their
+%% buckets)
+-define(usage_read_perm, {[admin, security], read}).
+-define(usage_write_perm, {[admin, security], write}).
 
-is_usage_allowed(audit_encryption, write, Req) ->
-    menelaus_auth:has_permission({[admin, security], write}, Req);
-is_usage_allowed(audit_encryption, read, Req) ->
-    menelaus_auth:has_permission({[admin, security], read}, Req);
-
-is_usage_allowed(log_encryption, write, Req) ->
-    menelaus_auth:has_permission({[admin, security], write}, Req);
-is_usage_allowed(log_encryption, read, Req) ->
-    menelaus_auth:has_permission({[admin, security], read}, Req).
+is_usage_allowed(Usage, PermType, Req) ->
+    FullAccessPerm = case PermType of
+                         read -> ?usage_read_perm;
+                         write -> ?usage_write_perm
+                     end,
+    AllowedPerms = [FullAccessPerm | usage_extra_permissions(Usage, PermType)],
+    lists:any(menelaus_auth:has_permission(_, Req), AllowedPerms).
 
 read_filter_secrets_by_permission(Secrets, Req) ->
     lists:filter(is_readable(_, Req), Secrets).
 
-is_readable(#{usage := Usages}, Req) when Usages /= [] ->
-    lists:any(is_usage_allowed(_, read, Req), Usages).
+is_readable(#{usage := Usages}, Req) ->
+    menelaus_auth:has_permission(?usage_read_perm, Req) orelse
+       lists:any(is_usage_allowed(_, read, Req), Usages).
 
-is_writable(#{usage := Usages}, Req) when Usages /= [] ->
-    lists:all(is_usage_allowed(_, write, Req), Usages).
+is_writable(#{usage := Usages}, Req) ->
+    menelaus_auth:has_permission(?usage_write_perm, Req) orelse
+        (Usages =/= [] andalso
+            lists:all(is_usage_allowed(_, write, Req), Usages)).
 
 parse_id(Str) when is_list(Str) ->
     try list_to_integer(Str) of
