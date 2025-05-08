@@ -345,7 +345,8 @@ dek_chronicle_keys_filter(Key) ->
 %% timestamp to undefined.
 -spec dek_config(dek_kind()) ->
     #{encryption_method_callback :=
-        fun( (Snapshot) -> {ok, encryption_method()} | {error, not_found} ),
+        fun( (cluster | node, Snapshot) -> {ok, encryption_method()} |
+                                           {error, not_found} ),
       set_active_key_callback :=
         fun ( (undefined | dek_id()) -> ok | {error, _}),
       lifetime_callback :=
@@ -368,8 +369,8 @@ dek_chronicle_keys_filter(Key) ->
             IntOrUndefined :: undefined | pos_integer(),
             DateTimeOrUndefined :: undefined | calendar:datetime().
 dek_config(configDek) ->
-    #{encryption_method_callback => cb_crypto:get_encryption_method(
-                                      config_encryption, _),
+    #{encryption_method_callback => ?cut(cb_crypto:get_encryption_method(
+                                           config_encryption, _1, _2)),
       set_active_key_callback => fun set_config_active_key/1,
       lifetime_callback => cb_crypto:get_dek_kind_lifetime(
                              config_encryption, _),
@@ -384,8 +385,8 @@ dek_config(configDek) ->
       chronicle_txn_keys => [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY],
       required_usage => config_encryption};
 dek_config(logDek) ->
-    #{encryption_method_callback => cb_crypto:get_encryption_method(
-                                      log_encryption, _),
+    #{encryption_method_callback => ?cut(cb_crypto:get_encryption_method(
+                                           log_encryption, _1, _2)),
       set_active_key_callback => fun set_log_active_key/1,
       lifetime_callback => cb_crypto:get_dek_kind_lifetime(
                              log_encryption, _),
@@ -400,8 +401,8 @@ dek_config(logDek) ->
       chronicle_txn_keys => [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY],
       required_usage => log_encryption};
 dek_config(auditDek) ->
-    #{encryption_method_callback => cb_crypto:get_encryption_method(
-                                      audit_encryption, _),
+    #{encryption_method_callback => ?cut(cb_crypto:get_encryption_method(
+                                           audit_encryption, _1, _2)),
       set_active_key_callback => fun (_) ->
                                      push_memcached_dek("@audit", auditDek)
                                  end,
@@ -418,7 +419,8 @@ dek_config(auditDek) ->
       chronicle_txn_keys => [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY],
       required_usage => audit_encryption};
 dek_config({bucketDek, Bucket}) ->
-    #{encryption_method_callback => ns_bucket:get_encryption(Bucket, _),
+    #{encryption_method_callback => ?cut(ns_bucket:get_encryption(Bucket,
+                                                                  _1, _2)),
       set_active_key_callback => ns_memcached:set_active_dek_for_bucket(Bucket,
                                                                         _),
       lifetime_callback => ns_bucket:get_dek_lifetime(Bucket, _),
@@ -454,7 +456,7 @@ dek_kinds_list_existing_on_node(Snapshot) ->
     lists:filter(
         fun(Kind) ->
             #{encryption_method_callback := GetMethod} = dek_config(Kind),
-            case GetMethod(Snapshot) of
+            case GetMethod(node, Snapshot) of
                 {ok, _} -> true;
                 {error, not_found} -> false
             end

@@ -199,7 +199,7 @@
          update_bucket_config/2,
          update_buckets_config/1,
          all_keys/1,
-         get_encryption/2,
+         get_encryption/3,
          get_dek_lifetime/2,
          get_dek_rotation_interval/2,
          get_drop_keys_timestamp/2,
@@ -2715,7 +2715,8 @@ validate_encryption_secret(SecretId, Bucket, Snapshot) ->
         {error, not_allowed} -> {error, secret_not_allowed}
     end.
 
-get_encryption(BucketName, Snapshot) ->
+get_encryption(BucketName, Scope, Snapshot) when Scope == cluster;
+                                                 Scope == node ->
     case get_bucket(BucketName, Snapshot) of
         {ok, BucketConfig} ->
             IsNodeInServers = lists:member(node(), get_servers(BucketConfig)),
@@ -2723,7 +2724,8 @@ get_encryption(BucketName, Snapshot) ->
             ExistsOnDisk = filelib:is_dir(Dir),
             Services = ns_cluster_membership:node_services(Snapshot, node()),
             IsKVNode = lists:member(kv, Services),
-            case IsNodeInServers orelse (IsKVNode andalso ExistsOnDisk) of
+            case (Scope == cluster) orelse IsNodeInServers orelse
+                 (IsKVNode andalso ExistsOnDisk) of
                 true ->
                     case proplists:get_value(encryption_secret_id, BucketConfig,
                                              ?SECRET_ID_NOT_SET) of

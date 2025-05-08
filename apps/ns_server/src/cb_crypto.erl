@@ -67,7 +67,7 @@
          get_deks_snapshot_hash/1,
 
          %% Other:
-         get_encryption_method/2,
+         get_encryption_method/3,
          get_dek_kind_lifetime/2,
          get_dek_rotation_interval/2,
          get_drop_keys_timestamp/2,
@@ -727,9 +727,10 @@ get_deks_snapshot_hash(#dek_snapshot{active_key = AK, all_keys = All}) ->
     erlang:phash2(AllIds).
 
 -spec get_encryption_method(encryption_type(),
+                            cluster | node,
                             cb_cluster_secrets:chronicle_snapshot()) ->
           {ok, cb_deks:encryption_method()} | {error, not_found}.
-get_encryption_method(Type, Snapshot) ->
+get_encryption_method(Type, _Scope, Snapshot) ->
     case menelaus_web_encr_at_rest:get_settings(Snapshot) of
         #{Type := EncryptionSettings}  ->
             {ok, case EncryptionSettings of

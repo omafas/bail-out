@@ -1594,7 +1594,8 @@ reread_bad_deks(Kind, #state{deks_info = DeksInfo} = State) ->
           {ok, #state{}} | {error, #state{}, term()}.
 maybe_update_deks(Kind, #state{deks_info = CurDeks} = OldState) ->
     Snapshot = deks_config_snapshot(Kind),
-    case call_dek_callback(encryption_method_callback, Kind, [Snapshot]) of
+    case call_dek_callback(encryption_method_callback, Kind,
+                           [node, Snapshot]) of
         {succ, {ok, EncrMethod}} ->
             %% Read DEKs if we don't have them yet
             State = #state{deks_info = AllDeks} =
@@ -2102,7 +2103,7 @@ read_all_deks() ->
                   dek_ids := DekIds}) ->
           Snapshot = deks_config_snapshot(Kind),
           case call_dek_callback(encryption_method_callback, Kind,
-                              [Snapshot]) of
+                                 [node, Snapshot]) of
               {succ, {ok, _}} ->
                   Keys = cb_deks:read(Kind, DekIds),
                   {true, new_dek_info(Kind, ActiveId, Keys,
@@ -2217,7 +2218,7 @@ reencrypt_deks(Kind, #{deks := Keys} = DeksInfo) ->
         {succ, {ok, EncrMethod}} ?= call_dek_callback(
                                       encryption_method_callback,
                                       Kind,
-                                      [Snapshot]),
+                                      [node, Snapshot]),
         RV = cb_deks:maybe_reencrypt_deks(Kind, Keys, EncrMethod, Snapshot),
         ?log_debug("Maybe reencrypt dek for ~p ~p ~p. Result: ~p",
                    [Kind, Keys, EncrMethod, RV]),
@@ -2283,7 +2284,7 @@ can_delete_secret(#{id := Id}, Snapshot) ->
         lists:filtermap(
           fun (Kind) ->
                case call_dek_callback(encryption_method_callback, Kind,
-                                      [Snapshot]) of
+                                      [cluster, Snapshot]) of
                   {succ, {ok, {secret, Id}}} ->
                       {true, Kind};
                   {succ, {ok, _}} ->
@@ -3034,7 +3035,8 @@ validate_for_config_encryption(#{type := T,
                                  data := #{encrypt_with := nodeSecretManager}},
                                Snapshot) when T == ?GENERATED_KEY_TYPE;
                                               T == ?KMIP_KEY_TYPE ->
-    case cb_crypto:get_encryption_method(config_encryption, Snapshot) of
+    case cb_crypto:get_encryption_method(config_encryption, cluster,
+                                         Snapshot) of
         {ok, disabled} -> {error, config_encryption_disabled};
         {ok, _} -> ok
     end;
@@ -3108,7 +3110,7 @@ validate_dek_related_usage_change(NewProps, PrevProps, Snapshot) ->
                 false ->
                     {succ, RV} = call_dek_callback(encryption_method_callback,
                                                    Kind,
-                                                   [Snapshot]),
+                                                   [cluster, Snapshot]),
                     case {ok, {secret, Id}} == RV of
                         true -> {true, Requirement};
                         false -> false

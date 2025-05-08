@@ -473,7 +473,8 @@ validate_encrypt_with(Name, State) ->
                   _ -> ok
               end;
           (nodeSecretManager) ->
-              case cb_crypto:get_encryption_method(config_encryption, direct) of
+              case cb_crypto:get_encryption_method(config_encryption, cluster,
+                                                   direct) of
                   {ok, disabled} ->
                       {error, format_error(config_encryption_disabled)};
                   {ok, _} ->
