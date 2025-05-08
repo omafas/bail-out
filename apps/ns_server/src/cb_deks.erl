@@ -319,7 +319,8 @@ dek_chronicle_keys_filter(Key) ->
 
 %% encryption_method_callback - called to determine if encryption is enabled
 %% or not for that type of entity.
-%% Parameters: Chronicle snapshot that contains all chronicle_txn_keys.
+%% Parameters: Chronicle snapshot that contains all keys prepared by
+%%             fetch_keys_callback.
 %% Returns {secret, Id} | encryption_service | disabled.
 %% Must be lightweight, as it can be called often.
 %%
@@ -330,8 +331,8 @@ dek_chronicle_keys_filter(Key) ->
 %% Must be idempotent (can be called with a dek that is already in use).
 %% Must be lightweight if the dek is already in use.
 %%
-%% chronicle_txn_keys - list of chronicle keys that is needed to determine
-%% state of encryption for a given entity
+%% fetch_keys_callback - returns a snapshot that conatains all the chronicle
+%% keys that are needed to determine the state of encryption for a given entity
 %%
 %% required_usage - the secret usage that secret must contain in order to be
 %% allowed to encrypt this kind of deks
@@ -362,7 +363,7 @@ dek_chronicle_keys_filter(Key) ->
       drop_callback :=
         fun ( (Ids) -> {ok, done | started} | {error, not_found | retry | _} ) |
         not_supported,
-      chronicle_txn_keys := [term()],
+      fetch_keys_callback := fun ( (Txn :: term()) -> Snapshot :: #{} ),
       required_usage := cb_cluster_secrets:secret_usage()
      } when Ids :: [dek_id()],
             Snapshot :: cb_cluster_secrets:chronicle_snapshot(),
@@ -382,7 +383,8 @@ dek_config(configDek) ->
           cb_crypto:get_force_encryption_timestamp(config_encryption, _),
       get_ids_in_use_callback => ?cut(get_config_dek_ids_in_use()),
       drop_callback => fun drop_config_deks/1,
-      chronicle_txn_keys => [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY],
+      fetch_keys_callback => chronicle_compat:txn_get_many(
+                               [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY], _),
       required_usage => config_encryption};
 dek_config(logDek) ->
     #{encryption_method_callback => ?cut(cb_crypto:get_encryption_method(
@@ -398,7 +400,8 @@ dek_config(logDek) ->
           cb_crypto:get_force_encryption_timestamp(log_encryption, _),
       get_ids_in_use_callback => ?cut(get_dek_ids_in_use(logDek)),
       drop_callback => fun drop_log_deks/1,
-      chronicle_txn_keys => [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY],
+      fetch_keys_callback => chronicle_compat:txn_get_many(
+                               [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY], _),
       required_usage => log_encryption};
 dek_config(auditDek) ->
     #{encryption_method_callback => ?cut(cb_crypto:get_encryption_method(
@@ -416,7 +419,8 @@ dek_config(auditDek) ->
           cb_crypto:get_force_encryption_timestamp(audit_encryption, _),
       get_ids_in_use_callback => ?cut(get_dek_ids_in_use(auditDek)),
       drop_callback => fun drop_audit_deks/1,
-      chronicle_txn_keys => [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY],
+      fetch_keys_callback => chronicle_compat:txn_get_many(
+                               [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY], _),
       required_usage => audit_encryption};
 dek_config({bucketDek, Bucket}) ->
     #{encryption_method_callback => ?cut(ns_bucket:get_encryption(Bucket,
@@ -433,12 +437,13 @@ dek_config({bucketDek, Bucket}) ->
                                      ns_memcached:get_dek_ids_in_use(Bucket)
                                  end,
       drop_callback => drop_bucket_deks(Bucket, _),
-      chronicle_txn_keys =>
-          [ns_bucket:root(),
-           ns_bucket:sub_key(Bucket, props),
-           ns_bucket:uuid_key(Bucket),
-           ns_bucket:sub_key(Bucket, encr_at_rest) |
-           ns_cluster_membership:node_membership_keys(node())],
+      fetch_keys_callback =>
+          chronicle_compat:txn_get_many(
+            [ns_bucket:root(),
+             ns_bucket:sub_key(Bucket, props),
+             ns_bucket:uuid_key(Bucket),
+             ns_bucket:sub_key(Bucket, encr_at_rest) |
+             ns_cluster_membership:node_membership_keys(node())], _),
       required_usage => {bucket_encryption, Bucket}}.
 
 %% Returns all possible deks kinds for this cluster.

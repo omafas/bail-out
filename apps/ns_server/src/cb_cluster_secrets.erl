@@ -2260,11 +2260,9 @@ reencrypt_deks(Kind, #{deks := Keys} = DeksInfo) ->
 
 -spec deks_config_snapshot(cb_deks:dek_kind()) -> chronicle_snapshot().
 deks_config_snapshot(Kind) ->
-    DekKeys = maps:get(chronicle_txn_keys, cb_deks:dek_config(Kind)),
-    {ok, {Snapshot, _}} = chronicle_kv:get_snapshot(kv,
-                                                    [?CHRONICLE_SECRETS_KEY |
-                                                     DekKeys]),
-    Snapshot.
+    FetchDekKeysFun = maps:get(fetch_keys_callback, cb_deks:dek_config(Kind)),
+    FetchOtherKeysFun = chronicle_compat:txn_get_many([?CHRONICLE_SECRETS_KEY], _),
+    chronicle_compat:get_snapshot([FetchDekKeysFun, FetchOtherKeysFun], #{}).
 
 -spec get_all_keys_from_props(secret_props()) -> [key_id()].
 get_all_keys_from_props(#{type := ?GENERATED_KEY_TYPE,
@@ -3569,9 +3567,9 @@ fetch_snapshot_in_txn(Txn) ->
     DeksRelatedSnapshot =
         lists:foldl(
           fun (Kind, Acc) ->
-              L = maps:get(chronicle_txn_keys, cb_deks:dek_config(Kind)),
-              New = chronicle_compat:txn_get_many(L, Txn),
-              maps:merge(Acc, New)
+              FetchKeys = maps:get(fetch_keys_callback,
+                                   cb_deks:dek_config(Kind)),
+              maps:merge(Acc, FetchKeys(Txn))
           end,
           BucketListSnapshot,
           cb_deks:dek_cluster_kinds_list(BucketListSnapshot)),
