@@ -1,0 +1,120 @@
+<!--
+  Copyright 2021-Present Couchbase, Inc.
+
+  Use of this software is governed by the Business Source License included in
+  the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+  file, in accordance with the Business Source License, use of this software
+  will be governed by the Apache License, Version 2.0, included in the file
+  licenses/APL2.txt.
+-->
+
+<mn-element-cargo depot="actions">
+  <div class="header-controls resp-hide-sml">
+    <a
+        (click)="createDialog.next()"
+        [hidden]="!(showAddView | async)">
+      ADD VIEW
+    </a>
+  </div>
+</mn-element-cargo>
+
+<mn-element-cargo depot="alerts">
+  <div
+      *ngIf="(showErrors | async)"
+      [ngSwitch]="(getDdocsStatus | async)"
+      class="alert alert-warning">
+    <p *ngSwitchCase="_404">Bucket name should be specified.</p>
+    <p *ngSwitchCase="400">Error 400: Either this bucket is not Couchbase bucket or is hosted on another node.</p>
+    <p *ngSwitchCase="404">Error 404: This bucket does not exist.</p>
+    <p *ngSwitchCase="403">Error 403: You do not have the necessary permissions to see views in this bucket.</p>
+    <p *ngSwitchDefault>Unexpected Error</p>
+  </div>
+</mn-element-cargo>
+
+<div class="row text-center text-small flex-center">
+   <em>
+      Views are deprecated. See
+      <a href="https://docs.couchbase.com/server/current/learn/views/views-intro.html" target="_blank">
+         documentation.
+      </a>
+   </em>
+</div>
+
+<div [formGroup]="form.group">
+  <div class="row resp-sml">
+    <mn-select
+       class="margin-bottom-half"
+       [values]="buckets | async"
+       [valuesMapping]="bucketValuesMapping"
+       [group]="form.group"
+       mnPlaceholder="select bucket"
+       mnFormControlName="item"
+       hasSearch="true">
+    </mn-select>
+    <span class="pills nowrap">
+      <a
+          [uiParams]="{ type: 'development' }"
+          uiSref="app.admin.views.list"
+          uiSrefActive="selected">
+        Development Views
+      </a>
+      <a
+          [uiParams]="{ type: 'production' }"
+          uiSref="app.admin.views.list"
+          uiSrefActive="selected">
+        Production Views
+      </a>
+      <span
+          class="label badge red-3"
+          *ngIf="hasProdDdocs | async">
+        {{(getDdocsByType | async)?.production.length}}
+      </span>
+    </span>
+  </div>
+
+  <div>
+    <div class="cbui-table">
+      <div
+          class="zero-content"
+          [hidden]="(buckets | async)?.length">
+        There are currently no Couchbase buckets and no views to show.
+        <span [hidden]="!(hasCreatePermission | async)">
+          Go to <a uiSref="app.admin.buckets">Buckets</a> to add one,
+          or load a <a uiSref="app.admin.settings.sampleBuckets">sample bucket</a> with data &amp; indexes.
+        </span>
+      </div>
+
+      <div
+        class="zero-content"
+        [hidden]="!(buckets | async)?.length || (showZeroContent | async)">
+        <span
+          [hidden]="(hasDevDdocs | async) || !(isDevelopmentViews | async)">
+          There are currently no design documents in development.
+          <span
+              class="when-roadmin-avoid-me"
+              [hidden]="!(hasWritePermission | async)">
+            Use ADD VIEW above to create one.
+          </span>
+        </span>
+        <span
+          class="zero-content"
+          [hidden]="(hasProdDdocs | async) || (isDevelopmentViews | async)">
+          There are no design documents currently published.
+          <span
+              class="when-roadmin-avoid-me"
+              [hidden]="!(hasWritePermission | async)">
+            Go to Development Views to create one.
+          </span>
+        </span>
+      </div>
+
+      <div *ngIf="((getDdocsStatus | async) === 200) && (hasReadPermission | async)">
+        <div *ngFor="let row of (getDdocsOfType | async); trackBy: trackBy">
+          <mn-views-list-item
+            [row]="row">
+          </mn-views-list-item>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

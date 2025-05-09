@@ -1,0 +1,172 @@
+<!--
+     Copyright 2020-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included
+     in the file licenses/BSL-Couchbase.txt.  As of the Change Date specified
+     in that file, in accordance with the Business Source License, use of this
+     software will be governed by the Apache License, Version 2.0, included in
+     the file licenses/APL2.txt.
+-->
+
+<mn-element-cargo depot="actions">
+  <div class="header-controls resp-sml">
+    <a
+       [hidden]="!(hasReferencesAndHasPermissionsToWrite | async)"
+       uiSref="app.admin.replications.add"
+       class="resp-hide-sml">
+      ADD REPLICATION
+    </a>
+    <a
+       [hidden]="!(permissions | async)?.cluster.xdcr.remote_clusters.write"
+       (click)="onAddReference.next()"
+       class="resp-hide-sml">
+      ADD REMOTE
+    </a>
+  </div>
+</mn-element-cargo>
+
+<mn-element-cargo depot="alerts">
+  <div
+     *ngIf="(hasReferencesAndisNotEnterprise | async)"
+     class="alert alert-warning">
+    <p>
+      Warning: use of XDCR is not permitted by the Couchbase Community Edition license. See
+      <a href="https://blog.couchbase.com/couchbase-modifies-license-free-community-edition-package/"
+         rel="noopener noreferrer"
+         target="_blank">this link</a> for details.
+    </p>
+  </div>
+</mn-element-cargo>
+
+<div
+   *ngIf="(remoteClusterRead | async)"
+   [mnSpinner]="(remoteClustersSpinner | async)">
+  <h4>Remote Clusters</h4>
+  <div
+     class="cbui-table"
+     *ngIf="(hasReferences | async)">
+    <div class="cbui-table-header padding-left">
+      <span class="cbui-table-cell flex-grow-1-5">
+        <span
+           class="sorter"
+           [ngClass]="{
+                  'dynamic-active': (referenceSorter.state | async)[0] == 'name',
+                  'dynamic-inverted': (referenceSorter.state | async)[1]
+                  }"
+           (click)="referenceSorter.click.next('name')">name</span>
+      </span>
+      <span class="cbui-table-cell flex-grow-1-5">IP/hostname</span>
+      <span class="cbui-table-cell flex-grow-1-5 resp-hide-sml"></span>
+      <span class="cbui-table-cell flex-grow-half resp-hide-sml"></span>
+    </div>
+    <mn-xdcr-ref-item
+       *ngFor="let ref of (getRemoteClustersSorted | async); trackBy: trackByFn"
+       [item]="ref"></mn-xdcr-ref-item>
+  </div>
+  <div
+     class="zero-content"
+     *ngIf="!(hasReferences | async)">
+    <span [hidden]="!(isEnterprise | async)">
+      No remote clusters defined. Use ADD REMOTE to set one up.
+    </span>
+    <span [hidden]="(isEnterprise | async)">
+      Use of cross-data center replication is not permitted by the Couchbase Community Edition license
+      since Couchbase Server 7.0. See
+      <a href="https://blog.couchbase.com/couchbase-modifies-license-free-community-edition-package/"
+         rel="noopener noreferrer"
+         target="_blank">this link</a> for details.
+    </span>
+  </div>
+</div>
+
+<!-- Outgoing Replications ************************************************ -->
+<div
+   *ngIf="(tasksRead | async)"
+   [mnSpinner]="(tasksSpinner | async)"
+   class="margin-top-1-5">
+  <h4>Outgoing Replications
+    <span
+       *ngIf="(permissions | async)?.cluster.collection['.:.:.'].stats.read"
+       [hidden]="!(getChangesLeftTotal | async)"
+       class="label raised neutral">{{getChangesLeftTotal | async | mnFormatQuantity:1000}} mutations remaining</span></h4>
+  <div
+     class="cbui-table"
+     *ngIf="(hasReplications | async)">
+    <div class="cbui-table-header">
+      <span class="cbui-table-cell">
+        source bucket
+      </span>
+      <span class="cbui-table-cell">
+        destination bucket
+      </span>
+      <span class="cbui-table-cell">remote cluster</span>
+      <span class="cbui-table-cell">status</span>
+    </div>
+    <mn-xdcr-item
+       *ngFor="let item of (tasksXDCR | async); trackBy: tasksTrackByFn;"
+       [item]="item"></mn-xdcr-item>
+  </div>
+  <div
+     class="zero-content"
+     *ngIf="!(hasReplications | async)">
+    <span [hidden]="!(isEnterprise | async)">
+      There are currently no outgoing replications defined.
+      <span [hidden]="!(hasReferencesAndHasPermissionsToWrite | async)"> Use ADD REPLICATION to set one up.</span>
+    </span>
+    <span [hidden]="(isEnterprise | async)">
+      Use of cross-data center replication is not permitted by the Couchbase Community Edition license
+      since Couchbase Server 7.0. See
+      <a href="https://blog.couchbase.com/couchbase-modifies-license-free-community-edition-package/"
+         rel="noopener noreferrer"
+         target="_blank">this link</a> for details.
+    </span>
+  </div>
+</div>
+
+<!-- Incoming Replications ************************************************ -->
+<ng-template #incomingTooltip>
+  <p>There is a lag time for target awareness of replications.</p>
+  <p>The lag time is dependent on the target awareness heartbeat interval set on the source cluster, which, by default,
+     could be from one to five minutes depending on replication activity.</p>
+  <p>See documentation for more info.</p>
+</ng-template>
+<div
+   *ngIf="(compatVersion80 | async) && (isEnterprise | async) && (xdcrSettingsRead | async)"
+   [mnSpinner]="(incomingSourcesSpinner | async)"
+   class="margin-top-1-5">
+  <div class="flex items-end flex-gap-5">
+    <h4>Incoming Replications</h4>
+    <span
+       class="fa-stack icon-info"
+       [ngbTooltip]="incomingTooltip"
+       placement="right">
+      <span class="icon fa-circle-thin fa-stack-2x"></span>
+      <span class="icon fa-info fa-stack-1x"></span>
+    </span>
+  </div>
+  <div
+     class="cbui-table"
+     *ngIf="(hasIncomingSources | async)">
+    <div class="cbui-table-header">
+      <span class="cbui-table-cell">
+        source cluster name
+      </span>
+      <span class="cbui-table-cell padding-left-1-25">
+        source cluster uuid
+      </span>
+      <span class="cbui-table-cell ">
+        replication count
+      </span>
+    </div>
+    <mn-xdcr-incoming
+       *ngFor="let incomingSource of (incomingSources | async); trackBy: incomingSourcesTrackByFn;"
+       [item]="incomingSource"></mn-xdcr-incoming>
+  </div>
+  <div
+     class="zero-content"
+     *ngIf="!(hasIncomingSources | async)">
+    <span [hidden]="!(isEnterprise | async)">
+      There are currently no incoming sources defined.
+    </span>
+  </div>
+</div>

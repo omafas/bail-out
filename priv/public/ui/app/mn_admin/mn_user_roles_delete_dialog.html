@@ -1,0 +1,32 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="dialog-small">
+  <div class="panel-header">
+    <h2>Confirm Delete User</h2>
+  </div>
+  <form
+     ng-submit="userRolesDeleteDialogCtl.onSubmit()"
+     mn-spinner="userRolesDeleteDialogCtl.viewLoading">
+    <div class="panel-content">
+      <div class="row flex-left">
+        <span class="icon fa-warning fa-2x red-3"></span>
+        <p class="break-word">
+          Warning: This action is not reversible.
+          <br>Delete {{userRolesDeleteDialogCtl.username}}?
+        </p>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <a  ng-click="$dismiss()">Cancel</a>
+      <button type="submit">Delete User</button>
+    </div>
+  </form>
+</div>

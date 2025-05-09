@@ -1,0 +1,81 @@
+Cluster Tests
+=========
+
+The main purpose of these tests is to avoid manual testing and retesting
+of ns_server's API during development. Basically everything that an engineer
+tests with curl may be put to cluster_tests.
+
+Note: currently tests execution order is undefined and the framework doesn't
+reset the state of ns_server between tests, so tests should not depend on each
+other or depend on server's state/config.
+
+
+Run tests against automatically generated temporary clusters
+-------------------------------------
+
+Install python requirements first:
+
+    $ pip3 install -r .//requirements.txt
+
+Install dependencies:
+
+* xmlsec1
+
+    needed for saml tests. Can be installed using standard package managers.
+    E.g. `apt install xmlsec1`, `brew install xmlsec1`, etc...
+
+and then run:
+
+    $ cd cluster_tests
+    $ ./run.py
+
+Start a single node cluster (with data and logs in ./test_cluster_data),
+and run all tests against that cluster. The data and logs will be retained,
+for investigating failed tests, but will be cleared upon subsequent calls to
+cluster_tests/run.py
+
+
+Run tests against existing cluster
+----------------------------------
+
+    $ cd cluster_tests
+    $ ./run.py --cluster localhost:9000
+
+Run all tests against localhost:9000.
+By default, username 'Administrator' and password 'asdasd' are used to
+access the cluster, but this could be changed by '-u' and '-p' params.
+
+
+Run specific tests or testsets
+-----------------------------
+
+    $ ./run.py --tests DummyTestSet
+
+This command will run all the tests in a specified class. It is possible to pass
+several classes separated by comma.
+
+    $ ./run.py --tests DummyTestSet.dummy1_test
+
+This command will run one test dummy1_test in DummyTestSet class. It is possible
+to pass several tests separated by comma:
+
+    $ ./run.py --tests DummyTestSet.dummy1_test,DummyTestSet.dummy2_test
+
+
+How to add new tests
+--------------------
+
+Tests are implemented as methods of classes. Each such class represents a group
+of tests with same setup and teardown procedures. Classes with tests must be
+inherited from BaseTestSet class and implement setup and teardown methods.
+Classes are put in files. In order to be executed by default, files with tests
+should be imported by run.py. See dummy_test.py for an example.
+
+In order to create a new test:
+
+1. Choose a file for your test (or create a new one based on dummy_test.py);
+2. Choose a class for your test (or create a new one based on DummyTestSet
+   from dummy_test.py)
+3. Implement new test as a method of the chosen class. Note that the test method
+   name must end with "_test". Otherwise it will be ignored.
+4. If a new file was created, add import instruction for this file in run.py.

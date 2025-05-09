@@ -1,0 +1,35 @@
+{"1.2.0",
+[{<<"chronicle">>,
+  {git,"https://github.com/couchbase/chronicle.git",
+       {ref,"39c668b8ccc9ed378faf35462601a1ffb4496ef7"}},
+  0},
+ {<<"enacl">>,
+  {git,"https://github.com/couchbasedeps/enacl.git",
+       {ref,"d01e1f61d84691cfec5721472b1e441dd97bc2b8"}},
+  0},
+ {<<"esaml">>,
+  {git,"https://github.com/couchbasedeps/esaml.git",
+       {ref,"7457d8aeec56d910fe63a984952efa2b9858d7e9"}},
+  0},
+ {<<"gen_smtp">>,
+  {git,"https://github.com/couchbasedeps/gen_smtp.git",
+       {ref,"83846d04bef94ef217fdc89d9a34587448de0702"}},
+  0},
+ {<<"iso8601">>,{pkg,<<"iso8601">>,<<"1.3.3">>},0},
+ {<<"jiffy">>,
+  {git,"https://github.com/couchbasedeps/jiffy.git",
+       {ref,"8bac9d21846a1f62a110305e648cee894d81a2e0"}},
+  0},
+ {<<"jose">>,
+  {git,"https://github.com/couchbasedeps/erlang-jose.git",
+       {ref,"eb6de2cb506b55533f550a1b0776c81b15317e23"}},
+  0},
+ {<<"ranch">>,{pkg,<<"ranch">>,<<"1.8.0">>},1}]}.
+[
+{pkg_hash,[
+ {<<"iso8601">>, <<"994AFF5DFE760F14A8C4F2D8C3CF500371BF1A8CF309C3C0CB510401064223E0">>},
+ {<<"ranch">>, <<"8C7A100A139FD57F17327B6413E4167AC559FBC04CA7448E9BE9057311597A1D">>}]},
+{pkg_hash_ext,[
+ {<<"iso8601">>, <<"BCC7767D691E4D8A26E713F48DA51ABD951BEC4E071AE841F371766F96B46834">>},
+ {<<"ranch">>, <<"49FBCFD3682FAB1F5D109351B61257676DA1A2FDBE295904176D5E521A2DDFE5">>}]}
+].

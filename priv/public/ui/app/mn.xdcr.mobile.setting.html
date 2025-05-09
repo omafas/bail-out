@@ -1,0 +1,42 @@
+<!--
+     Copyright 2024-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included
+     in the file licenses/BSL-Couchbase.txt.  As of the Change Date specified
+     in that file, in accordance with the Business Source License, use of this
+     software will be governed by the Apache License, Version 2.0, included in
+     the file licenses/APL2.txt.
+-->
+<div [formGroup]="group" *ngIf="(isEnterprise | async) && (compatVersion80 | async)" class="margin-bottom-1">
+  <div
+     class="row flex-left margin-bottom-half">
+    <label class="toggle-control margin-0">
+      <input
+         formControlName="mobile"
+         id="mobile"
+         type="checkbox">
+      <span class="toggle-control-body"></span>
+    </label>
+    <span
+       class="text-small margin-left-half max-width-80">
+      Enable this option to support active-active, bi-directional replication for buckets used by Sync Gateway 4.0 and later
+    </span>
+    <ng-template #mobileSettingTooltip>
+      <p class="text-smaller">Prior to enabling this option, enable <br/>Cross Cluster Versioning for all source and target buckets in the XDCR replication topology.</p>
+      <p class="text-smaller">Enabling this option sets "mobile" to "Active" in the replication setting.  To use Sync Gateway 4.0+ with bi-directional XDCR, each replication must have the "mobile" option set to "Active".<br/>See documentation for more details.</p>
+    </ng-template>
+    <span
+       class="fa-stack icon-info margin-left-quarter"
+       [ngbTooltip]="mobileSettingTooltip"
+       placement="auto bottom"
+       container="body">
+      <span class="icon fa-circle-thin fa-stack-2x"></span>
+      <span class="icon fa-info fa-stack-1x"></span>
+    </span>
+  </div>
+  <div
+     class="error"
+     [hidden]="!(error | async)?.mobile">
+    {{(error | async)?.mobile}}
+  </div>
+</div>

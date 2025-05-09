@@ -1,0 +1,57 @@
+<!--
+Copyright 2024-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+<section class="audit-module" [ngClass]="{'audit-module-open' : (toggleSection | async)}">
+  <div
+     class="audit-module-header fix-width-6"
+     [ngClass]="{'blue-bg-8': (isFieldEnabled | async) && (isUserActivityEnabled | async)}">
+    <span
+       class="disclosure inline"
+       [ngClass]="{disclosed: (toggleSection | async)}"
+       (click)="onToggleClick.next()">
+      {{moduleName}}
+    </span>
+    <span
+       class="icon"
+       [hidden]="!(isUserActivityEnabled | async)"
+       [ngClass]="(isFieldEnabled | async) ? 'fa-check green-3' : 'fa-ban red-4'"></span>
+  </div>
+  <div
+     class="audit-module-body"
+     [hidden]="!(toggleSection | async)">
+    <div class="row flex-left" [formGroup]="formHelper">
+      <label
+         class="toggle-control margin-0"
+         [attr.for]="'thisModule_checkall_' + moduleName">
+        <input
+           formControlName="toggleAll"
+           type="checkbox"
+           [attr.id]="'thisModule_checkall_' + moduleName">
+        <span class="toggle-control-body"></span>
+      </label>
+      <span class="text-smaller">&nbsp; enable all</span>
+    </div>
+    <hr>
+    <div
+       class="row flex-left items-top flex-gap-10"
+       [formGroup]="group.get('roleDescriptors').get(moduleName)"
+       *ngFor="let item of (thisDescriptors | async);">
+      <span class="fix-width-4">
+        <input
+           type="checkbox"
+           [attr.id]="'role_' + moduleName + '_' + item.role"
+           [formControlName]="item.role">
+        <label
+           class="checkbox"
+           [attr.for]="'role_' + moduleName + '_' + item.role">{{item.name}}</label>
+      </span>
+      <p class="fix-width-5">{{item.desc}}</p>
+    </div>
+  </div>
+</section>

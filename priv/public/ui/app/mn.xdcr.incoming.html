@@ -1,0 +1,31 @@
+<!--
+     Copyright 2020-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included
+     in the file licenses/BSL-Couchbase.txt.  As of the Change Date specified
+     in that file, in accordance with the Business Source License, use of this
+     software will be governed by the Apache License, Version 2.0, included in
+     the file licenses/APL2.txt.
+-->
+<section
+   class="has-hover padding-left-half"
+   (click)="detailsHashObserver.stream.toggleDetails.next(item.SourceClusterUUID)">
+  <div
+     class="cbui-tablerow">
+    <span
+       class="cbui-table-cell disclosure left-position-negative-1-25 padding-left-1-25" [ngClass]="{disclosed: (isDetailsOpened | async)}">
+      {{sourceClusterName | async}}
+    </span>
+    <span class="cbui-table-cell ">
+      {{sourceClusterId | async}}
+    </span>
+    <span class="cbui-table-cell ">
+      {{replicationCount | async}}
+    </span>
+  </div>
+  <mn-xdcr-incoming-details
+     *ngIf="(isDetailsOpened | async)"
+     [item]="item"
+     class="cbui-tablerow-expanded">
+  </mn-xdcr-incoming-details>
+</section>

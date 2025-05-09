@@ -1,0 +1,22 @@
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "l7ZJ5Xo5NN9pU8dOqpl1TTeHQF2F6WZrBXxQyBcY4Ys",
+      "y": "v7v1JNzFzVVTA7gVhIoI0Ptt7IAaHDzK1QwmvA5YoYk",
+      "alg": "ES256",
+      "use": "sig",
+      "kid": "duplicate-key-id"
+    },
+    {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "A-2eZ3N8xCv6xy37lQ_VPoMyL3MBIUBqK0_f9m3hnsA",
+      "y": "S5p1dOVYjTLp8sX7SZD3AeBzTllNsDEGe6HV7qY3fpU",
+      "alg": "ES256",
+      "use": "sig",
+      "kid": "duplicate-key-id"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{name, "columnar_provisioned"}.
+{prod_name, "Columnar"}.
+{prod_compat_version, "@COLUMNAR_COMPAT_VERSION@"}.
+{prod_min_supported_version,
+    "@MIN_SUPPORTED_COLUMNAR_PROVISIONED_COMPAT_VERSION@"}.
+{{couchdb, disabled}, true}.
+{{cbas, columnar}, true}.
+{{cbas, enable_blob_storage}, true}.
+{{cbas, skip_blob_storage_validation}, true}.
+{{indexer, projector_disabled}, true}.
+{{cbas, max_storage_partitions}, 1024}.
+{{cbas, extra_settings_version_76},
+    [{blobStorageEndpoint,
+      <<"analytics.settings.blob_storage_endpoint">>,
+      <<"">>},
+     {blobStorageAnonymousAuth,
+      <<"analytics.settings.blob_storage_anonymous_auth">>,
+      false},
+     {numStoragePartitions,
+      <<"analytics.settings.num_storage_partitions">>,
+      128}]}.
+{fixedServices, [kv, cbas]}.
+{max_buckets_supported, 0}.

@@ -1,0 +1,59 @@
+<!--
+Copyright 2024-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+<ng-template #loggingOptionsCollection>
+  There are multiple options for the conflict logging target at collection level:
+  <ul class="margin-top-half">
+    <li>Default collection - the conflicts from this collection are logged into the Default Conflict Log Collection.</li>
+    <li>Parent collection - the conflicts from this collection are logged into the collection set at the parent's scope level.</li>
+    <li>Custom collection - set a custom scope/collection for conflicts to log.</li>
+    <li>Do not log - the conflicts from this collection are not logged.</li>
+  </ul>
+</ng-template>
+
+<section [formGroup]="group" class="has-hover" (click)="toggler.click.next();">
+  <div class="cbui-tablerow">
+    <mn-xdcr-conflict-log-mapping-item
+       class="block"
+       keyspace="scopes"
+       [parent]="item.name"
+       [item]="item"
+       [mappingGroup]="mappingGroup"
+       [mappingRules]="mappingRules">
+    </mn-xdcr-conflict-log-mapping-item>
+  </div>
+  <div class="margin-left-1 margin-top-1 margin-bottom-1" [hidden]="!(toggler.state | async)" (click)="$event.stopPropagation();">
+    <input
+       [attr.id]="'conflict_log_custom_collections_' + item.name"
+       [formControlName]="'conflict_log_custom_collections_' + item.name"
+       type="checkbox"
+       (click)="$event.stopPropagation();">
+    <label [attr.for]="'conflict_log_custom_collections_' + item.name">
+      Customise Conflict Logging at collection level
+      <span
+         class="fa-stack icon-info"
+         [ngbTooltip]="loggingOptionsCollection"
+         placement="auto right"
+         container="body">
+        <span class="icon fa-circle-thin fa-stack-2x"></span>
+        <span class="icon fa-info fa-stack-1x"></span>
+      </span>
+    </label>
+  </div>
+  <mn-xdcr-conflict-log-mapping-controls
+     [hidden]="!(toggler.state | async)"
+     style="display: block;"
+     (click)="$event.stopPropagation();"
+     keyspace="collections"
+     [parent]="item.name"
+     [item]="item"
+     [mappingGroup]="mappingGroup"
+     [mappingRules]="mappingRules">
+  </mn-xdcr-conflict-log-mapping-controls>
+</section>

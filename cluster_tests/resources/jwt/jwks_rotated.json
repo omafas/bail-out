@@ -1,0 +1,20 @@
+{
+    "keys": [
+        {
+            "kty": "RSA",
+            "alg": "RS256",
+            "n": "wQB6kL8vCmPj3gnTVy8-XgRtaDMnpeTQb8UCxrZYJ1iXDym2lZLWtmB60EpnacVf2CZ3XvMkpLMKNRorfopkDhTlvgdKQRV8p4HTgVdFqxAnq-TLWlcC0JK17xD9ZlKXZopzP9amu8kkkSpQGYQl0nd3ynszdtmjU6Jv1YlJIA__vntmfuVu6Hmc52Ytg8MiRUOHoJUdhNCPDg_qL9RBnVrF6cwDUHXBSgi-G5uE7_SZmppT-qQ8GEyg5a6dyOWETjqo1hFNn5qCZkvvaG1AEDi1lnQASxy3dKcArul1YHkj1t7VHLJtibB8_NHVkZWW2qY2YUzrXMt3yqfu6l74Xw",
+            "e": "AQAB",
+            "use": "sig",
+            "kid": "rotated-key"
+        },
+        {
+            "kty": "RSA",
+            "alg": "RS256",
+            "n": "uVCkymFxcVbSFOLF75H_OWckZ2BXykc1mNKVtXewBcX9svAkQodMmJo3qNjxD-Q_ITVuxUj5HmYrQ5Yru55aQID6JrrAqFi3tt9ap4padR2x--m6nadZKI8OK8RQ6WwTKfI7D-BpUb_Ow5s9u2ej-fu70mPfNj3KsayiWikeXynHloyoZsJ9W3-Ce0yuUlf9VVbp_igql43f10gmVwqE4VdJ9nHyl-Fdr005M_SalPiL9tgGak5VR01DSk-gdlBEocftJWHRELVGCJYfYEZqYjNXI8y5d4kadnQ1-89rlvbAFfRvJAxXKXqZVviE8cYrjqzjm_MDaxunDCckQJlJ4w",
+            "e": "AQAB",
+            "use": "sig",
+            "kid": "2011-04-29"
+        }
+    ]
+}

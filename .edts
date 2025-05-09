@@ -1,0 +1,4 @@
+:name "ns_server"
+:node-name "ns_server"
+:lib-dirs '("deps")
+:app-include-dirs '("include")

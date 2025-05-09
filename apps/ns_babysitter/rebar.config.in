@@ -1,0 +1,5 @@
+{erl_opts, [bin_info_opt, nowarn_deprecated_type,
+            {i, "apps/ns_server/include"},
+            %% parse transform is a runtime dependency for cluster run
+            {parse_transform, ale_transform},
+            {d, 'DEFAULT_PROFILE_STR', "@DEFAULT_PROFILE@"}]}.

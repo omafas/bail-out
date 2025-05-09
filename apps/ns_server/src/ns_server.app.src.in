@@ -1,0 +1,45 @@
+%% @author Couchbase <info@couchbase.com>
+%% @copyright 2010-Present Couchbase, Inc.
+%%
+%% Use of this software is governed by the Business Source License included in
+%% the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+%% file, in accordance with the Business Source License, use of this software
+%% will be governed by the Apache License, Version 2.0, included in the file
+%% licenses/APL2.txt.
+%%
+{application, ns_server,
+ [{description, "Couchbase server"},
+  {vsn, "@NS_SERVER_VERSION@"},
+  {modules, [misc,
+             ns_config,
+             ns_config_default,
+             ns_config_log,
+             ns_config_sup,
+             ns_config_rep,
+             ns_log,
+             ns_node_disco,
+             ns_node_disco_conf_events,
+             ns_node_disco_log,
+             ns_port_server,
+             ns_port_sup,
+             ns_server,
+             ns_server_sup
+            ]},
+  {registered, [ns_server_sup,
+                ns_config,
+                ns_config_sup,
+                ns_config_events,
+                ns_node_disco,
+                ns_node_disco_events]},
+  {applications, [kernel, stdlib, ale, ns_common]},
+  {mod, {ns_server, []}},
+
+  % To  prevent  a  supervisor  from getting into an infinite loop of child
+  % process terminations and  restarts,  a  maximum  restart  frequency  is
+  % defined  using  two  integer  values  MaxR  and MaxT. If more than MaxR
+  % restarts occur within MaxT seconds, the supervisor terminates all child
+  % processes and then itself.
+
+  {env, [{max_r, 20},
+         {max_t, 10}]}
+ ]}.

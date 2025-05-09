@@ -1,0 +1,42 @@
+<!--
+Copyright 2024-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+<section class="border-0">
+  <div
+     class="audit-module-body">
+    <div class="row flex-left" [formGroup]="formHelper" *ngIf="(groupDescriptors | async | mnObjectKeys).length > 0">
+      <label
+         class="toggle-control margin-0"
+         [attr.for]="groups_checkall">
+        <input
+           formControlName="toggleAll"
+           type="checkbox"
+           [attr.id]="groups_checkall">
+        <span class="toggle-control-body"></span>
+      </label>
+      <span class="text-smaller">&nbsp; enable all</span>
+    </div>
+    <hr *ngIf="(groupDescriptors | async | mnObjectKeys).length > 0">
+    <div
+       class="row flex-left items-top flex-gap-10"
+       [formGroup]="group.get('groupDescriptors')"
+       *ngFor="let item of (groupDescriptors | async | mnObjectKeys);">
+      <span class="fix-width-4">
+        <input
+           type="checkbox"
+           [attr.id]="'group_' + item"
+           [formControlName]="item">
+        <label
+           class="checkbox"
+           [attr.for]="'group_' + item">{{item}}</label>
+      </span>
+      <p class="fix-width-5">{{(groupDescriptors | async)[item].description}}</p>
+    </div>
+  </div>
+</section>

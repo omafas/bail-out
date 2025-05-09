@@ -1,0 +1,870 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div ng-if="rbac.cluster.admin.security.write">
+   <h3>LDAP</h3>
+   <p style="width: 476px">
+      Couchbase Server can be configured to authenticate users by means of LDAP; and to map the LDAP groups of which a user is a member to roles defined on Couchbase Server.
+   </p>
+  <form
+     novalidate
+     ng-submit="mnLDAPCtl.save()"
+     mn-spinner="mnLDAPCtl.viewLoading">
+    <div class="margin-top-1 forms margin-bottom-1">
+
+      <div class="row items-top relative">
+        <div style="width: 476px; margin-bottom: 3rem;">
+          <div ng-click="sectFocus = 'LDAP';" class="margin-bottom-2">
+            <h3>LDAP Host Configuration</h3>
+
+            <div class="formrow row items-top  margin-top-half">
+              <span class="width-9 margin-right-half">
+                <label for="ldap_hosts">Host(s)</label>
+                <input
+                   type="text"
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   mn-autocomplete-off="enforce"
+                   id="ldap_hosts"
+                   ng-model="mnLDAPCtl.config.connect.hosts"
+                   placeholder="ldap1.example.com, ldap2.example.com"
+                   mn-focus="true"
+                   ng-focus="sectFocus = 'LDAP'">
+                <div
+                   class="error"
+                   ng-show="mnLDAPCtl.errors.hosts">
+                  {{mnLDAPCtl.errors.hosts}}
+                </div>
+              </span>
+              <span class="width-3">
+                <label for="ldap_port">Port</label>
+                <input
+                   type="text"
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   mn-autocomplete-off="enforce"
+                   id="ldap_port"
+                   ng-model="mnLDAPCtl.config.connect.port">
+                <div
+                   class="error"
+                   ng-show="mnLDAPCtl.errors.port">
+                  {{mnLDAPCtl.errors.port}}
+                </div>
+              </span>
+            </div>
+            <div class="formrow row">
+              <span class="width-4 margin-right-2">
+                <label for="ldap_encryption">Encryption</label>
+                <mn-select
+                   id="ldap_encryption"
+                   values="['None', 'TLS', 'StartTLSExtension']"
+                   ng-model="mnLDAPCtl.config.connect.encryption">
+                </mn-select>
+                <div
+                  class="error"
+                  ng-show="mnLDAPCtl.errors.encryption">
+                  {{mnLDAPCtl.errors.encryption}}
+                </div>
+              </span>
+              <span class="width-8">
+                <label
+                   for="cert"
+                   ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'"
+                   class="inline">
+                  Root Certificate</label>
+                <span
+                   class="fa-stack icon-info"
+                   uib-tooltip="This certificate will be used to verify your LDAP server's identity."
+                   tooltip-placement="top"
+                   tooltip-append-to-body="true"
+                   tooltip-trigger="mouseenter">
+                  <span class="icon fa-circle-thin fa-stack-2x"></span>
+                  <span class="icon fa-info fa-stack-1x"></span>
+                </span>
+                <div>
+                  <input
+                     type="radio"
+                     id="ldap-cert-none"
+                     ng-model="mnLDAPCtl.config.connect.serverCertValidation"
+                     name="certValidation"
+                     value="false"
+                     ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+                  <label
+                     for="ldap-cert-none"
+                     ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+                    None
+                  </label>
+                  <input
+                     type="radio"
+                     id="ldap-cert-server"
+                     ng-model="mnLDAPCtl.config.connect.serverCertValidation"
+                     name="certValidation"
+                     value="true"
+                     ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+                  <label
+                     for="ldap-cert-server"
+                     ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'"
+                     uib-tooltip="Use the certificate already loaded in your Couchbase cluster"
+                     tooltip-trigger="mouseenter"
+                     tooltip-placement="top">
+                    Couchbase
+                  </label>
+                  <input
+                     type="radio"
+                     id="ldap-cert-add"
+                     ng-model="mnLDAPCtl.config.connect.serverCertValidation"
+                     name="certValidation"
+                     value="pasteCert"
+                     ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+                  <label
+                     for="ldap-cert-add"
+                     ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+                    Paste Cert
+                  </label>
+                </div>
+                <div
+                   class="error"
+                   ng-show="mnLDAPCtl.errors.cert">
+                  {{mnLDAPCtl.errors.cert}}
+                </div>
+              </span>
+            </div>
+            <div
+               class="formrow"
+               ng-if="mnLDAPCtl.config.connect.serverCertValidation == 'pasteCert'">
+              <label
+                 for="bindDN"
+                 ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+                 LDAP Server Root Certificate</label>
+              <textarea
+                 rows="4"
+                 id="ldap_group_ref"
+                 autocorrect="off"
+                 autocompleterg="off"
+                 spellcheck="false"
+                 ng-model="mnLDAPCtl.config.connect.cacert"
+                 ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+              </textarea>
+              <div
+                 class="error"
+                 ng-show="mnLDAPCtl.errors.cacert">
+                {{mnLDAPCtl.errors.cacert}}
+              </div>
+            </div>
+            <div class="formrow">
+              <label>Contact LDAP Host</label>
+              <div class="desc" ng-show="mnLDAPCtl.config.authType == 'cert'">
+                These certificates will be used for authentication on your LDAP server.
+              </div>
+              <div class="desc" ng-if="mnLDAPCtl.maybeDisableClientCert()">
+                The Client Certificate choice requires Encryption be enabled above.
+              </div>
+              <div>
+                <input
+                   type="radio"
+                   id="anonymous-access"
+                   name="authType"
+                   value="anon"
+                   ng-model="mnLDAPCtl.config.authType">
+                <label for="anonymous-access">Anonymously</label>
+                <input
+                   type="radio"
+                   id="auth-using-usr-pwd"
+                   name="authType"
+                   value="creds"
+                   ng-model="mnLDAPCtl.config.authType">
+                <label for="auth-using-usr-pwd">Credentials</label>
+                <input
+                   type="radio"
+                   id="auth-using-client-cert"
+                   name="authType"
+                   ng-disabled="mnLDAPCtl.maybeDisableClientCert()"
+                   ng-model="mnLDAPCtl.config.authType"
+                   value="cert">
+                <label
+                   for="auth-using-client-cert"
+                   ng-disabled="mnLDAPCtl.maybeDisableClientCert()">Client Certificate</label>
+              </div>
+            </div>
+            <div
+               class="formrow row items-top"
+               ng-show="mnLDAPCtl.config.authType == 'creds'">
+              <span class="width-6 margin-right-half">
+                <label for="bindDN">
+                  Bind DN
+                </label>
+                <input
+                   type="text"
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   mn-autocomplete-off="enforce"
+                   id="bindDN"
+                   ng-model="mnLDAPCtl.config.connect.bindDN"
+                   placeholder="uid=admin,ou=users,dc=example,dc=com">
+                <div
+                   class="error"
+                   ng-show="mnLDAPCtl.errors.bindDN">
+                  {{mnLDAPCtl.errors.bindDN}}
+                </div>
+              </span>
+              <span class="width-6">
+                <label for="bindPass">
+                  Password
+                </label>
+                <input
+                   type="password"
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   mn-autocomplete-off="enforce"
+                   id="bindPass"
+                   ng-model="mnLDAPCtl.config.connect.bindPass">
+                <div
+                   class="error"
+                   ng-show="mnLDAPCtl.errors.bindPass">
+                  {{mnLDAPCtl.errors.bindPass}}
+                </div>
+
+              </span>
+            </div>
+            <div
+               class="formrow row items-top"
+               ng-show="mnLDAPCtl.config.authType == 'cert'">
+              <div class="width-6 margin-right-half">
+                <label
+                   for="client-tls-cert"
+                   ng-disabled="mnLDAPCtl.maybeDisableClientCert()">
+                  Client Certificate
+                </label>
+                <div
+                   mn-file-reader
+                   classes="['fix-width-3-5']"
+                   disable="mnLDAPCtl.maybeDisableClientCert()"
+                   result="mnLDAPCtl.config.connect.clientTLSCert">
+                </div>
+                <div
+                   class="error"
+                   ng-show="mnLDAPCtl.errors.clientTLSCert">
+                  {{mnLDAPCtl.errors.clientTLSCert}}
+                </div>
+              </div>
+              <div class="width-6">
+                <label
+                   for="client-tls-key"
+                   ng-disabled="mnLDAPCtl.maybeDisableClientCert()">
+                  Client Key
+                </label>
+                <div
+                   mn-file-reader
+                   classes="['fix-width-3-5']"
+                   disable="mnLDAPCtl.maybeDisableClientCert()"
+                   result="mnLDAPCtl.config.connect.clientTLSKey">
+                </div>
+                <div
+                   class="error"
+                   ng-show="mnLDAPCtl.errors.clientTLSKey">
+                  {{mnLDAPCtl.errors.clientTLSKey}}
+                </div>
+              </div>
+            </div>
+            <button
+               type="button"
+               class="outline"
+               ng-click="mnLDAPCtl.checkConnectivity()">
+              Check Network Settings
+            </button>
+            <p
+               ng-show="mnLDAPCtl.connectSuccessResult"
+               class="result-status"
+               ng-class="[mnLDAPCtl.connectSuccessResult.data.result]">
+              {{mnLDAPCtl.connectSuccessResult.data.result == "error" ? mnLDAPCtl.connectSuccessResult.data.reason || "error" : "Contact LDAP server successful"}}
+            </p>
+          </div>
+
+          <!-- Enable LDAP user authentication --------------------------------------- -->
+          <h3>User Authentication</h3>
+          <div ng-click="sectFocus = 'user auth'" class="margin-top-half margin-bottom-half">
+            <div class="formrow row flex-left">
+              <label
+                 class="toggle-control margin-0"
+                 for="for-enable-ldap-user-auth">
+                <input
+                   type="checkbox"
+                   id="for-enable-ldap-user-auth"
+                   ng-model="mnLDAPCtl.config.authentication.authenticationEnabled">
+                <span class="toggle-control-body"></span>
+              </label>
+              <span class="text-small">&nbsp; Enable LDAP user authentication</span>
+            </div>
+            <div ng-show="mnLDAPCtl.config.authentication.authenticationEnabled" class="margin-bottom-2">
+              <div class="formrow">
+                <label for="user-dn-mapping">Map Usernames Using:</label>
+                <div class="checkbox-list">
+                  <input
+                     type="radio"
+                     id="user-dn-mapping-flag-tempate"
+                     ng-model="mnLDAPCtl.config.userDnMapping"
+                     name="userDnMapping"
+                     value="template">
+                  <label for="user-dn-mapping-flag-tempate">Template</label>
+                  <input
+                     type="radio"
+                     id="user-dn-mapping-flag-query"
+                     ng-model="mnLDAPCtl.config.userDnMapping"
+                     name="userDnMapping"
+                     value="query">
+                  <label for="user-dn-mapping-flag-query">LDAP Search</label>
+                  <input
+                     ng-if="mnLDAPCtl.isEnterprise && mnLDAPCtl.mnPoolDefault.export.compat.atLeast76"
+                     type="radio"
+                     id="user-dn-mapping-flag-advanced"
+                     ng-model="mnLDAPCtl.config.userDnMapping"
+                     name="userDnMapping"
+                     value="advanced">
+                  <label ng-if="mnLDAPCtl.isEnterprise && mnLDAPCtl.mnPoolDefault.export.compat.atLeast76" for="user-dn-mapping-flag-advanced">Advanced Query</label>
+                </div>
+              </div>
+              <div class="formrow">
+                <div ng-if="mnLDAPCtl.config.userDnMapping == 'template'">
+                  <label for="user-dn-mapping-template">Template</label>
+                  <input
+                     type="text"
+                     placeholder="cn=%u,ou=users,dc=example,dc=com"
+                     autocorrect="off"
+                     spellcheck="false"
+                     autocapitalize="off"
+                     mn-autocomplete-off="enforce"
+                     id="user-dn-mapping-template"
+                     ng-model="mnLDAPCtl.config.authentication.userDNMapping.template">
+                </div>
+                <div class="row formrow items-top" ng-if="mnLDAPCtl.config.userDnMapping == 'query'">
+                  <span class="width-6 margin-right-half">
+                    <label class="inline">Base</label>
+                    <span
+                       class="fa-stack icon-info"
+                       uib-tooltip="Use this value as the starting point for your search."
+                       tooltip-placement="auto right"
+                       tooltip-append-to-body="true">
+                      <span class="icon fa-circle-thin fa-stack-2x"></span>
+                      <span class="icon fa-info fa-stack-1x"></span>
+                    </span>
+                    <input
+                       type="text"
+                       autocorrect="off"
+                       spellcheck="false"
+                       autocapitalize="off"
+                       mn-autocomplete-off="enforce"
+                       id="user-dn-mapping-base"
+                       ng-model="mnLDAPCtl.config.authentication.userDNMapping.base"
+                       placeholder="ou=users,dc=example,dc=com">
+                  </span>
+                  <span class="width-6">
+                    <label class="inline">Filter</label>
+                    <span
+                      class="fa-stack icon-info"
+                      uib-tooltip-html="'Filter as defined in <a href=\'https://datatracker.ietf.org/doc/rfc4515\' target=\'_blank\' rel=\'noopener noreferrer\'>RFC 4515</a>'"
+                      tooltip-placement="auto top"
+                      tooltip-append-to-body="true">
+                     <span class="icon fa-circle-thin fa-stack-2x"></span>
+                     <span class="icon fa-info fa-stack-1x"></span>
+                    </span>
+                    <input
+                       type="text"
+                       autocorrect="off"
+                       spellcheck="false"
+                       autocapitalize="off"
+                       mn-autocomplete-off="enforce"
+                       id="user-dn-mapping-filter"
+                       ng-model="mnLDAPCtl.config.authentication.userDNMapping.filter"
+                       placeholder="(uid=%u)">
+                  </span>
+                </div>
+                <div ng-if="mnLDAPCtl.config.userDnMapping == 'query'" class="width-4">
+                  <label for="user-dn-mapping-scope">Scope</label>
+                   <mn-select
+                      id="user-dn-mapping-scope"
+                      ng-model="mnLDAPCtl.config.authentication.userDNMapping.scope"
+                      values="['base', 'one', 'sub']"
+                      labels="['base object', 'one-level', 'subtree']">
+                  </mn-select>
+                </div>
+                <div ng-if="mnLDAPCtl.isEnterprise && mnLDAPCtl.mnPoolDefault.export.compat.atLeast76 && mnLDAPCtl.config.userDnMapping == 'advanced'">
+                  <label for="user-dn-mapping-advanced-template">Template</label>
+                  <textarea
+                     placeholder="{{mnLDAPCtl.advancedTemplatePlaceholder}}"
+                     autocorrect="off"
+                     spellcheck="false"
+                     autocapitalize="off"
+                     mn-autocomplete-off="enforce"
+                     id="user-dn-mapping-advanced-template"
+                     rows="11"
+                     ng-model="mnLDAPCtl.config.authentication.userDNMapping.advanced"></textarea>
+                </div>
+                <div
+                   class="error"
+                   ng-show="mnLDAPCtl.errors.userDNMapping">
+                  {{mnLDAPCtl.errors.userDNMapping}}
+                </div>
+              </div>
+              <p
+                 class="disclosure"
+                 ng-class="{disclosed: mnLDAPCtl.showTestUsername}"
+                 ng-click="mnLDAPCtl.showTestUsername = !mnLDAPCtl.showTestUsername">
+                Test User Authentication
+              </p>
+              <div ng-if="mnLDAPCtl.showTestUsername" class="margin-left-1-5">
+                <div class="formrow row items-top">
+                  <span class="width-6 margin-right-half">
+                    <label for="authUser">Username to Test</label>
+                    <input
+                       type="text"
+                       autocorrect="off"
+                       spellcheck="false"
+                       autocapitalize="off"
+                       mn-autocomplete-off="enforce"
+                       id="authUser"
+                       ng-model="mnLDAPCtl.config.cred.authUser">
+                    <div
+                       class="error"
+                       ng-show="mnLDAPCtl.errors.authUser">
+                      {{mnLDAPCtl.errors.authUser}}
+                    </div>
+                  </span>
+                  <span class="width-6">
+                    <label for="authPass">Password</label>
+                    <input
+                       type="password"
+                       autocorrect="off"
+                       spellcheck="false"
+                       autocapitalize="off"
+                       mn-autocomplete-off="enforce"
+                       id="authPass"
+                       ng-model="mnLDAPCtl.config.cred.authPass">
+                    <div
+                       class="error"
+                       ng-show="mnLDAPCtl.errors.authPass">
+                      {{mnLDAPCtl.errors.authPass}}
+                    </div>
+                  </span>
+                </div>
+                <button
+                   type="button"
+                   class="outline"
+                   ng-click="mnLDAPCtl.checkAuthentication()">
+                  Test User Authentication
+                </button>
+                <p
+                   ng-show="mnLDAPCtl.authenticationSuccessResult"
+                   class="result-status"
+                   ng-class="[mnLDAPCtl.authenticationSuccessResult.data.result]">
+                  {{mnLDAPCtl.authenticationSuccessResult.data.result == "error" ?
+                  mnLDAPCtl.authenticationSuccessResult.data.reason || "Error authenticating user" : "User recognized by LDAP server:"}}
+                </p>
+                <p
+                   ng-if="mnLDAPCtl.authenticationSuccessResult.data.dn"
+                   class="text-smallish">
+                  {{mnLDAPCtl.authenticationSuccessResult.data.dn}}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Enable LDAP group authorization & sync -------------------------------- -->
+          <h3>Group Authorization</h3>
+          <div class="margin-bottom-3" ng-click="sectFocus = 'group auth'">
+            <div class="formrow row flex-left margin-top-half">
+              <label
+                 class="toggle-control margin-0"
+                 for="for-enable-ldap-group">
+                <input
+                   type="checkbox"
+                   id="for-enable-ldap-group"
+                   ng-model="mnLDAPCtl.config.group.authorizationEnabled">
+                <span class="toggle-control-body"></span>
+              </label>
+              <span class="text-small">&nbsp; Enable LDAP group authorization & sync</span>
+            </div>
+            <div ng-if="mnLDAPCtl.config.group.authorizationEnabled" class="margin-bottom-1-5">
+              <div class="formrow">
+                <label>Query for Groups Using:</label>
+                <div class="formrow checkbox-list">
+                  <input
+                     type="radio"
+                     id="for-query-groups-attrs"
+                     ng-change="mnLDAPCtl.removeGroupsQueryErrors()"
+                     ng-model="mnLDAPCtl.config.queryForGroups"
+                     name="queryForGroups"
+                     value="users_attrs">
+                  <label for="for-query-groups-attrs" class="margin-right-0">User's attributes</label>
+                  <span
+                     class="fa-stack icon-info"
+                     uib-tooltip="Use this option when your LDAP users objects contain an attribute with a list of this user's groups. Specify the name of that attribute below."
+                     tooltip-placement="auto right"
+                     tooltip-append-to-body="true">
+                    <span class="icon fa-circle-thin fa-stack-2x"></span>
+                    <span class="icon fa-info fa-stack-1x"></span>
+                  </span>
+                  <input
+                     type="radio"
+                     id="for-query-groups-builder"
+                     ng-change="mnLDAPCtl.removeGroupsQueryErrors()"
+                     ng-model="mnLDAPCtl.config.queryForGroups"
+                     name="queryForGroups"
+                     value="query">
+                  <label for="for-query-groups-builder" class="margin-right-0">LDAP Search</label>
+                  <span
+                     class="fa-stack icon-info"
+                     uib-tooltip="Use this option when your LDAP groups objects contain references to their users."
+                     tooltip-placement="auto right"
+                     tooltip-append-to-body="true">
+                    <span class="icon fa-circle-thin fa-stack-2x"></span>
+                    <span class="icon fa-info fa-stack-1x"></span>
+                  </span>
+                </div>
+              </div>
+              <div ng-if="mnLDAPCtl.config.queryForGroups == 'users_attrs'">
+                <label for="for-groups-user-attributes">User Attribute</label>
+                <input
+                   type="text"
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   mn-autocomplete-off="enforce"
+                   id="for-groups-user-attributes"
+                   ng-model="mnLDAPCtl.config.group.groupsQuery.attributes"
+                   placeholder="memberOf">
+              </div>
+              <div class="row formrow items-top" ng-if="mnLDAPCtl.config.queryForGroups == 'query'">
+                <span class="width-6 margin-right-half">
+                  <label class="inline">Base</label>
+                  <span
+                     class="fa-stack icon-info"
+                     uib-tooltip="Use this value as the starting point for your search."
+                     tooltip-placement="auto right"
+                     tooltip-append-to-body="true">
+                    <span class="icon fa-circle-thin fa-stack-2x"></span>
+                    <span class="icon fa-info fa-stack-1x"></span>
+                  </span>
+                  <input
+                     type="text"
+                     autocorrect="off"
+                     spellcheck="false"
+                     autocapitalize="off"
+                     mn-autocomplete-off="enforce"
+                     id="for-groups-query"
+                     ng-model="mnLDAPCtl.config.group.groupsQuery.base"
+                     placeholder="ou=groups,dc=example,dc=com">
+                </span>
+                <span class="width-6">
+                  <label class="inline">Filter</label>
+                  <span
+                    class="fa-stack icon-info"
+                    uib-tooltip-html="'Filter as defined in <a href=\'https://datatracker.ietf.org/doc/rfc4515\' target=\'_blank\' rel=\'noopener noreferrer\'>RFC 4515</a>'"
+                    tooltip-placement="auto top"
+                    tooltip-append-to-body="true">
+                   <span class="icon fa-circle-thin fa-stack-2x"></span>
+                   <span class="icon fa-info fa-stack-1x"></span>
+                  </span>
+                  <input
+                     type="text"
+                     autocorrect="off"
+                     spellcheck="false"
+                     autocapitalize="off"
+                     mn-autocomplete-off="enforce"
+                     id="for-groups-query-filter"
+                     ng-model="mnLDAPCtl.config.group.groupsQuery.filter"
+                     placeholder="(member=%D)">
+                </span>
+              </div>
+              <div ng-if="mnLDAPCtl.config.queryForGroups == 'query'" class="width-4">
+                <label for="for-groups-query-scope">Scope</label>
+                <mn-select
+                   id="for-groups-query-scope"
+                   ng-model="mnLDAPCtl.config.group.groupsQuery.scope"
+                   values="['base', 'one', 'sub']"
+                   labels="['base object', 'one-level', 'subtree']">
+                </mn-select>
+              </div>
+              <div
+                 class="error"
+                 ng-show="mnLDAPCtl.errors.groupsQuery">
+                {{mnLDAPCtl.errors.groupsQuery}}
+              </div>
+              <div class="formrow checkbox-list margin-top-1">
+                <input
+                   type="checkbox"
+                   id="for-nested-groups-enabled"
+                   ng-model="mnLDAPCtl.config.group.nestedGroupsEnabled">
+                <label for="for-nested-groups-enabled">Traverse nested groups</label>
+              </div>
+              <p
+                 class="disclosure margin-top-1"
+                 ng-class="{disclosed: mnLDAPCtl.testGroupsQuery}"
+                 ng-click="mnLDAPCtl.testGroupsQuery = !mnLDAPCtl.testGroupsQuery">
+                Test Groups Query
+              </p>
+              <div ng-if="mnLDAPCtl.testGroupsQuery" class="margin-left-1-5">
+                <div class="formrow width-8">
+                  <label for="for-groups-query-user">Test Username</label>
+                  <input
+                     type="text"
+                     autocorrect="off"
+                     spellcheck="false"
+                     autocapitalize="off"
+                     mn-autocomplete-off="enforce"
+                     id="for-groups-query-user"
+                     ng-model="mnLDAPCtl.config.groupsQueryUser">
+                  <div
+                     class="error"
+                     ng-show="mnLDAPCtl.errors.groupsQueryUser">
+                    {{mnLDAPCtl.errors.groupsQueryUser}}
+                  </div>
+                </div>
+                <button
+                   type="button"
+                   class="outline"
+                   ng-click="mnLDAPCtl.checkGroupsQuery()">
+                  Test Groups Query
+                </button>
+                <p class="result-status error"
+                   ng-show="mnLDAPCtl.queryForGroupsSuccessResult.data.result == 'error'">
+                  {{mnLDAPCtl.queryForGroupsSuccessResult.data.reason}}
+                </p>
+                <p class="result-status success"
+                   ng-show="mnLDAPCtl.queryForGroupsSuccessResult.data.groups.length">
+                  Groups discovered successfully:<br>
+                  {{mnLDAPCtl.queryForGroupsSuccessResult.data.groups.join(", ")}}
+                </p>
+                <p class="result-status warning"
+                   ng-show="(mnLDAPCtl.queryForGroupsSuccessResult.data.result == 'success') && !mnLDAPCtl.queryForGroupsSuccessResult.data.groups.length">
+                  Connected but returned no groups.
+                </p>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- advanced settings ----------------------------------------------------- -->
+          <h3
+             class="disclosure margin-top-2"
+             ng-class="{disclosed: mnLDAPCtl.advancedSettings}"
+             ng-click="mnLDAPCtl.advancedSettings = !mnLDAPCtl.advancedSettings">
+            Advanced Settings
+          </h3>
+          <div ng-if="mnLDAPCtl.advancedSettings" class="margin-left-1-5">
+            <div class="formrow">
+              <label for="for-request-timeout">Request Timeout ms</label>
+              <input
+                 type="text"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocapitalize="off"
+                 mn-autocomplete-off="enforce"
+                 id="for-request-timeout"
+                 ng-model="mnLDAPCtl.config.advanced.requestTimeout">
+              <div
+                 class="error"
+                 ng-show="mnLDAPCtl.errors.requestTimeout">
+                {{mnLDAPCtl.errors.requestTimeout}}
+              </div>
+            </div>
+            <div class="formrow">
+              <label for="for-max-parallel">Max Parallel Connections</label>
+              <input
+                 type="text"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocapitalize="off"
+                 mn-autocomplete-off="enforce"
+                 id="for-max-parallel"
+                 ng-model="mnLDAPCtl.config.advanced.maxParallelConnections">
+              <div
+                 class="error"
+                 ng-show="mnLDAPCtl.errors.maxParallelConnections">
+                {{mnLDAPCtl.errors.maxParallelConnections}}
+              </div>
+            </div>
+            <div class="formrow">
+              <label for="for-max-cache-size">Max Cache Records</label>
+              <input
+                 type="text"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocapitalize="off"
+                 mn-autocomplete-off="enforce"
+                 id="for-max-cache-size"
+                 ng-model="mnLDAPCtl.config.advanced.maxCacheSize">
+              <div
+                 class="error"
+                 ng-show="mnLDAPCtl.errors.maxCacheSize">
+                {{mnLDAPCtl.errors.maxCacheSize}}
+              </div>
+            </div>
+            <div class="formrow">
+              <label for="for-cache-lifetime">Cache Time-to-Live ms</label>
+              <input
+                 type="text"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocapitalize="off"
+                 mn-autocomplete-off="enforce"
+                 id="for-cache-lifetime"
+                 ng-model="mnLDAPCtl.config.advanced.cacheValueLifetime">
+              <div
+                 class="error"
+                 ng-show="mnLDAPCtl.errors.cacheValueLifetime">
+                {{mnLDAPCtl.errors.cacheValueLifetime}}
+              </div>
+            </div>
+            <div class="formrow">
+              <label for="for-group-max-nesting">Group Max Nesting Depth</label>
+              <input
+                 type="text"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocapitalize="off"
+                 mn-autocomplete-off="enforce"
+                 id="for-group-max-nesting"
+                 ng-model="mnLDAPCtl.config.advanced.nestedGroupsMaxDepth">
+              <div
+                 class="error"
+                 ng-show="mnLDAPCtl.errors.nestedGroupsMaxDepth">
+                {{mnLDAPCtl.errors.nestedGroupsMaxDepth}}
+              </div>
+            </div>
+            <div
+               class="formrow"
+               ng-show="mnLDAPCtl.mnPoolDefault.export.compat.atLeast76">
+              <label
+                 class="inline"
+                 for="for-middlebox-comp-mode">
+                TLS Middlebox Compatibility
+              </label>
+              <div>
+                <input
+                   type="checkbox"
+                   id="for-middlebox-comp-mode"
+                   name="middleboxCompMode"
+                   ng-model="mnLDAPCtl.config.advanced.middleboxCompMode">
+                <label
+                   for="for-middlebox-comp-mode"
+                   class="checkbox">
+                  Enable Middlebox Compatibility
+                </label>
+              </div>
+              <div
+                 class="error"
+                 ng-show="mnLDAPCtl.errors.middleboxCompMode">
+                {{mnLDAPCtl.errors.middleboxCompMode}}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- help sidebar ---------------------------------------------------------- -->
+        <div class="ldap-helpsidebar" style="border-width:1px;height:520px;overflow-y:auto;padding-right:1rem;width:275px;top: 150px">
+          <p class="text-small margin-bottom-1 grayblack-bg-7 padding-half">
+            For more help:<br>
+            <a
+               href="https://docs.couchbase.com/server/{{::(implementationVersion | mnMajorMinorVersion)}}/manage/manage-security/configure-ldap.html"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="bold">
+              Configuring LDAP
+              <span class="icon fa-external-link"></span>
+            </a>
+          </p>
+          <h5
+             class="disclosure"
+             ng-class="{disclosed: sectFocus == 'LDAP'}"
+             ng-click="sectFocus = 'LDAP'">
+            LDAP Host Configuration
+          </h5>
+          <div ng-show="sectFocus == 'LDAP'">
+          <p>
+            This first section (down to <b>Check Network Settings</b>) contains
+            the basic settings to connect to your LDAP host(s).
+          </p>
+          <p>
+            Your certificate choices for connecting to your LDAP host are either
+            none (and no hostname verification will occur), use the certificate
+            already loaded in your Couchbase cluster,
+            or choose <b>Paste Cert</b> and paste in your own certificate text.
+          </p>
+          <p>
+            You may choose <b>Contact LDAP host anonymously</b> if your LDAP
+            configuration supports it, but an <b>LDAP DN</b> and valid
+            password will be necessary if you choose to authenticate users with
+            the query builder below and for any group authorization.
+          </p>
+          </div>
+          <h5
+             class="disclosure"
+             ng-class="{disclosed: sectFocus == 'user auth'}"
+             ng-click="sectFocus = 'user auth'">
+            User Authentication
+          </h5>
+          <div ng-show="sectFocus == 'user auth'">
+            <p>
+              This section lets you map
+              simple usernames (that will be used to log into Couchbase Server) to
+              LDAP DNs. You can expand the test section to test your mapping with
+              a real user.
+            </p>
+          </div>
+          <h5
+             class="disclosure"
+             ng-class="{disclosed: sectFocus == 'group auth'}"
+             ng-click="sectFocus = 'group auth'">
+            Group Authorization
+          </h5>
+          <div ng-show="sectFocus == 'group auth'">
+            <p>
+              This section lets you build a query so that Couchbase
+              Server can discover the LDAP groups a particular user belongs to
+              (which you can then map to Couchbase Server groups in Security >
+              Users > Groups). You can discover a user's groups with a user attribute
+              or by constructing a query.
+            </p>
+            <p>
+              You can expand the test section to test your query with
+              a real user.
+            </p>
+            <p>
+              NOTE: %u – is used to mean username, %D – means LDAP DN of the user
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <footer class="footer-save justify-between">
+      <span class="row margin-right-4" style="min-width: 312px">
+        <button
+           type="button"
+           class="outline"
+           ng-click="mnLDAPCtl.clearLdapCache();">
+          Clear Cache
+        </button>
+        <span
+           ng-if="mnLDAPCtl.cacheCleared"
+           class="wb-result-status success margin-left-1">
+          cache cleared successfully
+        </span>
+      </span>
+      <span class="row margin-left-3">
+        <a class="margin-right-2 text-medium" ng-click="mnLDAPCtl.reloadState()">Cancel</a>
+        <button type="submit">Save LDAP Configuration</button>
+      </span>
+    </footer>
+  </form>
+</div>

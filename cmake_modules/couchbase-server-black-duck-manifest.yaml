@@ -1,0 +1,7 @@
+components:
+    enacl:
+        bd-id: e72b97ab-d670-4214-803a-d6af3ea7ac28
+        versions: [ "v1.2.1" ]
+    erl-iso8601:
+        bd-id: 406e7219-dc9b-40f8-ab7f-b68e66d4ae94
+        versions: [ "1.3.3" ]

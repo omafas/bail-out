@@ -1,0 +1,115 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<mn-element-cargo depot="actions">
+  <div class="header-controls resp-sml">
+    <a
+       uiSref="app.admin.replications"
+       class="resp-hide-sml">
+      <span class="icon fa-arrow-left"></span> BACK
+    </a>
+  </div>
+</mn-element-cargo>
+
+<div
+   [formGroup]="form.group"
+   class="forms">
+  <div class="row flex-left items-stretch resp-flex-column-med margin-bottom-2">
+    <div class="width-9">
+      <mn-xdcr-rep-message
+        [fromBucket]="item.source"
+        [toBucket]="toBucket"
+        [toCluster]="toCluster | async"
+        [isEditMode]="true"></mn-xdcr-rep-message>
+
+      <mn-xdcr-filter
+         [xdcrGroup]="form.group"
+         [bucket]="item.source"
+         [settingsPipe]="replicationSettings"
+         [isEditMode]="true"
+         [group]="filterRegexpGroup"
+         [formHelper]="filterFormHelper"
+         *ngIf="(isEnterprise | async)"></mn-xdcr-filter>
+
+      <mn-xdcr-mapping
+         *ngIf="(replicationSettings | async) &&
+                (isEnterprise | async) &&
+                (compatVersion70 | async)"
+         [explicitMappingRules]="explicitMappingRules"
+         [explicitMappingMigrationRules]="explicitMappingMigrationRules"
+         [explicitMappingGroup]="explicitMappingGroup"
+         [group]="form.group"
+         [bucket]="item.source"></mn-xdcr-mapping>
+
+      <mn-xdcr-conflict-log
+         class="block"
+         *ngIf="(replicationSettings | async) && (isEnterprise | async) && (compatVersion80 | async)"
+         [mappingRules]="conflictLogRules"
+         [mappingGroup]="conflictLogMappingGroup"
+         [conflictLogging]="conflictLogging"
+         [group]="form.group"
+         [sourceBucket]="item.source"></mn-xdcr-conflict-log>
+
+      <mn-xdcr-mobile-setting
+         [group]="form.group"
+         [fromBucket]="sourceBucket">
+      </mn-xdcr-mobile-setting>
+
+      <mn-xdcr-settings
+         [form]="form"
+         [validationRequest]="postSettingsReplicationsValidation"
+         class="panel-content"></mn-xdcr-settings>
+    </div>
+    <div
+       *ngIf="(isEnterprise | async) && (compatVersion70 | async)"
+       style="border-left: 1px solid #d1d1d1; margin: 0 16px; flex-basis: 1;"
+       class="resp-hide-med">&nbsp;</div>
+    <div class="width-3"
+       *ngIf="(isEnterprise | async) && (compatVersion70 | async)">
+      <h4
+         class="block margin-right-1">
+        Mapping Rules
+      </h4>
+      <div style="display: block; overflow: scroll; height: 300px;">
+        <mn-xdcr-mapping-rules
+           class="block"
+           [isEditMode]="true"
+           [isMigrationMode]="isMigrationMode"
+           [isExplicitMappingMode]="isExplicitMappingMode"
+           [explicitMappingRules]="explicitMappingRules"
+           [explicitMappingMigrationRules]="explicitMappingMigrationRules"
+           [explicitMappingGroup]="explicitMappingGroup">
+        </mn-xdcr-mapping-rules>
+      </div>
+      <div class="margin-top-2" *ngIf="(isEnterprise | async) && (compatVersion80 | async)">
+        <h4
+           class="block margin-right-1">
+          Conflict Logging Rules
+        </h4>
+        <div style="display: block; overflow: scroll; height: 300px;">
+          <mn-xdcr-conflict-log-mapping-rules
+             class="block"
+             [isEditMode]="true"
+             [mappingRules]="conflictLogRules"
+             [mappingGroup]="conflictLogMappingGroup">
+          </mn-xdcr-conflict-log-mapping-rules>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer-save">
+    <button
+       type="button"
+       class="margin-right-2"
+       (click)="form.submit.next()">Save Replication</button>
+    <a class="text-medium" uiSref="app.admin.replications">Cancel/Reset</a>
+  </footer>
+</div>

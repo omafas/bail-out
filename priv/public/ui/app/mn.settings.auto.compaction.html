@@ -1,0 +1,48 @@
+<!--
+     Copyright 2021-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included
+     in the file licenses/BSL-Couchbase.txt.  As of the Change Date specified
+     in that file, in accordance with the Business Source License, use of this
+     software will be governed by the Apache License, Version 2.0, included in
+     the file licenses/APL2.txt.
+-->
+
+<mn-main-spinner
+   [mnSpinnerValue]="form.loadingPipe | async">
+</mn-main-spinner>
+
+<div class="margin-bottom-4">
+  <form
+     class="forms"
+     [formGroup]="form.group"
+     (ngSubmit)="form.submit.next()">
+    <h4>Auto-Compaction</h4>
+    <p class="text-small margin-bottom-1-5">
+      Auto-Compaction settings trigger the compaction process,
+      compacting databases and their respective view indexes when the
+      following conditions are met:
+    </p>
+    <mn-auto-compaction-form
+       class="margin-bottom-2"
+       [mnGroup]="form.group"
+       [mnErrors]="httpError"
+       [isBucketSettings]="false">
+    </mn-auto-compaction-form>
+    <footer
+      [hidden]="!(permissions | async)?.cluster.settings.write"
+      class="footer-save">
+      <button
+         type="submit"
+         [disabled]="hasErrors | async"
+         class="margin-right-2">
+        Save
+      </button>
+      <a
+         class="text-medium"
+         (click)="cancel()">
+        Cancel/Reset
+      </a>
+    </footer>
+  </form>
+</div>

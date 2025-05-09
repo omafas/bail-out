@@ -1,0 +1,12 @@
+{application, cb_dets,
+    [
+        {description, "Fork of erlang dets"},
+        {vsn, "0.0.0"},
+        {registered, []},
+        {applications, [
+            kernel,
+            stdlib
+        ]},
+        {modules, []},
+        {env, []}
+    ]}.

@@ -1,0 +1,86 @@
+<!--
+  Copyright 2021-Present Couchbase, Inc.
+
+  Use of this software is governed by the Business Source License included in
+  the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+  file, in accordance with the Business Source License, use of this software
+  will be governed by the Apache License, Version 2.0, included in the file
+  licenses/APL2.txt.
+-->
+
+<div class="relative">
+  <div class="row flex-right" style="min-height:0;position:absolute;top:0;right:0;z-index:1">
+    <span>
+      <button
+         (click)="startNewCollection()"
+         class="outline">
+        Start New Collection
+      </button>
+      <button
+         *ngIf="(taskCollectInfo | async)?.status === 'running'"
+         (click)="stopCollection()"
+         [disabled]="(disableStopCollection | async)"
+         class="outline">
+        Stop Collection
+      </button>
+    </span>
+  </div>
+</div>
+
+<div [mnSpinner]="(collectInfoLoading | async)">
+  <div
+     [attr.class]="'collection_status dynamic_' + (taskCollectInfo | async)?.status">
+    <p>
+      Collection {{(taskCollectInfo | async)?.status}}
+      <span
+         *ngIf="(taskCollectInfo | async)?.status === 'running'">
+       <span class="loading"></span>
+      </span>
+    </p>
+  </div>
+  <div *ngIf="(nodesByStatus | async)?.started" class="margin-bottom-2">
+    <p>In progress:</p>
+    <div *ngFor="let node of (nodesByStatus | async)?.started; trackBy:identifyNode">{{(node.nodeName | mnStripPortHTML) | async}}</div>
+  </div>
+  <div *ngIf="(nodesByStatus | async)?.starting" class="margin-bottom-2">
+    <p>Pending:</p>
+    <div *ngFor="let node of (nodesByStatus | async)?.starting; trackBy:identifyNode">{{(node.nodeName | mnStripPortHTML) | async}}</div>
+  </div>
+  <div *ngIf="(nodesByStatus | async)?.collected" class="margin-bottom-2">
+    <p>Logs were successfully collected to the following paths:</p>
+    <div *ngFor="let node of (nodesByStatus | async)?.collected; trackBy:identifyNode"><strong>{{(node.nodeName | mnStripPortHTML) | async}}</strong> &nbsp; {{node.path}}</div>
+  </div>
+  <div *ngIf="(nodesByStatus | async)?.startedUpload" class="margin-bottom-2">
+    <p>Logs are being uploaded from these paths:</p>
+    <div *ngFor="let node of (nodesByStatus | async)?.startedUpload; trackBy:identifyNode"><strong>{{(node.nodeName | mnStripPortHTML) | async}}</strong> {{node.path}}</div>
+  </div>
+  <div *ngIf="(nodesByStatus | async)?.startingUpload" class="margin-bottom-2">
+    <p class="success">Logs are pending upload from these paths:</p>
+    <div *ngFor="let node of (nodesByStatus | async)?.startingUpload; trackBy:identifyNode"><strong>{{(node.nodeName | mnStripPortHTML) | async}}</strong> {{node.path}}</div>
+  </div>
+  <div *ngIf="(nodesByStatus | async)?.uploaded" class="margin-bottom-2">
+    <p>Logs were successfully uploaded to the following URLs:</p>
+    <div *ngFor="let node of (nodesByStatus | async)?.uploaded; trackBy:identifyNode"><a href="{{node.url}}" target="_blank">{{node.url}}</a></div>
+  </div>
+  <div *ngIf="(nodesByStatus | async)?.failedUpload" class="margin-bottom-2">
+    <p class="error">Warning: The following logs were successfully collected but failed to upload. Please manually upload from the following locations:</p>
+    <div *ngFor="let node of (nodesByStatus | async)?.failedUpload; trackBy:identifyNode"><strong>{{(node.nodeName | mnStripPortHTML) | async}}</strong> {{node.path}}</div>
+  </div>
+  <div *ngIf="(nodesByStatus | async)?.failed" class="margin-bottom-2">
+    <p class="error">Error: Unable to collect logs from the following nodes:</p>
+    <div *ngFor="let node of (nodesByStatus | async)?.failed; trackBy:identifyNode">{{(node.nodeName | mnStripPortHTML) | async}}</div>
+  </div>
+  <div *ngIf="(nodesByStatus | async)?.cancelled" class="margin-bottom-2">
+    <p class="error">Cancelled nodes:</p>
+    <div *ngFor="let node of (nodesByStatus | async)?.cancelled; trackBy:identifyNode">{{(node.nodeName | mnStripPortHTML) | async}}</div>
+  </div>
+  <div *ngIf="(nodesErrors | async)" class="margin-top-1">
+    <p class="error">Node errors:</p>
+    <div *ngFor="let nodeError of (nodesErrors | async) | keyvalue; trackBy:identifyNodeError">
+      <strong>{{nodeError.key}}</strong>
+      <p class="pre-line" *ngFor="let error of nodeError.value">
+        {{error.error}}
+      </p>
+    </div>
+  </div>
+</div>

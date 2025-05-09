@@ -1,0 +1,99 @@
+/diag/masterEvents facility
+===========================
+
+
+In order to observe & verify cluster-wide operations we need some way
+to get notified when something notable happens.
+
+By doing GET for /diag/masterEvents on master node you'll get back infinite stream of
+json events. There will be one line per json event with lines
+separated by '\n'.
+
+Events streamed are:
+
+* node became master
+  {"type":"becameMaster","ts":"1333576032.53991","node":"'n_0@10.17.2.163'","host":"10.17.2.163:12000"}
+
+* ebucketmigrator started
+  {"vbuckets":[85],"checkpoints":{"85":0},"username":"default","type":"ebucketmigratorStart","ts":"1333576052.81971","takeover":"false","src":"10.17.2.163:12000","pid":"<13013.532.0>","node":"'n_2@10.17.2.163'","name":"replication_building_85_'n_2@10.17.2.163'","dst":"10.17.2.163:12004","bucket":"undefined"}
+
+* ebucketmigrator found some source vbucket(s) not ready (no open
+  checkpoint which means it's replica and it's being backfilled right
+  now). vbuckets attr is vbuckets that were not ready. You can find
+  ready vbuckets in corresponding (see pid) ebucketmigratorStart
+  message. Note this message is logged _before_ ebucketmigratorStart.
+  {"type":"notReadyVBuckets","ts":"1333576052.81971","vbuckets":[1],"pid":"<13013.532.0>"}
+
+* ebucketmigrator died
+  {"type":"ebucketmigratorTerminate","ts":"1333576047.859331","reason":"shutdown","pid":"<13014.432.0>"}
+
+* vbucket state changed by ns_server
+  {"vbucket":"0","type":"vbucketStateChange","ts":"1333576042.549572","state":"active","host":"10.17.2.163:12000","bucket":"default"}
+
+* bucket created
+  {"type":"createBucket","ts":"1333582750.502623","bucketType":"memcached","bucket":"mcd","params":{"sasl_password":"","ram_quota":"104857600","auth_type":"sasl"}}
+
+* bucket deleted
+  {"type":"deleteBucket","ts":"1333582734.895535","bucket":"mcd"}
+
+* rebalance started
+  {"type":"rebalanceStart","ts":"1333576051.72607","pid":"<0.533.0>","keepNodes":["10.17.2.163:12000","10.17.2.163:12002","10.17.2.163:12004"],"ejectNodes":[],"failedNodes":[]}
+
+* rebalance completed/failed/stopped
+  {"type":"rebalanceEnd","ts":"1333582913.797543","reason":"normal","pid":"<0.782.0>"}
+
+* vbucket map or fast-forward map changed (with event per vbucket
+  changed)
+  {"type":"resetFastForwardMap","ts":"1333576047.79036","bucket":"default"}
+  or
+  {"vbucket":"43","type":"updateMap","ts":"1333576047.814047","bucket":"default","chainBefore":["10.17.2.163:12002","10.17.2.163:12004"],"chainAfter":["10.17.2.163:12002",""]}
+  or
+  {"vbucket":"36","type":"updateFastForwardMap","ts":"1333576052.76132","bucket":"default","chainBefore":[],"chainAfter":["10.17.2.163:12000","10.17.2.163:12002"]}
+
+* vbucket mover spawned
+  {"vbucket":"43","type":"vbucketMoveStart","ts":"1333576052.782249","pid":"<0.592.0>","node":"'n_1@10.17.2.163'","bucket":"default","chainBefore":["10.17.2.163:12002",""],"chainAfter":["10.17.2.163:12002","10.17.2.163:12004"]}
+
+* vbucket move completed
+  {"vbucket":"43","type":"vbucketMoveDone","ts":"1333576052.926554","bucket":"default"}
+
+* node failed over
+  {"type":"failover","ts":"1333576047.785782","host":"10.17.2.163:12004"}
+
+* tap name deregister
+  {"type":"deregisterTapName","ts":"1333584275.53477","pidNode":"'n_0@10.17.2.163'","pid":"<0.9312.0>","name":"replication_building_1023_'n_2@10.17.2.163'","host":"10.17.2.163:12002","bucket":"default"}
+
+* vbucket filter change request was verified by ebucketmigrator and was just started:
+  {"type":"vbucketFilterChangeStarted","ts":1337311232.576239,"pid":"<0.560.0>","node":"n_0@10.17.2.163"}
+
+* failing over of bucket was started
+  {"type":"bucketFailoverStarted","ts":1337311236.171865,"pid":"<0.509.0>","node":"n_0@10.17.2.163","host":"10.17.2.163:12007","bucket":"default"}
+
+* failing over of bucket completed
+  {"type":"bucketFailoverEnded","ts":1337311234.629357,"pid":"<0.509.0>","node":"n_0@10.17.2.163","host":"10.17.2.163:12010","bucket":"default"}
+
+* rebalance of bucket started
+  {"type":"bucketRebalanceStarted","ts":1337311243.911436,"pid":"<0.843.0>","node":"n_0@10.17.2.163","bucket":"default"}
+
+* rebalance of bucket ended
+  {"type":"bucketRebalanceEnded","ts":1337311282.795146,"pid":"<0.843.0>","node":"n_0@10.17.2.163","bucket":"default"}
+
+
+
+Here's common types of fields:
+
+* type - type of event
+
+* ts - event timestamp as seconds since Unix epoch
+
+* host - memcached host/port for node
+
+* node - erlang atom of node
+
+* vbucket - vbucket number
+
+* bucket - bucket name (note for ebucketmigrator events bucket is
+  usually undefined and real bucket name is username)
+
+* pid - pid of process
+
+* chainBefore, chainAfter - vbucket map chain before and after vbucket map change or vbucket move

@@ -1,0 +1,11 @@
+{erl_first_files, ["src/ns_log_categorizing.erl",
+                   "src/replicated_storage.erl",
+                   "src/json_settings_manager.erl",
+                   "src/memcached_cfg.erl"
+                   ]}.
+
+{erl_opts, [{src_dirs, ["src"]},
+            {i, "@COUCHDB_SRC_DIR@/src/couchdb"},
+            {i, "@COUCHDB_SRC_DIR@/src"},
+            {parse_transform, ale_transform}, warnings_as_errors,
+            {d, 'DEFAULT_PROFILE_STR', "@DEFAULT_PROFILE@"}]}.

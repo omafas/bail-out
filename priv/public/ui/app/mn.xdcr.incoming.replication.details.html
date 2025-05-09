@@ -1,0 +1,111 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<ng-template #filterExpressionTooltipTemplate>
+  <div>
+    <h5 class="margin-bottom-quarter">Active Filters</h5>
+    <div
+       class="filter relative padding-left-1"
+       [hidden]="!(getFilterExpression | async)">{{getFilterExpression | async}}</div>
+    <div
+       class="filter relative padding-left-1"
+       [hidden]="!(getFilterExpiration | async)">Do not replicate document expirations</div>
+    <div
+       class="filter relative padding-left-1"
+       [hidden]="!(getFilterDeletion | async)">Do not replicate DELETE operations</div>
+    <div
+       class="filter relative padding-left-1"
+       [hidden]="!(getFilterBypassExpiry | async)">Remove TTL from replicated items</div>
+    <div
+       class="filter relative padding-left-1"
+       [hidden]="!(getFilterBinary | async)">Filter Binary Documents</div>
+
+  </div>
+</ng-template>
+<ng-template #targetNozzleTooltip>
+  <div>The number of incoming XDCR connections</div><div>for this replication can be calculated by:</div>
+  <div class="text-smaller margin-top-half">(target_nozzle_per_node) *</div>
+  <div class="text-smaller">(number of Data nodes on the source cluster) *</div>
+  <div class="text-smaller">(number of Data nodes on this cluster, the target)</div>
+</ng-template>
+
+<section class="has-hover"
+   (click)="$event.stopPropagation();detailsHashObserver.stream.toggleDetails.next(item.id)"
+   [ngClass]="(sectionClass | async)">
+  <div
+     class="cbui-tablerow"
+     [ngClass]="(tableClass | async)">
+    <span
+       class="cbui-table-cell">
+      {{sourceBucketName | async}}
+      <span
+         class="label lt-blue cursor-pointer"
+         *ngIf="(hasActiveFilters | async)"
+         (click)="$event.stopPropagation()"
+         [ngbTooltip]="filterExpressionTooltipTemplate"
+         placement="auto right"
+         appendToBody="true"
+         trigger="mouseenter">
+        filter
+      </span>
+    </span>
+    <span class="cbui-table-cell">{{targetBucketName | async}}</span>
+    <span class="cbui-table-cell">
+      {{status | async}}
+      <span [hidden]="!(isActiveReplication | async)" class="loading"></span>
+    </span>
+    <span class="cbui-table-cell">
+      <span class="flex items-end flex-gap-5">
+        <span
+           class="fa-stack icon-info"
+           [ngbTooltip]="targetNozzleTooltip"
+           placement="left">
+          <span class="icon fa-circle-thin fa-stack-2x"></span>
+          <span class="icon fa-info fa-stack-1x"></span>
+        </span>
+        <span>XDCR Target Nozzles Per Node: {{targetNozzlePerNode | async}}</span>
+      </span>
+      <span
+         (click)="$event.stopPropagation();onShowAllSettings.next(item)"
+         class="label lt-blue cursor-pointer padding-quarter border-radius-5 margin-top-quarter">
+        view all settings
+      </span>
+    </span>
+  </div>
+  <div
+     *ngIf="(isDetailsOpened | async)"
+     class="cbui-tablerow-expanded">
+    <div
+       *ngIf="areThereMappingRules | async"
+       class="margin-bottom-half"
+       (click)="$event.stopPropagation();">
+      <p
+         class="disclosure"
+         [ngClass]="{disclosed: (toggler.state | async)}"
+         (click)="toggler.click.next()">
+        Mapping Rules
+      </p>
+      <div
+         *ngIf="toggler.state | async">
+        <div class="mapping-rule"
+           *ngFor="let rule of (mappingRules | async)">
+              <span class="break-word">{{rule[0]}} --&gt; {{rule[1]}}</span>
+        </div>
+      </div>
+    </div>
+    <div
+       *ngIf="!(areThereMappingRules | async)"
+       class="margin-bottom-half"
+       (click)="$event.stopPropagation();">
+      <p>There are no mapping rules defined.</p>
+    </div>
+  </div>
+</section>
+

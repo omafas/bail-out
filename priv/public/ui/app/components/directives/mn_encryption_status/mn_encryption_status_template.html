@@ -1,0 +1,14 @@
+<ul>
+  <li>Encryption Status: {{vm.getStatusLabel(vm.encryptionInfo.dataStatus)}}</li>
+  <li>DEK Number: {{vm.encryptionInfo.dekNumber}}</li>
+  <li>Oldest DEK Creation Time:
+    <span class="semi-bold nowrap">{{vm.encryptionInfo.oldestDekCreationDatetime | date: 'mediumTime'}}</span>
+    <span>{{vm.encryptionInfo.oldestDekCreationDatetime | date: 'd MMM, y'}}</span>
+    <span ng-if="vm.encryptionInfo.oldestDekCreationDatetime" class="text-finer grayblack-2" style="line-height: 1.25;">
+      <span class="block">Date-times are displayed in browser local time:</span>
+      <span class="block margin-left-quarter"><strong>{{vm.mnTimezoneDetailsServiceDowngrade.getLocalTimezoneLabel()}}</strong> {{vm.mnTimezoneDetailsServiceDowngrade.getLocalGMTString()}}</span>
+      <span class="block">Server timezone offset is {{vm.mnTimezoneDetailsServiceDowngrade.getServerGMTOffset(vm.encryptionInfo.oldestDekCreationDatetime)}}</span>
+    </span>
+  </li>
+  <li>Encryption Issues: {{vm.hasIssues() ? vm.encryptionInfo.issues.join(', ') : 'no issues'}}</li>
+</ul>
