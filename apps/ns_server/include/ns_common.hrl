@@ -356,7 +356,7 @@
 -define(SERVERLESS_PROFILE, serverless).
 -define(SERVERLESS_PROFILE_STR, "serverless").
 -define(PROVISIONED_PROFILE_STR, "provisioned").
--define(COLUMNAR_PROFILE_STR, "columnar").
+-define(ANALYTICS_PROFILE_STR, "analytics").
 
 %% Default profile macros/constants
 %% DEFAULT_PROFILE_STR is provided by rebar.config at build time

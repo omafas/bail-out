@@ -355,7 +355,8 @@ apply_prod_compat_module(Fun, Args, Default) ->
         ?DEFAULT_PROD_NAME ->
             Default;
         Prod ->
-            Module = list_to_atom(string:lowercase(Prod) ++ "_prod_compat"),
+            Prod2 = string:replace(string:lowercase(Prod), " ", "_", all),
+            Module = list_to_atom(lists:flatten(Prod2) ++ "_prod_compat"),
             apply(Module, Fun, Args)
     end.
 

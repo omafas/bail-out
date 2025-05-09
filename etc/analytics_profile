@@ -1,5 +1,5 @@
-{name, "columnar"}.
-{prod_name, "Columnar"}.
+{name, "analytics"}.
+{prod_name, "Enterprise Analytics"}.
 {prod_compat_version, "@COLUMNAR_COMPAT_VERSION@"}.
 {prod_min_supported_version, "@MIN_SUPPORTED_COLUMNAR_COMPAT_VERSION@"}.
 {{couchdb, disabled}, true}.

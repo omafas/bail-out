@@ -2075,35 +2075,39 @@ community_allowed_topologies_test() ->
                  [[kv],[index,kv,n1ql],[fts,index,kv,n1ql]]),
     config_profile:unmock_default_profile(ok).
 
--define(COLUMNAR_PROD_NAME, "Columnar").
+-define(ANALYTICS_PROD_NAME, "Enterprise Analytics").
+-define(ANALYTICS_COMPAT_VERSION, "1.2.3").
+-define(ANALYTICS_MIN_COMPAT_VERSION, "1.0.0").
 
-check_product_compatibility_test() ->
+check_enterprise_analytics_product_compatibility_test() ->
     %% Test to help catch changes in product compatibility that don't
     %% maintain backwards compatibility
     meck:new(config_profile, [passthrough]),
     try
-        meck:expect(config_profile, get,
-                    fun () ->
-                            [
-                             {name, ?COLUMNAR_PROFILE_STR},
-                             {prod_name, ?COLUMNAR_PROD_NAME},
-                             {prod_compat_version, "1.2.3"},
-                             {prod_min_supported_version, "1.0.0"}
-                            ]
-                    end),
+        meck:expect(
+          config_profile, get,
+          fun () ->
+                  [
+                   {name, ?ANALYTICS_PROFILE_STR},
+                   {prod_name, ?ANALYTICS_PROD_NAME},
+                   {prod_compat_version, ?ANALYTICS_COMPAT_VERSION},
+                   {prod_min_supported_version,
+                    ?ANALYTICS_MIN_COMPAT_VERSION}
+                  ]
+          end),
         ?assertEqual(
            check_product_compatibility(
              "node",
              <<"1.5.9-1234-columnar">>,
-             [{<<"prodName">>, <<?COLUMNAR_PROD_NAME>>},
-              {<<"prodCompatVersion">>, <<"1.2.3">>}]),
+             [{<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
+              {<<"prodCompatVersion">>, <<?ANALYTICS_COMPAT_VERSION>>}]),
            ok),
         ?assertEqual(
            check_product_compatibility(
              "node",
              <<"1.2.3-1234-columnar">>,
-             [{<<"prodName">>, <<?COLUMNAR_PROD_NAME>>},
-              {<<"prodCompatVersion">>, <<"1.0.0">>}]),
+             [{<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
+              {<<"prodCompatVersion">>, <<?ANALYTICS_MIN_COMPAT_VERSION>>}]),
            ok),
         ?assertEqual(
            check_product_compatibility(
@@ -2111,26 +2115,28 @@ check_product_compatibility_test() ->
              <<"8.0.0-1234-enterprise">>,
              [{<<"prodName">>, <<?DEFAULT_PROD_NAME>>}]),
            {error,incompatible_product,
-            <<"Couchbase Server nodes are not compatible with Columnar"
-              " nodes">>}),
+            <<?DEFAULT_PROD_NAME, " nodes are not compatible with ",
+              ?ANALYTICS_PROD_NAME, " nodes">>}),
         ?assertEqual(
            check_product_compatibility(
              "old_node",
              <<"0.0.5-1234-columnar">>,
-             [{<<"prodName">>, <<?COLUMNAR_PROD_NAME>>},
+             [{<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
               {<<"prodCompatVersion">>, <<"0.0.5">>}]),
            {error,incompatible_cluster_version,
-            <<"Joining 0.0.5 Columnar node old_node is not supported. Upgrade"
-              " node to version 1.0.0 or greater and retry.">>}),
+            <<"Joining 0.0.5 ", ?ANALYTICS_PROD_NAME, " node old_node is not"
+              " supported. Upgrade node to version ",
+              ?ANALYTICS_MIN_COMPAT_VERSION, " or greater and retry.">>}),
         ?assertEqual(
            check_product_compatibility(
              "new_node",
              <<"9.9.9-1234-columnar">>,
-             [{<<"prodName">>, <<?COLUMNAR_PROD_NAME>>},
+             [{<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
               {<<"prodCompatVersion">>, <<"9.0.0">>}]),
            {error,incompatible_cluster_version,
-            <<"Joining 9.0.0 Columnar node new_node is not supported. The"
-              " maximum supported version of this node is 1.2.3.">>})
+            <<"Joining 9.0.0 ", ?ANALYTICS_PROD_NAME, " node new_node is not"
+              " supported. The maximum supported version of this node is ",
+              ?ANALYTICS_COMPAT_VERSION, ".">>})
     after
         meck:unload(config_profile)
     end.

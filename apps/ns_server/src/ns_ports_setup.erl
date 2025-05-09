@@ -621,13 +621,7 @@ goport_args(eventing, Config, _Cmd, NodeUUID) ->
 
 goport_args(cbas, Config, Cmd, NodeUUID) ->
     Columnar = config_profile:search({cbas, columnar}, false),
-    CBASDir = case Columnar of
-        true ->
-            "@columnar";
-        false ->
-            "@analytics"
-    end,
-    CBASDirs = [filename:join([Token], CBASDir) ||
+    CBASDirs = [filename:join([Token],  "@analytics") ||
                    Token <- ns_storage_conf:this_node_cbas_dirs()],
     case misc:ensure_writable_dirs(CBASDirs) of
         ok ->

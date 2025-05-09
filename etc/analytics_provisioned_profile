@@ -1,5 +1,5 @@
-{name, "columnar_provisioned"}.
-{prod_name, "Columnar"}.
+{name, "analytics_provisioned"}.
+{prod_name, "Enterprise Analytics"}.
 {prod_compat_version, "@COLUMNAR_COMPAT_VERSION@"}.
 {prod_min_supported_version,
     "@MIN_SUPPORTED_COLUMNAR_PROVISIONED_COMPAT_VERSION@"}.

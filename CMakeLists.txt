@@ -163,7 +163,7 @@ ADD_CUSTOM_TARGET (ns_dataclean
   VERBATIM)
 
 IF (BUILD_COLUMNAR)
-  SET (DEFAULT_PROFILE "columnar")
+  SET (DEFAULT_PROFILE "analytics")
 ELSE (BUILD_COLUMNAR)
   SET (DEFAULT_PROFILE "default")
 ENDIF (BUILD_COLUMNAR)
@@ -417,9 +417,9 @@ CONFIGURE_FILE (etc/static_config.in "${_etcdir}/couchbase/static_config" @ONLY)
 
 # Config profiles
 IF (BUILD_COLUMNAR)
-  # The columnar profile is the default profile for columnar builds
-  CONFIGURE_FILE (etc/columnar_profile "${_etcdir}/couchbase/columnar_profile" @ONLY)
-  CONFIGURE_FILE (etc/columnar_provisioned_profile "${_etcdir}/couchbase/columnar_provisioned_profile" @ONLY)
+  # The analytics profile is the default profile for enterprise analytics builds
+  CONFIGURE_FILE (etc/analytics_profile "${_etcdir}/couchbase/analytics_profile" @ONLY)
+  CONFIGURE_FILE (etc/analytics_provisioned_profile "${_etcdir}/couchbase/analytics_provisioned_profile" @ONLY)
 ELSE (BUILD_COLUMNAR)
   CONFIGURE_FILE (etc/default_profile "${_etcdir}/couchbase/default_profile" @ONLY)
   CONFIGURE_FILE (etc/serverless_profile "${_etcdir}/couchbase/serverless_profile" @ONLY)

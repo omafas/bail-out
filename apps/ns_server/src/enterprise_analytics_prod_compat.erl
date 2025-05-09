@@ -7,7 +7,7 @@
 %% will be governed by the Apache License, Version 2.0, included in the file
 %% licenses/APL2.txt.
 
--module(columnar_prod_compat).
+-module(enterprise_analytics_prod_compat).
 
 -include_lib("ns_common/include/cut.hrl").
 -include("ns_common.hrl").
@@ -90,7 +90,7 @@ get_product_pretend_version() ->
 
 -ifdef(TEST).
 %% should be kept in-sync with columnar profiles.
--define(COLUMNAR_PROD_NAME, "Columnar").
+-define(ANALYTICS_PROD_NAME, "Enterprise Analytics").
 
 compare_prod_compat_version_test_() ->
     [?_assertEqual(equal,
@@ -108,12 +108,12 @@ parse_ionic_version_test() ->
         meck:expect(config_profile, get,
                     fun () ->
                             [
-                             {name, ?COLUMNAR_PROFILE_STR},
-                             {prod_name, ?COLUMNAR_PROD_NAME}
+                             {name, ?ANALYTICS_PROFILE_STR},
+                             {prod_name, ?ANALYTICS_PROD_NAME}
                             ]
                     end),
         ?assertEqual(
-           {?COLUMNAR_PROD_NAME, <<"1.0.5">>},
+           {?ANALYTICS_PROD_NAME, <<"1.0.5">>},
            parse_ionic_version(<<"1.0.5-1234-columnar">>)),
         ?assertEqual({undefined, undefined},
                      parse_ionic_version(<<"7.6.0-1234-enterprise">>))
@@ -125,21 +125,22 @@ is_compatible_product_test() ->
     meck:new(config_profile, [passthrough]),
     try
         meck:expect(config_profile, get,
-            fun () ->
-                ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
-            end),
-        false = cluster_compat_mode:is_compatible_product(?COLUMNAR_PROD_NAME),
+                    fun () ->
+                            ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                    end),
+        false =
+            cluster_compat_mode:is_compatible_product(?ANALYTICS_PROD_NAME),
         meck:expect(config_profile, get,
-            fun () ->
-                [
-                    {name, ?COLUMNAR_PROFILE_STR},
-                    {prod_name, ?COLUMNAR_PROD_NAME}
-                ]
-            end),
+                    fun () ->
+                            [
+                             {name, ?ANALYTICS_PROFILE_STR},
+                             {prod_name, ?ANALYTICS_PROD_NAME}
+                            ]
+                    end),
         false = cluster_compat_mode:is_compatible_product("Wombat"),
         false = cluster_compat_mode:is_compatible_product(undefined),
         false = cluster_compat_mode:is_compatible_product(?DEFAULT_PROD_NAME),
-        true = cluster_compat_mode:is_compatible_product(?COLUMNAR_PROD_NAME)
+        true = cluster_compat_mode:is_compatible_product(?ANALYTICS_PROD_NAME)
     after
         meck:unload(config_profile)
     end.

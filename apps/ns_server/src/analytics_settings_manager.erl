@@ -156,5 +156,5 @@ config_upgrade_test() ->
                    "\"analytics.settings.blob_storage_scheme\":\"\"}">>,
                  Data),
     config_profile:unmock_default_profile(ok).
-    %% TODO: add upgrade test w/ columnar profile
+    %% TODO: add upgrade test w/ analytics profile
 -endif.
