@@ -60,7 +60,7 @@ licenses/APL2.txt.
         <strong>Storage Backend: </strong>
         {{storageBackend | async}}
       </div>
-      <div class="nowrap" *ngIf="bucket.bucketType === 'membase'">
+      <div class="nowrap" *ngIf="bucket.bucketType === 'membase' || bucket.bucketType === 'ephemeral'">
         <strong>#vbuckets: </strong>
         {{numVBuckets | async}}
       </div>
