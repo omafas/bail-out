@@ -137,7 +137,6 @@ default(Vsn) ->
     ok = misc:mkdir_p(BreakpadMinidumpDir),
 
     IsEnterprise = init_is_enterprise(),
-    IsColumnar = config_profile:search({cbas, columnar}, false),
     SASLAuthdEnabled = init_saslauthd_enabled(),
     JeMallocConfDefault = je_malloc_conf_default(),
 
@@ -155,7 +154,6 @@ default(Vsn) ->
     [{{node, node(), config_version}, get_current_version()},
      {directory, path_config:component_path(data, "config")},
      {{node, node(), is_enterprise}, IsEnterprise},
-     {{node, node(), is_columnar}, IsColumnar},
      {{node, node(), saslauthd_enabled}, SASLAuthdEnabled},
      {index_aware_rebalance_disabled, false},
      {max_bucket_count, config_profile:get_value(max_buckets_supported,

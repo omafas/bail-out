@@ -2075,7 +2075,6 @@ community_allowed_topologies_test() ->
                  [[kv],[index,kv,n1ql],[fts,index,kv,n1ql]]),
     config_profile:unmock_default_profile(ok).
 
--define(ANALYTICS_PROD_NAME, "Enterprise Analytics").
 -define(ANALYTICS_COMPAT_VERSION, "1.2.3").
 -define(ANALYTICS_MIN_COMPAT_VERSION, "1.0.0").
 

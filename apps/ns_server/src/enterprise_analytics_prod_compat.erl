@@ -89,9 +89,6 @@ get_product_pretend_version() ->
     end.
 
 -ifdef(TEST).
-%% should be kept in-sync with columnar profiles.
--define(ANALYTICS_PROD_NAME, "Enterprise Analytics").
-
 compare_prod_compat_version_test_() ->
     [?_assertEqual(equal,
                    compare_prod_compat_version("1.2.3", "1.2.3")),

@@ -31,8 +31,6 @@
          is_version_morpheus/1,
          is_enterprise/0,
          is_enterprise/1,
-         is_columnar/0,
-         is_columnar/1,
          is_saslauthd_enabled/0,
          is_cbas_enabled/0,
          supported_compat_version/0,
@@ -160,12 +158,6 @@ is_enterprise(Config) ->
 
 is_enterprise() ->
     ns_config:read_key_fast({node, node(), is_enterprise}, false).
-
-is_columnar(Config) ->
-    ns_config:search(Config, {node, node(), is_columnar}, false).
-
-is_columnar() ->
-    ns_config:read_key_fast({node, node(), is_columnar}, false).
 
 is_saslauthd_enabled() ->
     is_enterprise() andalso
@@ -445,7 +437,7 @@ tls_supported() ->
     is_enterprise().
 
 is_goxdcr_enabled() ->
-    not is_columnar().
+    not config_profile:search({goxdcr, disabled}, false).
 
 -ifdef(TEST).
 mb_master_advertised_version_test() ->

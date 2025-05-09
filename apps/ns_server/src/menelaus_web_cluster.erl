@@ -133,7 +133,7 @@ cluster_init_validators(Config, Snapshot) ->
     menelaus_web_queries:cluster_init_validators() ++
     menelaus_web_node:node_encryption_validators() ++
     menelaus_web_settings:settings_web_post_validators() ++
-    menelaus_web_columnar:cluster_init_validators() ++
+    menelaus_web_analytics:cluster_init_validators() ++
     [menelaus_web_indexes:validate_storage_mode(indexerStorageMode, _),
      validator:token_list(allowedHosts, ",", _),
      validator:convert(allowedHosts,

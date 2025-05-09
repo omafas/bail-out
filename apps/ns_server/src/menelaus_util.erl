@@ -70,7 +70,6 @@
          handle_streaming/3,
          assert_is_enterprise/0,
          assert_is_enterprise/1,
-         assert_is_columnar/0,
          assert_is_dev_preview/0,
          assert_profile_flag/2,
          assert_is_76/0,
@@ -753,11 +752,6 @@ assert_is_enterprise(ParamName) ->
     assert(fun cluster_compat_mode:is_enterprise/0,
            [param_error_prefix(ParamName), "enterprise edition"],
            [{"X-enterprise-edition-needed", 1}]).
-
-assert_is_columnar() ->
-    assert(fun cluster_compat_mode:is_columnar/0,
-           "This http API endpoint requires Columnar",
-           [{"X-columnar-needed", 1}]).
 
 assert_is_dev_preview() ->
     assert(fun cluster_compat_mode:is_developer_preview/0,

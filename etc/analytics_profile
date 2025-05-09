@@ -3,6 +3,7 @@
 {prod_compat_version, "@COLUMNAR_COMPAT_VERSION@"}.
 {prod_min_supported_version, "@MIN_SUPPORTED_COLUMNAR_COMPAT_VERSION@"}.
 {{couchdb, disabled}, true}.
+{{goxdcr, disabled}, true}.
 {{cbas, columnar}, true}.
 {{cbas, enable_blob_storage}, true}.
 {{cbas, skip_blob_storage_validation}, false}.

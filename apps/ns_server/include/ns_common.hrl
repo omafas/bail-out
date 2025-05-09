@@ -272,6 +272,8 @@
 -define(MASTER_ADVERTISED_VERSION, [8, 0, 0]).
 
 -define(DEFAULT_PROD_NAME, "Couchbase Server").
+%% This needs to be kept in sync with 'prodName' in the analytics profiles
+-define(ANALYTICS_PROD_NAME, "Enterprise Analytics").
 
 -define(MIN_OF_MAX_MOVES_PER_NODE, 1).
 -define(MAX_OF_MAX_MOVES_PER_NODE, 64).
