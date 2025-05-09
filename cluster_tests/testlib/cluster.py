@@ -627,6 +627,9 @@ class Cluster:
         r = testlib.get_succ(self, f'/pools/default/b/{bucket}')
         return r.json()['uuid']
 
+    def get_buckets(self):
+        r = testlib.get_succ(self, f'/pools/default/buckets')
+        return r.json()
 
 def get_services_string(services: List[Service]):
     return ",".join(services_to_strings(services))

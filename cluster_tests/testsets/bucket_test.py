@@ -7,15 +7,13 @@
 # will be governed by the Apache License, Version 2.0, included in the file
 # licenses/APL2.txt.
 import string
-import sys
 import random
-import time
 import collections
 import itertools
 import traceback
 
-import requests
 import testlib
+from testlib.util import Service
 
 """
 How to add a new test for a new parameter, param:
@@ -2399,3 +2397,161 @@ class MultiNodeBucketTestSet(BucketTestSetBase):
                         allowed_time_period=[False],
                         just_validate=[True, False],
                         is_creation=[True, False])
+
+# should NOT require a rebalance after creating an empty bucket
+class NewBucketWithUnbalancedServerGroups(testlib.BaseTestSet):
+    def __init__(self, cluster):
+        super().__init__(cluster)
+
+    @staticmethod
+    def requirements():
+        # ensure we set vbuckets to 1024 since the higher the number of vbuckets
+        # the more likely we are to hit this issue with the server groups.
+        return testlib.ClusterRequirements(num_nodes=4, num_connected=4,
+                                           num_vbuckets=1024,
+                                           services=[Service.KV])
+
+    def setup(self):
+        pass
+
+    def teardown(self):
+        pass
+
+    def test_teardown(self):
+        self.move_nodes_back()
+        for bucket in self.cluster.get_buckets():
+            self.cluster.delete_bucket(bucket["name"])
+
+        latest_groups = self.get_server_groups()
+        for count, g in enumerate(latest_groups["groups"]):
+            if g["name"] == "Group 1":
+                latest_groups["groups"].pop(count)
+
+        for g in latest_groups["groups"]:
+            self.delete_server_group(g["uri"])
+
+    def create_server_groups(self, start=0, end=5):
+        for j in range(start, end):
+            data = {"name": f"{j}".encode()}
+            r = testlib.post_succ(self.cluster, "/pools/default/serverGroups",
+                                  data=data)
+            assert r.json() == []
+
+        create_groups_resp = self.get_server_groups()
+        rev = self.extract_rev(create_groups_resp)
+        group_name_uri = {}
+        for group in create_groups_resp["groups"]:
+            group_name_uri[group["name"]] = group["uri"]
+
+        return group_name_uri, rev
+
+    def get_server_groups(self):
+        return testlib.get_succ(self.cluster,
+                                "/pools/default/serverGroups").json()
+
+    def move_nodes_to_server_groups(self, name_uri_map, node_maps, rev):
+        groups = []
+        for key, value in name_uri_map.items():
+            groups.append({"name": key,
+                           "uri": value,
+                           "nodes": [{"otpNode": n} for n in node_maps[key]]})
+
+        testlib.put_succ(self.cluster, f"/pools/default/serverGroups?rev={rev}",
+                         json={"groups": groups})
+        return groups
+
+    def is_cluster_balanced(self):
+        pools = testlib.get_succ(self.cluster, "/pools/default").json()
+        return pools["balanced"]
+
+    def delete_server_group(self, server_group):
+        return testlib.delete_succ(self.cluster, f"{server_group}")
+
+    @staticmethod
+    def extract_rev(group_response):
+        return group_response["uri"].split("=")[1]
+
+    def move_nodes_back(self):
+        groups = self.get_server_groups()
+        rev = self.extract_rev(groups)
+        num_groups = len(groups["groups"])
+
+        single_group_map = {"Group 1":
+                          [self.cluster.connected_nodes[0].otp_node(),
+                           self.cluster.connected_nodes[2].otp_node(),
+                           self.cluster.connected_nodes[3].otp_node(),
+                           self.cluster.connected_nodes[1].otp_node()]}
+
+        for i in range(2, num_groups+1):
+            single_group_map[str(i)] = []
+
+        name_uri_mapping = {}
+        for group in groups["groups"]:
+            name_uri_mapping[group["name"]] = group["uri"]
+
+        return self.move_nodes_to_server_groups(name_uri_mapping,
+                                                single_group_map,
+                                                rev)
+
+    def create_couchstore_bucket_test(self):
+        bucket_name = "test1"
+        groups, rev = self.create_server_groups(2, 7)
+        nodes_maps = {"Group 1": [],
+                      "2": [self.cluster.connected_nodes[0].otp_node()],
+                      "3": [self.cluster.connected_nodes[2].otp_node(),
+                            self.cluster.connected_nodes[3].otp_node(),
+                            self.cluster.connected_nodes[1].otp_node()],
+                      "4": [],
+                      "5": [],
+                      "6": []}
+
+        self.move_nodes_to_server_groups(groups, nodes_maps, rev)
+        data = {"name": bucket_name,
+                "storageBackend": "couchstore",
+                "ramQuota": 256}
+        self.cluster.create_bucket(data, sync=True)
+        assert self.is_cluster_balanced()
+
+    def create_buckets_randomized_groups_test(self):
+        bucket_name = "test2"
+        low, high = 2, random.randint(3, 20)
+        actual_highest = high - 1
+        groups, rev = self.create_server_groups(low, high)
+        all_nodes = [self.cluster.connected_nodes[0].otp_node(),
+                     self.cluster.connected_nodes[1].otp_node(),
+                     self.cluster.connected_nodes[2].otp_node(),
+                     self.cluster.connected_nodes[3].otp_node()]
+
+        output = []
+        for i in range(low, actual_highest):
+            if all_nodes:
+                taken = list(set(
+                    random.choices(all_nodes, k=random.randint(0, 3))))
+                for t in taken:
+                    all_nodes.remove(t)
+                output.append({"name": str(i),
+                               "nodes": [{"otpNode": n} for n in taken],
+                               "uri": groups[str(i)]})
+            else:
+                output.append({"name": str(i),
+                               "nodes": [],
+                               "uri": groups[str(i)]})
+
+        # any remaining? put them at the end
+        output.append({"name": str(actual_highest),
+                       "nodes": [{"otpNode": n} for n in all_nodes],
+                       "uri": groups[str(actual_highest)]})
+
+        output.append({"name": "Group 1",
+                       "nodes": [],
+                       "uri": groups["Group 1"]})
+
+        out = testlib.put_succ(self.cluster,
+                               f"/pools/default/serverGroups?rev={rev}",
+                               json={"groups": output})
+        assert out.json() == []
+        data = {"name": bucket_name,
+                "storageBackend": "couchstore",
+                "ramQuota": 256}
+        self.cluster.create_bucket(data, sync=True)
+        assert self.is_cluster_balanced()
