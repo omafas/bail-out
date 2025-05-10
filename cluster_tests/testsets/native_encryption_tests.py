@@ -777,8 +777,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         ids = get_key_list(node, '{bucketDek, \'' + self.bucket_name + '\'}')
         print(ids)
         unknown_id = 'unknown'
-        res = run_dump_bucket_deks(node, ['--bucket', self.bucket_name,
-                                          '--key-ids', unknown_id] + ids)
+        res = run_dump_bucket_deks(node, ['--key-ids', unknown_id] + ids)
 
         verify_key_presense_in_dump_key_response(res, ids, [unknown_id])
 
@@ -793,7 +792,6 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         wrong_password = testlib.random_str(8)
         error = run_dump_bucket_deks(node,
                                      ['-p', wrong_password,
-                                      '--bucket', self.bucket_name,
                                       '--key-ids', unknown_id] + ids,
                                      expected_return_code=2)
         assert error == 'Incorrect master password\n', \
@@ -802,8 +800,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         # Make sure incorrect args don't lead to exit code 2 (used to be
         # the case), so it is not mixed with incorrect password
         run_dump_bucket_deks(node,
-                             ['-p', wrong_password,
-                              '--bucket', self.bucket_name],
+                             ['-p', wrong_password],
                              expected_return_code=1)
 
     def config_dek_automatic_rotation_test(self):

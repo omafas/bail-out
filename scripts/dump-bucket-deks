@@ -30,16 +30,21 @@ def main():
         elif args.stdin_password:
             password = input()
 
-        if args.bucket is not None:
-            ids_map = {os.path.join(args.bucket, "deks", key_id): key_id \
+        if args.bucket_uuid is not None:
+            ids_map = {os.path.join(args.bucket_uuid, "deks", key_id): key_id \
                                                     for key_id in args.key_ids}
             key_specs = [{'type': 'keyId',
                           'kind': 'bucketDek',
                           'id': key} for key in ids_map]
-        else:
+        elif args.key_dir is not None:
             ids_map = {key_id: key_id for key_id in args.key_ids}
             key_specs = [{'type': 'keyPath',
                           'path': os.path.join(args.key_dir, key_id),
+                          'id': key_id} for key_id in args.key_ids]
+        else:
+            ids_map = {key_id: key_id for key_id in args.key_ids}
+            key_specs = [{'type': 'searchDekKind',
+                          'kind': 'bucketDek',
                           'id': key_id} for key_id in args.key_ids]
 
         res = gosecrets_client_lib.read_keys(
@@ -58,13 +63,17 @@ def parse_args():
     arg_parser.add_argument('--config', '-c', type=str,
                             metavar='<gosecrets_config_path>',
                             help='path to gosecrets config', required=True)
-    group = arg_parser.add_mutually_exclusive_group(required=True)
+    group = arg_parser.add_mutually_exclusive_group()
     group.add_argument('--key-dir', '-w', type=str,
                        metavar='<directory_with_keys>',
                        help='directory to search for bucket keys')
     group.add_argument('--bucket', '-b', type=str,
                        metavar='<bucket_name>',
-                       help='bucket name')
+                       help='bucket name (not supported, use --bucket-uuid '
+                            'instead or just drop it)')
+    group.add_argument('--bucket-uuid', '-u', type=str,
+                       metavar='<bucket_uuid>',
+                       help='bucket uuid')
     pass_group = arg_parser.add_mutually_exclusive_group(required=False)
     pass_group.add_argument('--password', '-p', nargs='?',
                             action=PasswordAction,

@@ -767,13 +767,67 @@ func (state *StoredKeysState) readKey(name, kind string, validateProof bool, ctx
 	}
 	keyIface, _, proof, err := readKeyRaw(keySettings, name)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read key %s: %s", name, err.Error())
+		// It is important to not strip ErrKeyNotFound here
+		return nil, fmt.Errorf("failed to read key %s: %w", name, err)
 	}
 	err = state.decryptKey(keyIface, validateProof, proof, ctx)
 	if err != nil {
 		return nil, err
 	}
 	return keyIface, nil
+}
+
+func (state *StoredKeysState) searchKey(keyKind, keyId string, ctx *storedKeysCtx) (storedKeyIface, error) {
+	for _, cfg := range ctx.storedKeyConfigs {
+		if (keyKind == cfg.KeyKind) || (keyKind == "") {
+			if cfg.KeyKind == "bucketDek" {
+				dirs, err := filepath.Glob(filepath.Join(cfg.Path, "*"))
+				if err != nil {
+					logDbg("Failed to read dir list using wildcard %s: %s", cfg.Path, err.Error())
+					return nil, err
+				}
+				logDbg("searching in buckets dirs:%v", dirs)
+				for _, dir := range dirs {
+					fileInfo, err := os.Stat(dir)
+					if err != nil || !fileInfo.IsDir() {
+						logDbg("skipping non-dir %s", dir)
+						continue
+					}
+					baseDir := filepath.Base(dir)
+					if baseDir[0] == '.' || baseDir[0] == '@' {
+						logDbg("skipping dir %s", baseDir)
+						continue
+					}
+					keyName := filepath.Join(baseDir, "deks", keyId)
+					keyIface, err := state.readKey(keyName, cfg.KeyKind, true, ctx)
+					var keyNotFoundErr ErrKeyNotFound
+					if errors.As(err, &keyNotFoundErr) {
+						logDbg("skipping %s - key %s not present", baseDir, keyId)
+						continue
+					}
+
+					if err != nil {
+						return nil, err
+					}
+					return keyIface, nil
+				}
+			} else {
+				logDbg("searching in %s", cfg.Path)
+				keyIface, err := state.readKey(keyId, cfg.KeyKind, true, ctx)
+				var keyNotFoundErr ErrKeyNotFound
+				if errors.As(err, &keyNotFoundErr) {
+					logDbg("key %s not found in %s", keyId, cfg.Path)
+					continue
+				}
+
+				if err != nil {
+					return nil, err
+				}
+				return keyIface, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("key %s not found", keyId)
 }
 
 func (state *StoredKeysState) encryptKey(keyIface storedKeyIface, ctx *storedKeysCtx) error {

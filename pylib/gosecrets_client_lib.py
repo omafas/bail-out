@@ -15,6 +15,7 @@ import subprocess
 import base64
 from installed_script_helpers import basedir, find_binary
 import json
+import signal
 
 
 global_debug_on = False
@@ -55,6 +56,10 @@ def read_keys(key_specs, config_path, gosecrets_path=None,
                 send_command(proc, 'read_key_file', spec['path'])
             elif spec['type'] == 'keyId':
                 send_command(proc, 'read_key', spec['kind'], spec['id'])
+            elif spec['type'] == 'searchDekKind':
+                send_command(proc, 'search_key', spec['kind'], spec['id'])
+            elif spec['type'] == 'search':
+                send_command(proc, 'search_key', '', spec['id'])
             else:
                 raise BadArg(f'unknown key spec type: {spec["type"]}')
 
@@ -84,7 +89,7 @@ def terminate_gosecrets(proc):
     try:
         output, _ = proc.communicate(timeout=5)
         code = proc.returncode
-        if code != 0:
+        if code != 0 and code != -int(signal.SIGTERM):
             debug(f'Gosecrets exited with unexpected code: {code}')
             debug(f'Gosecrets output: {output}')
     except subprocess.TimeoutExpired:
@@ -100,6 +105,8 @@ def send_command(proc, cmd, *args):
         data = encode_read_key(*args)
     elif cmd == 'read_key_file':
         data = encode_read_key_file(*args)
+    elif cmd == 'search_key':
+        data = encode_search_key(*args)
     else:
         raise ValueError
     debug(f'<== {cmd} {args}')
@@ -173,6 +180,12 @@ def encode_read_key(key_usage, key_name):
 
 def encode_read_key_file(key_file):
     return encode_msg(b'\x10' + encode_msg(key_file.encode()))
+
+
+def encode_search_key(key_kind, key_name):
+    return encode_msg(bytes([24]) +
+                      encode_msg(key_kind.encode()) +
+                      encode_msg(key_name.encode()))
 
 
 def encode_msg(msg):

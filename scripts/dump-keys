@@ -29,13 +29,16 @@ def main():
         elif args.stdin_password:
             password = input()
 
-        if args.key_kind is not None:
-            key_specs = [{'type': 'keyId',
+        if args.key_dir is not None:
+            key_specs = [{'type': 'keyPath',
+                          'path': os.path.join(args.key_dir, key_id),
+                          'id': key_id} for key_id in args.key_ids]
+        elif args.key_kind is not None:
+            key_specs = [{'type': 'searchDekKind',
                           'kind': args.key_kind,
                           'id': key_id} for key_id in args.key_ids]
         else:
-            key_specs = [{'type': 'keyPath',
-                          'path': os.path.join(args.key_dir, key_id),
+            key_specs = [{'type': 'search',
                           'id': key_id} for key_id in args.key_ids]
 
         res = gosecrets_client_lib.read_keys(
@@ -54,7 +57,7 @@ def parse_args():
     arg_parser.add_argument('--config', '-c', type=str,
                             metavar='<gosecrets_config_path>',
                             help='path to gosecrets config', required=True)
-    group = arg_parser.add_mutually_exclusive_group(required=True)
+    group = arg_parser.add_mutually_exclusive_group()
     group.add_argument('--key-kind', '-u', type=str,
                        metavar='<key_kind>',
                        help='bucketDek, configDek, kek, etc...')

@@ -277,6 +277,8 @@ func (s *encryptionService) processCommand() {
 		s.cmdVerifyMac(data)
 	case 23:
 		s.cmdRevalidateKeyCache()
+	case 24:
+		s.cmdSearchKey(data)
 	default:
 		panic(fmt.Sprintf("Unknown command %v", command))
 	}
@@ -894,6 +896,19 @@ func (s *encryptionService) cmdVerifyMac(data []byte) {
 func (s *encryptionService) cmdRevalidateKeyCache() {
 	s.storedKeysState.revalidateKeyCache(s.newStoredKeyCtx())
 	replySuccess()
+}
+
+func (s *encryptionService) cmdSearchKey(data []byte) {
+	keyKind, data := readBigField(data)
+	keyName, _ := readBigField(data)
+	keyKindStr := string(keyKind)
+	keyNameStr := string(keyName)
+	keyIface, err := s.storedKeysState.searchKey(keyKindStr, keyNameStr, s.newStoredKeyCtx())
+	if err != nil {
+		replyError(err.Error())
+		return
+	}
+	replyReadKey(keyIface)
 }
 
 func replyReadKey(keyIface storedKeyIface) {
