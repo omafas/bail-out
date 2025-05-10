@@ -744,34 +744,82 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         set_cfg_encryption(node, 'nodeSecretManager', -1)
         update_secret(node, secret_id, secret)
 
-    def dump_keks_test(self):
-        secret = auto_generated_secret()
-        node = self.random_node()
+    def dump_keys_utilities_test(self):
+        secret = auto_generated_secret(usage=['bucket-encryption',
+                                              'config-encryption'])
+        node = random.choice(kv_nodes(self.cluster))
         secret_id = create_secret(node, secret)
         n = 5
         for i in range(n):
             rotate_secret(node, secret_id)
 
-        ids = get_all_kek_ids(node, secret_id)
-        testlib.assert_eq(len(ids), n + 1)
-        unknown_id = 'unknown'
-        res = run_dump_keys(node, ['--key-kind', 'kek', \
-                                   '--key-ids', unknown_id] + ids)
+        kek_ids = get_all_kek_ids(node, secret_id)
+        testlib.assert_eq(len(kek_ids), n + 1)
 
-        verify_key_presense_in_dump_key_response(res, ids, [unknown_id])
+        bucket_props = {'name': self.bucket_name,
+                        'ramQuota': 100,
+                        'encryptionAtRestKeyId': secret_id}
+        self.cluster.create_bucket(bucket_props, sync=True)
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
+        bucket_dek_ids = \
+            get_key_list(node, '{bucketDek, <<"' + bucket_uuid + '">>}')
+        assert len(bucket_dek_ids) > 0, \
+                f'no deks found for bucket {self.bucket_name}'
+        print(bucket_dek_ids)
+
+        unknown_id = 'unknown'
+
+        all_ids = [unknown_id] + kek_ids + bucket_dek_ids
+
+        ## Test dump-keys:
+        res = run_dump_keys(node, ['--key-kind', 'kek', \
+                                   '--key-ids'] + all_ids)
+        verify_key_presense_in_dump_key_response(res, kek_ids,
+                                                 [unknown_id] + bucket_dek_ids)
 
         keys_path = Path(node.data_path()) / 'config' / 'keks'
         res = run_dump_keys(node, ['--key-dir', keys_path,
-                                   '--key-ids', unknown_id] + ids)
+                                   '--key-ids'] + all_ids)
+        verify_key_presense_in_dump_key_response(res, kek_ids,
+                                                 [unknown_id] + bucket_dek_ids)
 
-        verify_key_presense_in_dump_key_response(res, ids, [unknown_id])
+        res = run_dump_keys(node, ['--key-ids'] + all_ids)
+        verify_key_presense_in_dump_key_response(res, kek_ids + bucket_dek_ids,
+                                                 [unknown_id])
+
+        res = run_dump_keys(node, ['--key-kind', 'bucketDek',
+                                   '--key-ids'] + all_ids)
+        verify_key_presense_in_dump_key_response(res, bucket_dek_ids,
+                                                 [unknown_id] + kek_ids)
+
+        keys_path = Path(node.data_path()) / 'data' / bucket_uuid / 'deks'
+        res = run_dump_keys(node, ['--key-dir', keys_path,
+                                   '--key-ids'] + all_ids)
+        verify_key_presense_in_dump_key_response(res, bucket_dek_ids,
+                                                 [unknown_id] + kek_ids)
+
+        ## Test dump-bucket-deks:
+        res = run_dump_bucket_deks(node, ['--bucket-uuid', bucket_uuid,
+                                          '--key-ids'] + all_ids)
+        verify_key_presense_in_dump_key_response(res, bucket_dek_ids,
+                                                 [unknown_id] + kek_ids)
+
+        keys_path = Path(node.data_path()) / 'data' / bucket_uuid / 'deks'
+        res = run_dump_bucket_deks(node, ['--key-dir', keys_path,
+                                          '--key-ids'] + all_ids)
+        verify_key_presense_in_dump_key_response(res, bucket_dek_ids,
+                                                 [unknown_id] + kek_ids)
+
+        res = run_dump_bucket_deks(node, ['--key-ids'] + all_ids)
+        verify_key_presense_in_dump_key_response(res, bucket_dek_ids,
+                                                 [unknown_id] + kek_ids)
 
         # Make sure that we return correct code and error in case
         # of wrong password (other utilities can rely on that)
         wrong_password = testlib.random_str(8)
         error = run_dump_keys(node,
                               ['-p', wrong_password, '--key-kind', 'kek', \
-                               '--key-ids', unknown_id] + ids,
+                               '--key-ids'] + all_ids,
                               expected_return_code=2)
         assert error == 'Incorrect master password\n', \
                f'unexpected error: {error}'
@@ -782,33 +830,13 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                       ['-p', wrong_password, '--key-kind', 'kek'],
                        expected_return_code=1)
 
-    def dump_bucket_deks_test(self):
-        secret = auto_generated_secret(usage=['bucket-encryption'])
-        secret_id = create_secret(self.random_node(), secret)
-        bucket_props = {'name': self.bucket_name,
-                        'ramQuota': 100,
-                        'encryptionAtRestKeyId': secret_id}
-        self.cluster.create_bucket(bucket_props, sync=True)
-        node = self.random_node()
-        ids = get_key_list(node, '{bucketDek, \'' + self.bucket_name + '\'}')
-        print(ids)
-        unknown_id = 'unknown'
-        res = run_dump_bucket_deks(node, ['--key-ids', unknown_id] + ids)
-
-        verify_key_presense_in_dump_key_response(res, ids, [unknown_id])
-
-        keys_path = Path(node.data_path()) / 'data' / self.bucket_name / 'deks'
-        res = run_dump_bucket_deks(node, ['--key-dir', keys_path,
-                                          '--key-ids', unknown_id] + ids)
-
-        verify_key_presense_in_dump_key_response(res, ids, [unknown_id])
-
         # making sure that we return correct code and error in case
         # of wrong password (other utilities can rely on that)
         wrong_password = testlib.random_str(8)
         error = run_dump_bucket_deks(node,
                                      ['-p', wrong_password,
-                                      '--key-ids', unknown_id] + ids,
+                                      '--bucket-uuid', bucket_uuid,
+                                      '--key-ids'] + all_ids,
                                      expected_return_code=2)
         assert error == 'Incorrect master password\n', \
                f'unexpected error: {error}'
@@ -816,8 +844,29 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         # Make sure incorrect args don't lead to exit code 2 (used to be
         # the case), so it is not mixed with incorrect password
         run_dump_bucket_deks(node,
-                             ['-p', wrong_password],
+                             ['-p', wrong_password,
+                              '--bucket-uuid', bucket_uuid],
                              expected_return_code=1)
+
+        try:
+            password = change_password(node)
+
+            def verify_dump_keys_with_password():
+                res = run_dump_keys(node, ['-p', password, '--key-ids'] +
+                                          all_ids)
+                verify_key_presense_in_dump_key_response(
+                    res, kek_ids + bucket_dek_ids, [unknown_id])
+
+                res = run_dump_bucket_deks(node, ['-p', password, '--key-ids']
+                                                 + all_ids)
+                verify_key_presense_in_dump_key_response(res, bucket_dek_ids,
+                                                         [unknown_id] + kek_ids)
+
+            testlib.poll_for_condition(
+                verify_dump_keys_with_password,
+                sleep_time=1, timeout=30, retry_on_assert=True)
+        finally:
+            change_password(node, password='')
 
     def config_dek_automatic_rotation_test(self):
         # Enable encryption and set dek rotation int = 1 sec
@@ -1879,6 +1928,7 @@ def run_dump_key_utility(node, name, args, expected_return_code=0):
     all_args = ['--config', gosecrets_cfg_path,
                 '--gosecrets', gosecrets_path] + args
     env = {'PYTHONPATH': pylib_path, "PATH": os.environ['PATH']}
+    print(f'running {utility_path} with {all_args}')
     r = subprocess.run([utility_path] + all_args, capture_output=True, env=env)
     assert r.returncode == expected_return_code, \
            f'{name} returned {r.returncode}\n' \
