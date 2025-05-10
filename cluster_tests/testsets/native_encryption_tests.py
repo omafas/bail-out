@@ -1027,7 +1027,15 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.update_bucket({'name': self.bucket_name,
                                     'encryptionAtRestDekRotationInterval': 1})
 
-        time.sleep(3)
+        # Write some documents to the bucket to make sure that we have
+        # something to re-encrypt with every active DEK, otherwise
+        # new DEKs are not really used and can be removed once new dek is
+        # generated (it depends on implementation in memcached).
+        # Note that we wait for 3 seconds here so at least 3 DEK can be
+        # generated if the limit is not respected.
+        for i in range(15):
+            write_random_doc(self.cluster, self.bucket_name)
+            time.sleep(0.2)
 
         bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
         verify_bucket_deks_files(self.cluster, bucket_uuid,
@@ -2562,3 +2570,10 @@ def drop_bucket_deks_and_verify_dek_info(cluster, bucket):
 def kv_nodes(cluster):
     return [n for n in cluster.connected_nodes
             if Service.KV in n.get_services()]
+
+
+def write_random_doc(cluster, bucket_name):
+    random_key = testlib.random_str(10)
+    testlib.post_succ(cluster,
+                      f"/pools/default/buckets/{bucket_name}/docs/{random_key}",
+                      data={"value": testlib.random_str(10)})
