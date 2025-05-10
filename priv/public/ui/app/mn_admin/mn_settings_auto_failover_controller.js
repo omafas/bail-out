@@ -59,6 +59,7 @@ function mnSettingsAutoFailoverController($scope, $q, mnPromiseHelper, mnSetting
         if (mnPoolDefault.export.compat.atLeast80) {
             settings.allowFailoverEphemeralNoReplicas =
                 vm.autoFailoverSettings.allowFailoverEphemeralNoReplicas;
+            settings.failoverOnDataDiskNonResponsiveness = vm.autoFailoverSettings.failoverOnDataDiskNonResponsiveness;
         }
     }
 

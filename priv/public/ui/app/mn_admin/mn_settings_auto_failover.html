@@ -74,6 +74,7 @@ licenses/APL2.txt.
          ng-show="settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors.maxCount">
         {{settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors.maxCount}}
       </div>
+
       <div
          ng-if="adminCtl.poolDefault.compat.atLeast55 && adminCtl.poolDefault.isEnterprise"
          class="row flex-left text-medium flex-wrap">
@@ -104,6 +105,38 @@ licenses/APL2.txt.
           {{settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors['failoverOnDataDiskIssues[timePeriod]']}}
         </div>
       </div>
+
+       <div
+           ng-if="adminCtl.poolDefault.compat.atLeast80 && adminCtl.poolDefault.isEnterprise"
+           class="row flex-left text-medium flex-wrap">
+          <input
+              type="checkbox"
+              id="for-disk-nonresponse-enable"
+              ng-disabled="!settingsAutoFailoverCtl.autoFailoverSettings.enabled || !rbac.cluster.settings.write"
+              ng-model="settingsAutoFailoverCtl.autoFailoverSettings.failoverOnDataDiskNonResponsiveness.enabled">
+          <label
+              for="for-disk-nonresponse-enable"
+              class="margin-right-zero line-height-1-5">
+             Auto-failover for data disk read/write non-responsiveness
+          </label>
+          &nbsp;after&nbsp;
+          <input
+              type="number"
+              autocorrect="off"
+              spellcheck="false"
+              autocapitalize="off"
+              id="auto_nonresponse_disk_timeout"
+              ng-model="settingsAutoFailoverCtl.autoFailoverSettings.failoverOnDataDiskNonResponsiveness.timePeriod"
+              ng-disabled="!settingsAutoFailoverCtl.autoFailoverSettings.enabled || !settingsAutoFailoverCtl.autoFailoverSettings.failoverOnDataDiskNonResponsiveness.enabled || !rbac.cluster.settings.write"
+              class="input-small input-short-1">
+          &nbsp;seconds&nbsp;
+          <div
+              class="error"
+              ng-show="settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors['failoverOnDataDiskNonResponsiveness[timePeriod]']">
+             {{settingsAutoFailoverCtl.saveAutoFailoverSettingsErrors['failoverOnDataDiskNonResponsiveness[timePeriod]']}}
+          </div>
+       </div>
+
       <div
          ng-if="adminCtl.poolDefault.compat.atLeast72 && adminCtl.poolDefault.isEnterprise"
          class="row flex-left text-medium flex-wrap">
