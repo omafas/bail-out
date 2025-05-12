@@ -599,16 +599,20 @@ get_auto_failover_reported_errors(AutoFailoverPid) ->
 get_auto_failover_tick_period(AutoFailoverPid) ->
     auto_failover:get_tick_period_from_state(sys:get_state(AutoFailoverPid)).
 
-poll_for_auto_failover_completion() ->
-    %% Failover is async to the auto_failover module, poll til it is completed
+poll_for_counter_value(Counter, Value) ->
     misc:poll_for_condition(
-        fun() ->
-                case chronicle_compat:get(counters, #{}) of
-                    {error, not_found} -> false;
-                    {ok, Value} ->
-                        proplists:is_defined(failover_complete, Value)
-                end
-        end, 5000, 100).
+      fun() ->
+              case chronicle_compat:get(counters, #{}) of
+                  {error, not_found} -> false;
+                  {ok, V} ->
+                      case proplists:is_defined(Counter, V) of
+                          true ->
+                              proplists:get_value(Counter, V) =:= Value;
+                          false ->
+                              false
+                      end
+              end
+      end, 5000, 100).
 
 perform_auto_failover(AutoFailoverPid) ->
     %% Override tick period. This lets us tick auto_failover as few times as
@@ -631,7 +635,7 @@ perform_auto_failover(AutoFailoverPid) ->
       end,
       lists:seq(0, 3)),
 
-    poll_for_auto_failover_completion().
+    poll_for_counter_value(failover_complete, 1).
 
 auto_failover_t(_SetupConfig, PidMap) ->
     #{auto_failover := AutoFailoverPid} = PidMap,
