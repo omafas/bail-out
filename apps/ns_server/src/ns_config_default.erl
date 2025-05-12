@@ -48,7 +48,7 @@ get_data_dir() ->
     end.
 
 detect_enterprise_version(NsServerVersion) ->
-    case re:run(NsServerVersion, <<"-(columnar|enterprise)$">>) of
+    case re:run(NsServerVersion, <<"-enterprise(-analytics)?$">>) of
         nomatch ->
             false;
         _ ->
@@ -609,5 +609,8 @@ test_all_upgrades() ->
 detect_enterprise_version_test() ->
     true = detect_enterprise_version(<<"1.8.0r-9-ga083a1e-enterprise">>),
     true = not detect_enterprise_version(<<"1.8.0r-9-ga083a1e-comm">>),
-    true = detect_enterprise_version(<<"1.8.0r-9-ga083a1e-columnar">>).
+    true = detect_enterprise_version(
+        <<"1.8.0r-9-ga083a1e-enterprise-analytics">>),
+    false = detect_enterprise_version(
+        <<"1.8.0r-9-ga083a1e-enterprise-wombat">>).
 -endif.

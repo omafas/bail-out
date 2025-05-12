@@ -26,7 +26,7 @@ ELSE ("${PRODUCT_VERSION}" STREQUAL "")
 ENDIF ("${PRODUCT_VERSION}" STREQUAL "")
 
 IF (BUILD_COLUMNAR)
-  SET (_ns_version "${COLUMNAR_PRODUCT_VERSION}-columnar")
+  SET (_ns_version "${COLUMNAR_PRODUCT_VERSION}-enterprise-analytics")
 ELSEIF (BUILD_ENTERPRISE)
   SET (_ns_version "${_product_version}-enterprise")
 ELSE ()
