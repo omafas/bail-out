@@ -900,7 +900,9 @@ graceful_failover_test_() ->
           buckets => ["default"]},
 
     Tests = [
-             {"Graceful failover", fun graceful_failover_t/2}
+             {"Graceful failover", fun graceful_failover_t/2},
+             {"Graceful failover incorrect expected topology",
+              fun graceful_failover_incorrect_expected_topology/2}
             ],
 
     %% foreachx here to let us pass parameters to setup.
@@ -919,3 +921,92 @@ graceful_failover_t(_SetupConfig, _PidMap) ->
     {ok, BucketConfig} = ns_bucket:get_bucket("default"),
     Servers = ns_bucket:get_servers(BucketConfig),
     ?assertNot(lists:member('a', Servers)).
+
+graceful_failover_incorrect_expected_topology(_SetupConfig, _R) ->
+    ?log_info("Starting graceful failover incorrect expected topology test"),
+
+    %% For this test we will force the map such that we can gracefully fail over
+    %% two nodes, 'a' and 'c', without issue.
+    {ok, _} =
+        ns_bucket:set_map_and_uploaders("default", [['a', 'b']], undefined),
+
+    %% Need to trap the exit of the graceful failover processes to avoid nuking
+    %% the test process when it exits.
+    erlang:process_flag(trap_exit, true),
+
+    %% We are running this manually in the failure cases so that we can catch
+    %% the failure cases and test their types.
+    HandleGracefulFailoverError =
+        fun(Nodes, Opts) ->
+                {ok, Pid} =
+                    ns_rebalancer:start_link_graceful_failover(Nodes, Opts),
+                receive
+                    {'EXIT', Pid, Reason} ->
+                        Reason
+                after 5000 ->
+                        exit(timeout)
+                end
+        end,
+
+    %% Cannot failover with incorrect topologies, missing some nodes
+    ?assertEqual(
+       expected_topology_mismatch,
+       HandleGracefulFailoverError(['a'],
+                                   #{expected_topology => #{active => ['a']}})),
+
+    %% And now we have the correct active nodes, but did not specify the other
+    %% fields. The REST API will default these to an empty list if any one
+    %% parameter is set, but we should still test this behaviour.
+    ?assertEqual(
+       expected_topology_mismatch,
+       HandleGracefulFailoverError(
+         ['a'],
+         #{expected_topology => #{active => ['a', 'b', 'c']}})),
+
+    %% Invalid node in addition to the others
+    ?assertEqual(
+       expected_topology_mismatch,
+       HandleGracefulFailoverError(
+         ['a'],
+         #{expected_topology =>
+               #{active => ['a', 'b', 'c', 'not_valid'],
+                 inactiveFailed => [],
+                 inactiveAdded => []}})),
+
+    %% And now we can fail over.
+    ok = ns_orchestrator:start_graceful_failover(
+           ['a'],
+           #{expected_topology => #{active => ['a', 'b', 'c'],
+                                    inactiveFailed => [],
+                                    inactiveAdded => []}}),
+    poll_for_counter_value(graceful_failover_success, 1),
+
+    %% Now, this is where it matters. Can we prevent the failover of c when we
+    %% think that a is still active?
+    ?assertEqual(
+       expected_topology_mismatch,
+       HandleGracefulFailoverError(
+         ['c'],
+         #{expected_topology => #{active => ['a', 'b', 'c'],
+                                  inactiveFailed => [],
+                                  inactiveAdded => []}})),
+
+    %% Sanity check for inactiveAdded too
+    ?assertEqual(
+       expected_topology_mismatch,
+       HandleGracefulFailoverError(
+         ['c'],
+         #{expected_topology => #{active => ['b', 'c'],
+                                  inactiveFailed => ['a'],
+                                  inactiveAdded => ['d']}})),
+
+    %% And we can continue to fail over another node.
+    ok = ns_orchestrator:start_graceful_failover(
+           ['c'],
+           #{expected_topology => #{active => ['b', 'c'],
+                                    inactiveFailed => ['a'],
+                                    inactiveAdded => []}}),
+
+    poll_for_counter_value(graceful_failover_success, 2),
+
+    erlang:process_flag(trap_exit, false).

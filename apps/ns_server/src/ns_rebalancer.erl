@@ -1304,7 +1304,7 @@ start_link_graceful_failover(Nodes, Opts) ->
     proc_lib:start_link(erlang, apply,
                         [fun run_graceful_failover/2, [Nodes, Opts]]).
 
-run_graceful_failover(Nodes, _Opts) ->
+run_graceful_failover(Nodes, Opts) ->
     chronicle_compat:pull(),
 
     case failover:is_possible(Nodes, #{}) of
@@ -1340,6 +1340,15 @@ run_graceful_failover(Nodes, _Opts) ->
     ok = leader_activities:run_activity(
            graceful_failover, majority,
            fun () ->
+                   ClusterSnapshot = ns_cluster_membership:get_snapshot(),
+                   try
+                       failover:maybe_check_expected_topology(ClusterSnapshot,
+                                                              Opts)
+                   catch
+                       throw:Err ->
+                           erlang:exit(Err)
+                   end,
+
                    ale:info(?USER_LOGGER,
                             "Starting vbucket moves for "
                             "graceful failover of ~p", [Nodes]),

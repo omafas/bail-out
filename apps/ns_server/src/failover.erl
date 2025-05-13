@@ -28,6 +28,7 @@
          clear_failover_vbuckets_sets/1,
          nodes_needed_for_durability_failover/2,
          can_preserve_durability_majority/2,
+         maybe_check_expected_topology/2,
          get_snapshot/0]).
 
 -define(DATA_LOST, 1).
