@@ -467,6 +467,7 @@ handle_get_user(Domain, UserId, Req) ->
             menelaus_util:reply_json(Req, <<"Unknown user domain.">>, 404);
         DomainAtom ->
             Identity = {UserId, DomainAtom},
+            verify_domain_access(Req, Identity, read),
             case menelaus_users:user_exists(Identity) of
                 false ->
                     menelaus_util:reply_json(Req, <<"Unknown user.">>, 404);
@@ -1123,9 +1124,9 @@ get_security_roles() ->
     [R || {R, _} <- menelaus_roles:get_security_roles(
                       ns_bucket:get_snapshot())].
 
-verify_domain_access(Req, {_UserId, Domain})
+verify_domain_access(Req, {_UserId, Domain}, Access)
   when Domain =:= local orelse Domain =:= external ->
-    Permission = get_domain_access_permission(write, Domain),
+    Permission = get_domain_access_permission(Access, Domain),
     do_verify_domain_access(Req, Permission).
 
 do_verify_domain_access(Req, Permission) ->
@@ -1152,7 +1153,7 @@ handle_put_user_validated({User, Domain} = Identity, Name, Password, Roles,
     verify_security_roles_access(
       Req, ?SECURITY_WRITE, lists:usort(GroupRoles ++ Roles ++ OldRoles)),
 
-    verify_domain_access(Req, Identity),
+    verify_domain_access(Req, Identity, write),
 
     verify_ldap_access(Req, ?EXTERNAL_WRITE, LdapMapGroups),
 
@@ -1196,7 +1197,7 @@ handle_delete_user(Domain, UserId, Req) ->
             verify_security_roles_access(
               Req, ?SECURITY_WRITE, menelaus_users:get_roles(Identity)),
 
-            verify_domain_access(Req, Identity),
+            verify_domain_access(Req, Identity, write),
 
             case menelaus_users:delete_user(Identity) of
                 {commit, _} ->
