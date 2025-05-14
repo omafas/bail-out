@@ -159,7 +159,8 @@
          maybe_start_fusion_uploaders/2,
          maybe_stop_fusion_uploaders/2,
          get_active_guest_volumes/1,
-         sync_fusion_log_store/2
+         sync_fusion_log_store/2,
+         bucket_metadata_file/1
         ]).
 
 %% for ns_memcached_sockets_pool, memcached_file_refresh only

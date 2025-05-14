@@ -84,7 +84,92 @@ setup_storage_paths() ->
         {value, _} ->
             not_changed
     end,
+    lists:foreach(
+      fun ({BucketName, BucketUUID}) ->
+          ok = ensure_bucket_is_in_correct_dir(BucketName, BucketUUID)
+      end, ns_bucket:uuids()),
     ignore.
+
+%% Move data from old bucket directory (bucket name) to new bucket directory
+%% (bucket uuid). Can be removed after support for 7.* is dropped.
+ensure_bucket_is_in_correct_dir(BucketName, BucketUUID) ->
+    OldBucketDir = pre_morpheus_bucket_dbdir(BucketName),
+    NewBucketDir = this_node_bucket_dbdir(BucketUUID),
+    BucketMetadataFile = ns_memcached:bucket_metadata_file(NewBucketDir),
+    maybe
+        {_, true} ?= {old_dir_exists, filelib:is_file(OldBucketDir)},
+
+        %% If metadata file exists, we have already moved the data
+        %% This can be probably removed when views implement support for
+        %% bucket dir = uuid (because rename will be atomic in this case).
+        {_, false} ?= {metadata_exists, filelib:is_file(BucketMetadataFile)},
+
+        {_, true} ?= {old_dir_is_dir, filelib:is_dir(OldBucketDir)},
+
+        %% At this point, we know that the old directory exists, the
+        %% metadata file does not exist, so we probably need to move something
+        filelib:ensure_path(NewBucketDir),
+        %% Just in case if metadata file is happen to be in different directory
+        filelib:ensure_dir(BucketMetadataFile),
+
+        %% Move the data
+        %% Ideally we should just rename the whole directory, but
+        %% we can't do that until views implement support for bucket dir = uuid.
+        %% file:rename(OldBucketDir, NewBucketDir),
+        {ok, Files} ?= file:list_dir(OldBucketDir),
+        Result = lists:filtermap(
+                   fun (Filename) ->
+                       case should_move_bucket_file(Filename) of
+                           true ->
+                               OldFile = filename:join(OldBucketDir, Filename),
+                               NewFile = filename:join(NewBucketDir, Filename),
+                               case file:rename(OldFile, NewFile) of
+                                   ok ->
+                                       ?log_info("Moved bucket file ~p to ~p",
+                                                 [OldFile, NewFile]),
+                                       false;
+                                   {error, Reason} ->
+                                       ?log_error("Failed to move bucket file "
+                                                   "~p to ~p: ~p",
+                                                   [OldFile, NewFile, Reason]),
+                                       {true, {Reason, OldFile, NewFile}}
+                               end;
+                           false ->
+                               false
+                       end
+                   end, Files),
+
+        case Result of
+            [] ->
+                ok;
+            Errors ->
+                {errors, Errors}
+        end
+    else
+        {old_dir_exists, false} ->
+            ok;
+        {metadata_exists, true} ->
+            ?log_debug("Bucket ~p has already migrated to uuid dir "
+                       "(metadata file exists)", [BucketName]),
+            ok;
+        {old_dir_is_dir, false} ->
+            ?log_error("Old bucket directory ~p is not a directory",
+                       [OldBucketDir]),
+            {error, {old_bucket_dir_is_file, OldBucketDir}};
+        {error, Reason} ->
+            ?log_error("Failed to move bucket ~p files: ~p",
+                       [BucketName, Reason]),
+            {error, Reason}
+    end.
+
+should_move_bucket_file(".") ->
+    false;
+should_move_bucket_file("..") ->
+    false;
+should_move_bucket_file("master.couch" ++ _) ->
+    false;
+should_move_bucket_file(_Filename) ->
+    true.
 
 get_db_and_ix_paths() ->
     {ok, DBDir} = this_node_dbdir(),
@@ -101,6 +186,10 @@ this_node_bucket_dbdir(BucketName, Snapshot) ->
 this_node_bucket_dbdir(UUID) ->
     {ok, DBDir} = this_node_dbdir(),
     filename:join(DBDir, binary_to_list(UUID)).
+
+pre_morpheus_bucket_dbdir(BucketName) ->
+    {ok, DBDir} = this_node_dbdir(),
+    filename:join(DBDir, BucketName).
 
 -spec this_node_logdir() -> {ok, string()} | {error, any()}.
 this_node_logdir() ->

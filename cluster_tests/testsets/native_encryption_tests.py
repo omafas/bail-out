@@ -23,6 +23,7 @@ import time
 import uuid
 from testsets.sample_buckets import SampleBucketTasksBase
 from testsets.users_tests import put_user
+import shutil
 
 encrypted_file_magic = b'\x00Couchbase Encrypted\x00'
 min_timer_interval = 1 # seconds
@@ -1711,6 +1712,75 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
             set_ns_config_value(node, 'test_bypass_encr_cfg_restrictions',
                                 'true')
 
+    def bucket_dir_migration_test(self):
+        # Since bucket name is considered PII, we should stop using bucket
+        # name as bucket dir name in morpheus
+        # Node should move all existing bucket data to the new bucket dir (uuid)
+        # during the first startup after the upgrade (and before creating
+        # buckets in memcached)
+        kv_node = random.choice(kv_nodes(self.cluster))
+        bucket_props = {'name': self.bucket_name,
+                        'ramQuota': 100}
+        self.cluster.create_bucket(bucket_props, sync=True)
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
+        data_dir = Path(kv_node.data_path()) / 'data'
+        new_bucket_dir = data_dir / bucket_uuid
+        pre_morpheus_bucket_dir = data_dir / self.bucket_name
+        assert new_bucket_dir.exists(), \
+               f'new bucket dir {new_bucket_dir} does not exist'
+
+        docs = {}
+        for i in range(10):
+            key, value = write_random_doc(self.cluster, self.bucket_name)
+            docs[key] = value
+
+        self.cluster.stop_node(kv_node)
+
+        # move cluster data to old bucket dir
+        print(f'moving files from {new_bucket_dir} to {pre_morpheus_bucket_dir}')
+
+        # since views have not implemented support for bucket dir = uuid,
+        # we actually create data/bucket_name dir as well (for views files),
+        # so here we assume that data/bucket_name dir already exists
+        assert pre_morpheus_bucket_dir.exists(), \
+               f'dir {pre_morpheus_bucket_dir} does not exist'
+
+        moved_files = []
+        for f in new_bucket_dir.iterdir():
+            print(f'moving {f} to {pre_morpheus_bucket_dir}')
+            shutil.move(f, pre_morpheus_bucket_dir)
+            moved_files.append(f)
+
+        shutil.rmtree(new_bucket_dir)
+
+        self.cluster.restart_node(kv_node)
+
+        testlib.poll_for_condition(
+            lambda: new_bucket_dir.exists(),
+            sleep_time=1, attempts=50, verbose=True)
+
+        # Make sure that all documents are still present (basically making
+        # sure that bucket dir migration is successful)
+        for key, expected_value in docs.items():
+            value = testlib.poll_for_condition(
+                    lambda: get_doc(self.cluster, self.bucket_name, key),
+                    sleep_time=1, attempts=50, retry_on_assert=True,
+                    verbose=True)
+            assert value == expected_value, f'doc {key} does not match'
+
+        # Check that migration moved all files back to new bucket dir
+        for f in moved_files:
+            assert f.exists(), f'file {f} does not exist'
+
+        # Now make sure we remove all bucket dirs when bucket is deleted
+        self.cluster.delete_bucket(self.bucket_name)
+        testlib.poll_for_condition(
+            lambda: not new_bucket_dir.exists(),
+            sleep_time=1, attempts=50, verbose=True)
+        testlib.poll_for_condition(
+            lambda: not pre_morpheus_bucket_dir.exists(),
+            sleep_time=1, attempts=50, verbose=True)
+
 
 # Set master password and restart the cluster
 # Testing that we can decrypt deks when master password is set
@@ -2624,6 +2694,16 @@ def kv_nodes(cluster):
 
 def write_random_doc(cluster, bucket_name):
     random_key = testlib.random_str(10)
+    random_value = testlib.random_str(10)
     testlib.post_succ(cluster,
                       f"/pools/default/buckets/{bucket_name}/docs/{random_key}",
-                      data={"value": testlib.random_str(10)})
+                      data={"value": random_value})
+    return random_key, random_value
+
+
+def get_doc(cluster, bucket_name, key):
+    r = testlib.get_succ(cluster,
+                         f"/pools/default/buckets/{bucket_name}/docs/{key}")
+    r = r.json()
+    assert 'base64' in r, f'no base64 in response: {r}'
+    return str(base64.b64decode(r['base64']), 'utf-8')
