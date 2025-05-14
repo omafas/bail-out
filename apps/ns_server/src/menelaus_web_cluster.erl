@@ -1169,9 +1169,26 @@ do_handle_start_hard_failover(Req, FailoverBody) ->
 handle_start_graceful_failover(Req) ->
     case parse_graceful_failover_args(Req) of
         {ok, Nodes} ->
-            failover_audit_and_reply(
-              ns_orchestrator:start_graceful_failover(Nodes),
-              Req, Nodes, graceful);
+            IsMorpheus = cluster_compat_mode:is_cluster_morpheus(),
+            case parse_expected_topology_params(Req, IsMorpheus) of
+                {error, Error} ->
+                    reply_text(Req, Error, 400);
+                Opts ->
+                    case IsMorpheus of
+                        false ->
+                            failover_audit_and_reply(
+                              ns_orchestrator:start_graceful_failover(Nodes),
+                              Req, Nodes, graceful);
+                        true ->
+                            %% We will always use the new orchestrator
+                            %% API post-Morpheus such that we can
+                            %% eventually remove the old non-map API.
+                            failover_audit_and_reply(
+                              ns_orchestrator:start_graceful_failover(Nodes,
+                                                                      Opts),
+                              Req, Nodes, graceful)
+                    end
+            end;
         {error, ErrorMsg} ->
             reply_text(Req, ErrorMsg, 400)
     end.
