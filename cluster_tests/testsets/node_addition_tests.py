@@ -230,6 +230,51 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
             # validates new-node's certificates when doing completeJoin
             self.assert_cluster_unknown_ca_error(r)
 
+    # The node addition will fail as the node being added has disabled
+    # client cert authentication
+    def add_trusted_node_to_trusted_cluster_client_cert_disabled_test(self):
+        self.provision_cluster_node()
+        self.provision_new_node()
+        load_ca(self.cluster_node(), self.new_node_ca)
+        load_ca(self.new_node(), self.cluster_ca)
+        # Initialize the node being added to the cluster so that it has
+        # a user/password and we can toggle client cert required. This
+        # node/cluster gets over-written when it is added to the provisioned
+        # cluster node.
+        data_path = self.new_node().data_path()
+        data = {"hostname": self.new_node().host,
+                "services": "kv",
+                "username": "Administrator",
+                "password": "asdasd",
+                "port": "SAME"}
+        testlib.post_succ(self.new_node(), f"/clusterInit", data=data).json()
+
+        testlib.toggle_client_cert_auth(self.new_node(),
+                                        enabled=False, mandatory=False)
+        r = self.cluster.add_node(self.new_node(), use_client_cert_auth=True,
+                                  expected_code=400).json()
+        self.assert_node_must_use_client_cert(r)
+
+        # Run the same test except specify an invalid username/password
+        r = self.cluster.add_node(self.new_node(), use_client_cert_auth=False,
+                                  auth=("BadUser", "password"),
+                                  expected_code=400).json()
+        self.assert_cannot_use_invalid_username_password(r)
+
+        # Change the new node so it uses mandatory client certs
+        testlib.toggle_client_cert_auth(self.new_node(),
+                                        enabled=True, mandatory=True)
+        # Try using an invalid username/password
+        r = self.cluster.add_node(self.new_node(), use_client_cert_auth=False,
+                                  auth=("BadUser", "password"),
+                                  expected_code=400).json()
+        self.assert_cluster_requires_per_node_cert(r)
+
+        # Need to clean up the node that was /clusterInit'd so subsequent
+        # tests don't get residual errors.
+        testlib.post_succ(self.new_node(), '/controller/hardResetNode')
+
+
     # Cluster node uses custom certs, new node uses ootb certs:
 
     def add_trusted_ootb_node_to_trusted_cluster_test(self):
@@ -448,6 +493,39 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
                                      use_client_cert_auth=True)
         testlib.delete(self.cluster, f'/pools/default/trustedCAs/{ca_id}')
 
+    # Cluster has client cert auth set to disabled. The node-to-be-added
+    # specifies clientCertAuth=true when joining the cluster. Ensure the
+    # appropriate error is returned. Also ensure an appropriate error if
+    # clientCertAuth=false but an invalid username/password is specified.
+    def client_cert_auth_ootb_client_certs_disabled_on_cluster_join_test(self):
+        self.provision_cluster_node(should_load_client_cert=False)
+        self.provision_new_node(should_load_client_cert=False)
+        testlib.toggle_client_cert_auth(self.cluster_node(),
+                                        enabled=False, mandatory=False)
+        load_ca(self.new_node(), self.cluster_ca)
+
+        r = self.cluster.do_join_cluster(self.new_node(),
+                                         use_client_cert_auth=True,
+                                         expected_code=400).json()
+        self.assert_cannot_use_per_node_client_cert(r)
+
+        # Now attempt using a bad username/password
+        r = self.cluster.do_join_cluster(self.new_node(),
+                                         use_client_cert_auth=False,
+                                         auth=("baduser", "password"),
+                                         expected_code=400).json()
+        self.assert_cannot_use_invalid_username_password(r)
+
+        # Change the cluster node so it uses mandatory client certs
+        testlib.toggle_client_cert_auth(self.cluster_node(),
+                                        enabled=True, mandatory=True)
+        # Try using a bad username/password
+        r = self.cluster.do_join_cluster(self.new_node(),
+                                         use_client_cert_auth=False,
+                                         auth=("baduser", "password"),
+                                         expected_code=400).json()
+        self.assert_added_node_must_use_client_cert(r)
+
 
     def provision_cluster_node(self, should_load_client_cert=False):
         cluster_node = self.cluster_node()
@@ -505,6 +583,35 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
                             response[0])
         assert_failed_to_connect_error(self.cluster_node(), response[0])
 
+
+    def assert_cannot_use_per_node_client_cert(self, response):
+        assert_msg_in_error('Invalid credentials. Ensure client certificate '
+                            'authentication is enabled for the cluster.',
+                            response[0])
+
+
+    def assert_cannot_use_invalid_username_password(self, response):
+        assert_msg_in_error('Invalid credentials. Verify username and '
+                            'password.', response[0])
+
+
+    def assert_node_must_use_client_cert(self, response):
+        assert_msg_in_error('Invalid credentials. Ensure client certificate '
+                            'authentication is enabled on the node being '
+                            'added.', response[0])
+
+
+    def assert_cluster_requires_per_node_cert(self, response):
+        assert_msg_in_error('Cluster node requires per-node client '
+                            'certificate when client certificate '
+                            'authentication is set to mandatory.',
+                            response[0])
+
+    def assert_added_node_must_use_client_cert(self, response):
+        assert_msg_in_error('Node being added requires per-node client '
+                            'certificate when client certificate '
+                            'authentication is set to mandatory.',
+                            response[0])
 
 
 class NodeAdditionWithCertsIPv6Tests(testlib.BaseTestSet):

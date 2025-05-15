@@ -106,7 +106,7 @@ decode_json_response_error({ok, {{401 = StatusCode, _}, _, Body}},
                          _Method,
                          _Request) ->
     TrimmedBody = string:substr(erlang:binary_to_list(Body), 1, 48),
-    M = <<"Authentication failed. Verify username and password.">>,
+    M = <<"Invalid credentials.">>,
     {error, rest_error, M, {bad_status, StatusCode, list_to_binary(TrimmedBody)}};
 
 decode_json_response_error({ok, {{StatusCode, _}, _, Body}},

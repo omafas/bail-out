@@ -972,6 +972,16 @@ post_json_to_joinee(Target, HiddenAuth, Options, Stuff) ->
             {error, ns_error_messages:engage_cluster_error(
                       {engage_cluster_failed,
                        {"cluster", E, M, node(), {}}})};
+        {error, rest_error, M, {bad_status, 401, _Msg}} ->
+            Details =
+                case ?UNHIDE(HiddenAuth) of
+                    client_cert_auth ->
+                        <<"Ensure client certificate authentication is enabled "
+                        "on the node being added.">>;
+                    _ ->
+                        <<"Verify username and password.">>
+                end,
+            {error, <<M/binary, " ", Details/binary>>};
         {error, _, X, _} ->
             {error, X};
         Other ->

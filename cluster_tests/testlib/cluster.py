@@ -418,18 +418,26 @@ class Cluster:
 
     # Add new_node to the cluster, and optionally perform a rebalance
     def add_node(self, new_node, services=None, do_rebalance=False,
+                 use_client_cert_auth=False, auth=None,
                  verbose=False, expected_code=200, expected_error=None):
         cluster_node = self.get_available_cluster_node()
         if services is None:
             services = cluster_node.get_services()
 
+        if use_client_cert_auth:
+            data = {"clientCertAuth": "true"}
+        elif auth == None:
+            data = {"user": self.auth[0],
+                    "password": self.auth[1]}
+        else:
+            data = {"user": auth[0],
+                    "password": auth[1]}
+
         # Can only add nodes with the https address, which requires the 1900X
         # port
-        data = {"user": self.auth[0],
-                "password": self.auth[1],
-                "hostname": new_node.https_service_url() if self.is_enterprise
-                            else new_node.url,
-                "services": get_services_string(services)}
+        data.update({"hostname": new_node.https_service_url()
+                    if self.is_enterprise else new_node.url,
+                    "services": get_services_string(services)})
         if verbose:
             print(f"Adding node {data}")
         r = testlib.post_succ(cluster_node, f"/controller/addNode", data=data,
@@ -446,7 +454,8 @@ class Cluster:
 
     def do_join_cluster(self, new_node, services=None, do_rebalance=False,
                         verbose=False, expected_code=200,
-                        use_client_cert_auth=False):
+                        use_client_cert_auth=False,
+                        auth=None):
         cluster_node = self.get_available_cluster_node()
         if services is None:
             services = cluster_node.get_services()
@@ -458,9 +467,12 @@ class Cluster:
 
         if use_client_cert_auth:
             data['clientCertAuth'] = 'true'
-        else:
+        elif auth == None:
             data['user'] = self.auth[0]
             data['password'] = self.auth[1]
+        else:
+            data['user'] = auth[0]
+            data['password'] = auth[1]
 
         if verbose:
             print(f"doJoinCluster with {data}")
