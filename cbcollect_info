@@ -1979,6 +1979,14 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
         rc_url = f'{goxdcr_url}/remoteClusters{redact_opt}'
         rp_url = f'{goxdcr_url}/replications{redact_opt}'
         srcs_url = f'{goxdcr_v2_url}/sourceClusters{redact_opt}'
+
+        # rp_backfill_url always requires backfill=true, redactRequested is optional
+        backfill_params = ["backfill=true"]
+        if options.redact_level != "none":
+            backfill_params.append("redactRequested=true")
+        backfill_query = f"?{'&'.join(backfill_params)}"
+        rp_backfill_url = f'{goxdcr_url}/replications{backfill_query}'
+
         goxdcr_tasks = [
             *make_golang_profile_tasks('GoXDCR', local_token_creds_fun,
                                        goxdcr_port, 'goxdcr'),
@@ -1996,6 +2004,11 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
                            get_creds_fun=local_token_creds_fun,
                            url=srcs_url, timeout=300,
                            log_file="goxdcr_incoming_sources.json",
+                           no_header=True),
+            make_curl_task(name='GoXDCR Backfill vbTasks: ',
+                           get_creds_fun=local_token_creds_fun,
+                           url=rp_backfill_url,timeout=300,
+                           log_file="goxdcr_VBTasks.json",
                            no_header=True)
         ]
 
