@@ -72,6 +72,7 @@ class SamlTests(testlib.BaseTestSet):
     def requirements():
         return testlib.ClusterRequirements(min_num_nodes=2,
                                            edition="Enterprise",
+                                           balanced=True,
                                            buckets=[{'name': bucket,
                                                      'ramQuota': 100}],
                                            services=SamlTests.services_to_run)
