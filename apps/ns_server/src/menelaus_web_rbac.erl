@@ -1903,7 +1903,8 @@ do_store_group_inner(GroupId, Props, CanOverwrite, Req) ->
                     {_, SanitizedGroupId} =
                         ns_config_log:sanitize_value(GroupId, [add_salt]),
                     ?log_debug("Group added: ~p, ~p",
-                               [GroupId, SanitizedGroupId]),
+                               [ns_config_log:tag_group_name(GroupId),
+                                SanitizedGroupId]),
                     event_log:add_log(group_added,
                                       [{group, SanitizedGroupId}]),
                     Reason;
@@ -1937,7 +1938,9 @@ handle_delete_group(GroupId, Req) ->
             ns_audit:delete_user_group(Req, GroupId),
             {_, SanitizedGroupId} = ns_config_log:sanitize_value(GroupId,
                                                                  [add_salt]),
-            ?log_debug("Group deleted: ~p, ~p", [GroupId, SanitizedGroupId]),
+            ?log_debug("Group deleted: ~p, ~p",
+                       [ns_config_log:tag_group_name(GroupId),
+                        SanitizedGroupId]),
             event_log:add_log(group_deleted, [{group, SanitizedGroupId}]),
             menelaus_util:reply_json(Req, <<>>, 200);
         {error, not_found} ->

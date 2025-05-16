@@ -29,6 +29,7 @@
 
 %% state sanitization
 -export([format_status/2, tag_user_data/1, tag_user_name/1, tag_doc_id/1,
+         tag_group_name/1,
          tag_user_props/1, tag_misc_item/1]).
 
 format_status(_Opt, [_PDict, State]) ->
@@ -157,6 +158,18 @@ tag_user_name(UserName) ->
     {ok, Val} = do_tag_user_name(UserName),
     Val.
 
+tag_group_name(GroupName) ->
+    {ok, Val} = do_tag_group_name(GroupName),
+    Val.
+
+do_tag_group_name(GroupName) when is_list(GroupName) ->
+    {ok, "<ud>" ++ GroupName ++ "</ud>"};
+do_tag_group_name(GroupName) when is_binary(GroupName) ->
+    {ok, Val} = do_tag_group_name(binary_to_list(GroupName)),
+    {ok, list_to_binary(Val)};
+do_tag_group_name(_) ->
+    no_change.
+
 tag_user_props(Props) ->
     generic:transformt(?transform({name, N}, {name, tag_user_name(N)}),
                        Props).
@@ -259,6 +272,8 @@ sanitize(Config, TagUserTuples) ->
               {stop, {org_name, tag_misc_item(OrgName)}};
           ({org_url, OrgURL}) ->
               {stop, {org_url, tag_misc_item(OrgURL)}};
+          ({group, GroupName}) ->
+              {stop, {group, tag_group_name(GroupName)}};
           (Other) ->
               Continue(Other)
       end, Config).
