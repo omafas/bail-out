@@ -459,11 +459,11 @@ handle_get_user(Domain, UserId, Req) ->
             menelaus_util:reply_json(Req, <<"Unknown user domain.">>, 404);
         DomainAtom ->
             Identity = {UserId, DomainAtom},
+            verify_domain_access(Req, Identity, read),
             case menelaus_users:user_exists(Identity) of
                 false ->
                     menelaus_util:reply_json(Req, <<"Unknown user.">>, 404);
                 true ->
-                    verify_domain_access(Req, Identity, read),
                     verify_security_roles_access(
                       Req, ?SECURITY_READ, menelaus_users:get_roles(Identity)),
                     ns_audit:rbac_info_retrieved(Req, users),
