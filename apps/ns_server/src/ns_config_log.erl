@@ -281,6 +281,8 @@ sanitize(Config, TagUserTuples) ->
 sanitize_value(Value) ->
     sanitize_value(Value, []).
 
+sanitize_value(_Value0, [mask]) ->
+    {sanitized, <<"*****">>};
 sanitize_value(Value0, Options) ->
     Salt = case Options of
                [add_salt] ->

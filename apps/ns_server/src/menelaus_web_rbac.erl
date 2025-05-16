@@ -1265,7 +1265,7 @@ do_store_user({User, Domain} = Identity, Props, Req) ->
         ok ->
             ns_audit:set_user(Req, Identity, UniqueRoles, Name, Groups, Locked,
                               TemporaryPassword, Reason),
-            {_, SanitizedUser} = ns_config_log:sanitize_value(User, [add_salt]),
+            {_, SanitizedUser} = ns_config_log:sanitize_value(User, [mask]),
             ?log_debug("User added - ~p:~p, ~p.",
                        [ns_config_log:tag_user_name(User), Domain,
                         SanitizedUser]),
@@ -1296,7 +1296,7 @@ handle_delete_user(Domain, UserId, Req) ->
                     ns_audit:delete_user(Req, Identity),
                     {_, SanitizedUserId} = ns_config_log:sanitize_value(
                                              UserId,
-                                             [add_salt]),
+                                             [mask]),
                     ?log_debug("User deleted ~p:~p, ~p.",
                                [ns_config_log:tag_user_name(UserId), T,
                                 SanitizedUserId]),
@@ -1901,7 +1901,7 @@ do_store_group_inner(GroupId, Props, CanOverwrite, Req) ->
                       Req, GroupId, UniqueRoles, Description, LDAPGroup,
                       Reason),
                     {_, SanitizedGroupId} =
-                        ns_config_log:sanitize_value(GroupId, [add_salt]),
+                        ns_config_log:sanitize_value(GroupId, [mask]),
                     ?log_debug("Group added: ~p, ~p",
                                [ns_config_log:tag_group_name(GroupId),
                                 SanitizedGroupId]),
@@ -1937,7 +1937,7 @@ handle_delete_group(GroupId, Req) ->
         ok ->
             ns_audit:delete_user_group(Req, GroupId),
             {_, SanitizedGroupId} = ns_config_log:sanitize_value(GroupId,
-                                                                 [add_salt]),
+                                                                 [mask]),
             ?log_debug("Group deleted: ~p, ~p",
                        [ns_config_log:tag_group_name(GroupId),
                         SanitizedGroupId]),
