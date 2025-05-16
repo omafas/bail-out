@@ -525,11 +525,11 @@ handle_get_user(Domain, UserId, Req) ->
             reply_unknown_domain_error(Req);
         DomainAtom ->
             Identity = {UserId, DomainAtom},
+            verify_domain_access(Req, Identity, read),
             case menelaus_users:user_exists(Identity) of
                 false ->
                     reply_unknown_user_error(Req);
                 true ->
-                    verify_domain_access(Req, Identity, read),
                     Roles = menelaus_users:get_roles(Identity),
                     verify_security_roles_access(Req, ?SECURITY_READ, Roles),
                     Permission = get_domain_access_permission(read,
