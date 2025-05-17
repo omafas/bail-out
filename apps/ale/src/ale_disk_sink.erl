@@ -453,21 +453,6 @@ compress(true = _IsEncrypted, Name, Path) ->
 reencrypt_and_compress(Name, Path, Opts) ->
     CompressPth = Path ++ ".tmp",
 
-    IsGzipMagicHeader =
-        fun(FileName) ->
-                {ok, F} = file:open(FileName, [read, raw, binary]),
-                try
-                    case file:read(F, 2) of
-                        {ok, <<16#1f, 16#8b>>} ->
-                            true;
-                        _ ->
-                            false
-                    end
-                after
-                    file:close(F)
-                end
-        end,
-
     RenameEnsureGzExtention =
         fun(ResultFilePath, OrigPath) ->
                 case filename:extension(OrigPath) of
@@ -498,25 +483,13 @@ reencrypt_and_compress(Name, Path, Opts) ->
 
     %% When re-encrypting and compressing an unencrypted ".gz" file, we need to
     %% remove the .gz extension to match existing file convention for
-    %% encrypted files. If the resulting file is a gzip decrypted, we need to
-    %% ensure we add the .gz extension
+    %% encrypted files. For gzip compressed file, we need to ensure we add
+    %% the .gz extension
     RenameFunc =
-        fun(ResultFilePath, OrigPath, RencrOpts) ->
-                %% If a file was re-encrypted with allow_decrypt true and with
-                %% decr_compression as gzip and the resulting file was
-                %% a decrypted file and has a valid gzip magic header, it
-                %% is safe to say that file is a gzip format file
-                DecrWithGzip =
-                    maps:get(allow_decrypt, RencrOpts, false) andalso
-                    maps:get(decr_compression, RencrOpts, false) =:= gzip,
-                case DecrWithGzip andalso
-                     not ale:is_file_encrypted(ResultFilePath) andalso
-                     IsGzipMagicHeader(ResultFilePath)  of
-                    true ->
-                        RenameEnsureGzExtention(ResultFilePath, OrigPath);
-                    false ->
-                        RenameStripGzExtention(ResultFilePath, OrigPath)
-                end
+        fun (ResultFilePath, OrigPath, gzip) ->
+                RenameEnsureGzExtention(ResultFilePath, OrigPath);
+            (ResultFilePath, OrigPath, couchbase_encrypted) ->
+                RenameStripGzExtention(ResultFilePath, OrigPath)
         end,
 
     try
@@ -530,8 +503,9 @@ reencrypt_and_compress(Name, Path, Opts) ->
             DS = ale:get_sink_ds(Name),
             RencrOpts = Opts#{encr_compression => {zlib, 5, none},
                               ignore_incomplete_last_chunk => true},
-            ok ?= ale:reencrypt_file(Path, CompressPth, DS, RencrOpts),
-            ok ?= RenameFunc(CompressPth, Path, RencrOpts)
+            {ok, Format} ?= ale:reencrypt_file(Path, CompressPth, DS,
+                                               RencrOpts),
+            ok ?= RenameFunc(CompressPth, Path, Format)
         else
             {error, key_not_found} ->
                 %% We don't have a key for this file anymore, so we can't

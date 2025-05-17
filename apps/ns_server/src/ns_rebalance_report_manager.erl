@@ -186,6 +186,8 @@ handle_call({reencrypt_reports, LogDS},
         lists:filtermap(
           fun({_FileName, ok}) ->
                   false;
+              ({_FileName, {ok, _}}) ->
+                  false;
              ({FileName, {error, E}}) ->
                  case lists:member(FileName, FilesInConfig) of
                      true ->

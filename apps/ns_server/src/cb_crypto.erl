@@ -152,7 +152,8 @@ atomic_write_file(Path, Bytes, DekSnapshot, Opts) when is_binary(Bytes) ->
                        decr_compression => decr_compression_cfg(),
                        ignore_incomplete_last_chunk => boolean(),
                        allow_decrypt => boolean()}) ->
-          ok | {error, term()}.
+          {ok, ResultFileFormat :: couchbase_encrypted | gzip | unencrypted} |
+          {error, term()}.
 %% Note1: This function does not support reencryption with different chunk size,
 %% because it is not really needed at this point.
 %% When compression is used, it is possible to achieve bigger chunks by using
@@ -207,15 +208,33 @@ reencrypt_file(FromPath, ToPath, DS, Opts) ->
             _ ->
                 {ok, DS}
         end,
-    case DSRes of
-        {ok, DSToUse} ->
-            misc:atomic_write_file(
-              ToPath,
-              fun (IO) ->
-                  reencrypt_file_to_iodevice(IO, FromPath, DSToUse, Opts)
-              end);
-        {error, Reason} ->
-            {error, Reason}
+
+    ExpectedDecrFormat =
+        case maps:get(decr_compression, Opts, undefined) of
+            gzip ->
+                gzip;
+            undefined ->
+                unencrypted
+        end,
+
+    maybe
+        {ok, DSToUse} ?= DSRes,
+        ok ?= misc:atomic_write_file(
+                ToPath,
+                fun (IO) ->
+                        reencrypt_file_to_iodevice(IO, FromPath, DSToUse, Opts)
+                end),
+        FileFormat =
+            case get_dek_id(DSToUse) == undefined of
+                true ->
+                    ExpectedDecrFormat;
+                false ->
+                    couchbase_encrypted
+            end,
+        {ok, FileFormat}
+    else
+        {error, _Reason} = Error ->
+            Error
     end.
 
 reencrypt_file_to_iodevice(IODevice, FromPath, DS, Opts) ->
@@ -1402,22 +1421,24 @@ reencrypt_with_opts_mix_test() ->
         %% is used with an emptyDS and thus the resulting file will be
         %% unencrypted, and since there is no decr_compression option, we
         %% verify that it must not be compressed
-        ok = reencrypt_file(Path, Path, DSEmptyActive,
-                            #{allow_decrypt => true,
-                              encr_compression => {zlib, 5, none}}),
+        {ok, unencrypted} =
+            reencrypt_file(Path, Path, DSEmptyActive,
+                           #{allow_decrypt => true,
+                             encr_compression => {zlib, 5, none}}),
         {ok, DataRead0} = misc:raw_read_file(Path),
         ?assert(Data =:= DataRead0),
 
         %% Now try reencrypt on an encrypted file, but with explicit option of
         %% decr_compression => undefined combined with allow_decrypt => true,
-        %% and using emptyDS, the result must be a decrypted file that is not
+        %% and using emptyDS, the result must be a unencrypted file that is not
         %% compressed(the same as no decr_compression opt being specified)
         ok = atomic_write_file(Path, Data, DS,
                                #{encr_compression => {zlib, 5, none}}),
-        ok = reencrypt_file(Path, Path, DSEmptyActive,
-                            #{allow_decrypt => true,
-                              encr_compression => {zlib, 5, none},
-                              decr_compression => undefined}),
+        {ok, unencrypted} =
+            reencrypt_file(Path, Path, DSEmptyActive,
+                           #{allow_decrypt => true,
+                             encr_compression => {zlib, 5, none},
+                             decr_compression => undefined}),
         {ok, DataRead0} = misc:raw_read_file(Path),
         ?assert(Data =:= DataRead0),
 
@@ -1431,8 +1452,9 @@ reencrypt_with_opts_mix_test() ->
         %% Now rencrypt the decrypted file with allow_decrypt => true using
         %% active key DS, and the decrypted file should get re-encrypted into
         %% an encrypted file
-        ok = reencrypt_file(Path, Path, DS,
-                            #{allow_decrypt => true}),
+        {ok, couchbase_encrypted} =
+            reencrypt_file(Path, Path, DS,
+                           #{allow_decrypt => true}),
         ?assert(is_file_encrypted(Path)),
 
         %% Take the encrypted file and reencrypt it with zlib compression and
@@ -1441,13 +1463,15 @@ reencrypt_with_opts_mix_test() ->
         %% unencrypted and gzip compressed, we should be able to read the
         %% data from this file via "compressed" option using file:open() and
         %% the resulting data should match exactly the original source data
-        ok = reencrypt_file(Path, Path, DS,
-                            #{encr_compression => {zlib, 5, none}}),
+        {ok, couchbase_encrypted} =
+            reencrypt_file(Path, Path, DS,
+                           #{encr_compression => {zlib, 5, none}}),
         ?assert(is_file_encrypted(Path)),
-        ok = reencrypt_file(Path, Path, DSEmptyActive,
-                            #{allow_decrypt => true,
-                              decr_compression => gzip,
-                              encr_compression => {zlib, 5, none}}),
+        {ok, gzip} =
+            reencrypt_file(Path, Path, DSEmptyActive,
+                           #{allow_decrypt => true,
+                             decr_compression => gzip,
+                             encr_compression => {zlib, 5, none}}),
         ?assertNot(is_file_encrypted(Path)),
         CompressedData = ReadFileData(Path, []),
         UnCompressed = ReadFileData(Path, [compressed]),
@@ -1465,10 +1489,13 @@ reencrypt_on_disabled_enrc_test() ->
     DSEmptyActive = create_deks_snapshot(undefined, AllDeks, undefined),
     try
         ok = atomic_write_file(Path, Data, DS, #{}),
-        ok = reencrypt_file(Path, Path, DSEmptyActive,#{}),
+        {ok, couchbase_encrypted} =
+            reencrypt_file(Path, Path,
+                           DSEmptyActive,#{}),
         ?assert(is_file_encrypted(Path)),
-        ok = reencrypt_file(Path, Path, DSEmptyActive,
-                            #{allow_decrypt => true}),
+        {ok, unencrypted} =
+            reencrypt_file(Path, Path, DSEmptyActive,
+                           #{allow_decrypt => true}),
         ?assertNot(is_file_encrypted(Path)),
         {ok, Bin} = misc:raw_read_file(Path),
         ?assert(Bin =:= Data)
@@ -1490,17 +1517,20 @@ reencrypt_decrypted_file_test() ->
         {error, unknown_magic} = reencrypt_file(Path, Path, DS,#{}),
         ?assertNot(is_file_encrypted(Path)),
 
-        ok = reencrypt_file(Path, Path, DSEmptyActive,
-                            #{allow_decrypt => true}),
+        {ok, unencrypted} =
+            reencrypt_file(Path, Path, DSEmptyActive,
+                           #{allow_decrypt => true}),
         ?assertNot(is_file_encrypted(Path)),
 
-        ok = reencrypt_file(Path, Path, DS,
-                            #{allow_decrypt => true,
-                              max_chunk_size => 293}),
+        {ok, couchbase_encrypted}
+            = reencrypt_file(Path, Path, DS,
+                             #{allow_decrypt => true,
+                               max_chunk_size => 293}),
         ?assert(is_file_encrypted(Path)),
 
-        ok = reencrypt_file(Path, Path, DSEmptyActive,
-                            #{allow_decrypt => true}),
+        {ok, unencrypted} =
+            reencrypt_file(Path, Path, DSEmptyActive,
+                           #{allow_decrypt => true}),
         ?assertNot(is_file_encrypted(Path)),
         {ok, Bin} = misc:raw_read_file(Path),
         ?assert(Bin =:= Data)
@@ -1526,7 +1556,8 @@ reencrypt_file_test_parametrized(Bin, FromOpts, ToOpts, DS1, DS2) ->
     Path2 = path_config:tempfile("cb_crypto_reencrypt_file_test2", ".tmp"),
     try
         ok = atomic_write_file(Path1, Bin, DS1, FromOpts),
-        ok = reencrypt_file(Path1, Path2, DS2, ToOpts),
+        {ok, couchbase_encrypted} =
+            reencrypt_file(Path1, Path2, DS2, ToOpts),
         {decrypted, Bin} = read_file(Path2, DS2)
     after
         file:delete(Path1),
@@ -1561,8 +1592,10 @@ reencrypt_file_negative_cases_test() ->
         ok = file:close(H),
         {error, invalid_file_encryption} = reencrypt_file(Path1, Path2, DS,
                                                           Opts),
-        ok = reencrypt_file(Path1, Path2, DS,
-                            Opts#{ignore_incomplete_last_chunk => true}),
+
+        {ok, couchbase_encrypted} =
+            reencrypt_file(Path1, Path2, DS,
+                           Opts#{ignore_incomplete_last_chunk => true}),
 
         ok = misc:atomic_write_file(Path1, Bin), %% unencrypted
         {error, unknown_magic} = reencrypt_file(Path1, Path2, WrongDS, Opts),
