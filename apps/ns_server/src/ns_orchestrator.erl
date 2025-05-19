@@ -77,7 +77,7 @@
          needs_rebalance/0,
          needs_rebalance_with_detail/0,
          start_link/0,
-         start_rebalance/7,
+         start_rebalance/1,
          retry_rebalance/4,
          stop_rebalance/0,
          start_recovery/1,
@@ -452,37 +452,35 @@ ensure_janitor_run(Item, Timeout) ->
               end
       end, Timeout, 1000).
 
--spec start_rebalance([node()], [node()], all | [bucket_name()],
-                      [list()], all | [atom()], map() | undefined,
-                      rebalance_plan_uuid() | undefined) ->
-                             {ok, binary()} | ok | in_progress |
-                             nodes_mismatch |
-                             no_active_nodes_left | in_recovery |
-                             in_bucket_hibernation |
-                             in_buckets_shutdown | {nodes_down, [atom()]} |
-                             delta_recovery_not_possible | no_kv_nodes_left |
-                             {need_more_space, list()} |
-                             {must_rebalance_services, list()} |
-                             {unhosted_services, list()} |
-                             {total_quota_too_high, list()} |
-                             {rebalance_not_allowed, list()} |
-                             {params_mismatch, list()} |
-                             {invalid_rebalance_plan, string()}.
-start_rebalance(KnownNodes, EjectNodes, DeltaRecoveryBuckets,
-                DefragmentZones, Services, DesiredServicesNodes, PlanUUID) ->
+-spec start_rebalance(#{known_nodes := [node()],
+                        eject_nodes := [node()],
+                        delta_recovery_buckets := all | [bucket_name()],
+                        defragment_zones := [list()],
+                        services := all | [atom()],
+                        desired_services_nodes := map() | undefined,
+                        plan_uuid := rebalance_plan_uuid() | undefined}) ->
+          {ok, binary()} | ok | in_progress |
+          nodes_mismatch |
+          no_active_nodes_left | in_recovery |
+          in_bucket_hibernation |
+          in_buckets_shutdown | {nodes_down, [atom()]} |
+          delta_recovery_not_possible | no_kv_nodes_left |
+          {need_more_space, list()} |
+          {must_rebalance_services, list()} |
+          {unhosted_services, list()} |
+          {total_quota_too_high, list()} |
+          {rebalance_not_allowed, list()} |
+          {params_mismatch, list()} |
+          {invalid_rebalance_plan, string()}.
+start_rebalance(Params) ->
+    #{desired_services_nodes := DesiredServicesNodes,
+      known_nodes := KnownNodes} = Params,
     case get_services_nodes_memory_data(DesiredServicesNodes, KnownNodes) of
         {error, E} ->
             E;
         {ok, MemoryData} ->
             call({maybe_start_rebalance,
-                  #{known_nodes => KnownNodes,
-                    eject_nodes => EjectNodes,
-                    delta_recovery_buckets => DeltaRecoveryBuckets,
-                    defragment_zones => DefragmentZones,
-                    services => Services,
-                    desired_services_nodes => DesiredServicesNodes,
-                    memory_data => MemoryData,
-                    plan_uuid => PlanUUID}})
+                  Params#{memory_data => MemoryData}})
     end.
 
 retry_rebalance(rebalance, Params, Id, Chk) ->

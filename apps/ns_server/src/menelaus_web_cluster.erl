@@ -1275,10 +1275,13 @@ parse_rebalance_params(Params) ->
             menelaus_util:assert_is_morpheus()
     end,
 
-    [[list_to_existing_atom(N) || N <- KnownNodesS],
-     [list_to_existing_atom(N) || N <- EjectedNodesS],
-     DeltaRecoveryBuckets, DefragmentZones, Services, ServiceNodesMap,
-     PlanUUID].
+    #{known_nodes => [list_to_existing_atom(N) || N <- KnownNodesS],
+      eject_nodes => [list_to_existing_atom(N) || N <- EjectedNodesS],
+      delta_recovery_buckets => DeltaRecoveryBuckets,
+      defragment_zones => DefragmentZones,
+      services => Services,
+      desired_services_nodes => ServiceNodesMap,
+      plan_uuid => PlanUUID}.
 
 parse_topology_params(Params, Services, KeepNodes) ->
     {ok, MP} = re:compile("^\\[(\\w+)\\]$"),
@@ -1336,14 +1339,14 @@ parse_topology_params(Params, Services, KeepNodes) ->
             ServiceNodesMap
     end.
 
-do_handle_rebalance(Req, [KnownNodes, EjectedNodes, DeltaRecoveryBuckets,
-                          DefragmentZones, Services, DesiredSevicesTopology,
-                          PlanUUID]
-                    = Params) ->
+do_handle_rebalance(Req, Params) ->
+    #{known_nodes := KnownNodes,
+      eject_nodes := EjectedNodes,
+      delta_recovery_buckets := DeltaRecoveryBuckets,
+      services := Services,
+      desired_services_nodes := DesiredSevicesTopology} = Params,
     ?log_info("Starting rebalance with params ~p", [Params]),
-    case rebalance:start(KnownNodes, EjectedNodes, DeltaRecoveryBuckets,
-                         DefragmentZones, Services, DesiredSevicesTopology,
-                         PlanUUID) of
+    case rebalance:start(Params) of
         in_progress ->
             reply(Req, 200);
         nodes_mismatch ->
