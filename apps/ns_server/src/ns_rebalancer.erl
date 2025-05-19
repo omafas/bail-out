@@ -37,7 +37,8 @@
          rebalance_topology_aware_services/3,
          needs_rebalance_with_reason/3,
          get_desired_services_nodes/1,
-         prepare_fusion_rebalance/1]).
+         prepare_fusion_rebalance/1,
+         maybe_check_expected_topology/2]).
 
 -export([wait_local_buckets_shutdown_complete/0]). % used via rpc:multicall
 -export([get_fusion_storage_snapshot/4]). %% used via rpc:call
@@ -1347,8 +1348,7 @@ run_graceful_failover(Nodes, Opts) ->
 
                    ClusterSnapshot = ns_cluster_membership:get_snapshot(),
                    try
-                       failover:maybe_check_expected_topology(ClusterSnapshot,
-                                                              Opts)
+                       maybe_check_expected_topology(ClusterSnapshot, Opts)
                    catch
                        throw:Err ->
                            erlang:exit(Err)
@@ -1838,6 +1838,30 @@ to_human_readable_reason(map_needs_rebalance) ->
     <<"Bucket map needs rebalance.">>;
 to_human_readable_reason(servers_changed) ->
     <<"Servers of bucket have changed.">>.
+
+maybe_check_expected_topology(Snapshot,
+                              #{expected_topology := ExpectedTopology}) ->
+    ActiveNodes = ns_cluster_membership:active_nodes(Snapshot),
+    InactiveFailedNodes = ns_cluster_membership:inactive_failed_nodes(Snapshot),
+    InactiveAddedNodes = ns_cluster_membership:inactive_added_nodes(Snapshot),
+    case ExpectedTopology of
+        #{active := ActiveNodes, inactiveFailed := InactiveFailedNodes,
+          inactiveAdded := InactiveAddedNodes} ->
+            ok;
+        _ ->
+            %% For now let's just throw the error rather than include the
+            %% differences. The end user action should be to update their state
+            %% and re-assess their actions regardless of the differences. We may
+            %% as well log it though.
+            ?log_error("Expected topology mismatch. "
+                       "Active nodes: ~0p, Inactive failed nodes: ~0p, "
+                       "Inactive added nodes: ~0p. Expected Topology: ~0p",
+                       [ActiveNodes, InactiveFailedNodes, InactiveAddedNodes,
+                        ExpectedTopology]),
+            throw(expected_topology_mismatch)
+    end;
+maybe_check_expected_topology(_, _) ->
+    ok.
 
 -ifdef(TEST).
 find_active_nodes_of_vbuckets_test() ->

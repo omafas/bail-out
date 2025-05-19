@@ -28,7 +28,6 @@
          clear_failover_vbuckets_sets/1,
          nodes_needed_for_durability_failover/2,
          can_preserve_durability_majority/2,
-         maybe_check_expected_topology/2,
          get_snapshot/0]).
 
 -define(DATA_LOST, 1).
@@ -975,35 +974,11 @@ is_possible(FailoverNodes, Snapshot, Options) ->
         end,
         BucketsConfig = ns_bucket:get_buckets_by_rank(Snapshot),
         check_last_server(BucketsConfig, FailoverNodes),
-        maybe_check_expected_topology(Snapshot, Options)
+        ns_rebalancer:maybe_check_expected_topology(Snapshot, Options)
     catch
         throw:Error ->
             Error
     end.
-
-maybe_check_expected_topology(Snapshot,
-                              #{expected_topology := ExpectedTopology}) ->
-    ActiveNodes = ns_cluster_membership:active_nodes(Snapshot),
-    InactiveFailedNodes = ns_cluster_membership:inactive_failed_nodes(Snapshot),
-    InactiveAddedNodes = ns_cluster_membership:inactive_added_nodes(Snapshot),
-    case ExpectedTopology of
-        #{active := ActiveNodes, inactiveFailed := InactiveFailedNodes,
-          inactiveAdded := InactiveAddedNodes} ->
-            ok;
-        _ ->
-            %% For now let's just throw the error rather than include the
-            %% differences. The end user action should be to update their state
-            %% and re-assess their actions regardless of the differences. We may
-            %% as well log it though.
-            ?log_error("Expected topology mismatch. "
-                       "Active nodes: ~0p, Inactive failed nodes: ~0p, "
-                       "Inactive added nodes: ~0p. Expected Topology: ~0p",
-                       [ActiveNodes, InactiveFailedNodes, InactiveAddedNodes,
-                        ExpectedTopology]),
-            throw(expected_topology_mismatch)
-    end;
-maybe_check_expected_topology(_, _) ->
-    ok.
 
 maybe_check_kv_safety(Nodes, Snapshot, Options) ->
     %% Whilst we also check this in ns_orchestrator in the auto_failover path,
