@@ -292,7 +292,7 @@ stop_resume_bucket(Bucket) ->
           expected_topology_mismatch.
 failover(Nodes, AllowUnsafe) when is_boolean(AllowUnsafe) ->
     %% Pre-Morpheus compat function clause.
-    failover(Nodes, #{allow_unsafe => AllowUnsafe});
+    call({failover, Nodes, AllowUnsafe}, infinity);
 failover(Nodes, Options) when is_map(Options) ->
     call({failover, Nodes, Options}, infinity).
 
@@ -312,7 +312,7 @@ failover(Nodes, Options) when is_map(Options) ->
           expected_topology_mismatch.
 start_failover(Nodes, AllowUnsafe) when is_boolean(AllowUnsafe) ->
     %% Pre-Morpheus compat function clause.
-    start_failover(Nodes, #{allow_unsafe => AllowUnsafe});
+    call({start_failover, Nodes, AllowUnsafe});
 start_failover(Nodes, Options) when is_map(Options) ->
     call({start_failover, Nodes, Options}).
 
@@ -856,7 +856,7 @@ idle({update_bucket,
         case bucket_placer:place_bucket(BucketName, UpdatedProps) of
             {ok, NewUpdatedProps} ->
                 ns_bucket:update_bucket_props(
-                       BucketType, StorageMode, BucketName, NewUpdatedProps);
+                  BucketType, StorageMode, BucketName, NewUpdatedProps);
             {error, BadZones} ->
                 {error, {need_more_space, BadZones}}
         end,
@@ -874,7 +874,11 @@ idle({failover, Node}, From, _State) ->
     %% calls from pre-5.5 nodes
     {keep_state_and_data,
      [{next_event, {call, From}, {failover, [Node], false}}]};
-idle({failover, Nodes, Options}, From, _State) ->
+idle({failover, Nodes, AllowUnsafe}, From, _State)
+  when is_boolean(AllowUnsafe) ->
+    %% calls from pre-morpheus nodes
+    idle({failover, Nodes, #{allow_unsafe => AllowUnsafe}}, From, _State);
+idle({failover, Nodes, Options}, From, _State) when is_map(Options) ->
     handle_start_failover(Nodes, From, true, hard_failover, Options);
 idle({start_failover, Nodes, Options}, From, _State) ->
     handle_start_failover(Nodes, From, false, hard_failover, Options);
