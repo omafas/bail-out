@@ -1909,30 +1909,40 @@ class NativeEncryptionPermissionsTests(testlib.BaseTestSet):
         for user in self.writing:
             for usage in self.writing[user]:
                 tests[f'create_secret({user}, {usage})'] = \
-                    lambda s, n=user, u=usage: s.create_secret_test_(n, u)
+                    lambda s, n=user, u=usage: s.create_secret_test_(n, [u])
                 tests[f'update_secret({user}, {usage})'] = \
-                    lambda s, n=user, u=usage: s.update_secret_test_(n, u)
+                    lambda s, n=user, u=usage: s.update_secret_test_(n, [u])
                 tests[f'read_secret({user}, {usage})'] = \
                     lambda s, n=user, u=usage: s.read_secret_test_(n, u)
         return tests
 
-    def create_secret_test_(self, username, usage):
-        creds = (username, self.password)
-        secret = auto_generated_secret(usage=[usage])
-        expected_code = 200 if self.writing[username][usage] else 403
-        create_secret(self.cluster, secret, auth=creds,
-                      expected_code=expected_code)
+    def random_usage_sublist_test_gen(self):
+        tests = {}
+        for user in self.writing:
+            all_usages = list(self.writing[user].keys())
+            subset_size = random.randint(2, len(all_usages))
+            usages = random.sample(all_usages, subset_size)
+            tests[f'rand_create_secret({user}, {usages})'] = \
+                lambda s, n=user, u=usages: s.create_secret_test_(n, u)
+            tests[f'rand_update_secret({user}, {usages})'] = \
+                lambda s, n=user, u=usages: s.update_secret_test_(n, u)
+        return tests
 
-    def update_secret_test_(self, username, usage):
+    def create_secret_test_(self, username, usages):
         creds = (username, self.password)
-        secret = auto_generated_secret(usage=[usage])
+        secret = auto_generated_secret(usage=usages)
+        create_secret(self.cluster, secret, auth=creds,
+                      expected_code=self.expected_write_res(username, usages))
+
+    def update_secret_test_(self, username, usages):
+        creds = (username, self.password)
+        secret = auto_generated_secret(usage=usages)
         secret_id = create_secret(self.cluster, secret) # note: admin creates it
         secret['name'] = secret['name'] + ' foo'
-        expected_code = 200 if self.writing[username][usage] else 403
         update_secret(self.cluster, secret_id, secret, auth=creds,
-                      expected_code=expected_code)
+                      expected_code=self.expected_write_res(username, usages))
         delete_secret(self.cluster, secret_id, auth=creds,
-                      expected_code=expected_code)
+                      expected_code=self.expected_write_res(username, usages))
 
     def read_secret_test_(self, name, usage):
         creds = (name, self.password)
@@ -1965,6 +1975,10 @@ class NativeEncryptionPermissionsTests(testlib.BaseTestSet):
             secrets = get_secrets(self.cluster, auth=creds)
             filtered = [s for s in secrets if s['id'] == not_readable_secret]
             assert filtered == [], f'unexpected secrets: {secrets}'
+
+    def expected_write_res(self, username, usages):
+        expected_res = [self.writing[username][u] for u in usages]
+        return 200 if all(expected_res) else 403
 
 
 def get_key_list(node, kind_as_str):
