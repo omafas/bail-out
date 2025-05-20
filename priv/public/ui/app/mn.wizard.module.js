@@ -12,7 +12,7 @@ import {NgModule} from '@angular/core';
 
 import {UIRouterModule} from '@uirouter/angular';
 import {ReactiveFormsModule} from '@angular/forms';
-import {HttpClientJsonpModule, HttpClientModule, HTTP_INTERCEPTORS} from '@angular/common/http';
+import {HttpClientJsonpModule, HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 import {CommonModule} from '@angular/common';
 import {NgbModule} from '@ng-bootstrap/ng-bootstrap';
 
@@ -45,7 +45,12 @@ let states = [{
   component: MnWizardSetupNewClusterComponent
 }, {
   name: 'app.wizard.joinCluster',
-  component: MnWizardJoinClusterComponent
+  component: MnWizardJoinClusterComponent,
+  resolve: {
+    clientCertificates: ['$http', ($http) => {
+      return $http.get('/pools/default/certificates/client');
+    }]
+  }
 }, {
   name:'app.wizard.termsAndConditions',
   component: MnWizardTermsAndConditionsComponent

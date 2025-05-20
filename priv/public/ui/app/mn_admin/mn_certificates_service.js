@@ -26,6 +26,7 @@ function mnCertificatesFactory($http, mnPoolDefault) {
     deletePoolsDefaultTrustedCAs: deletePoolsDefaultTrustedCAs,
     getNodeCertificateSettings: getNodeCertificateSettings,
     getNodeCertificateSettingsByNode: getNodeCertificateSettingsByNode,
+    getClientCertificate: getClientCertificate,
   };
 
   return mnCertificatesService;
@@ -116,6 +117,13 @@ function mnCertificatesFactory($http, mnPoolDefault) {
     return $http({
       method: 'DELETE',
       url: '/pools/default/trustedCAs/' + encodeURIComponent(id)
+    });
+  }
+
+  function getClientCertificate() {
+    return $http({
+      method: 'GET',
+      url: '/pools/default/certificates/client',
     });
   }
 }

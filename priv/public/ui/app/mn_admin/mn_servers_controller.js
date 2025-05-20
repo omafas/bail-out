@@ -96,7 +96,7 @@ angular
     mnEncryptionStatus,
   ])
   .config(["$stateProvider", configure])
-  .controller('mnServersController', ["$scope", "$state", "$uibModal", "mnPoolDefault", "mnPoller", "mnServersService", "mnHelper", "mnGroupsService", "mnPromiseHelper", "permissions", "mnStatisticsNewService", "mnCertificatesService", "pools", "poolDefault", mnServersController])
+  .controller('mnServersController', ["$scope", "$state", "$uibModal", "mnPoolDefault", "mnPoller", "mnServersService", "mnHelper", "mnGroupsService", "mnPromiseHelper", "permissions", "mnStatisticsNewService", "mnCertificatesService", "pools", "poolDefault", "mnClusterConfigurationService", mnServersController])
   .controller('mnServersListItemDetailsController', mnServersListItemDetailsController)
   .controller("mnServersListItemController", mnServersListItemController)
   .controller('mnServersFailOverDialogController', mnServersFailOverDialogController)
@@ -144,7 +144,7 @@ function configure($stateProvider) {
     });
 }
 
-function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller, mnServersService, mnHelper, mnGroupsService, mnPromiseHelper, permissions, mnStatisticsNewService, mnCertificatesService, pools, poolDefault) {
+function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller, mnServersService, mnHelper, mnGroupsService, mnPromiseHelper, permissions, mnStatisticsNewService, mnCertificatesService, pools, poolDefault, mnClusterConfigurationService) {
   var vm = this;
   vm.mnPoolDefault = mnPoolDefault.latestValue();
 
@@ -223,7 +223,9 @@ function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller,
               return mnGroupsService.getGroups();
             }
           });
-        }
+        },
+        selfConfig: mnClusterConfigurationService.getSelfConfig,
+        certificates: mnCertificatesService.getClientCertificate,
       }
     });
   }

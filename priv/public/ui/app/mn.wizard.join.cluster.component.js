@@ -42,13 +42,17 @@ class MnWizardJoinClusterComponent extends MnLifeCycleHooksToStream {
     MnAuthService,
     MnFormService,
     UIRouter,
+    'clientCertificates',
     MnPools,
     $rootScope,
     MnHelperService
   ]}
 
-  constructor(mnPoolsService, mnSecurityService, mnWizardService, mnAuthService, mnFormService, uiRouter, mnPools, $rootScope, mnHelperService) {
+  constructor(mnPoolsService, mnSecurityService, mnWizardService, mnAuthService, mnFormService, uiRouter, clientCertificates, mnPools, $rootScope, mnHelperService) {
     super();
+
+    this.clientCertificates = clientCertificates;
+    const uploadedCert = this.clientCertificates.data[0]?.type === 'uploaded';
 
     this.mnHelperService = mnHelperService;
 
@@ -58,6 +62,7 @@ class MnWizardJoinClusterComponent extends MnLifeCycleHooksToStream {
 
     const clusterAdminGroup = this.joinClusterForm.get('clusterAdmin');
     const clientCertAuthControl = clusterAdminGroup.get('clientCertAuth');
+    clientCertAuthControl.setValue(uploadedCert ? 'true' : 'false');
     const userControl = clusterAdminGroup.get('user');
     const passwordControl = clusterAdminGroup.get('password');
 

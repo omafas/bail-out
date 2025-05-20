@@ -10,12 +10,14 @@ licenses/APL2.txt.
 
 export default mnServersAddDialogController;
 
-mnServersAddDialogController.$inject = ["$scope", "$rootScope", "$q", "$uibModal", "mnServersService", "$uibModalInstance", "mnHelper", "mnPromiseHelper", "groups", "mnClusterConfigurationService", "mnPoolDefault", "mnCertificatesService"];
+mnServersAddDialogController.$inject = ["$scope", "$rootScope", "$q", "$uibModal", "mnServersService", "$uibModalInstance", "mnHelper", "mnPromiseHelper", "groups", "mnClusterConfigurationService", "mnPoolDefault", "mnCertificatesService", "selfConfig", "certificates"];
 
-function mnServersAddDialogController($scope, $rootScope, $q, $uibModal, mnServersService, $uibModalInstance, mnHelper, mnPromiseHelper, groups, mnClusterConfigurationService, mnPoolDefault, mnCertificatesService) {
+function mnServersAddDialogController($scope, $rootScope, $q, $uibModal, mnServersService, $uibModalInstance, mnHelper, mnPromiseHelper, groups, mnClusterConfigurationService, mnPoolDefault, mnCertificatesService, selfConfig, certificates) {
   var vm = this;
 
   vm.specifyDisk = false;
+
+  vm.selfCertType = certificates.data.find(node => node.node === selfConfig.configuredHostname)?.type;
 
   vm.addNodeConfig = {
     services: {
@@ -28,7 +30,7 @@ function mnServersAddDialogController($scope, $rootScope, $q, $uibModal, mnServe
     },
     credentials: {
       hostname: '',
-      clientCertAuth: 'true',
+      clientCertAuth: vm.selfCertType === 'uploaded' ? 'true' : 'false',
       user: 'Administrator',
       password: ''
     }
