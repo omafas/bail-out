@@ -45,7 +45,7 @@
               <p class="desc"
                  [hidden]="!(mnPermissions.stream | async)?.cluster.collection[(sourceBucketName | async) + ':.:.']?.collections.read">
                 <span class="icon fa-warning warning margin-right-half"></span>
-                You can specify a single collection for logging conflicts for the entire application or specify different conflict log collections at scope or collection level.<br>
+                You can specify a single collection for logging conflicts for the entire replication or specify different conflict log collections at scope or collection level.<br>
                 <span class="icon fa-warning warning margin-right-half"></span>
                 Scopes and collections to be removed by filtering rules set above will STILL BE SHOWN in this list.
               </p>
