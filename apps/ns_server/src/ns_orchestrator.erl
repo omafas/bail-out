@@ -43,7 +43,8 @@
                             type,
                             rebalance_id,
                             abort_reason,
-                            reply_to}).
+                            reply_to,
+                            opts}).
 
 -record(bucket_hibernation_state,
         {hibernation_manager :: pid(),
@@ -491,7 +492,8 @@ retry_rebalance(rebalance, Params, Id, Chk) ->
 
 retry_rebalance(graceful_failover, Params, Id, Chk) ->
     call({maybe_retry_graceful_failover,
-          proplists:get_value(nodes, Params), Id, Chk}).
+          proplists:get_value(nodes, Params),
+          proplists:get_value(opts, Params), Id, Chk}).
 
 %% Pre-Morpheus compat function. start_graceful_failover/2 is the new function.
 -spec start_graceful_failover([node()]) ->
@@ -713,13 +715,14 @@ handle_event({call, From}, {maybe_start_rebalance,
         throw:Error -> {keep_state_and_data, [{reply, From, Error}]}
     end;
 
-handle_event({call, From}, {maybe_retry_graceful_failover, Nodes, Id, Chk},
+handle_event({call, From},
+             {maybe_retry_graceful_failover, Nodes, Opts, Id, Chk},
              _StateName, _State) ->
     case graceful_failover_retry_ok(Chk) of
         false ->
             {keep_state_and_data, [{reply, From, retry_check_failed}]};
         Chk ->
-            StartEvent = {start_graceful_failover, Nodes, Id, Chk},
+            StartEvent = {start_graceful_failover, Nodes, Opts, Id, Chk},
             {keep_state_and_data, [{next_event, {call, From}, StartEvent}]}
     end;
 
@@ -965,7 +968,8 @@ idle({start_graceful_failover, Nodes, Opts, Id, RetryChk}, From, _State) ->
                                 to_failover = Nodes,
                                 abort_reason = undefined,
                                 type = Type,
-                                rebalance_id = Id},
+                                rebalance_id = Id,
+                                opts = Opts},
              [{reply, From, ok}]};
         {error, RV} ->
             misc:unlink_terminate_and_wait(ObserverPid, kill),
@@ -1714,8 +1718,10 @@ retry_rebalance(_, #rebalancing_state{type = rebalance,
 retry_rebalance(_, #rebalancing_state{type = graceful_failover,
                                       to_failover = Nodes,
                                       retry_check = Chk,
-                                      rebalance_id = Id}) ->
-    auto_rebalance:retry_rebalance(graceful_failover, [{nodes, Nodes}],
+                                      rebalance_id = Id,
+                                      opts = Opts}) ->
+    auto_rebalance:retry_rebalance(graceful_failover,
+                                   [{nodes, Nodes}, {opts, Opts}],
                                    Id, Chk);
 
 retry_rebalance(_, _) ->
