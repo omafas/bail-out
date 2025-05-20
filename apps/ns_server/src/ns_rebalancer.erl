@@ -1340,6 +1340,11 @@ run_graceful_failover(Nodes, Opts) ->
     ok = leader_activities:run_activity(
            graceful_failover, majority,
            fun () ->
+                   ?log_info("Starting graceful failover of ~p", [Nodes]),
+
+                   ok = testconditions:check_test_condition(
+                          graceful_failover_start),
+
                    ClusterSnapshot = ns_cluster_membership:get_snapshot(),
                    try
                        failover:maybe_check_expected_topology(ClusterSnapshot,
@@ -1370,6 +1375,9 @@ run_graceful_failover(Nodes, Opts) ->
                    master_activity_events:note_rebalance_stage_completed(kv),
                    sleep_for_sdk_clients("graceful failover"),
                    {ok, []} = failover:orchestrate(Nodes, #{}),
+
+                   ok = testconditions:check_test_condition(
+                          graceful_failover_complete),
 
                    ok
            end).
