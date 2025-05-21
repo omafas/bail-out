@@ -657,21 +657,37 @@ licenses/APL2.txt.
             *ngIf="(form.group.get('enableEncryptionAtRest').valueChanges | async)"
           >
             <div class="formrow">
-              <label>Available Encryption Keys</label>
-              <mn-select
-                class="inline fix-width-3"
-                [group]="form.group"
-                [values]="filteredSecrets"
-                mnPlaceholder="select key..."
-                [valuesMapping]="secretsMapping"
-                mnFormControlName="encryptionAtRestKeyId"
-              >
-              </mn-select>
+              <label>Available Encryption Keys
+                 <ng-template #autoCompactionTooltip>
+                    Encryption keys are managed on the <em>Security</em> &#8594; <em>Encryption At Rest</em> page.
+                 </ng-template>
+                 <span
+                     [ngbTooltip]="autoCompactionTooltip"
+                     triggers="click"
+                     class="fa-stack icon-info"
+                     placement="right"
+                 >
+                     <span class="icon fa-circle-thin fa-stack-2x"></span>
+                     <span class="icon fa-info fa-stack-1x"></span>
+                  </span>
+              </label>
+               <mn-select
+                   class="inline fix-width-3"
+                   [group]="form.group"
+                   [values]="filteredSecrets"
+                   mnPlaceholder="select key..."
+                   [valuesMapping]="secretsMapping"
+                   mnFormControlName="encryptionAtRestKeyId"
+               >
+               </mn-select>
               <div
                  class="error error-form"
                  [hidden]="!(httpError | async)?.errors['encryptionAtRestKeyId']"
               >
                 {{(httpError | async)?.errors['encryptionAtRestKeyId']}}
+              </div>
+              <div class="error error-form" [hidden]="form.group.get('encryptionAtRestKeyId').value">
+                To enable encryption, an encryption key is required. 
               </div>
             </div>
 
@@ -822,7 +838,8 @@ licenses/APL2.txt.
 
     <div class="panel-footer">
       <a (click)="activeModal.dismiss()">Cancel</a>
-      <button type="submit">
+      <button type="submit"
+              [disabled]="form.group.invalid || (disableSubmitDueToEncryption$ | async)">
         <span>{{bucket ? 'Save Changes' : 'Add Bucket'}}</span>
       </button>
     </div>

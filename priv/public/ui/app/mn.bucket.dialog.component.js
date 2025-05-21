@@ -304,6 +304,17 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
 
     this.showUsersLink = this.users
       .pipe(map(users => users.length > 3));
+
+    this.disableSubmitDueToEncryption$ = combineLatest([
+      this.form.group.get('enableEncryptionAtRest').valueChanges.pipe(startWith(this.form.group.get('enableEncryptionAtRest').value)),
+      this.form.group.get('encryptionAtRestKeyId').valueChanges.pipe(startWith(this.form.group.get('encryptionAtRestKeyId').value))
+    ]).pipe(
+      map(([encryptionEnabled, keyId]) => {
+        return encryptionEnabled && !keyId; // Disable if encryption enabled and no key selected
+      }),
+      shareReplay({refCount: true, bufferSize: 1}),
+      takeUntil(this.mnOnDestroy)
+    );
   }
 
   getBucketTotalRam(ramSummary) {
