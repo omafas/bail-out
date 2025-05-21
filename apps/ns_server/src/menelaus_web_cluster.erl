@@ -989,8 +989,11 @@ parse_hard_failover_args(Req) ->
 %% These parameters are used to determine if the state of the clsuter is the
 %% same as the caller expects it to be before we perform some topology changing
 %% operation.
-parse_expected_topology_params(Req, IsMorpheus) ->
+parse_expected_topology_params_from_req(Req, IsMorpheus) ->
     Params = mochiweb_request:parse_post(Req),
+    parse_expected_topology_params(Params, IsMorpheus).
+
+parse_expected_topology_params(Params, IsMorpheus) ->
     ActiveNodes =
         parse_list_param("activeNodes", Params, undefined),
     InactiveFailedNodes =
@@ -1143,7 +1146,7 @@ do_handle_start_hard_failover(Req, FailoverBody) ->
     case parse_hard_failover_args(Req) of
         {ok, Nodes, AllowUnsafe} ->
             IsMorpheus = cluster_compat_mode:is_cluster_morpheus(),
-            case parse_expected_topology_params(Req, IsMorpheus) of
+            case parse_expected_topology_params_from_req(Req, IsMorpheus) of
                 {error, Error} ->
                     reply_text(Req, Error, 400);
                 Opts ->
@@ -1170,7 +1173,7 @@ handle_start_graceful_failover(Req) ->
     case parse_graceful_failover_args(Req) of
         {ok, Nodes} ->
             IsMorpheus = cluster_compat_mode:is_cluster_morpheus(),
-            case parse_expected_topology_params(Req, IsMorpheus) of
+            case parse_expected_topology_params_from_req(Req, IsMorpheus) of
                 {error, Error} ->
                     reply_text(Req, Error, 400);
                 Opts ->
@@ -1275,13 +1278,23 @@ parse_rebalance_params(Params) ->
             menelaus_util:assert_is_morpheus()
     end,
 
-    #{known_nodes => [list_to_existing_atom(N) || N <- KnownNodesS],
-      eject_nodes => [list_to_existing_atom(N) || N <- EjectedNodesS],
-      delta_recovery_buckets => DeltaRecoveryBuckets,
-      defragment_zones => DefragmentZones,
-      services => Services,
-      desired_services_nodes => ServiceNodesMap,
-      plan_uuid => PlanUUID}.
+    IsMorpheus = cluster_compat_mode:is_cluster_morpheus(),
+    BaseMap =
+        case parse_expected_topology_params(Params, IsMorpheus) of
+            {error, TopologyError} ->
+                throw(TopologyError);
+            TopologyArgs ->
+                TopologyArgs
+        end,
+
+    BaseMap
+        #{known_nodes => [list_to_existing_atom(N) || N <- KnownNodesS],
+          eject_nodes => [list_to_existing_atom(N) || N <- EjectedNodesS],
+          delta_recovery_buckets => DeltaRecoveryBuckets,
+          defragment_zones => DefragmentZones,
+          services => Services,
+          desired_services_nodes => ServiceNodesMap,
+          plan_uuid => PlanUUID}.
 
 parse_topology_params(Params, Services, KeepNodes) ->
     {ok, MP} = re:compile("^\\[(\\w+)\\]$"),
