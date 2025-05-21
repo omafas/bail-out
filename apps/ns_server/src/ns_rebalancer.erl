@@ -508,6 +508,14 @@ rebalance_body(#{keep_nodes := KeepNodes,
                  delta_nodes := DeltaNodes,
                  delta_recovery_buckets := DeltaRecoveryBucketNames,
                  services := Services} = Params, DesiredServers) ->
+    ClusterMembershipSnap = ns_cluster_membership:get_snapshot(),
+    try
+        maybe_check_expected_topology(ClusterMembershipSnap, Params)
+    catch
+        throw:Err ->
+            erlang:exit(Err)
+    end,
+
     LiveNodes = KeepNodes ++ EjectNodesAll,
     LiveKVNodes = ns_cluster_membership:service_nodes(LiveNodes, kv),
 
