@@ -1068,7 +1068,8 @@ idle({start_rebalance, Params = #{keep_nodes := KeepNodes,
                                 to_failover = [],
                                 abort_reason = undefined,
                                 type = Type,
-                                rebalance_id = RebalanceId},
+                                rebalance_id = RebalanceId,
+                                opts = Params},
              [{reply, From, ReturnValue}]};
         {error, Error} ->
             ?log_info("Rebalance ~p was not started due to error: ~p",
@@ -1666,7 +1667,8 @@ retry_rebalance(_, #rebalancing_state{type = rebalance,
                                       failed_nodes = FNs,
                                       delta_recov_bkts = DRBkts,
                                       retry_check = Chk,
-                                      rebalance_id = Id}) ->
+                                      rebalance_id = Id,
+                                      opts = Opts}) ->
     case lists:member(node(), FNs) of
         true ->
             ?log_debug("Orchestrator is one of the failed nodes "
@@ -1696,9 +1698,21 @@ retry_rebalance(_, #rebalancing_state{type = rebalance,
                     EjectedNodes = EjectedNodes0 -- EjectedByReb,
 
                     NewChk = update_retry_check(EjectedByReb, Chk),
-                    Params = [{known_nodes,  KnownNodes},
-                              {eject_nodes, EjectedNodes},
-                              {delta_recovery_buckets, DRBkts}],
+                    Params0 = [{known_nodes,  KnownNodes},
+                               {eject_nodes, EjectedNodes},
+                               {delta_recovery_buckets, DRBkts}],
+
+                    %% TODO: Ideally we should move to put all of the params in
+                    %% the opts map such that we can just pass that in, but that
+                    %% requires a bit more refactoring.
+                    Params =
+                        case maps:get(expected_topology, Opts, []) of
+                            undefined ->
+                                Params0;
+                            TopologyArgs ->
+                                [{expected_topology, TopologyArgs}] ++
+                                    Params0
+                        end,
 
                     auto_rebalance:retry_rebalance(rebalance, Params, Id,
                                                    NewChk);
