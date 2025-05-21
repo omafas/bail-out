@@ -1645,7 +1645,7 @@ do_ensure_bucket(Sock, Bucket, BConf, false, JWT) ->
             %% impossible.
             {ok, DS} = cb_crypto:fetch_deks_snapshot({bucketDek, Bucket}),
             {ActiveDek, Deks} = cb_crypto:get_all_deks(DS),
-            {Engine, ConfigString, ConfigStringSanitized} =
+            {Engine, ConfigString, ConfigStringForLogging} =
                 memcached_bucket_config:start_params(BConf, ActiveDek, Deks,
                                                      JWT),
 
@@ -1662,7 +1662,7 @@ do_ensure_bucket(Sock, Bucket, BConf, false, JWT) ->
                                                 ConfigString, Timeout) of
                 ok ->
                     ?log_info("Created bucket ~p with config string ~p",
-                              [Bucket, ConfigStringSanitized]),
+                              [Bucket, ConfigStringForLogging]),
                     ok = mc_client_binary:select_bucket(Sock, Bucket);
                 Error ->
                     {error, {bucket_create_error, Error}}

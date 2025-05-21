@@ -398,7 +398,9 @@ ensure_collections(Sock, #cfg{name = BucketName, snapshot = Snapshot}) ->
                               collections:convert_uid_from_memcached(Next)})
     end.
 
-start_params(#cfg{config = BucketConfig,
+start_params(#cfg{name=BucketName,
+                  config = BucketConfig,
+                  snapshot = Snapshot,
                   params = Params,
                   engine_config = EngineConfig}, ActiveDek, Deks, JWT) ->
     Engine = proplists:get_value(engine, EngineConfig),
@@ -426,9 +428,9 @@ start_params(#cfg{config = BucketConfig,
           end, Params),
 
     PrepareCfgString =
-        fun (Sanitize) ->
+        fun (ForLogging) ->
                 Sanitizer =
-                    case Sanitize of
+                    case ForLogging of
                         true ->
                             fun (_) -> <<"<sanitized>">> end;
                         false ->
@@ -444,7 +446,7 @@ start_params(#cfg{config = BucketConfig,
                             "";
                         _ ->
                             JWTParam =
-                                case Sanitize of
+                                case ForLogging of
                                     true ->
                                         {_, Payload} =
                                             jose_jwt:peek_payload(JWT),
@@ -455,9 +457,38 @@ start_params(#cfg{config = BucketConfig,
                                 end,
                             ?MAGMA_FUSION_AUTH_TOKEN ++ "=" ++ JWTParam
                     end,
+                CollectionManifestString =
+                    case ForLogging of
+                        true ->
+                            %% The collection manifest can potentially be very
+                            %% large, so we'll just log the uid
+                            CollectionManifestShort =
+                                io_lib:format(
+                                  "<base64-encoding of manifest ~s>",
+                                  [collections:uid(BucketName, Snapshot)]),
+                            "collection_manifest=" ++ CollectionManifestShort;
+                        false ->
+                            CollectionManifestJson =
+                                collections:manifest_json_for_memcached(
+                                  BucketName, Snapshot),
+                            %% Note, we base64url encode the collection manifest
+                            %% to avoid needing to to make sure we escape any
+                            %% ";" / "=". At the time of writing, these
+                            %% characters are not believed to be possible to
+                            %% appear in the manifest, but we're just making
+                            %% sure we don't get a bug slip through if that
+                            %% changed in future.
+                            CollectionManifestEncoded =
+                                base64:encode(
+                                  ejson:encode(CollectionManifestJson),
+                                  #{padding => false,
+                                    mode => urlsafe}),
+                            "collection_manifest=" ++ CollectionManifestEncoded
+                    end,
 
                 ExtraParams = [P || P <- [StaticConfigString, ExtraConfigString,
-                                          DeksConfigString, JWTConfigString],
+                                          DeksConfigString, JWTConfigString,
+                                          CollectionManifestString],
                                     P =/= ""],
                 string:join(DynamicParams ++ ExtraParams, ";")
         end,
