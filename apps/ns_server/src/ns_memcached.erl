@@ -1661,7 +1661,7 @@ do_ensure_bucket(Sock, Bucket, BConf, false, JWT) ->
             case mc_client_binary:create_bucket(Sock, Bucket, Engine,
                                                 ConfigString, Timeout) of
                 ok ->
-                    ?log_info("Created bucket ~p with config string ~p",
+                    ?log_info("Created bucket ~p with config string ~s",
                               [Bucket, ConfigStringForLogging]),
                     ok = mc_client_binary:select_bucket(Sock, Bucket);
                 Error ->
