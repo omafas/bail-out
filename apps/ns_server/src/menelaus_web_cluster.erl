@@ -1382,9 +1382,10 @@ do_handle_rebalance(Req, Params) ->
             reply_json(
               Req,
               {[{invalidRebalancePlan,
-                 io_lib:format(
-                   "Incompatibility with stored rebalance plan: ~s.",
-                   [Error])}]}, 400);
+                 iolist_to_binary(
+                   io_lib:format(
+                     "Incompatibility with stored rebalance plan: ~s.",
+                     [Error]))}]}, 400);
         %% pre-7.6 responses
         ok ->
             ns_audit:rebalance_initiated(Req, KnownNodes, EjectedNodes,
