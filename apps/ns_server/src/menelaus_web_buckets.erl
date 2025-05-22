@@ -5155,6 +5155,8 @@ validate_dura_min_level_before_server_list_populated_test() ->
                 read_key_fast, fun(_, Default) -> Default end),
     meck:expect(ns_config, search,
                 fun (couchbase_num_vbuckets_default) -> false end),
+    meck:expect(ns_config, search_node_with_default,
+                fun (_, D) -> D end),
     %% BucketConfig before the server list has been populated
     BucketConfig = [{servers, []},
                     {desired_servers, [node1]},
@@ -5180,6 +5182,8 @@ validate_dura_min_level_change_when_only_one_kv_node_active_test() ->
     meck:new(ns_config, [passthrough]),
     meck:expect(ns_config,
                 read_key_fast, fun(_, Default) -> Default end),
+    meck:expect(ns_config, search_node_with_default,
+                fun (_, D) -> D end),
     BucketConfig = [{servers, [node1]},
                     {desired_servers, [node1]},
                     {num_replicas, 1},
@@ -5578,6 +5582,9 @@ storage_mode_migration_meck_setup(Version) ->
                 fun (_, Default) ->
                         Default
                 end),
+    meck:expect(ns_config, search_node_with_default,
+                fun (_, D) -> D end),
+
     meck:expect(ns_config, search,
                 fun (couchbase_num_vbuckets_default) ->
                         false
@@ -5987,6 +5994,8 @@ num_replicas_guardrail_validation_test_() ->
                             (_, Default) -> Default end),
              meck:expect(ns_config, search,
                          fun (couchbase_num_vbuckets_default) -> false end),
+             meck:expect(ns_config, search_node_with_default,
+                         fun ({cb_cluster_secrets, _}, D) -> D end),
 
              meck:expect(ns_storage_conf, this_node_dbdir,
                          fun () -> {ok, ""} end),

@@ -118,6 +118,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                       'passwordSource': 'env'})
         change_password(self.sm_node, password='')
         set_cfg_dek_limit(self.cluster, None)
+        set_log_dek_limit(self.cluster, None)
+        set_all_bucket_dek_limit(self.cluster, None)
         set_remove_hist_keys_interval(self.cluster, None)
 
     def random_node(self):
@@ -1059,20 +1061,46 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
     def dek_limit_test(self):
         set_cfg_dek_limit(self.cluster, 2)
+        set_log_dek_limit(self.cluster, 2)
 
-        secret = auto_generated_secret(usage=['bucket-encryption',
-                                              'config-encryption'])
+        secret = auto_generated_secret(usage=['config-encryption'])
         secret_id = create_secret(self.random_node(), secret)
 
         set_cfg_encryption(self.random_node(), 'encryptionKey', secret_id,
                            dek_rotation=1)
+        set_log_encryption(self.cluster, 'nodeSecretManager', -1,
+                           dek_rotation=1)
+
+        time.sleep(3)
+
+        verify_dek_files(self.cluster, Path() / 'config' / 'deks',
+                         verify_key_count=lambda n: n <= 2)
+        verify_dek_files(self.cluster, Path() / 'config' / 'logs_deks',
+                         verify_key_count=lambda n: n <= 2)
+
+    def all_bucket_dek_limit_test(self):
+        self.bucket_dek_limit_test_base(all_bucket_dek_limit=2)
+
+    def specific_bucket_dek_limit_test(self):
+        self.bucket_dek_limit_test_base(all_bucket_dek_limit=10,
+                                        specific_bucket_dek_limit=2)
+
+    def bucket_dek_limit_test_base(self,
+                                   all_bucket_dek_limit = None,
+                                   specific_bucket_dek_limit = None):
+        secret = auto_generated_secret(usage=['bucket-encryption'])
+        secret_id = create_secret(self.random_node(), secret)
+
+        set_all_bucket_dek_limit(self.cluster, all_bucket_dek_limit)
+
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': secret_id,
                                     'encryptionAtRestDekRotationInterval': 0},
                                    sync=True)
         # Set the limit after bucket is created, otherwise we don't have
         # bucket UUID yet
-        set_bucket_dek_limit(self.cluster, self.bucket_name, 2)
+        set_bucket_dek_limit(self.cluster, self.bucket_name,
+                             specific_bucket_dek_limit)
 
         self.cluster.update_bucket({'name': self.bucket_name,
                                     'encryptionAtRestDekRotationInterval': 1})
@@ -1091,8 +1119,6 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         verify_bucket_deks_files(self.cluster, bucket_uuid,
                                  verify_key_count=lambda n: n <= 2)
 
-        verify_dek_files(self.cluster, Path() / 'config' / 'deks',
-                         verify_key_count=lambda n: n <= 2)
 
     def prepare_cluster_for_node_readd_testing(self):
         # Create auto-generated secret for bucket encryption
@@ -2475,8 +2501,15 @@ def poll_verify_deks_and_collect_ids(*args, **kwargs):
 
 
 def set_cfg_dek_limit(cluster, n):
-    key = '{cb_cluster_secrets, {max_dek_num, configDek}}'
-    set_ns_config_value(cluster, key, n)
+    set_dek_limit(cluster, 'configDek', n)
+
+
+def set_log_dek_limit(cluster, n):
+    set_dek_limit(cluster, 'logDek', n)
+
+
+def set_all_bucket_dek_limit(cluster, n):
+    set_dek_limit(cluster, 'bucketDek', n)
 
 
 def set_bucket_dek_limit(cluster, bucket, n):
@@ -2484,7 +2517,12 @@ def set_bucket_dek_limit(cluster, bucket, n):
     if uuid is None and n is None:
         # The bucket doesn't exist, no point in resetting the limit
         return
-    key = '{cb_cluster_secrets, {max_dek_num, {bucketDek, <<"' + uuid + '">>}}}'
+    key = '{bucketDek, <<"' + uuid + '">>}'
+    set_dek_limit(cluster, key, n)
+
+
+def set_dek_limit(cluster, kind, n):
+    key = '{cb_cluster_secrets, {max_dek_num, ' + kind + '}}'
     set_ns_config_value(cluster, key, n)
 
 

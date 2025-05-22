@@ -29,7 +29,6 @@
 -define(DEK_TIMER_RETRY_TIME_S, ?get_param(dek_retry_interval, 60)).
 -define(DEK_DROP_RETRY_TIME_S(Kind),
         ?get_param({dek_removal_min_interval, Kind}, 60*60*3)).
--define(MAX_DEK_NUM(Kind), ?get_param({max_dek_num, Kind}, 50)).
 
 %% DEK GC interval is slightly less than DEK_INFO_UPDATE_INVERVAL_S to
 %% ensure that DEK GC can be triggered before DEK info update (on average).
@@ -2195,7 +2194,7 @@ generate_new_dek(Kind, CurrentDeks, EncryptionMethod, Snapshot) ->
     %% Rotation is needed but if there are too many deks already
     %% we should not generate new deks (something is wrong)
     CurrentDekNum = length(CurrentDeks),
-    case CurrentDekNum < ?MAX_DEK_NUM(Kind) of
+    case CurrentDekNum < max_dek_num(Kind) of
         true ->
             ?log_debug("Generating new ~p dek, encryption is ~p...",
                        [Kind, EncryptionMethod]),
@@ -4220,6 +4219,13 @@ handle_erpc_key_test_result(Res, Nodes) ->
 
 call_is_writable_mfa({M, F, A}, ExtraArgs) ->
     erlang:apply(M, F, A ++ ExtraArgs).
+
+max_dek_num(Kind) ->
+    Default = case Kind of
+                  {bucketDek, _} -> ?get_param({max_dek_num, bucketDek}, 50);
+                  _ -> 50
+              end,
+    ?get_param({max_dek_num, Kind}, Default).
 
 -ifdef(TEST).
 replace_secret_in_list_test() ->
