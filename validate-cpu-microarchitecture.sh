@@ -80,7 +80,8 @@ validate_cpu_microarchitecture() {
     DEBUG=${2-false}
 
     # Check to see if the check should be bypassed
-    if [ -n "${COUCHBASE_DO_NOT_VALIDATE_CPU_MICROARCHITECTURE}" ]; then
+    # MB-66703 for now, this check is force-bypassed
+    if [ -n "QQQ CHECK DISABLED ${COUCHBASE_DO_NOT_VALIDATE_CPU_MICROARCHITECTURE}" ]; then
         $DEBUG && echo "Skipping CPU microarchitecture validation due to COUCHBASE_DO_NOT_VALIDATE_CPU_MICROARCHITECTURE variable."
         return 0
     fi
