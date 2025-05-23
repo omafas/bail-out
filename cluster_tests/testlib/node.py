@@ -22,6 +22,7 @@ class Node:
         self.host = host
         self.port = port
         self.auth = auth
+        self.dbdir_cache = None
         self.data_path_cache = None
         self.tmp_path_cache = None
         self.logs_path_cache = None
@@ -38,6 +39,14 @@ class Node:
 
     def __lt__(self, other):
         return self.hostname() < other.hostname()
+
+    def dbdir(self):
+        if self.dbdir_cache is None:
+            r = testlib.diag_eval(
+                  self, "{ok, Dir} = ns_storage_conf:this_node_dbdir(), Dir.")
+            self.dbdir_cache = r.text.strip('\"')
+
+        return self.dbdir_cache
 
     def data_path(self):
         if self.data_path_cache is None:
