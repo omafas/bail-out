@@ -67,10 +67,6 @@ def parse_args():
     group.add_argument('--key-dir', '-w', type=str,
                        metavar='<directory_with_keys>',
                        help='directory to search for bucket keys')
-    group.add_argument('--bucket', '-b', type=str,
-                       metavar='<bucket_name>',
-                       help='bucket name (not supported, use --bucket-uuid '
-                            'instead or just drop it)')
     group.add_argument('--bucket-uuid', '-u', type=str,
                        metavar='<bucket_uuid>',
                        help='bucket uuid')
