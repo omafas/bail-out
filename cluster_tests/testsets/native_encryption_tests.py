@@ -29,6 +29,11 @@ encrypted_file_magic = b'\x00Couchbase Encrypted\x00'
 min_timer_interval = 1 # seconds
 dek_info_update_interval = 3 # seconds
 min_dek_gc_interval = 2 # seconds
+default_dek_lifetime = 60*60*24*365
+min_dek_lifetime = 60*60*24*30
+default_dek_rotation = 60*60*24*30
+min_dek_rotation = 60*60*24*7
+dek_lifetime_margin = 5*60
 
 class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
@@ -104,8 +109,15 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                             None)
 
     def test_teardown(self):
-        set_cfg_encryption(self.cluster, 'nodeSecretManager', -1)
-        set_log_encryption(self.cluster, 'disabled', -1)
+        set_cfg_encryption(self.cluster, 'nodeSecretManager', -1,
+                           dek_lifetime=default_dek_lifetime,
+                           dek_rotation=default_dek_rotation)
+        set_audit_encryption(self.cluster, 'disabled', -1,
+                             dek_lifetime=default_dek_lifetime,
+                             dek_rotation=default_dek_rotation)
+        set_log_encryption(self.cluster, 'disabled', -1,
+                           dek_lifetime=default_dek_lifetime,
+                           dek_rotation=default_dek_rotation)
         set_bucket_dek_limit(self.cluster, self.bucket_name, None)
         self.cluster.delete_bucket(self.bucket_name)
         self.cluster.delete_bucket(self.bucket_name2)
@@ -1645,11 +1657,29 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         config_data_file = Path(data_dir) / 'config' / 'config.dat'
         assert_file_is_decryptable(node, config_data_file)
 
+    def dek_settings_test_cases(self):
+        return [ # (rotation, lifetime, success)
+                (1, None, False),
+                (min_dek_rotation - 1, None, False),
+                (default_dek_lifetime - dek_lifetime_margin + 1, None, False),
+                (default_dek_lifetime - dek_lifetime_margin, None, True),
+                (None, 1, False),
+                (None, min_dek_lifetime - 1, False),
+                (None, default_dek_rotation + dek_lifetime_margin - 1, False),
+                (None, default_dek_rotation + dek_lifetime_margin, True),
+                (min_dek_rotation, min_dek_lifetime, True),
+                (min_dek_lifetime, min_dek_lifetime + dek_lifetime_margin - 1,
+                 False),
+                (min_dek_lifetime, min_dek_lifetime + dek_lifetime_margin,
+                 True),
+                (0, min_dek_lifetime + 1, False),
+                (0, 0, True),
+                (min_dek_rotation + 1, 0, True),
+               ]
+
     def bucket_dek_bad_settings_validation_test(self):
         # Currently we expect dek lifetime to be at least 5 minutes more
         # than the rotation interval
-        margin_secs = 5 * 60
-
         secret = auto_generated_secret(usage=['bucket-encryption'])
         secret_id = create_secret(self.random_node(), secret)
 
@@ -1657,44 +1687,50 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         set_ns_config_value(self.cluster, 'test_bypass_encr_cfg_restrictions',
                             None)
 
+        bucket_props = {'name': self.bucket_name,
+                        'ramQuota': 100,
+                        'encryptionAtRestKeyId': secret_id}
+
+        def test_create_bucket(rotation, lifetime, expected_code):
+            props = bucket_props.copy()
+            if rotation is not None:
+                props['encryptionAtRestDekRotationInterval'] = rotation
+            if lifetime is not None:
+                props['encryptionAtRestDekLifetime'] = lifetime
+            self.cluster.create_bucket(props, expected_code=expected_code,
+                                       sync=True)
+            if expected_code == 202:
+                self.cluster.delete_bucket(self.bucket_name)
+
+        def test_update_bucket(rotation, lifetime, expected_code):
+            props = {'name': self.bucket_name}
+            if rotation is not None:
+                props['encryptionAtRestDekRotationInterval'] = rotation
+            if lifetime is not None:
+                props['encryptionAtRestDekLifetime'] = lifetime
+            self.cluster.update_bucket(props, expected_code=expected_code)
+            if expected_code == 200:
+                # restore default values
+                props['encryptionAtRestDekRotationInterval'] = default_dek_rotation
+                props['encryptionAtRestDekLifetime'] = default_dek_lifetime
+                self.cluster.update_bucket(props)
+
         try:
-            # Initial bucket create with invalid encryptionAtRestDekLifetime
-            # should not work
-            self.cluster.create_bucket({'name': self.bucket_name,
-                                        'ramQuota': 100,
-                                        'encryptionAtRestKeyId': secret_id,
-                                        'encryptionAtRestDekLifetime': 1},
-                                       expected_code=400, sync=True)
+            for r, l, s in self.dek_settings_test_cases():
+                test_create_bucket(r, l, 202 if s else 400)
 
-            # Bucket create with valid lifetime and rotation intervals should
-            # work
-            self.cluster.create_bucket({'name': self.bucket_name,
-                                        'ramQuota': 100,
-                                        'encryptionAtRestKeyId': secret_id,
-                                        'encryptionAtRestDekLifetime':
-                                            100 + margin_secs,
-                                        'encryptionAtRestDekRotationInterval':
-                                            100}, sync=True)
+            self.cluster.create_bucket(bucket_props, sync=True)
+            r = testlib.get_succ(self.cluster,
+                                 f'/pools/default/buckets/{self.bucket_name}')
+            r = r.json()
+            assert r['encryptionAtRestDekRotationInterval'] == default_dek_rotation, \
+                   f'unexpected bucket rotation'
+            assert r['encryptionAtRestDekLifetime'] == default_dek_lifetime, \
+                   f'unexpected bucket lifetime'
 
-            # Test update attempts of interval and lifetime
-            self.cluster.update_bucket({'name': self.bucket_name,
-                                        'encryptionAtRestDekLifetime':
-                                            100 + margin_secs - 1},
-                                       expected_code=400)
-            self.cluster.update_bucket({'name': self.bucket_name,
-                                        'encryptionAtRestDekLifetime': 1000,
-                                        'encryptionAtRestDekRotationInterval':
-                                            0}, expected_code=400)
-            self.cluster.update_bucket({'name': self.bucket_name,
-                                        'encryptionAtRestDekLifetime': 0,
-                                        'encryptionAtRestDekRotationInterval':
-                                            0})
-            self.cluster.update_bucket({'name': self.bucket_name,
-                                        'encryptionAtRestDekRotationInterval':
-                                            1})
-            self.cluster.update_bucket({'name': self.bucket_name,
-                                        'encryptionAtRestDekLifetime': 1},
-                                       expected_code=400)
+            for r, l, s in self.dek_settings_test_cases():
+                test_update_bucket(r, l, 200 if s else 400)
+
         finally:
             # re-enable bypass
             set_ns_config_value(self.cluster,
@@ -1703,36 +1739,24 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def dek_bad_settings_validation_test(self):
         node = self.random_node()
 
-        # Currently we expect dek lifetime to be at least 5 minutes more
-        # than the rotation interval
-        margin_secs = 5 * 60
-
         # disable bypass to enable full validation
         set_ns_config_value(node, 'test_bypass_encr_cfg_restrictions',
                             None)
 
+        def test_dek_settings(rotation, lifetime, expected_code):
+            set_log_encryption(node, 'nodeSecretManager', -1,
+                               dek_lifetime=lifetime, dek_rotation=rotation,
+                               expected_code=expected_code)
+            if expected_code == 200:
+                set_log_encryption(node, 'nodeSecretManager', -1,
+                                   dek_lifetime=default_dek_lifetime,
+                                   dek_rotation=default_dek_rotation)
+
         try:
             # Test config validation for just log encryption, the validation
             # logic being tested here is shared with other types
-            set_log_encryption(node, 'nodeSecretManager', -1,
-                               dek_lifetime=100 + margin_secs - 1,
-                               dek_rotation=100, expected_code=400)
-            set_log_encryption(node, 'nodeSecretManager', -1,
-                               dek_lifetime=100 + margin_secs,
-                               dek_rotation=100)
-            set_log_encryption(node, 'nodeSecretManager', -1,
-                               dek_lifetime=10000, dek_rotation=0,
-                               expected_code=400)
-            set_log_encryption(node, 'nodeSecretManager', -1,
-                               dek_lifetime=0, dek_rotation=0)
-            set_log_encryption(node, 'nodeSecretManager', -1,
-                               dek_lifetime=0, dek_rotation=1)
-            set_log_encryption(node, 'nodeSecretManager', -1,
-                               dek_lifetime=1, dek_rotation=0,
-                               expected_code=400)
-            set_log_encryption(node, 'nodeSecretManager', -1,
-                               dek_lifetime=1, dek_rotation=1,
-                               expected_code=400)
+            for r, l, s in self.dek_settings_test_cases():
+                test_dek_settings(r, l, 200 if s else 400)
         finally:
             # re-enable bypass
             set_ns_config_value(node, 'test_bypass_encr_cfg_restrictions',
@@ -2079,16 +2103,19 @@ def set_audit_encryption(cluster, *args, **kwargs):
 
 
 def set_comp_encryption(cluster, component, mode, secret,
-                        dek_lifetime=60*60*24*365, dek_rotation=60*60*24*30,
+                        dek_lifetime=None, dek_rotation=None,
                         skip_encryption_key_test=False,
                         expected_code=200):
+    data = {'encryptionMethod': mode,
+            'encryptionKeyId': secret,
+            'skipEncryptionKeyTest': skip_encryption_key_test}
+    if dek_lifetime is not None:
+        data['dekLifetime'] = dek_lifetime
+    if dek_rotation is not None:
+        data['dekRotationInterval'] = dek_rotation
     res = testlib.post_succ(cluster,
                       f'/settings/security/encryptionAtRest/{component}',
-                      json={'encryptionMethod': mode,
-                            'encryptionKeyId': secret,
-                            'dekLifetime': dek_lifetime,
-                            'dekRotationInterval': dek_rotation,
-                            'skipEncryptionKeyTest': skip_encryption_key_test},
+                      json=data,
                       expected_code=expected_code)
     if expected_code == 200:
         r = testlib.get_succ(cluster, '/settings/security/encryptionAtRest')

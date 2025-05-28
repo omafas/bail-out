@@ -3939,3 +3939,37 @@ many_to_one_result_test() ->
 
 verify_list(S, TypeCheckFun) ->
     is_list(S) andalso lists:all(TypeCheckFun, S).
+
+interval_to_string(0, 0, 0, 0) ->
+    "0 seconds";
+interval_to_string(Days, Hours, Minutes, Seconds) ->
+    Format = fun (0, _SingleStr, _PluralStr) -> [];
+                 (1, SingleStr, _) -> [io_lib:format("1 ~s", [SingleStr])];
+                 (V, _, PluralStr) -> [io_lib:format("~b ~s", [V, PluralStr])]
+             end,
+    lists:flatten(lists:join(" ", Format(Days, "day", "days") ++
+                                  Format(Hours, "hour", "hours") ++
+                                  Format(Minutes, "minute", "minutes") ++
+                                  Format(Seconds, "second", "seconds"))).
+
+-ifdef(TEST).
+interval_to_string_test() ->
+    ?assertEqual("0 seconds", interval_to_string(0, 0, 0, 0)),
+    ?assertEqual("1 day", interval_to_string(1, 0, 0, 0)),
+    ?assertEqual("2 days", interval_to_string(2, 0, 0, 0)),
+    ?assertEqual("1 hour", interval_to_string(0, 1, 0, 0)),
+    ?assertEqual("2 hours", interval_to_string(0, 2, 0, 0)),
+    ?assertEqual("1 minute", interval_to_string(0, 0, 1, 0)),
+    ?assertEqual("2 minutes", interval_to_string(0, 0, 2, 0)),
+    ?assertEqual("1 second", interval_to_string(0, 0, 0, 1)),
+    ?assertEqual("2 seconds", interval_to_string(0, 0, 0, 2)),
+
+    ?assertEqual("1 day 1 hour 1 minute 1 second",
+                 interval_to_string(1, 1, 1, 1)),
+    ?assertEqual("2 days 2 hours 2 minutes 2 seconds",
+                 interval_to_string(2, 2, 2, 2)),
+    ?assertEqual("2 days 2 minutes",
+                 interval_to_string(2, 0, 2, 0)),
+    ?assertEqual("1 hour 2 seconds",
+                 interval_to_string(0, 1, 0, 2)).
+-endif.

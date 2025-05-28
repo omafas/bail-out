@@ -1378,7 +1378,7 @@ validate_ram(#ram_summary{this_alloc = Alloc, this_used = Used}) ->
 
 additional_bucket_params_validation(Params, Ctx) ->
     BypassAddnlEncrChecks =
-        ns_config:read_key_fast(test_bypass_encr_cfg_restrictions, false),
+        menelaus_web_encr_at_rest:bypass_encr_cfg_restrictions(),
     lists:append([maybe_validate_replicas_and_durability(Params, Ctx),
                   validate_magma_ram_quota(Params, Ctx),
                   validate_watermarks(Params, Ctx),
@@ -2168,11 +2168,20 @@ parse_validate_encryption_secret_id(BucketName, Params) ->
     end.
 
 parse_validate_encryption_rotation_interval(Params) ->
+    Min = menelaus_web_encr_at_rest:min_dek_rotation_interval_in_sec(),
     maybe
         [ValStr] ?= proplists:get_all_values(
                       "encryptionAtRestDekRotationInterval",
                       Params),
         {ok, Val} ?= menelaus_util:parse_validate_number(ValStr, 0, undefined),
+        ok ?= case Val of
+                  0 -> ok;
+                  _ ->
+                      case Min =< Val of
+                          true -> ok;
+                          false -> too_small
+                      end
+              end,
         [{ok, encryption_dek_rotation_interval, Val}]
     else
         [] ->
@@ -2180,17 +2189,29 @@ parse_validate_encryption_rotation_interval(Params) ->
         [_ | _] ->
             [{error, encryptionAtRestDekRotationInterval,
               <<"too many values">>}];
-        E when E == too_small; E == too_large; E == invalid ->
+        E when E == too_large; E == invalid ->
             [{error, encryptionAtRestDekRotationInterval,
-              <<"invalid interval">>}]
+              <<"invalid interval">>}];
+        too_small ->
+            [{error, encryptionAtRestDekRotationInterval,
+              menelaus_web_encr_at_rest:dek_interval_error(Min)}]
     end.
 
 parse_validate_encryption_dek_lifetime(Params) ->
+    Min = menelaus_web_encr_at_rest:min_dek_lifetime_in_sec(),
     maybe
         [ValStr] ?= proplists:get_all_values(
                       "encryptionAtRestDekLifetime",
                       Params),
         {ok, Val} ?= menelaus_util:parse_validate_number(ValStr, 0, undefined),
+        ok ?= case Val of
+                  0 -> ok;
+                  _ ->
+                      case Min =< Val of
+                          true -> ok;
+                          false -> too_small
+                      end
+              end,
         [{ok, encryption_dek_lifetime, Val}]
     else
         [] ->
@@ -2198,9 +2219,12 @@ parse_validate_encryption_dek_lifetime(Params) ->
         [_ | _] ->
             [{error, encryptionAtRestDekLifetime,
               <<"too many values">>}];
-        E when E == too_small; E == too_large; E == invalid ->
+        E when E == too_large; E == invalid ->
             [{error, encryptionAtRestDekLifetime,
-              <<"invalid interval">>}]
+              <<"invalid interval">>}];
+        too_small ->
+            [{error, encryptionAtRestDekLifetime,
+              menelaus_web_encr_at_rest:dek_interval_error(Min)}]
     end.
 
 validate_replicas_number(Params, IsNew) ->
@@ -4600,15 +4624,15 @@ basic_bucket_params_screening_t() ->
                     [{"bucketType", "membase"},
                      {"ramQuota", "1024"},
                      {"encryptionAtRestKeyId", "1"},
-                     {"encryptionAtRestDekRotationInterval", "1000"},
-                     {"encryptionAtRestDekLifetime", "2000"}],
+                     {"encryptionAtRestDekRotationInterval", "604800"},
+                     {"encryptionAtRestDekLifetime", "2592000"}],
                     AllBuckets),
 
     ?assertEqual([], E38),
     ?assertEqual(1, proplists:get_value(encryption_secret_id, OK38)),
-    ?assertEqual(1000,
+    ?assertEqual(604800,
                  proplists:get_value(encryption_dek_rotation_interval, OK38)),
-    ?assertEqual(2000,
+    ?assertEqual(2592000,
                  proplists:get_value(encryption_dek_lifetime, OK38)),
 
     %% Invalid encryption at rest

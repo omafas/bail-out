@@ -16,7 +16,9 @@
 -export([handle_get/2, handle_post/2, get_settings/1, handle_drop_keys/2,
          handle_bucket_drop_keys/2, build_bucket_encr_at_rest_info/2,
          format_encr_at_rest_info/1, handle_force_encr/2,
-         handle_bucket_force_encr/2]).
+         handle_bucket_force_encr/2, min_dek_rotation_interval_in_sec/0,
+         min_dek_lifetime_in_sec/0, dek_interval_error/1,
+         bypass_encr_cfg_restrictions/0]).
 
 encr_method(Param, SecretIdName, EncrType) ->
     AllowedInMixedClusters = case EncrType of
@@ -62,8 +64,7 @@ encr_secret_id(Param, EncrMethodName, EncrType) ->
 
 encr_dek_lifetime(Param, RotIntervalName, EncrType) ->
     DependsOnFn =
-        case ns_config:read_key_fast(test_bypass_encr_cfg_restrictions,
-                                     false) of
+        case bypass_encr_cfg_restrictions() of
             true ->
                 fun (_LifeTime, _RotIntrvl) -> ok end;
             _ ->
@@ -87,13 +88,12 @@ encr_dek_lifetime(Param, RotIntervalName, EncrType) ->
         end,
     {Param,
      #{cfg_key => [EncrType, dek_lifetime_in_sec],
-       type => {int, 0, max_uint64},
+       type => {dek_interval, min_dek_lifetime_in_sec()},
        depends_on => #{RotIntervalName => DependsOnFn}}}.
 
 encr_dek_rotate_intrvl(Param, LifetimeName, EncrType) ->
     DependsOnFn =
-        case ns_config:read_key_fast(test_bypass_encr_cfg_restrictions,
-                                     false) of
+        case bypass_encr_cfg_restrictions() of
             true ->
                 fun (_RotIntrvl, _LifeTime) -> ok end;
             _ ->
@@ -118,7 +118,7 @@ encr_dek_rotate_intrvl(Param, LifetimeName, EncrType) ->
 
     {Param,
      #{cfg_key => [EncrType, dek_rotation_interval_in_sec],
-       type => {int, 0, max_uint64},
+       type => {dek_interval, min_dek_rotation_interval_in_sec()},
        depends_on => #{LifetimeName => DependsOnFn}}}.
 
 encr_deks_drop_date(Param, EncrType) ->
@@ -219,7 +219,17 @@ type_spec(encr_info) ->
     #{validators => [not_supported],
       formatter => fun (undefined) -> ignore;
                        (Info) -> {value, format_encr_at_rest_info(Info)}
-                   end}.
+                   end};
+type_spec({dek_interval, Min}) ->
+    #{validators => [int,
+                     validator:validate(
+                       fun (0) -> ok;
+                           (N) when N >= Min,
+                                    N =< ?MAX_64BIT_UNSIGNED_INT -> ok;
+                           (_) ->
+                               {error, dek_interval_error(Min)}
+                       end, _, _)],
+      formatter => int}.
 
 handle_get(Path, Req) ->
     Settings = get_settings(direct),
@@ -605,3 +615,27 @@ test_encryption_keys(SettingsToTest) ->
                       end
               end
       end, NewSettings).
+
+bypass_encr_cfg_restrictions() ->
+    ns_config:read_key_fast(test_bypass_encr_cfg_restrictions, false).
+
+min_dek_rotation_interval_in_sec() ->
+    case bypass_encr_cfg_restrictions() of
+        true -> 0;
+        false -> ?get_param(min_dek_rotation_interval_in_sec, 7 * 60 * 60 * 24)
+    end.
+
+min_dek_lifetime_in_sec() ->
+    case bypass_encr_cfg_restrictions() of
+        true -> 0;
+        false -> ?get_param(min_dek_lifetime_in_sec, 30 * 60 * 60 * 24)
+    end.
+
+dek_interval_error(MinInSec) ->
+    Days = MinInSec div (24 * 60 * 60),
+    Hours = (MinInSec rem (24 * 60 * 60)) div (60 * 60),
+    Minutes = (MinInSec rem (60 * 60)) div 60,
+    Seconds = MinInSec rem 60,
+    list_to_binary(
+      io_lib:format("must be greater or equal to ~s",
+                    [misc:interval_to_string(Days, Hours, Minutes, Seconds)])).
