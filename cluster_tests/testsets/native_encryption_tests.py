@@ -1530,6 +1530,61 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         config_data_file = Path(data_dir) / 'config' / 'config.dat'
         assert_file_is_decryptable(node, config_data_file)
 
+    def bucket_dek_bad_settings_validation_test(self):
+        # Currently we expect dek lifetime to be at least 5 minutes more
+        # than the rotation interval
+        margin_secs = 5 * 60
+
+        secret = auto_generated_secret(usage=['bucket-encryption'])
+        secret_id = create_secret(self.random_node(), secret)
+
+        # disable bypass to enable full validation
+        set_ns_config_value(self.cluster, 'test_bypass_encr_cfg_restrictions',
+                            None)
+
+        try:
+            # Initial bucket create with invalid encryptionAtRestDekLifetime
+            # should not work
+            self.cluster.create_bucket({'name': self.bucket_name,
+                                        'ramQuota': 100,
+                                        'encryptionAtRestKeyId': secret_id,
+                                        'encryptionAtRestDekLifetime': 1},
+                                       expected_code=400, sync=True)
+
+            # Bucket create with valid lifetime and rotation intervals should
+            # work
+            self.cluster.create_bucket({'name': self.bucket_name,
+                                        'ramQuota': 100,
+                                        'encryptionAtRestKeyId': secret_id,
+                                        'encryptionAtRestDekLifetime':
+                                            100 + margin_secs,
+                                        'encryptionAtRestDekRotationInterval':
+                                            100}, sync=True)
+
+            # Test update attempts of interval and lifetime
+            self.cluster.update_bucket({'name': self.bucket_name,
+                                        'encryptionAtRestDekLifetime':
+                                            100 + margin_secs - 1},
+                                       expected_code=400)
+            self.cluster.update_bucket({'name': self.bucket_name,
+                                        'encryptionAtRestDekLifetime': 1000,
+                                        'encryptionAtRestDekRotationInterval':
+                                            0}, expected_code=400)
+            self.cluster.update_bucket({'name': self.bucket_name,
+                                        'encryptionAtRestDekLifetime': 0,
+                                        'encryptionAtRestDekRotationInterval':
+                                            0})
+            self.cluster.update_bucket({'name': self.bucket_name,
+                                        'encryptionAtRestDekRotationInterval':
+                                            1})
+            self.cluster.update_bucket({'name': self.bucket_name,
+                                        'encryptionAtRestDekLifetime': 1},
+                                       expected_code=400)
+        finally:
+            # re-enable bypass
+            set_ns_config_value(self.cluster,
+                                'test_bypass_encr_cfg_restrictions', 'true')
+
     def dek_bad_settings_validation_test(self):
         node = self.random_node()
 

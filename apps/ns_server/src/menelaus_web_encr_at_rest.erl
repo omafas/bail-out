@@ -13,8 +13,6 @@
 -include_lib("ns_common/include/cut.hrl").
 -include("cb_cluster_secrets.hrl").
 
--define(DEK_LIFETIME_ROTATION_MARGIN_SEC, (5 * 60)).
-
 -export([handle_get/2, handle_post/2, get_settings/1, handle_drop_keys/2,
          handle_bucket_drop_keys/2, build_bucket_encr_at_rest_info/2,
          format_encr_at_rest_info/1, handle_force_encr/2,

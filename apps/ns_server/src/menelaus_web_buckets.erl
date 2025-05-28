@@ -1375,9 +1375,13 @@ validate_ram(#ram_summary{this_alloc = Alloc, this_used = Used}) ->
     end.
 
 additional_bucket_params_validation(Params, Ctx) ->
+    BypassAddnlEncrChecks =
+        ns_config:read_key_fast(test_bypass_encr_cfg_restrictions, false),
     lists:append([maybe_validate_replicas_and_durability(Params, Ctx),
                   validate_magma_ram_quota(Params, Ctx),
-                  validate_watermarks(Params, Ctx)]).
+                  validate_watermarks(Params, Ctx),
+                  validate_encr_lifetime_and_rotation_intrvl(
+                    Params, Ctx, BypassAddnlEncrChecks)]).
 
 maybe_validate_replicas_and_durability(Params, Ctx) ->
     %% MB-63888: When we fail over a node we set servers in the Bucket config
@@ -1479,6 +1483,70 @@ validate_watermarks(Params, Ctx) ->
                              memory_high_watermark,
                              memoryHighWatermark,
                              less_than).
+
+validate_lifetime_with_rotation_intrvl(ParamLifeTime, _CurrRotIntrvl)
+  when ParamLifeTime =:= undefined;
+       ParamLifeTime =:= 0 ->
+    [];
+validate_lifetime_with_rotation_intrvl(_ParamLifeTime, 0 = _CurrRotIntrvl) ->
+    [{encryptionAtRestDekLifetime,
+      <<"Dek lifetime must be set to 0, if dek rotation interval is "
+        "currently 0">>}];
+validate_lifetime_with_rotation_intrvl(ParamLifeTime, CurrRotIntrvl)
+  when ParamLifeTime < CurrRotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
+    Err =
+        io_lib:format("Dek lifetime must be a least ~p seconds more than the "
+                      "current dek rotation interval value of ~p",
+                      [?DEK_LIFETIME_ROTATION_MARGIN_SEC, CurrRotIntrvl]),
+    [{encryptionAtRestDekLifetime, list_to_binary(Err)}];
+validate_lifetime_with_rotation_intrvl(_ParamLifeTime, _CurrRotIntrvl) ->
+    [].
+
+validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime)
+  when ParamRotIntrvl =:= undefined;
+       CurrLifeTime =:= 0 ->
+    [];
+validate_rotation_intrvl_with_lifetime(0 = _ParamRotIntrvl, _CurrLifeTime) ->
+    [{encryptionAtRestDekRotationInterval,
+      <<"Dek rotation interval can't be set to 0 if dek lifetime is not "
+        "currently 0">>}];
+validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime)
+  when CurrLifeTime < ParamRotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
+    Err =
+        io_lib:format("Dek rotation interval must be at least ~p seconds less "
+                      "than the current dek lifetime value of ~p",
+                      [?DEK_LIFETIME_ROTATION_MARGIN_SEC,
+                       CurrLifeTime]),
+    [{encryptionAtRestDekRotationInterval, list_to_binary(Err)}];
+validate_rotation_intrvl_with_lifetime(_ParamRotIntrvl, _CurrLifeTime) ->
+    [].
+
+validate_encr_lifetime_and_rotation_intrvl(_, _, true = _Bypass) ->
+    [];
+validate_encr_lifetime_and_rotation_intrvl(Params, Ctx, false = _Bypass) ->
+    ParamLifeTime =
+        proplists:get_value(encryption_dek_lifetime, Params),
+    ParamRotIntrvl =
+        proplists:get_value(encryption_dek_rotation_interval, Params),
+
+    CurrLifeTime =
+        case get_value_from_parms_or_bucket(encryption_dek_lifetime,
+                                            Params, Ctx) of
+            undefined ->
+                ?DEFAULT_DEK_LIFETIME_S;
+            LifeTimeVal ->
+                LifeTimeVal
+        end,
+    CurrRotIntrvl =
+        case get_value_from_parms_or_bucket(encryption_dek_rotation_interval,
+                                            Params, Ctx) of
+            undefined ->
+                ?DEFAULT_DEK_ROTATION_INTERVAL_S;
+            RotIntrvlVal ->
+                RotIntrvlVal
+        end,
+    validate_lifetime_with_rotation_intrvl(ParamLifeTime, CurrRotIntrvl) ++
+        validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime).
 
 validate_high_low_values(Params, Ctx, LowParam, LowParamExtName,
                          HighParam, HighParamExtName, Check) ->

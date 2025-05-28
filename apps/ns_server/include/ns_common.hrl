@@ -539,6 +539,8 @@
                   cb_crypto:get_in_use_deks(FilePaths)
           end}).
 
+-define(DEK_LIFETIME_ROTATION_MARGIN_SEC, (5 * 60)).
+
 -define(MAX_PHASH2_RANGE, 4294967296).
 -define(DEFAULT_SYSTEMD_CGROUP_ROOT,
         "/sys/fs/cgroup/system.slice/couchbase-server.service").
