@@ -165,7 +165,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                       expected_code=404)
 
         # Trying to change type which is not allowed
-        secret_json['type'] = 'awskms-aes-key-256'
+        secret_json['type'] = 'awskms-symmetric-key'
         errors = update_secret(self.random_node(), secret_id, secret_json,
                                expected_code=400)
         assert errors['type'] == 'the field can\'t be changed', \
@@ -1034,7 +1034,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         aws_secret = get_secret(self.random_node(), aws_secret_id)
         verify_kek_files(self.cluster, aws_secret, verify_key_count=1,
-                         verify_key_type='awskm')
+                         verify_key_type='awskms-symmetric')
 
         set_remove_hist_keys_interval(self.cluster, 1000)
 
@@ -1047,7 +1047,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
             # Verify that only one new KEK is left in chronicle and that it
             # stored on disk
             verify_kek_files(self.cluster, s, verify_key_count=1,
-                             verify_key_type='awskm')
+                             verify_key_type='awskms-symmetric')
             assert s['data']['storedKeyIds'][0]['id'] != kek_id, \
                    'expected different key id'
             # Verify that old KEK is not present on disk
@@ -2164,7 +2164,7 @@ def aws_test_secret(name=None, usage=None, should_work=True):
         key_arn = 'TEST_AWS_BAD_KEY_ARN'
 
     return {'name': name,
-            'type': 'awskms-aes-key-256',
+            'type': 'awskms-symmetric-key',
             'usage': usage,
             'data': {'keyARN': key_arn}}
 
@@ -2237,7 +2237,7 @@ def verify_kek_files(cluster, secret, verify_key_count=1, **kwargs):
                        f'kek count is unexpected: {count} ' \
                        f'(expected: {verify_key_count})'
             key_ids = [key['id'] for key in secret['data']['keys']]
-        elif secret['type'] == 'awskms-aes-key-256':
+        elif secret['type'] == 'awskms-symmetric-key':
             key_ids = [key['id'] for key in secret['data']['storedKeyIds']]
         else:
             assert False, f'unexpected secret type: {secret["type"]}'
@@ -2460,7 +2460,7 @@ def get_kek_id(cluster, secret_id):
         for k in r['data']['keys']:
             if k['active']:
                 return k['id']
-    if r['type'] == 'awskms-aes-key-256':
+    if r['type'] == 'awskms-symmetric-key':
         return r['data']['storedKeyIds'][0]['id']
     return None
 

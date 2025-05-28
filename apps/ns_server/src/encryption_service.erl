@@ -116,7 +116,8 @@ store_dek(Kind, Id, Key, KekIdToEncrypt, CreationDT) ->
     store_key(Kind, Id, 'raw-aes-gcm', Key, KekIdToEncrypt, CreationDT, false).
 
 store_aws_key(Id, Params, CreationDT, TestOnly) ->
-    store_key(kek, Id, awskm, ejson:encode(format_aws_key_params(Params)),
+    store_key(kek, Id, 'awskms-symmetric',
+              ejson:encode(format_aws_key_params(Params)),
               <<"encryptionService">>, CreationDT, false, TestOnly).
 
 format_aws_key_params(#{key_arn := KeyArn, region := Region,

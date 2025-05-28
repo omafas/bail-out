@@ -82,7 +82,7 @@ type storedKeyType string
 
 const (
 	rawAESGCMKey storedKeyType = "raw-aes-gcm"
-	awskmKey     storedKeyType = "awskm"
+	awskmKey     storedKeyType = "awskms-symmetric"
 	kmipKey      storedKeyType = "kmip"
 
 	// Magic string used for encrypted file headers

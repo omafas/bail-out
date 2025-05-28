@@ -81,7 +81,7 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
     this.form = this.mnFormService.create(this)
       .setFormGroup({
         name: '',
-        type: 'awskms-aes-key-256',
+        type: 'awskms-symmetric-key',
         'generated-secret': this.formBuilder.group({
           encryptWith: 'nodeSecretManager',
           encryptWithKeyId: null,
@@ -240,7 +240,7 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
     };
 
     switch (rv.type) {
-      case 'awskms-aes-key-256':
+      case 'awskms-symmetric-key':
         rv['aws-secret'] = item.data;
         break;
       case 'cb-server-managed-aes-key-256':
@@ -290,7 +290,7 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
 
     let data = {};
     switch (type) {
-      case 'awskms-aes-key-256':
+      case 'awskms-symmetric-key':
         data = awsSecret;
         break;
       case 'cb-server-managed-aes-key-256':
