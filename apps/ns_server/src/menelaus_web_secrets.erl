@@ -730,7 +730,7 @@ format_error({cycle, _}) ->
     "Circular dependency between keys";
 format_error(no_quorum) ->
     "Operation temporarily cannot be performed possibly due to loss of quorum";
-format_error({store_key_error, Msg}) ->
+format_error({store_key_error_test, Msg}) ->
     %% This error is returned when secret params test fails
     Msg;
 format_error(active_key) ->
