@@ -209,7 +209,8 @@ class BucketMigrationTest(testlib.BaseTestSet):
                                            min_num_nodes=4, min_memsize=2*1024,
                                            num_connected=2,
                                            balanced=True,
-                                           buckets=[])
+                                           buckets=[],
+                                           num_vbuckets=16)
 
     def setup(self):
         pass

@@ -1838,7 +1838,8 @@ class BasicBucketTestSet(BucketTestSetBase):
         return testlib.ClusterRequirements(min_memsize=1024,
                                            num_nodes=1,
                                            edition="Enterprise",
-                                           buckets=[])
+                                           buckets=[],
+                                           num_vbuckets=16)
 
     def name_test(self):
         self.test_param("name",
@@ -2051,7 +2052,8 @@ class ServerlessBucketTestSet(BucketTestSetBase):
         return testlib.ClusterRequirements(min_memsize=1024,
                                            num_nodes=1,
                                            edition="Serverless",
-                                           buckets=[])
+                                           buckets=[],
+                                           num_vbuckets=16)
 
     def bucket_placer_test(self):
         main_params = {
@@ -2098,7 +2100,8 @@ class MultiNodeBucketTestSet(BucketTestSetBase):
     def requirements():
         return testlib.ClusterRequirements(num_nodes=4,
                                            balanced=True,
-                                           buckets=[])
+                                           buckets=[],
+                                           num_vbuckets=16)
 
     # TOFIX: replica_number give different errors based
     # whether just_validate is True or False and also if the num_nodes is less

@@ -33,6 +33,7 @@ class BucketDeletionTest(testlib.BaseTestSet):
     def requirements():
         return testlib.ClusterRequirements(
             min_num_nodes=2,
+            num_vbuckets=16,
             buckets=[{"name": f"bucket-{i}",
                       "storageBackend": "couchstore",
                       "replicaNumber": 1,

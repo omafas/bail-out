@@ -477,7 +477,8 @@ class GuardRailRestrictionTests(testlib.BaseTestSet):
         return testlib.ClusterRequirements(
             edition="Provisioned", min_num_nodes=1,
             min_memsize=1024,
-            buckets=[])
+            buckets=[],
+            num_vbuckets=16)
 
     def setup(self):
 
@@ -653,6 +654,7 @@ class DataIngressTests(testlib.BaseTestSet):
             edition="Provisioned",
             min_num_nodes=2,
             num_connected=2,
+            num_vbuckets=16,
             buckets=[{"name": BUCKET_NAME,
                       "storageBackend": "couchstore",
                       "ramQuota": 100}])

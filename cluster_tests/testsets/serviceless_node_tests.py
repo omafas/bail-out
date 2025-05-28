@@ -55,6 +55,7 @@ class ServicelessNodeTests(testlib.BaseTestSet):
             min_num_nodes=3,
             num_connected=1,
             afamily="ipv4",
+            num_vbuckets=16,
             buckets=[{"name": "testbucket",
                       "ramQuota": 200}])
 

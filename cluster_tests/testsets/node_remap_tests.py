@@ -57,7 +57,8 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
                                             min_memsize=1024,
                                             balanced=True,
                                             buckets=[],
-                                            test_generated_cluster=True),
+                                            test_generated_cluster=True,
+                                            num_vbuckets=16),
                 # Test with a single node. The hostname mapping is slightly
                 # different. We make assumptions about paths, we cannot use a
                 # provided cluster.
@@ -66,7 +67,8 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
                                             services=[testlib.Service.KV],
                                             min_memsize=1024,
                                             buckets=[],
-                                            test_generated_cluster=True)]
+                                            test_generated_cluster=True,
+                                            num_vbuckets=16)]
 
     def setup(self):
         self.load_and_assert_sample_bucket(self.cluster, "travel-sample")

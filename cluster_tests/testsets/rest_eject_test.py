@@ -19,6 +19,7 @@ class RestEjectTest(testlib.BaseTestSet):
             num_nodes=3,
             services=[Service.KV],
             balanced=True,
+            num_vbuckets=16,
             buckets=[{"name": "testbucket",
                       "ramQuota": 200}])
 

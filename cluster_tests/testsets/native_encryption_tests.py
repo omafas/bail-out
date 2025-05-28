@@ -43,7 +43,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                                      'n1': [Service.QUERY],
                                                      'n2': [Service.KV]},
                                            buckets=[],
-                                           balanced=True)
+                                           balanced=True,
+                                           num_vbuckets=16)
 
     def setup(self):
         # Wait for orchestrator to move to non kv node.
@@ -1635,7 +1636,8 @@ class NativeEncryptionNodeRestartTests(testlib.BaseTestSet):
                                            edition='Enterprise',
                                            buckets=[],
                                            balanced=True,
-                                           test_generated_cluster=True)
+                                           test_generated_cluster=True,
+                                           num_vbuckets=16)
 
     def setup(self):
         pass

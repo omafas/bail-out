@@ -603,6 +603,7 @@ class NodeRemovalStreamingChunked(testlib.BaseTestSet):
                                     min_num_nodes=2, num_connected=2,
                                     services=[Service.KV, Service.CBAS],
                                     balanced=True,
+                                    num_vbuckets=16,
                                     buckets=[{"name": BUCKET_NAME,
                                               "storageBackend": "couchstore",
                                               "ramQuota": 256}])]

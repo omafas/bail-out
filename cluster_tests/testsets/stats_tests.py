@@ -20,6 +20,7 @@ class StatsRangeAPITests(testlib.BaseTestSet):
     def requirements():
         return testlib.ClusterRequirements(
             min_num_nodes=2,
+            num_vbuckets=16,
             # Some stats needs a bucket to be present
             buckets=[{"name": "statsRangeTestBucket",
                       "ramQuota": 200}])

@@ -21,6 +21,7 @@ class CrudTests(testlib.BaseTestSet):
     def requirements():
         return testlib.ClusterRequirements(
             services=[Service.KV],
+            num_vbuckets=16,
             buckets=[{"name": bucket_name,
                       "ramQuota": 100}])
 

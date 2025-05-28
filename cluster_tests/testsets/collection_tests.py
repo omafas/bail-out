@@ -101,6 +101,7 @@ class CollectionTests(testlib.BaseTestSet):
     @staticmethod
     def requirements():
         return testlib.ClusterRequirements(num_nodes=1, memsize=1024,
+                                           num_vbuckets=16,
                                            buckets=[])
 
     def setup(self):

@@ -73,6 +73,7 @@ class SamlTests(testlib.BaseTestSet):
         return testlib.ClusterRequirements(min_num_nodes=2,
                                            edition="Enterprise",
                                            balanced=True,
+                                           num_vbuckets=16,
                                            buckets=[{'name': bucket,
                                                      'ramQuota': 100}],
                                            services=SamlTests.services_to_run)

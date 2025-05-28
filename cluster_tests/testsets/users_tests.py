@@ -27,6 +27,7 @@ class UsersTestSet(testlib.BaseTestSet):
                       Service.CBAS],
             # i.e. wait for service up
             balanced=True,
+            num_vbuckets=16,
             buckets=[{"name": "test",
                       "ramQuota": 100,
                       "storageBackend": "couchstore"}])

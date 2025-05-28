@@ -103,6 +103,7 @@ class JWTTests(testlib.BaseTestSet):
     def requirements():
         return testlib.ClusterRequirements(edition="Enterprise",
                                            dev_preview=True,
+                                           num_vbuckets=16,
                                            buckets=[
                                                {'name': JWTTests.test_bucket,
                                                      'ramQuota': 100}],
