@@ -893,9 +893,9 @@ computed_stats_lazy_proplist(_) ->
                   fun (Gets, _Hits) when Gets == 0 -> 0; % this handles int and float 0
                       (Gets, Hits) -> Hits * 100/Gets
                   end),
-    EPCacheMissRatio = Z2(ep_bg_fetched, cmd_lookup,
-                          fun (BGFetches, Gets) ->
-                                  try BGFetches * 100 / Gets
+    EPCacheMissRatio = Z2(get_misses, cmd_get,
+                          fun (Misses, Gets) ->
+                                  try Misses * 100 / Gets
                                   catch error:badarith -> 0
                                   end
                           end),
@@ -1726,7 +1726,7 @@ membase_summary_stats_description(BucketId, ServiceNodes, IsEphemeral) ->
            {name, <<"ep_cache_miss_rate">>},
            {desc, <<"Percentage of reads per second to this bucket "
                     "from disk as opposed to RAM (measured from "
-                    "ep_bg_fetches / cmd_lookup * 100)">>},
+                    "get_misses / cmd_gets)">>},
            {maxY, 100}]},
          {[{title, <<"gets per sec.">>},
            {name, <<"cmd_get">>},

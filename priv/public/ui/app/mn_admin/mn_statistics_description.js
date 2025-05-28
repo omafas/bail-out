@@ -1369,7 +1369,7 @@ function get65CompatDesc() {
         "ep_cache_miss_rate": {
           unit: "percent",
           title: "Cache Miss Ratio",
-          desc: "Percentage of reads per second to this bucket from disk as opposed to RAM. (measured from ep_bg_fetches / gets * 100)"
+          desc: "The ratio between the number of read operations which failed due to the key not being present, and all read operations (kv_ops{op='get', result='miss'} / kv_ops{op='get'})"
         },
         "ep_resident_items_rate": {
           unit: "percent",
