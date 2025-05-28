@@ -169,7 +169,7 @@ secret_validators(CurProps) ->
                    false -> {error, "Must be unique"}
                end
        end, name, _),
-     validator:one_of(type, [?GENERATED_KEY_TYPE, ?AWSKMS_KEY_TYPE,
+     validator:one_of(type, [?CB_MANAGED_KEY_TYPE, ?AWSKMS_KEY_TYPE,
                              ?KMIP_KEY_TYPE], _),
      validator:convert(type, binary_to_atom(_, latin1), _),
      validator:required(type, _),
@@ -320,15 +320,15 @@ export_secret(#{type := DataType} = Props) ->
                         (log_encryption) ->
                             {true, <<"log-encryption">>}
                     end, UList);
-              (data, D) when DataType == ?GENERATED_KEY_TYPE ->
-                  {format_auto_generated_key_data(D)};
+              (data, D) when DataType == ?CB_MANAGED_KEY_TYPE ->
+                  {format_cb_managed_key_data(D)};
               (data, D) when DataType == ?AWSKMS_KEY_TYPE ->
                   {format_aws_key_data(D)};
               (data, D) when DataType == ?KMIP_KEY_TYPE ->
                   {format_kmip_key_data(D)}
           end, Props))).
 
-format_auto_generated_key_data(Props) ->
+format_cb_managed_key_data(Props) ->
     ActiveKeyId = maps:get(active_key_id, Props),
     maps:to_list(
       maps:map(
@@ -445,8 +445,8 @@ validate_secrets_data(Name, CurSecretProps, State) ->
         true ->
             Validators =
                 case Type of
-                    ?GENERATED_KEY_TYPE ->
-                        generated_key_validators(CurSecretProps);
+                    ?CB_MANAGED_KEY_TYPE ->
+                        cb_managed_key_validators(CurSecretProps);
                     ?AWSKMS_KEY_TYPE ->
                         awskms_key_validators(CurSecretProps);
                     ?KMIP_KEY_TYPE ->
@@ -466,7 +466,7 @@ validate_secrets_data(Name, CurSecretProps, State) ->
 %% Note: CurSecretProps can only be used for static fields validation here.
 %% Any field that can be modified and needs to use CurProps should be
 %% checked in transaction in cb_cluster_secret:replace_secret_internal.
-generated_key_validators(CurSecretProps) ->
+cb_managed_key_validators(CurSecretProps) ->
     [validator:boolean(canBeCached, _),
      validator:default(canBeCached, true, _),
      validator:boolean(autoRotation, _),

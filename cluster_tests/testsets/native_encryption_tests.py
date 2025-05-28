@@ -82,8 +82,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         # are running. It increases code coverage.
         id1 = create_secret(self.random_node(), aws_test_secret())
         id2 = create_secret(self.random_node(),
-                            auto_generated_secret(encrypt_with='encryptionKey',
-                                                  encrypt_secret_id=id1))
+                            cb_managed_secret(encrypt_with='encryptionKey',
+                                              encrypt_secret_id=id1))
         self.pre_created_ids = [id2, id1] # so we can remove them later
         # Memorize all existing ids so we don't remove them in test_teardown
         self.pre_existing_ids = [s['id'] for s in get_secrets(self.cluster)]
@@ -142,7 +142,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         start_len = len(get_secrets(self.random_node()))
 
         # Create new secret
-        secret_json = auto_generated_secret(name='Test Secret 1')
+        secret_json = cb_managed_secret(name='Test Secret 1')
         secret_id = create_secret(self.random_node(), secret_json)
 
         # Encrypt data using that secret
@@ -156,7 +156,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         assert len(secret_list) == start_len + 1, \
                f'unexpected length of secrets ({secret_list})'
         assert secret['name'] == 'Test Secret 1', 'unexpected name'
-        assert secret['type'] == 'auto-generated-aes-key-256', 'unexpected type'
+        assert secret['type'] == 'cb-server-managed-aes-key-256', \
+               'unexpected type'
         verify_kek_files(self.cluster, secret)
 
         # Trying to update the secret that doesn't exist
@@ -172,7 +173,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         # Changing secret's name
         secret_json['name'] = 'Test Secret 2'
-        secret_json['type'] = 'auto-generated-aes-key-256'
+        secret_json['type'] = 'cb-server-managed-aes-key-256'
         update_secret(self.random_node(), secret_id, secret_json)
         secret = get_secret(self.random_node(), secret_id)
         assert secret['name'] == 'Test Secret 2', 'unexpected name'
@@ -186,8 +187,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         verify_kek_files(self.cluster, secret, verify_missing=True)
 
     def bucket_with_encryption_test(self):
-        secret1_json = auto_generated_secret(name='Test Secret 1')
-        secret2_json = auto_generated_secret(name='Test Secret 2')
+        secret1_json = cb_managed_secret(name='Test Secret 1')
+        secret2_json = cb_managed_secret(name='Test Secret 2')
 
         secret1_id = create_secret(self.random_node(), secret1_json)
 
@@ -240,7 +241,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         delete_secret(self.random_node(), secret2_id)
 
     def bucket_without_encryption_test(self):
-        secret1_json = auto_generated_secret(name='Test Secret 1')
+        secret1_json = cb_managed_secret(name='Test Secret 1')
         secret1_id = create_secret(self.random_node(), secret1_json)
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': -1},
@@ -276,7 +277,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100})
         self.cluster.create_bucket({'name': self.bucket_name2, 'ramQuota': 100})
 
-        secret1_json = auto_generated_secret(
+        secret1_json = cb_managed_secret(
                          usage=[f'bucket-encryption-{self.bucket_name}',
                                 f'bucket-encryption-{self.bucket_name2}'])
         secret1_id = create_secret(self.random_node(), secret1_json)
@@ -304,7 +305,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         # Now the secret should work fine for encryption
         self.cluster.create_bucket(bucket_props)
 
-        secret2_json = auto_generated_secret(
+        secret2_json = cb_managed_secret(
                          usage=[f'bucket-encryption-{self.bucket_name2}'])
         secret2_id = create_secret(self.random_node(), secret2_json)
 
@@ -331,7 +332,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
     def change_SM_password_test(self):
         data = testlib.random_str(8)
-        secret_id = create_secret(self.sm_node, auto_generated_secret())
+        secret_id = create_secret(self.sm_node, cb_managed_secret())
         encrypted = encrypt_with_key(self.sm_node,
                                      get_kek_id(self.sm_node, secret_id),
                                      data)
@@ -341,7 +342,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
     def SM_data_key_rotation_test(self):
         data = testlib.random_str(8)
-        secret_id = create_secret(self.sm_node, auto_generated_secret())
+        secret_id = create_secret(self.sm_node, cb_managed_secret())
         kek_id = get_kek_id(self.sm_node, secret_id)
         encrypted = encrypt_with_key(self.sm_node, kek_id, data)
         testlib.post_succ(self.sm_node, '/node/controller/rotateDataKey')
@@ -363,7 +364,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def change_SM_config_test(self):
         data = testlib.random_str(8)
         # Creating a secret that will be encrypted by node SM
-        secret1_id = create_secret(self.sm_node, auto_generated_secret())
+        secret1_id = create_secret(self.sm_node, cb_managed_secret())
         encrypted = encrypt_with_key(self.sm_node,
                                      get_kek_id(self.sm_node, secret1_id),
                                      data)
@@ -379,7 +380,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         # Check that we can create new secrets after SM config change
         # and keks are actually saved on disk
-        secret2_id = create_secret(self.sm_node, auto_generated_secret())
+        secret2_id = create_secret(self.sm_node, cb_managed_secret())
         verify_kek_files(self.cluster,
                          get_secret(self.random_node(), secret2_id),
                          verify_encryption_kek='encryptionService')
@@ -406,33 +407,33 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         #            key4  key5
         secret1_id = create_secret(
                        self.random_node(),
-                       auto_generated_secret(name='Root (key1)'))
+                       cb_managed_secret(name='Root (key1)'))
         secret2_id = create_secret(
                        self.random_node(),
-                       auto_generated_secret(name='Level 2 (key2)',
-                                             encrypt_with='encryptionKey',
-                                             encrypt_secret_id=secret1_id))
+                       cb_managed_secret(name='Level 2 (key2)',
+                                         encrypt_with='encryptionKey',
+                                         encrypt_secret_id=secret1_id))
         secret3_id = create_secret(
                        self.random_node(),
-                       auto_generated_secret(name='Level 2 (key3)',
-                                             encrypt_with='encryptionKey',
-                                             encrypt_secret_id=secret1_id))
+                       cb_managed_secret(name='Level 2 (key3)',
+                                         encrypt_with='encryptionKey',
+                                         encrypt_secret_id=secret1_id))
         secret4_id = create_secret(
                        self.random_node(),
-                       auto_generated_secret(name='Level 3 (key4)',
-                                             encrypt_with='encryptionKey',
-                                             encrypt_secret_id=secret2_id))
+                       cb_managed_secret(name='Level 3 (key4)',
+                                         encrypt_with='encryptionKey',
+                                         encrypt_secret_id=secret2_id))
         secret5_id = create_secret(
                        self.random_node(),
-                       auto_generated_secret(name='Level 3 (key5)',
-                                             encrypt_with='encryptionKey',
-                                             encrypt_secret_id=secret3_id))
+                       cb_managed_secret(name='Level 3 (key5)',
+                                         encrypt_with='encryptionKey',
+                                         encrypt_secret_id=secret3_id))
 
         # Can't create secret because encryption key with such id doesn't exist
         create_secret(self.random_node(),
-                      auto_generated_secret(name='key6',
-                                            encrypt_with='encryptionKey',
-                                            encrypt_secret_id=secret5_id + 1),
+                      cb_managed_secret(name='key6',
+                                        encrypt_with='encryptionKey',
+                                        encrypt_secret_id=secret5_id + 1),
                       expected_code=400)
 
         # Testing that keys on disk are encrypted by correct keks
@@ -479,17 +480,17 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def kek_not_allowed_to_encrypt_kek_test(self):
         good_secret_id = create_secret(
                            self.random_node(),
-                           auto_generated_secret(name='Good Secret',
-                                                 usage=['bucket-encryption',
-                                                        'KEK-encryption']))
+                           cb_managed_secret(name='Good Secret',
+                                             usage=['bucket-encryption',
+                                                    'KEK-encryption']))
         bad_secret_id = create_secret(
                           self.random_node(),
-                          auto_generated_secret(name='Bad Secret',
-                                                usage=['bucket-encryption']))
+                          cb_managed_secret(name='Bad Secret',
+                                            usage=['bucket-encryption']))
 
-        secret = auto_generated_secret(name='Lever 2 (key1)',
-                                       encrypt_with='encryptionKey',
-                                       encrypt_secret_id=bad_secret_id)
+        secret = cb_managed_secret(name='Lever 2 (key1)',
+                                   encrypt_with='encryptionKey',
+                                   encrypt_secret_id=bad_secret_id)
 
         errors = create_secret(self.random_node(), secret, expected_code=400)
         assert errors['_'] == 'Encryption key not allowed', \
@@ -506,12 +507,12 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
     def change_encrypt_id_for_kek_test(self):
         secret1_id = create_secret(self.random_node(),
-                                   auto_generated_secret(name='Root 1'))
+                                   cb_managed_secret(name='Root 1'))
         secret2_id = create_secret(self.random_node(),
-                                   auto_generated_secret(name='Root 2'))
-        secret3 = auto_generated_secret(name='Lever 2 (key1)',
-                                        encrypt_with='encryptionKey',
-                                        encrypt_secret_id=secret1_id)
+                                   cb_managed_secret(name='Root 2'))
+        secret3 = cb_managed_secret(name='Lever 2 (key1)',
+                                    encrypt_with='encryptionKey',
+                                    encrypt_secret_id=secret1_id)
         secret3_id = create_secret(self.random_node(), secret3)
 
         kek1_id = get_kek_id(self.random_node(), secret1_id)
@@ -550,11 +551,11 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                       expected_code=400)
 
     def change_secret_usage_test(self):
-        secret1 = auto_generated_secret(usage=['KEK-encryption'])
+        secret1 = cb_managed_secret(usage=['KEK-encryption'])
         secret1_id = create_secret(self.random_node(), secret1)
 
-        secret2 = auto_generated_secret(encrypt_with='encryptionKey',
-                                        encrypt_secret_id=secret1_id)
+        secret2 = cb_managed_secret(encrypt_with='encryptionKey',
+                                    encrypt_secret_id=secret1_id)
         secret2_id = create_secret(self.random_node(), secret2)
 
         # Can't remove 'KEK-encryption' usage because this secret is
@@ -576,12 +577,12 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def rotate_kek_that_encrypts_kek_test(self):
         secret1_id = create_secret(
                        self.random_node(),
-                       auto_generated_secret(name='Root'))
+                       cb_managed_secret(name='Root'))
         secret2_id = create_secret(
                        self.random_node(),
-                       auto_generated_secret(name='Lever 2 (key1)',
-                                             encrypt_with='encryptionKey',
-                                             encrypt_secret_id=secret1_id))
+                       cb_managed_secret(name='Lever 2 (key1)',
+                                         encrypt_with='encryptionKey',
+                                         encrypt_secret_id=secret1_id))
         verify_kek_files(self.cluster,
                          get_secret(self.random_node(), secret1_id),
                          verify_encryption_kek='encryptionService')
@@ -611,7 +612,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def rotate_kek_that_encrypts_bucket_dek_test(self):
         secret1_id = create_secret(
                        self.random_node(),
-                       auto_generated_secret(name='Root'))
+                       cb_managed_secret(name='Root'))
 
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': secret1_id},
@@ -642,17 +643,17 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
             tz = timezone(timedelta(hours=offset))
             return datetime.now(tz=tz).replace(microsecond=0)
         bad_next_rotation = (now(7) - moment).isoformat()
-        secret = auto_generated_secret(auto_rotation=True,
-                                       next_rotation_time=bad_next_rotation)
+        secret = cb_managed_secret(auto_rotation=True,
+                                   next_rotation_time=bad_next_rotation)
         errors = create_secret(self.random_node(), secret, expected_code=400)
         assert errors['data']['nextRotationTime'] == 'must be in the future', \
                f'unexpected error: {errors}'
 
         rotation_days = 3
         next_rotation = (now(-7) + moment).isoformat()
-        secret = auto_generated_secret(auto_rotation=True,
-                                       rotation_interval=rotation_days,
-                                       next_rotation_time=next_rotation)
+        secret = cb_managed_secret(auto_rotation=True,
+                                   rotation_interval=rotation_days,
+                                   next_rotation_time=next_rotation)
         secret_id = create_secret(self.random_node(), secret)
 
         def rotation_happened(key_num, expected_rotation_time_iso):
@@ -698,7 +699,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
             sleep_time=0.3, timeout=30)
 
     def cfg_encryption_api_test(self):
-        secret = auto_generated_secret(usage=['bucket-encryption'])
+        secret = cb_managed_secret(usage=['bucket-encryption'])
         bad_id = create_secret(self.random_node(), secret)
         secret['usage'] = ['bucket-encryption', 'config-encryption']
         secret['name'] = secret['name'] + ' (good)' # has to be unique
@@ -725,7 +726,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         node = self.random_node()
         set_cfg_encryption(node, 'disabled', -1)
 
-        secret = auto_generated_secret()
+        secret = cb_managed_secret()
         # Can't create secret because it will be stored unencrypted in
         # chronicle then
         create_secret(node, secret, expected_code=400)
@@ -760,8 +761,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         update_secret(node, secret_id, secret)
 
     def dump_keys_utilities_test(self):
-        secret = auto_generated_secret(usage=['bucket-encryption',
-                                              'config-encryption'])
+        secret = cb_managed_secret(usage=['bucket-encryption',
+                                          'config-encryption'])
         node = random.choice(kv_nodes(self.cluster))
         secret_id = create_secret(node, secret)
         n = 5
@@ -886,7 +887,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def config_dek_automatic_rotation_test(self):
         # Enable encryption and set dek rotation int = 1 sec
         # Wait some time and check if dek has rotated
-        secret = auto_generated_secret(usage=['config-encryption'])
+        secret = cb_managed_secret(usage=['config-encryption'])
         secret_id = create_secret(self.random_node(), secret)
         kek_id = get_kek_id(self.random_node(), secret_id)
         set_cfg_encryption(self.random_node(), 'encryptionKey', secret_id,
@@ -925,7 +926,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def bucket_dek_automatic_rotation_test(self):
         # Enable encryption and set dek rotation int = 1 sec
         # Wait some time and check if dek has rotated
-        secret = auto_generated_secret(usage=['bucket-encryption'])
+        secret = cb_managed_secret(usage=['bucket-encryption'])
         secret_id = create_secret(self.random_node(), secret)
         kek_id = get_kek_id(self.random_node(), secret_id)
 
@@ -951,7 +952,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def dont_remove_active_dek_test(self):
         # enable encryption and set dek lifetime = 1 sec,
         # wait some time and make sure active dek is not removed
-        secret = auto_generated_secret(usage=['config-encryption'])
+        secret = cb_managed_secret(usage=['config-encryption'])
         secret_id = create_secret(self.random_node(), secret)
         kek_id = get_kek_id(self.random_node(), secret_id)
         set_cfg_encryption(self.random_node(), 'encryptionKey', secret_id,
@@ -1021,14 +1022,13 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                               verify_encryption_kek=kek_id)
 
         # Create an generated secret and encrypt it with AWS secret
-        generated_secret = auto_generated_secret(
-                             name='test',
-                             encrypt_with='encryptionKey',
-                             encrypt_secret_id=aws_secret_id)
-        generated_secret_id = create_secret(self.random_node(),
-                                            generated_secret)
+        secret = cb_managed_secret(
+                      name='test',
+                      encrypt_with='encryptionKey',
+                      encrypt_secret_id=aws_secret_id)
+        cb_managed_secret_id = create_secret(self.random_node(), secret)
         verify_kek_files(self.cluster,
-                         get_secret(self.random_node(), generated_secret_id),
+                         get_secret(self.random_node(), cb_managed_secret_id),
                          verify_encryption_kek=kek_id,
                          verify_key_count=1)
 
@@ -1061,7 +1061,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         # with new KEK
         poll_verify_kek_files(self.cluster,
                               get_secret(self.random_node(),
-                                         generated_secret_id),
+                                         cb_managed_secret_id),
                               verify_encryption_kek=new_kek_id,
                               verify_key_count=1)
         poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
@@ -1075,7 +1075,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         set_cfg_dek_limit(self.cluster, 2)
         set_log_dek_limit(self.cluster, 2)
 
-        secret = auto_generated_secret(usage=['config-encryption'])
+        secret = cb_managed_secret(usage=['config-encryption'])
         secret_id = create_secret(self.random_node(), secret)
 
         set_cfg_encryption(self.random_node(), 'encryptionKey', secret_id,
@@ -1100,7 +1100,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def bucket_dek_limit_test_base(self,
                                    all_bucket_dek_limit = None,
                                    specific_bucket_dek_limit = None):
-        secret = auto_generated_secret(usage=['bucket-encryption'])
+        secret = cb_managed_secret(usage=['bucket-encryption'])
         secret_id = create_secret(self.random_node(), secret)
 
         set_all_bucket_dek_limit(self.cluster, all_bucket_dek_limit)
@@ -1133,8 +1133,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
 
     def prepare_cluster_for_node_readd_testing(self):
-        # Create auto-generated secret for bucket encryption
-        secret = auto_generated_secret(
+        # Create cb-managed secret for bucket encryption
+        secret = cb_managed_secret(
             usage=['bucket-encryption', 'config-encryption']
         )
         secret_id = create_secret(self.random_node(), secret)
@@ -1157,7 +1157,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         return (candidate_for_removal, secret_id)
 
     def modify_encryption_for_node_readd_testing(self, node, prev_secret_id):
-        secret = auto_generated_secret(
+        secret = cb_managed_secret(
             usage=['bucket-encryption', 'config-encryption']
         )
         node = self.cluster.connected_nodes[0]
@@ -1276,7 +1276,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         bad_aws_secret_id = create_secret(self.random_node(), bad_secret)
 
         err = create_secret(self.random_node(),
-                            auto_generated_secret(
+                            cb_managed_secret(
                                 encrypt_with='encryptionKey',
                                 encrypt_secret_id=bad_aws_secret_id),
                             expected_code=400)
@@ -1477,7 +1477,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                              dek_number=1)
 
     def remove_old_deks_test(self):
-        secret = auto_generated_secret(usage=['bucket-encryption'])
+        secret = cb_managed_secret(usage=['bucket-encryption'])
         secret_id = create_secret(self.random_node(), secret)
         kek_id = get_kek_id(self.random_node(), secret_id)
 
@@ -1522,11 +1522,11 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def dek_reencryption_test(self):
         # reenable encryption using different secret
         # and check if old dek is the same and that it gets reencrypted
-        secret1 = auto_generated_secret(usage=['bucket-encryption'])
+        secret1 = cb_managed_secret(usage=['bucket-encryption'])
         secret_id1 = create_secret(self.random_node(), secret1)
         kek_id1 = get_kek_id(self.random_node(), secret_id1)
 
-        secret2 = auto_generated_secret(usage=['bucket-encryption'])
+        secret2 = cb_managed_secret(usage=['bucket-encryption'])
         secret_id2 = create_secret(self.random_node(), secret2)
         kek_id2 = get_kek_id(self.random_node(), secret_id2)
 
@@ -1680,7 +1680,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def bucket_dek_bad_settings_validation_test(self):
         # Currently we expect dek lifetime to be at least 5 minutes more
         # than the rotation interval
-        secret = auto_generated_secret(usage=['bucket-encryption'])
+        secret = cb_managed_secret(usage=['bucket-encryption'])
         secret_id = create_secret(self.random_node(), secret)
 
         # disable bypass to enable full validation
@@ -1980,13 +1980,13 @@ class NativeEncryptionPermissionsTests(testlib.BaseTestSet):
 
     def create_secret_test_(self, username, usages):
         creds = (username, self.password)
-        secret = auto_generated_secret(usage=usages)
+        secret = cb_managed_secret(usage=usages)
         create_secret(self.cluster, secret, auth=creds,
                       expected_code=self.expected_write_res(username, usages))
 
     def update_secret_test_(self, username, usages):
         creds = (username, self.password)
-        secret = auto_generated_secret(usage=usages)
+        secret = cb_managed_secret(usage=usages)
         secret_id = create_secret(self.cluster, secret) # note: admin creates it
         secret['name'] = secret['name'] + ' foo'
         update_secret(self.cluster, secret_id, secret, auth=creds,
@@ -1997,7 +1997,7 @@ class NativeEncryptionPermissionsTests(testlib.BaseTestSet):
     def read_secret_test_(self, name, usage):
         creds = (name, self.password)
         forbidden = [u for u in self.reading[name] if not self.reading[name][u]]
-        secret_with_usage = auto_generated_secret(usage=[usage] + forbidden)
+        secret_with_usage = cb_managed_secret(usage=[usage] + forbidden)
         # Note: admin creates this secret
         secret_with_usage_id = create_secret(self.cluster, secret_with_usage)
 
@@ -2016,7 +2016,7 @@ class NativeEncryptionPermissionsTests(testlib.BaseTestSet):
             assert len(filtered) == 0, f'unexpected secrets: {secrets}'
 
         if len(forbidden) > 0:
-            not_readable_secret = auto_generated_secret(usage=forbidden)
+            not_readable_secret = cb_managed_secret(usage=forbidden)
             # Note: admin creates this secret
             not_readable_secret_id = create_secret(self.cluster,
                                                    not_readable_secret)
@@ -2127,12 +2127,12 @@ def set_comp_encryption(cluster, component, mode, secret,
     return res.json()['errors']
 
 
-def auto_generated_secret(name=None,
-                          usage=None,
-                          auto_rotation=False, rotation_interval=7,
-                          next_rotation_time=None,
-                          encrypt_with='nodeSecretManager',
-                          encrypt_secret_id=None):
+def cb_managed_secret(name=None,
+                      usage=None,
+                      auto_rotation=False, rotation_interval=7,
+                      next_rotation_time=None,
+                      encrypt_with='nodeSecretManager',
+                      encrypt_secret_id=None):
     if usage is None:
         usage = ['bucket-encryption', 'KEK-encryption']
     if name is None:
@@ -2143,7 +2143,7 @@ def auto_generated_secret(name=None,
     if next_rotation_time is not None:
         optional['nextRotationTime'] = next_rotation_time
     return {'name': name,
-            'type': 'auto-generated-aes-key-256',
+            'type': 'cb-server-managed-aes-key-256',
             'usage': usage,
             'data': {'autoRotation': auto_rotation,
                      'rotationIntervalInDays': rotation_interval,
@@ -2230,7 +2230,7 @@ def delete_secret(cluster, secret_id, expected_code=200, auth=None):
 
 def verify_kek_files(cluster, secret, verify_key_count=1, **kwargs):
     for node in cluster.connected_nodes:
-        if secret['type'] == 'auto-generated-aes-key-256':
+        if secret['type'] == 'cb-server-managed-aes-key-256':
             if verify_key_count is not None:
                 count = len(secret['data']['keys'])
                 assert count == verify_key_count, \
@@ -2456,7 +2456,7 @@ def verify_key_file(path, verify_encryption_kek=None,
 
 def get_kek_id(cluster, secret_id):
     r = get_secret(cluster, secret_id)
-    if r['type'] == 'auto-generated-aes-key-256':
+    if r['type'] == 'cb-server-managed-aes-key-256':
         for k in r['data']['keys']:
             if k['active']:
                 return k['id']
@@ -2467,7 +2467,7 @@ def get_kek_id(cluster, secret_id):
 
 def get_all_kek_ids(cluster, secret_id):
     r = get_secret(cluster, secret_id)
-    if r['type'] == 'auto-generated-aes-key-256':
+    if r['type'] == 'cb-server-managed-aes-key-256':
         return [k['id'] for k in r['data']['keys']]
     return None
 

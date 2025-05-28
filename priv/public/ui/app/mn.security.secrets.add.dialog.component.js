@@ -243,7 +243,7 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
       case 'awskms-aes-key-256':
         rv['aws-secret'] = item.data;
         break;
-      case 'auto-generated-aes-key-256':
+      case 'cb-server-managed-aes-key-256':
         if (item.data.autoRotation) {
           const localTime = new Date(item.data.nextRotationTime);
           rv['generated-secret'] = {
@@ -293,7 +293,7 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
       case 'awskms-aes-key-256':
         data = awsSecret;
         break;
-      case 'auto-generated-aes-key-256':
+      case 'cb-server-managed-aes-key-256':
         const {rotationIntervalInDays, nextRotationTime, autoRotation, encryptWith, encryptWithKeyId, canBeCached} = generatedSecret;
         data = {autoRotation, encryptWith};
         if (encryptWith === 'encryptionKey') {
