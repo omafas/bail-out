@@ -1770,12 +1770,11 @@ def set_cfg_encryption(cluster, *args, **kwargs):
 
 
 def set_log_encryption(cluster, *args, **kwargs):
-    return set_comp_encryption(cluster, 'log', *args, dek_lifetime=0, **kwargs)
+    return set_comp_encryption(cluster, 'log', *args, **kwargs)
 
 
 def set_audit_encryption(cluster, *args, **kwargs):
-    return set_comp_encryption(cluster, 'audit', *args, dek_lifetime=0,
-                               **kwargs)
+    return set_comp_encryption(cluster, 'audit', *args, **kwargs)
 
 
 def set_comp_encryption(cluster, component, mode, secret,
