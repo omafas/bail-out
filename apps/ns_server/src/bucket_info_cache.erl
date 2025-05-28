@@ -347,6 +347,8 @@ build_bucket_capabilities(BucketConfig) ->
                      {'subdoc.ReplicaRead',
                       cluster_compat_mode:is_cluster_76()},
                      {'subdoc.BinaryXattr',
+                      cluster_compat_mode:is_cluster_morpheus()},
+                     {'subdoc.AccessDeleted',
                       cluster_compat_mode:is_cluster_morpheus()}] ++
                      maybe_range_scan_capability(BucketConfig),
 
@@ -593,7 +595,7 @@ get_bucket_capabilities(?VERSION_MORPHEUS,
                         IsEnterprise,
                         IsMagma) ->
     get_bucket_capabilities(?VERSION_76, IsEnterprise, IsMagma) ++
-    ['subdoc.BinaryXattr'];
+    ['subdoc.BinaryXattr', 'subdoc.AccessDeleted'];
 get_bucket_capabilities(_Version, _IsEnterprise, false = _IsMagma) ->
     [couchapi];
 get_bucket_capabilities(_Version, _IsEnterprise, _IsMagma) ->
