@@ -1677,7 +1677,8 @@ class NativeEncryptionPermissionsTests(testlib.BaseTestSet):
 
     @staticmethod
     def requirements():
-        return testlib.ClusterRequirements(edition='Enterprise')
+        return testlib.ClusterRequirements(edition='Enterprise',
+                                           num_vbuckets=16)
 
     def setup(self):
         set_cfg_encryption(self.cluster, 'nodeSecretManager', -1)
