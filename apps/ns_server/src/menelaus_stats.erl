@@ -1711,7 +1711,7 @@ membase_summary_stats_description(BucketId, ServiceNodes, IsEphemeral) ->
            {name, <<"ep_cache_miss_rate">>},
            {desc, <<"Percentage of reads per second to this bucket "
                     "from disk as opposed to RAM (measured from "
-                    "get_misses / cmd_gets">>},
+                    "get_misses / cmd_gets)">>},
            {maxY, 100}]},
          {[{title, <<"gets per sec.">>},
            {name, <<"cmd_get">>},

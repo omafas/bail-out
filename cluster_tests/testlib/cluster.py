@@ -836,6 +836,10 @@ class Cluster:
         assert len(nodes) == 1
         return nodes[0]
 
+    def get_buckets(self):
+        r = testlib.get_succ(self, f'/pools/default/buckets')
+        return r.json()
+
 def get_services_string(services: List[Service]):
     return ",".join(services_to_strings(services))
 
