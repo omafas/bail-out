@@ -1500,13 +1500,13 @@ validate_lifetime_with_rotation_intrvl(ParamLifeTime, _CurrRotIntrvl, _MaxDeks)
 validate_lifetime_with_rotation_intrvl(_ParamLifeTime, 0 = _CurrRotIntrvl,
                                        _MaxDeks) ->
     [{encryptionAtRestDekLifetime,
-      <<"Dek lifetime must be set to 0, if dek rotation interval is "
+      <<"DEK lifetime must be set to 0, if DEK rotation interval is "
         "currently 0">>}];
 validate_lifetime_with_rotation_intrvl(ParamLifeTime, CurrRotIntrvl, _MaxDeks)
   when ParamLifeTime < CurrRotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
     Err =
-        io_lib:format("Dek lifetime must be a least ~p seconds more than the "
-                      "current dek rotation interval value of ~p",
+        io_lib:format("DEK lifetime must be a least ~p seconds more than the "
+                      "current DEK rotation interval value of ~p",
                       [?DEK_LIFETIME_ROTATION_MARGIN_SEC, CurrRotIntrvl]),
     [{encryptionAtRestDekLifetime, list_to_binary(Err)}];
 validate_lifetime_with_rotation_intrvl(ParamLifeTime, CurrRotIntrvl, MaxDeks)
@@ -1525,13 +1525,13 @@ validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime, _MaxDeks)
 validate_rotation_intrvl_with_lifetime(0 = _ParamRotIntrvl, _CurrLifeTime,
                                        _MaxDeks) ->
     [{encryptionAtRestDekRotationInterval,
-      <<"Dek rotation interval can't be set to 0 if dek lifetime is not "
+      <<"DEK rotation interval can't be set to 0 if DEK lifetime is not "
         "currently 0">>}];
 validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime, _MaxDeks)
   when CurrLifeTime < ParamRotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
     Err =
-        io_lib:format("Dek rotation interval must be at least ~p seconds less "
-                      "than the current dek lifetime value of ~p",
+        io_lib:format("DEK rotation interval must be at least ~p seconds less "
+                      "than the current DEK lifetime value of ~p",
                       [?DEK_LIFETIME_ROTATION_MARGIN_SEC,
                        CurrLifeTime]),
     [{encryptionAtRestDekRotationInterval, list_to_binary(Err)}];
