@@ -2467,6 +2467,9 @@ parse_validate_cross_cluster_versioning_enabled(Params, IsNew, _Allow,
             {error, enableCrossClusterVersioning,
              <<"Cross Cluster Versioning cannot be disabled once it has been "
                "enabled">>};
+        {ok, cross_cluster_versioning_enabled, true} when Current ->
+            {error, enableCrossClusterVersioning,
+             <<"Cross Cluster Versioning is already enabled">>};
         Other ->
             Other
     end.
