@@ -667,6 +667,7 @@ respond_bucket_created(Req, PoolId, BucketId) ->
           ignore_warnings,
           new,
           bucket_name,
+          bucket_uuid,
           bucket_config,
           all_buckets,
           kv_nodes,
@@ -687,14 +688,19 @@ init_bucket_validation_context(IsNew, BucketName, Req) ->
     Config = ns_config:get(),
     Snapshot =
         chronicle_compat:get_snapshot(
-          [ns_bucket:fetch_snapshot(all, _, [props]),
+          [ns_bucket:fetch_snapshot(all, _, [props, uuid]),
            ns_cluster_membership:fetch_snapshot(_)], #{ns_config => Config}),
 
     KvNodes = ns_cluster_membership:service_active_nodes(Snapshot, kv),
     ServerGroups = ns_cluster_membership:server_groups(Snapshot),
 
+    BucketUUID =
+        case IsNew of
+            true -> ns_bucket:uuid(BucketName, Snapshot);
+            false -> not_present
+        end,
     init_bucket_validation_context(
-      IsNew, BucketName,
+      IsNew, BucketName, BucketUUID,
       ns_bucket:get_buckets(Snapshot),
       KvNodes, ServerGroups,
       ns_storage_conf:cluster_storage_info(Config, Snapshot),
@@ -703,7 +709,7 @@ init_bucket_validation_context(IsNew, BucketName, Req) ->
       cluster_compat_mode:is_enterprise(),
       cluster_compat_mode:is_developer_preview()).
 
-init_bucket_validation_context(IsNew, BucketName, AllBuckets,
+init_bucket_validation_context(IsNew, BucketName, BucketUUID, AllBuckets,
                                KvNodes, ServerGroups,
                                ClusterStorageTotals,
                                ValidateOnly, IgnoreWarnings,
@@ -736,6 +742,7 @@ init_bucket_validation_context(IsNew, BucketName, AllBuckets,
        ignore_warnings = IgnoreWarnings,
        new = IsNew,
        bucket_name = BucketName,
+       bucket_uuid = BucketUUID,
        all_buckets = AllBuckets,
        kv_nodes = KvNodes,
        max_replicas = MaxReplicas,
@@ -1486,33 +1493,41 @@ validate_watermarks(Params, Ctx) ->
                              memoryHighWatermark,
                              less_than).
 
-validate_lifetime_with_rotation_intrvl(ParamLifeTime, _CurrRotIntrvl)
+validate_lifetime_with_rotation_intrvl(ParamLifeTime, _CurrRotIntrvl, _MaxDeks)
   when ParamLifeTime =:= undefined;
        ParamLifeTime =:= 0 ->
     [];
-validate_lifetime_with_rotation_intrvl(_ParamLifeTime, 0 = _CurrRotIntrvl) ->
+validate_lifetime_with_rotation_intrvl(_ParamLifeTime, 0 = _CurrRotIntrvl,
+                                       _MaxDeks) ->
     [{encryptionAtRestDekLifetime,
       <<"Dek lifetime must be set to 0, if dek rotation interval is "
         "currently 0">>}];
-validate_lifetime_with_rotation_intrvl(ParamLifeTime, CurrRotIntrvl)
+validate_lifetime_with_rotation_intrvl(ParamLifeTime, CurrRotIntrvl, _MaxDeks)
   when ParamLifeTime < CurrRotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
     Err =
         io_lib:format("Dek lifetime must be a least ~p seconds more than the "
                       "current dek rotation interval value of ~p",
                       [?DEK_LIFETIME_ROTATION_MARGIN_SEC, CurrRotIntrvl]),
     [{encryptionAtRestDekLifetime, list_to_binary(Err)}];
-validate_lifetime_with_rotation_intrvl(_ParamLifeTime, _CurrRotIntrvl) ->
+validate_lifetime_with_rotation_intrvl(ParamLifeTime, CurrRotIntrvl, MaxDeks)
+  when ParamLifeTime > MaxDeks * CurrRotIntrvl ->
+    Err = io_lib:format("Must be less than dekRotationInterval * max DEKs (~b)",
+                        [MaxDeks]),
+    [{encryptionAtRestDekLifetime, list_to_binary(Err)}];
+validate_lifetime_with_rotation_intrvl(_ParamLifeTime, _CurrRotIntrvl,
+                                       _MaxDeks) ->
     [].
 
-validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime)
+validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime, _MaxDeks)
   when ParamRotIntrvl =:= undefined;
        CurrLifeTime =:= 0 ->
     [];
-validate_rotation_intrvl_with_lifetime(0 = _ParamRotIntrvl, _CurrLifeTime) ->
+validate_rotation_intrvl_with_lifetime(0 = _ParamRotIntrvl, _CurrLifeTime,
+                                       _MaxDeks) ->
     [{encryptionAtRestDekRotationInterval,
       <<"Dek rotation interval can't be set to 0 if dek lifetime is not "
         "currently 0">>}];
-validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime)
+validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime, _MaxDeks)
   when CurrLifeTime < ParamRotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
     Err =
         io_lib:format("Dek rotation interval must be at least ~p seconds less "
@@ -1520,7 +1535,13 @@ validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime)
                       [?DEK_LIFETIME_ROTATION_MARGIN_SEC,
                        CurrLifeTime]),
     [{encryptionAtRestDekRotationInterval, list_to_binary(Err)}];
-validate_rotation_intrvl_with_lifetime(_ParamRotIntrvl, _CurrLifeTime) ->
+validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime, MaxDeks)
+  when CurrLifeTime > MaxDeks * ParamRotIntrvl ->
+    Err = io_lib:format("Must be greater than dekLifetime / max DEKs (~b)",
+                        [MaxDeks]),
+    [{encryptionAtRestDekRotationInterval, list_to_binary(Err)}];
+validate_rotation_intrvl_with_lifetime(_ParamRotIntrvl, _CurrLifeTime,
+                                       _MaxDeks) ->
     [].
 
 validate_encr_lifetime_and_rotation_intrvl(_, _, true = _Bypass) ->
@@ -1547,8 +1568,15 @@ validate_encr_lifetime_and_rotation_intrvl(Params, Ctx, false = _Bypass) ->
             RotIntrvlVal ->
                 RotIntrvlVal
         end,
-    validate_lifetime_with_rotation_intrvl(ParamLifeTime, CurrRotIntrvl) ++
-        validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime).
+    DekKind = case Ctx#bv_ctx.bucket_uuid of
+                  not_present -> {bucketDek, <<>>};
+                  UUID -> {bucketDek, UUID}
+              end,
+    MaxDeks = cb_cluster_secrets:max_dek_num(DekKind),
+    validate_lifetime_with_rotation_intrvl(ParamLifeTime, CurrRotIntrvl,
+                                           MaxDeks) ++
+        validate_rotation_intrvl_with_lifetime(ParamRotIntrvl, CurrLifeTime,
+                                               MaxDeks).
 
 validate_high_low_values(Params, Ctx, LowParam, LowParamExtName,
                          HighParam, HighParamExtName, Check) ->
@@ -3912,7 +3940,12 @@ basic_bucket_params_screening(IsNew, Name, Params, AllBuckets,
     Groups = [[{uuid, N},
                {name, N},
                {nodes, [N]}] || N <- KvNodes],
-    Ctx = init_bucket_validation_context(IsNew, Name, AllBuckets,
+    BucketUUID =
+        case IsNew of
+            true -> <<"7a3e8e249d8a2f9dabd757ec4dfcbc03">>;
+            false -> not_present
+        end,
+    Ctx = init_bucket_validation_context(IsNew, Name, BucketUUID, AllBuckets,
                                          KvNodes, Groups, [],
                                          false, false,
                                          Version, IsEnterprise,

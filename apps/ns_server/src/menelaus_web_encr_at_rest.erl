@@ -82,8 +82,20 @@ encr_dek_lifetime(Param, RotIntervalName, EncrType) ->
                                             [?DEK_LIFETIME_ROTATION_MARGIN_SEC,
                                              RotIntrvl]),
                         {error, Err};
-                    (_, _) ->
-                        ok
+                    (LifeTime, RotIntrvl) ->
+                        MaxDeks = lists:min(
+                                    [cb_cluster_secrets:max_dek_num(Kind) ||
+                                     Kind <- get_dek_kinds_by_type(EncrType)]),
+                        if
+                            LifeTime > RotIntrvl * MaxDeks ->
+                                M = io_lib:format(
+                                      "Must be less than or equal to "
+                                      "dekRotationInterval * max DEKs (~b)",
+                                      [MaxDeks]),
+                                {error, M};
+                            true ->
+                                ok
+                        end
                 end
         end,
     {Param,
@@ -111,8 +123,19 @@ encr_dek_rotate_intrvl(Param, LifetimeName, EncrType) ->
                                             [?DEK_LIFETIME_ROTATION_MARGIN_SEC,
                                              LifeTime]),
                         {error, Err};
-                    (_, _) ->
-                        ok
+                    (RotIntrvl, LifeTime) ->
+                        MaxDeks = lists:min(
+                                    [cb_cluster_secrets:max_dek_num(Kind) ||
+                                     Kind <- get_dek_kinds_by_type(EncrType)]),
+                        if
+                            LifeTime > RotIntrvl * MaxDeks ->
+                                M = io_lib:format(
+                                      "Must be greater than or equal to "
+                                      "dekLifetime / max DEKs (~b)", [MaxDeks]),
+                                {error, M};
+                            true ->
+                                ok
+                        end
                 end
         end,
 
@@ -639,3 +662,12 @@ dek_interval_error(MinInSec) ->
     list_to_binary(
       io_lib:format("must be greater or equal to ~s",
                     [misc:interval_to_string(Days, Hours, Minutes, Seconds)])).
+
+get_dek_kinds_by_type(Type) ->
+    lists:flatmap(
+      fun (Kind) ->
+          case cb_deks:dek_config(Kind) of
+              #{required_usage := Type} -> [Kind];
+              #{required_usage := _} -> []
+          end
+      end, cb_deks:dek_cluster_kinds_list(direct)).

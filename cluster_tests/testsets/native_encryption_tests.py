@@ -29,6 +29,7 @@ encrypted_file_magic = b'\x00Couchbase Encrypted\x00'
 min_timer_interval = 1 # seconds
 dek_info_update_interval = 3 # seconds
 min_dek_gc_interval = 2 # seconds
+default_max_deks = 50
 default_dek_lifetime = 60*60*24*365
 min_dek_lifetime = 60*60*24*30
 default_dek_rotation = 60*60*24*30
@@ -1667,6 +1668,9 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                 (None, min_dek_lifetime - 1, False),
                 (None, default_dek_rotation + dek_lifetime_margin - 1, False),
                 (None, default_dek_rotation + dek_lifetime_margin, True),
+                (min_dek_rotation, default_max_deks * min_dek_rotation + 1,
+                 False),
+                (min_dek_rotation, default_max_deks * min_dek_rotation, True),
                 (min_dek_rotation, min_dek_lifetime, True),
                 (min_dek_lifetime, min_dek_lifetime + dek_lifetime_margin - 1,
                  False),

@@ -80,7 +80,8 @@
          destroy_deks/2,
          diag_info/0,
          reencrypt_deks/0,
-         node_supports_encryption_at_rest/1]).
+         node_supports_encryption_at_rest/1,
+         max_dek_num/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -827,6 +828,14 @@ nodes_with_encryption_at_rest(Nodes) ->
                          false -> false
                      end
                  end, Nodes).
+
+-spec max_dek_num(cb_deks:dek_kind()) -> pos_integer().
+max_dek_num(Kind) ->
+    Default = case Kind of
+                  {bucketDek, _} -> ?get_param({max_dek_num, bucketDek}, 50);
+                  _ -> 50
+              end,
+    ?get_param({max_dek_num, Kind}, Default).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -4219,13 +4228,6 @@ handle_erpc_key_test_result(Res, Nodes) ->
 
 call_is_writable_mfa({M, F, A}, ExtraArgs) ->
     erlang:apply(M, F, A ++ ExtraArgs).
-
-max_dek_num(Kind) ->
-    Default = case Kind of
-                  {bucketDek, _} -> ?get_param({max_dek_num, bucketDek}, 50);
-                  _ -> 50
-              end,
-    ?get_param({max_dek_num, Kind}, Default).
 
 -ifdef(TEST).
 replace_secret_in_list_test() ->
