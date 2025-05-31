@@ -97,17 +97,11 @@ ValidateNoDataLoss =
 
 WaitForRebalance =
   fun (Rec) ->
-    case rebalance:progress() of
-      not_running -> ok;
-      _ -> Rec(Rec)
-    end
-  end,
-
-GetRebalanceStatus =
-  fun () ->
     case rebalance:status() of
       none ->
         ok;
+      running ->
+        Rec(Rec);
       {none, Error} ->
         {error, Error}
     end
@@ -115,13 +109,16 @@ GetRebalanceStatus =
 
 MoveVBuckets =
   fun (Chains) ->
-    ok = ns_orchestrator:ensure_janitor_run({bucket, Bucket}),
+    ale:info(ns_server, "Ensuring janitor run"),
+    true = misc:poll_for_condition(
+             fun() ->
+                     ok =:= ns_orchestrator:ensure_janitor_run({bucket, Bucket})
+             end, 2000, 250),
     ale:info(ns_server, "Moving vbuckets: ~p", [Chains]),
     ok = gen_statem:call({via, leader_registry, ns_orchestrator},
                          {move_vbuckets, Bucket, Chains}),
     ale:info(ns_server, "Vbuckets moved: ~p", [Chains]),
-    WaitForRebalance(WaitForRebalance),
-    GetRebalanceStatus()
+    WaitForRebalance(WaitForRebalance)
   end,
 
 GetVbucketMoves =
@@ -163,13 +160,13 @@ case {InvalidVbuckets, DataLossVbuckets} of
         lists:flatten(io_lib:format("Failed to delete corrupt vbuckets. Error: ~p.", [Error]))
     end;
   {InvalidVbuckets, []} ->
-    lists:flatten(io_lib:format("Found ~p invalid vbuckets: ~p.",
+    lists:flatten(io_lib:format("Found ~p invalid vbuckets: ~w.",
                                 [length(InvalidVbuckets), InvalidVbuckets]));
   {[], DataLossVbuckets} ->
-    lists:flatten(io_lib:format("Found ~p vbuckets with data loss: ~p.",
+    lists:flatten(io_lib:format("Found ~p vbuckets with data loss: ~w.",
                                 [length(DataLossVbuckets), DataLossVbuckets]));
   {InvalidVbuckets, DataLossVbuckets} ->
-    lists:flatten(io_lib:format("Found ~p invalid vbuckets: ~p. Found ~p vbuckets with data loss: ~p.",
+    lists:flatten(io_lib:format("Found ~p invalid vbuckets: ~w. Found ~p vbuckets with data loss: ~w.",
                   [length(InvalidVbuckets), InvalidVbuckets, length(DataLossVbuckets), DataLossVbuckets]))
 end.
 EOF
