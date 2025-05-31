@@ -14,16 +14,37 @@
 
 -include("ns_common.hrl").
 
--export([delete_databases_and_files/1]).
+-export([delete_databases_and_files/1, delete_databases_and_files_uuid/1]).
 
-delete_databases_and_files(Bucket) ->
+delete_databases(Bucket) ->
     AllDBs = bucket_databases(Bucket),
     MasterDB = iolist_to_binary([Bucket, <<"/master">>]),
     {MaybeMasterDb, RestDBs} = lists:partition(
                             fun (Name) ->
                                     Name =:= MasterDB
                             end, AllDBs),
-    RV = case delete_databases_loop(MaybeMasterDb ++ RestDBs) of
+    delete_databases_loop(MaybeMasterDb ++ RestDBs).
+
+delete_databases_and_files_uuid(UUID) ->
+    Bucket = couch_dbname_cache:get_dbname_from_uuid(UUID),
+    RV = case delete_databases(Bucket) of
+        ok ->
+            {ok, DbDir} = ns_storage_conf:this_node_dbdir(),
+            Path = filename:join(DbDir, binary_to_list(UUID)),
+            ?log_info("Couch dbs are deleted. Proceeding with bucket directory ~p", [Path]),
+            case misc:rm_rf(Path) of
+                ok -> ok;
+                Error ->
+                    {rm_rf_error, Error}
+            end;
+        Error ->
+            {delete_vbuckets_error, Error}
+    end,
+    ?log_info("Bucket ~p deletion has finished with ~p", [Bucket, RV]),
+    RV.
+
+delete_databases_and_files(Bucket) ->
+    RV = case delete_databases(Bucket) of
              ok ->
                  {ok, DbDir} = ns_storage_conf:this_node_dbdir(),
                  Path = filename:join(DbDir, Bucket),
@@ -36,14 +57,8 @@ delete_databases_and_files(Bucket) ->
              Error ->
                  {delete_vbuckets_error, Error}
          end,
-    do_delete_bucket_indexes(Bucket),
     ?log_info("Bucket ~p deletion has finished with ~p", [Bucket, RV]),
     RV.
-
-do_delete_bucket_indexes(Bucket) ->
-    {ok, BaseIxDir} = ns_storage_conf:this_node_ixdir(),
-    ?log_info("Start deleting bucket ~p indexes at ~p", [Bucket, BaseIxDir]),
-    couch_set_view:delete_index_dir(BaseIxDir, list_to_binary(Bucket)).
 
 delete_databases_loop([]) ->
     ok;
