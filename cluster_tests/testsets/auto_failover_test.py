@@ -95,10 +95,7 @@ class AutoFailoverSettingsTestBase(testlib.BaseTestSet):
 
             if self.is_76:
                 assert 'disableMaxCount' in self.post_data_keys
-                if self.is_serverless:
-                    assert self.prev_settings['disableMaxCount']
-                else:
-                    assert not self.prev_settings['disableMaxCount']
+                assert not self.prev_settings['disableMaxCount']
                 if 'maxCount' not in self.result_keys:
                     assert self.is_serverless
                     assert self.prev_settings['disableMaxCount']
@@ -349,7 +346,7 @@ class AutoFailoverSettingsTestBase(testlib.BaseTestSet):
                 time_period_key = key + '[timePeriod]'
 
                 if 'enabled' in delta and delta['enabled'] == 'false':
-                    if enabled_key in self.result_keys:
+                    if key in self.result_keys:
                         delta[enabled_key] = 'false'
 
                 if enabled_key in delta and delta[enabled_key] == 'false':

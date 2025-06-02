@@ -73,8 +73,21 @@
 %% Default settings reflect settings of the minimum supported cluster version.
 %% Settings for newer versions will be added in ns_online_config_upgrader.
 %% Specify those in a config_upgrade_to_X function.
+%%
+%% A nuance to this occurs if the auto_failover settings are specified in
+%% a profile (e.g. provisioned_profile). The settings are all used for a
+%% new install but for upgrades the settings from the profile should only
+%% be used if that setting is new for the release (so the config_upgrade_to_X
+%% functions need to consider this).
 default_config(IsEnterprise) ->
-    default_config(?MIN_SUPPORTED_VERSION, IsEnterprise).
+    case config_profile:get_value(auto_failover, undefined) of
+        undefined ->
+            default_config(?MIN_SUPPORTED_VERSION, IsEnterprise);
+        Defaults ->
+            %% The default values are provided in the profile file to allow
+            %% them to be different (e.g. for provisioned_profile).
+            Defaults
+    end.
 
 default_config(?MIN_SUPPORTED_VERSION, IsEnterprise) ->
     [{?ROOT_CONFIG_KEY,
@@ -92,22 +105,61 @@ default_config(?MIN_SUPPORTED_VERSION, IsEnterprise) ->
 max_events_allowed() ->
     100.
 
+%% The upgrades are complicated by using, first in morpheus, the
+%% profile file to specify the default auto_failover settings. For a new
+%% install these settings from the profile are already in the config. For
+%% an upgrade from a pre-morpheus release the profile must be checked to
+%% see if there's values specified that are new for the release. If so they
+%% are added.
+
+%% Get the auto_failover settings from the profile
+get_profile_auto_failover_settings() ->
+    case config_profile:get_value(auto_failover, undefined) of
+        undefined ->
+            [];
+        Cfg ->
+            proplists:get_value(auto_failover_cfg, Cfg, [])
+    end.
+
 config_upgrade_to_76(Config) ->
-    [{set, auto_failover_cfg,
-      misc:update_proplist(auto_failover:get_cfg(Config),
-                           [{?DISABLE_MAX_COUNT_CONFIG_KEY,
-                             config_profile:get_bool(
-                               failover_disable_max_count)}])}].
+    ConfigAFOSettings = auto_failover:get_cfg(Config),
+    ProfileAFOSettings = get_profile_auto_failover_settings(),
+
+    %% Existing cfg has precedence over possibly new keys. This is needed
+    %% in the case where a profile file contains default config settings
+    %% which are also handled in config_upgrade_to_<rel> functions. On a
+    %% new install the settings in the profile may contain new ones
+    %% introduced in the release and may have a different value than the
+    %% one set by this upgrade function. In that case we want to keep the
+    %% setting from the profile.
+    NewKeys =
+        [{?DISABLE_MAX_COUNT_CONFIG_KEY,
+          config_profile:get_bool({?DISABLE_MAX_COUNT_CONFIG_KEY,
+                                   config_profile:get_bool(
+                                     ?DISABLE_MAX_COUNT_CONFIG_KEY)})}],
+    Settings0 = misc:update_proplist(NewKeys, ProfileAFOSettings),
+    Settings = misc:update_proplist(Settings0, ConfigAFOSettings),
+
+    [{set, auto_failover_cfg, Settings}].
 
 config_upgrade_to_morpheus(Config) ->
-    %% Merging existing cfg over the default to retain any already configured
-    %% settings (we may have configured some in 7.6.3 or newer).
-    [{set, auto_failover_cfg,
-      misc:update_proplist(
+    ConfigAFOSettings = auto_failover:get_cfg(Config),
+    ProfileAFOSettings = get_profile_auto_failover_settings(),
+    %% Existing cfg has precedence over possibly new keys. This is needed
+    %% in the case where a profile file contains default config settings
+    %% which are also handled in config_upgrade_to_<rel> functions. On a
+    %% new install the settings in the profile may contain new ones
+    %% introduced in the release and may have a different value than the
+    %% one set by this upgrade function. In that case we want to keep the
+    %% setting from the profile.
+    NewKeys =
         [{?ALLOW_FAILOVER_EPHEMERAL_NO_REPLICAS_CONFIG_KEY,
           auto_failover:hidden_failover_ephemeral_setting()},
          ?FAILOVER_ON_DATA_DISK_NON_RESPONSIVENESS_DEFAULT],
-        auto_failover:get_cfg(Config))}].
+    Settings0 = misc:update_proplist(NewKeys, ProfileAFOSettings),
+    Settings = misc:update_proplist(Settings0, ConfigAFOSettings),
+
+    [{set, auto_failover_cfg, Settings}].
 
 interesting_stats() ->
     [enabled, count, maxCount].
@@ -464,6 +516,9 @@ config_upgrade_to_morpheus_test() ->
             Default
         end),
 
+    %% Test using the "default" profile.
+    config_profile:load_default_profile_for_test(),
+
     BaseConfig = default_config(true),
     [{set, auto_failover_cfg, DefaultUpgradedCfg}] =
         config_upgrade_to_morpheus([BaseConfig]),
@@ -481,5 +536,39 @@ config_upgrade_to_morpheus_test() ->
                  proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
                                      IgnoreExistingDiskNonRespCfg)),
 
+    config_profile:unload_profile_for_test(),
+
+    %% Test using the provisioned profile which has changes to the default
+    %% auto-failover settings.
+    config_profile:load_profile_for_test(?PROVISIONED_PROFILE_STR),
+
+    [{set, auto_failover_cfg, UpgradedWithProfile}] =
+        config_upgrade_to_morpheus([BaseConfig]),
+
+    %% Profile values differ from base but must not change base values
+    %% as a result of upgrade
+    ?assertEqual(120, proplists:get_value(timeout, UpgradedWithProfile)),
+    ?assertEqual(1, proplists:get_value(max_count, UpgradedWithProfile)),
+    ?assertEqual([{enabled,false},{timePeriod,120}],
+                 proplists:get_value(?DATA_DISK_ISSUES_CONFIG_KEY,
+                                     UpgradedWithProfile)),
+
+    %% Values not in base config but introduced in profile as new key/values
+    ?assertEqual(undefined,
+                 proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
+                 BaseConfig)),
+    ?assertEqual([{enabled, true}, {timePeriod, 120}],
+                 proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
+                 UpgradedWithProfile)),
+    ?assertEqual(undefined,
+                 proplists:get_value(
+                   ?ALLOW_FAILOVER_EPHEMERAL_NO_REPLICAS_CONFIG_KEY,
+                   BaseConfig)),
+    ?assertEqual(false,
+                 proplists:get_value(
+                   ?ALLOW_FAILOVER_EPHEMERAL_NO_REPLICAS_CONFIG_KEY,
+                   UpgradedWithProfile)),
+
+    config_profile:unload_profile_for_test(),
     meck:unload().
 -endif.

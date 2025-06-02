@@ -24,5 +24,29 @@
 {{prometheus, default_high_card_services},
     [index, fts, kv, cbas, eventing, ns_server, n1ql]}.
 {{couchdb, disabled}, true}.
-{failover_disable_max_count, true}.
+%% Removed in morpheus and replaced with disable_max_count=false to match
+%% the provisioned profile.
+%% {failover_disable_max_count, true}.
 {enable_metered_collections, true}.
+
+%% These specify the default values for auto failover and are used instead
+%% of the ones within ns_server on a new install. For upgrades, only those
+%% that are new for the release are used (others are ignored).
+%% These are the same as the default values as used in the provisioned
+%% profile and will be reassessed if serverless becomes viable again.
+{auto_failover,
+    [{auto_failover_cfg,
+        [{enabled,true},
+        {timeout,10},
+        {count,0},
+        {max_count,100},
+        {failover_on_data_disk_non_responsiveness,
+            [{enabled,true},
+             {timePeriod,120}]},
+        {disable_max_count,false},
+        {failover_on_data_disk_issues,
+            [{enabled,true},
+             {timePeriod,10}]},
+        {can_abort_rebalance,true},
+        {failover_preserve_durability_majority,false},
+        {allow_failover_ephemeral_no_replicas,false}]}]}.
