@@ -318,41 +318,43 @@ get_expiry_period(Task) ->
     ?get_timeout(ConfigKey, ExpiryTime).
 
 cleanup_tasks() ->
-    BucketUUIDKeys = lists:map(ns_bucket:sub_key(_, uuid),
-                               ns_bucket:get_bucket_names()),
-    %% We check and update in a transaction to avoid a task being updated
-    %% after being added to a list of tasks to delete, but before the
-    %% deletion has occurred, causing the deletion of the updated task
-    Result = chronicle_compat:transaction([tasks | BucketUUIDKeys],
-                                          do_cleanup(_)),
-    case Result of
-        {ok, _} ->
-            ok;
-        Error ->
-            ?log_error("Failed to cleanup global tasks. Error: ~p", [Error])
+    %% Initially check if tasks need updating (without logging) before entering
+    %% the chronicle transaction, to avoid having a transaction every 60s
+    case get_cleaned_up_tasks(direct, false) of
+        {true, _} ->
+            %% We perform the update in a transaction to avoid a task update
+            %% racing with task deletion, which could delete the updated status
+            chronicle_compat:transaction([tasks], do_cleanup_txn(_));
+        false ->
+            ok
     end.
 
--spec do_cleanup(map()) ->
-          {commit, [{set, tasks, [task()]}]} | {abort, {error, any()}}.
-do_cleanup(Snapshot) ->
-    case chronicle_compat:get(Snapshot, tasks, #{}) of
-        {ok, Tasks} ->
-            NewTasks = lists:filter(should_keep_task(_), Tasks),
-            case NewTasks =:= Tasks of
-                true ->
-                    {commit, []};
-                false ->
-                    {commit, [{set, tasks, NewTasks}]}
-            end;
-        {error, _} = Error ->
-            {abort, Error}
+do_cleanup_txn(Snapshot) ->
+    case get_cleaned_up_tasks(Snapshot, true) of
+        {true, NewTasks} ->
+            {commit, [{set, tasks, NewTasks}]};
+        false ->
+            {commit, []}
     end.
 
--spec should_keep_task(task()) -> boolean().
-should_keep_task(Task) ->
+get_cleaned_up_tasks(Snapshot, LogCleanup) ->
+    Tasks = chronicle_compat:get(Snapshot, tasks, #{required => true}),
+    NewTasks = lists:filter(should_keep_task(_, LogCleanup), Tasks),
+    case NewTasks =:= Tasks of
+        true -> false;
+        false -> {true, NewTasks}
+    end.
+
+-spec should_keep_task(task(), boolean()) -> boolean().
+should_keep_task(Task, LogCleanup) ->
     case functools:alternative(Task, cleanup_checks()) of
         {ok, Reason} ->
-            ?log_debug("Cleaning up task (~s):~n~p", [Reason, Task]),
+            case LogCleanup of
+                true ->
+                    ?log_debug("Cleaning up task (~s):~n~p", [Reason, Task]);
+                false ->
+                    ok
+            end,
             false;
         false ->
             true
@@ -388,19 +390,13 @@ now_secs() ->
     erlang:system_time(second).
 
 -ifdef(TEST).
-modules() ->
-    [chronicle_compat, ns_cluster_membership, cluster_compat_mode, ns_config].
-
 setup() ->
-    meck:new(modules(), [passthrough]),
     meck:expect(cluster_compat_mode, is_cluster_76, fun () -> true end).
 
 teardown(_) ->
-    meck:unload(modules()).
+    meck:unload().
 
 -define(EXTRAS, [[], [{test, <<"test">>}]]).
--define(UUID, <<"test">>).
--define(SNAPSHOT, #{{bucket, "default", uuid} => {?UUID, 0}}).
 
 %% Generate tasks of all possible type and status, and for each of those
 %% configurations, also generate one with/without a bucket, and with/without a
@@ -451,10 +447,6 @@ assert_lists_equal(ExpectedList, ActualList) ->
                   lists:zip(lists:sort(ExpectedList), lists:sort(ActualList))).
 
 cleanup_test__() ->
-    meck:expect(chronicle_compat, get_snapshot,
-                fun (_, _) ->
-                        #{}
-                end),
     meck:expect(ns_cluster_membership, nodes_wanted,
                 fun () ->
                         [node()]
@@ -465,9 +457,26 @@ cleanup_test__() ->
                 end),
     TasksToKeep = generate_tasks(),
     TasksToRemove = generate_all_expired_tasks(TasksToKeep),
-    Snapshot = ?SNAPSHOT#{tasks => {TasksToRemove ++ TasksToKeep, 0}},
-    {commit, [{set, tasks, NewTasks}]} = do_cleanup(Snapshot),
-    assert_lists_equal(TasksToKeep, NewTasks).
+    ExistingTasks = TasksToRemove ++ TasksToKeep,
+    meck:expect(chronicle_compat, get,
+                fun(direct, tasks, #{required := true}) -> ExistingTasks;
+                   (#{tasks := {T, _}}, tasks, #{required := true}) -> T
+                end),
+    %% Confirm that expired tasks are removed
+    meck:expect(chronicle_compat, transaction,
+                fun([tasks], Fun) ->
+                        Snapshot = #{tasks => {ExistingTasks, 0}},
+                        {commit, [{set, tasks, NewTasks}]} = Fun(Snapshot),
+                        assert_lists_equal(TasksToKeep, NewTasks)
+                end),
+    ok = cleanup_tasks(),
+
+    %% Confirm that chronicle_compat:transaction isn't called for no change
+    meck:expect(chronicle_compat, get,
+                fun(direct, tasks, #{required := true}) -> TasksToKeep end),
+    meck:expect(chronicle_compat, transaction,
+                fun([tasks], _) -> error(unexpected_call) end),
+    ok = cleanup_tasks().
 
 get_tasks_test__() ->
     Tasks = generate_tasks(),
@@ -614,7 +623,7 @@ fake_transaction(Snapshot0, ExpectedTasks, Keys, Fun) ->
     end.
 
 update_task_test__() ->
-    Snapshot0 = ?SNAPSHOT#{tasks => {[], 0}},
+    Snapshot0 = #{tasks => {[], 0}},
     Tasks = generate_task_creates(),
     TaskIds = [Task#global_task.task_id || Task <- Tasks],
 
