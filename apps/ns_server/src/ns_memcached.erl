@@ -1134,14 +1134,12 @@ delete_bucket(Sock, Bucket, BucketUUID, Force, DeleteData) ->
             true ->
                 ?log_debug("Proceeding into vbuckets dbs deletions"),
                 try
-                    ns_couchdb_api:delete_databases_and_files(Bucket)
+                    ns_couchdb_api:delete_databases_and_files_uuid(BucketUUID)
                 catch
                     Class:Exception ->
                         ?log_error("Failed to delete couchdb bucket ~p: ~p",
                                    [Bucket, {Class, Exception}])
-                end,
-                Dir = ns_storage_conf:this_node_bucket_dbdir(BucketUUID),
-                misc:rm_rf(Dir);
+                end;
             false ->
                 ok
         end

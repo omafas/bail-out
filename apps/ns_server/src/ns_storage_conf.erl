@@ -95,81 +95,43 @@ setup_storage_paths() ->
 ensure_bucket_is_in_correct_dir(BucketName, BucketUUID) ->
     OldBucketDir = pre_morpheus_bucket_dbdir(BucketName),
     NewBucketDir = this_node_bucket_dbdir(BucketUUID),
-    BucketMetadataFile = ns_memcached:bucket_metadata_file(NewBucketDir),
     maybe
         {_, true} ?= {old_dir_exists, filelib:is_file(OldBucketDir)},
 
-        %% If metadata file exists, we have already moved the data
-        %% This can be probably removed when views implement support for
-        %% bucket dir = uuid (because rename will be atomic in this case).
-        {_, false} ?= {metadata_exists, filelib:is_file(BucketMetadataFile)},
-
         {_, true} ?= {old_dir_is_dir, filelib:is_dir(OldBucketDir)},
 
+        {_, false} ?= {new_dir_exists, filelib:is_file(NewBucketDir)},
         %% At this point, we know that the old directory exists, the
-        %% metadata file does not exist, so we probably need to move something
-        filelib:ensure_path(NewBucketDir),
-        %% Just in case if metadata file is happen to be in different directory
-        filelib:ensure_dir(BucketMetadataFile),
-
-        %% Move the data
-        %% Ideally we should just rename the whole directory, but
-        %% we can't do that until views implement support for bucket dir = uuid.
-        %% file:rename(OldBucketDir, NewBucketDir),
-        {ok, Files} ?= file:list_dir(OldBucketDir),
-        Result = lists:filtermap(
-                   fun (Filename) ->
-                       case should_move_bucket_file(Filename) of
-                           true ->
-                               OldFile = filename:join(OldBucketDir, Filename),
-                               NewFile = filename:join(NewBucketDir, Filename),
-                               case file:rename(OldFile, NewFile) of
-                                   ok ->
-                                       ?log_info("Moved bucket file ~p to ~p",
-                                                 [OldFile, NewFile]),
-                                       false;
-                                   {error, Reason} ->
-                                       ?log_error("Failed to move bucket file "
-                                                   "~p to ~p: ~p",
-                                                   [OldFile, NewFile, Reason]),
-                                       {true, {Reason, OldFile, NewFile}}
-                               end;
-                           false ->
-                               false
-                       end
-                   end, Files),
-
-        case Result of
-            [] ->
-                ok;
-            Errors ->
-                {errors, Errors}
-        end
+        %% new directory does not exist, so we should rename the old directory
+        %% to the new directory.
+        ?log_info("Migrating bucket ~p data from ~p to ~p",
+                  [BucketName, OldBucketDir, NewBucketDir]),
+        ok ?= filelib:ensure_dir(NewBucketDir),
+        ok ?= file:rename(OldBucketDir, NewBucketDir),
+        ?log_info("Bucket ~p data migration completed", [BucketName]),
+        ok
     else
         {old_dir_exists, false} ->
+            ?log_info("Bucket ~p data migration not needed", [BucketName]),
             ok;
-        {metadata_exists, true} ->
-            ?log_debug("Bucket ~p has already migrated to uuid dir "
-                       "(metadata file exists)", [BucketName]),
-            ok;
+        {new_dir_exists, true} ->
+            % New directory exists and old directory exists - this should
+            % never happen
+            ?log_error("Bucket data migration failed: new directory "
+                       "~p exists while old directory ~p also exists",
+                       [NewBucketDir, OldBucketDir]),
+            {error, {both_dirs_exist, NewBucketDir, OldBucketDir}};
         {old_dir_is_dir, false} ->
-            ?log_error("Old bucket directory ~p is not a directory",
-                       [OldBucketDir]),
+            ?log_error("Bucket ~p migration failed: old bucket directory ~p is "
+                       "not a directory", [BucketName, OldBucketDir]),
             {error, {old_bucket_dir_is_file, OldBucketDir}};
         {error, Reason} ->
-            ?log_error("Failed to move bucket ~p files: ~p",
-                       [BucketName, Reason]),
+            ?log_error("Bucket ~p migration failed: rename from ~p to ~p "
+                       "failed: ~p",
+                       [BucketName, OldBucketDir, NewBucketDir, Reason]),
             {error, Reason}
     end.
 
-should_move_bucket_file(".") ->
-    false;
-should_move_bucket_file("..") ->
-    false;
-should_move_bucket_file("master.couch" ++ _) ->
-    false;
-should_move_bucket_file(_Filename) ->
-    true.
 
 get_db_and_ix_paths() ->
     {ok, DBDir} = this_node_dbdir(),
@@ -795,9 +757,35 @@ delete_unused_db_files(Dir) when is_list(Dir) ->
     %% cb_cluster_secrets can create new DEK files while we are
     %% deleting the directory (which will lead to rm_rf failure or
     %% removal of newly created DEK files).
-    cb_cluster_secrets:destroy_deks(
-        {bucketDek, list_to_binary(Dir)}, %% Assuming Dir is bucket uuid
-        fun () ->
+    MaybeBucketUUID = iolist_to_binary(Dir),
+    IsBucketDirUUID =
+        case ns_bucket:is_valid_bucket_uuid(MaybeBucketUUID) of
+            true -> %% Dir can be a bucket uuid or a bucket name because
+                    %% uuid is a valid bucket name
+                Path = this_node_bucket_dbdir(MaybeBucketUUID),
+                MetadataFile = ns_memcached:bucket_metadata_file(Path),
+                %% The metadata file is present only in Morpheus
+                %% so if it exists Dir has to be a bucket uuid
+                filelib:is_file(MetadataFile);
+            false -> %% Dir has to be a bucket name, not a bucket uuid
+                false
+        end,
+    case IsBucketDirUUID of
+        true ->
+            cb_cluster_secrets:destroy_deks(
+                {bucketDek, MaybeBucketUUID},
+                fun () ->
+                    case ns_couchdb_api:delete_databases_and_files_uuid(
+                           MaybeBucketUUID) of
+                        ok ->
+                            ok;
+                        Other ->
+                            ?log_error("Failed to delete old data files "
+                                    "dir ~p. Error = ~p", [Dir, Other]),
+                            Other
+                    end
+                end);
+        false ->
             case ns_couchdb_api:delete_databases_and_files(Dir) of
                 ok ->
                     ok;
@@ -806,7 +794,7 @@ delete_unused_db_files(Dir) when is_list(Dir) ->
                                "dir ~p. Error = ~p", [Dir, Other]),
                     Other
             end
-        end).
+    end.
 
 %% deletes @2i subdirectory in index directory of this node.
 %%

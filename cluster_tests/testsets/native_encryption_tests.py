@@ -1782,6 +1782,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         pre_morpheus_bucket_dir = data_dir / self.bucket_name
         assert new_bucket_dir.exists(), \
                f'new bucket dir {new_bucket_dir} does not exist'
+        assert not pre_morpheus_bucket_dir.exists(), \
+               f'pre-morpheus bucket dir {pre_morpheus_bucket_dir} exists'
 
         docs = {}
         for i in range(10):
@@ -1790,27 +1792,19 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         self.cluster.stop_node(kv_node)
 
-        # move cluster data to old bucket dir
-        print(f'moving files from {new_bucket_dir} to {pre_morpheus_bucket_dir}')
-
-        # since views have not implemented support for bucket dir = uuid,
-        # we actually create data/bucket_name dir as well (for views files),
-        # so here we assume that data/bucket_name dir already exists
-        assert pre_morpheus_bucket_dir.exists(), \
-               f'dir {pre_morpheus_bucket_dir} does not exist'
-
-        moved_files = []
-        for f in new_bucket_dir.iterdir():
-            print(f'moving {f} to {pre_morpheus_bucket_dir}')
-            shutil.move(f, pre_morpheus_bucket_dir)
-            moved_files.append(f)
-
-        shutil.rmtree(new_bucket_dir)
+        # move cluster data to old bucket dir, imitating pre-morpheus bucket
+        print(f'renaming {new_bucket_dir} to {pre_morpheus_bucket_dir}')
+        moved_files = list(new_bucket_dir.iterdir())
+        os.rename(new_bucket_dir, pre_morpheus_bucket_dir)
 
         self.cluster.restart_node(kv_node)
 
         testlib.poll_for_condition(
             lambda: new_bucket_dir.exists(),
+            sleep_time=1, attempts=50, verbose=True)
+
+        testlib.poll_for_condition(
+            lambda: not pre_morpheus_bucket_dir.exists(),
             sleep_time=1, attempts=50, verbose=True)
 
         # Make sure that all documents are still present (basically making
