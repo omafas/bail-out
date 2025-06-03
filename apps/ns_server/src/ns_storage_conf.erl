@@ -107,6 +107,9 @@ ensure_bucket_is_in_correct_dir(BucketName, BucketUUID) ->
         ?log_info("Migrating bucket ~p data from ~p to ~p",
                   [BucketName, OldBucketDir, NewBucketDir]),
         ok ?= filelib:ensure_dir(NewBucketDir),
+        %% Since bucket data is not migrated yet, we need to ensure that
+        %% views indexes are migrated as well
+        {_, ok} ?= {indexes, maybe_migrate_views(BucketName, BucketUUID)},
         ok ?= file:rename(OldBucketDir, NewBucketDir),
         ?log_info("Bucket ~p data migration completed", [BucketName]),
         ok
@@ -125,6 +128,10 @@ ensure_bucket_is_in_correct_dir(BucketName, BucketUUID) ->
             ?log_error("Bucket ~p migration failed: old bucket directory ~p is "
                        "not a directory", [BucketName, OldBucketDir]),
             {error, {old_bucket_dir_is_file, OldBucketDir}};
+        {indexes, {error, Reason}} ->
+            ?log_error("Bucket ~p migration failed: failed to migrate views "
+                       "indexes: ~p", [BucketName, Reason]),
+            {error, Reason};
         {error, Reason} ->
             ?log_error("Bucket ~p migration failed: rename from ~p to ~p "
                        "failed: ~p",
@@ -132,6 +139,28 @@ ensure_bucket_is_in_correct_dir(BucketName, BucketUUID) ->
             {error, Reason}
     end.
 
+maybe_migrate_views(BucketName, BucketUUID) ->
+    {ok, IxDir} = this_node_ixdir(),
+    OldDir = filename:join([IxDir, "@indexes", BucketName]),
+    NewDir = filename:join([IxDir, "@indexes", binary_to_list(BucketUUID)]),
+    maybe
+        {_, true} ?= {old_dir_exists, filelib:is_file(OldDir)},
+        {_, false} ?= {new_dir_exists, filelib:is_file(NewDir)},
+        {_, true} ?= {old_dir_is_dir, filelib:is_dir(OldDir)},
+        ?log_info("Migrating ~p views indexes from ~p to ~p",
+                  [BucketName, OldDir, NewDir]),
+        ok ?= file:rename(OldDir, NewDir)
+    else
+        {old_dir_exists, false} ->
+            %% Migration is not needed
+            ok;
+        {new_dir_exists, true} ->
+            {error, {new_dir_exists, NewDir}};
+        {old_dir_is_dir, false} ->
+            {error, {old_dir_not_dir, OldDir}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 get_db_and_ix_paths() ->
     {ok, DBDir} = this_node_dbdir(),
