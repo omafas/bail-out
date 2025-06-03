@@ -154,10 +154,17 @@ is_index_pausing_on() ->
         (not ns_config:read_key_fast(index_pausing_disabled, false)).
 
 is_enterprise(Config) ->
-    ns_config:search(Config, {node, node(), is_enterprise}, false).
+    case ns_config:search(Config, {node, node(), is_enterprise}) of
+        {value, Value} ->
+            Value;
+        false ->
+            %% it is possible that we don't find this key during
+            %% node rename; this is workaround for that case
+            ns_config_default:init_is_enterprise()
+    end.
 
 is_enterprise() ->
-    ns_config:read_key_fast({node, node(), is_enterprise}, false).
+    is_enterprise(ns_config:latest()).
 
 is_saslauthd_enabled() ->
     is_enterprise() andalso

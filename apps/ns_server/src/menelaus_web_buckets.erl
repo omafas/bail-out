@@ -5657,6 +5657,7 @@ storage_mode_migration_ram_quota_test() ->
                 fun () ->
                         true
                 end),
+    meck:expect(cluster_compat_mode, is_enterprise, fun () -> true end),
     Params = [{"storageBackend", "magma"}],
     BaseBucketConfig =
         [{type, membase},
