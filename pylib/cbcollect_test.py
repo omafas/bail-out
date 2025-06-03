@@ -7,6 +7,9 @@ import unittest
 from io import BytesIO
 from timeit import default_timer as timer
 from io import StringIO
+import tracemalloc
+
+tracemalloc.start()
 
 log_stream = StringIO()
 
@@ -648,8 +651,10 @@ class TestTaskSystem(unittest.TestCase):
         tempdir = tempfile.mkdtemp()
 
         outfile = f"{tempdir}/testdir.zip"
-        runner = TaskRunner(outfile, prefix="aaaa",
-                            salt_value="abcdefg", tmp_dir=tempdir)
+
+        # NOTE: salt="" because we don't want to bother redacting cause it
+        # will take too long and it's gibberish data.
+        runner = TaskRunner(outfile, prefix="aaaa", tmp_dir=tempdir)
 
         tasks: List[Task] = [
             # Reads 8 bytes
@@ -663,7 +668,65 @@ class TestTaskSystem(unittest.TestCase):
                 ["dd", "if=/dev/zero", "bs=1M", "count=4097"],
                 log_file="large.log")]
         runner.run_tasks(*tasks)
+
         runner.close()
+        _, peak = tracemalloc.get_traced_memory()
+        print_memory_trace_and_reset("test_large_file", peak)
+
+    def test_stderr_deadlock(self):
+        """
+        See: MB-66860
+
+        This test ensures we don't deadlock when reading from both stdout and
+        stderr. The test (inside evil_pipes.py) creates ever-increasing buffer
+        sizes to ensure the test will work regardless of the default buffer
+        size on that particular platform/system.
+        """
+        self.deadlock_test("python3 evil_pipes.py --stderr",
+                           "Evil pipes test to ensure we don't deadlock..",
+                           "test_stderr_deadlock")
+
+    def test_stdout_deadlock_buffering(self):
+        self.deadlock_test("python3 evil_pipes.py --stdout",
+                           "Evil pipes stdout 1GB of data",
+                           "test_stdout_deadlock_buffering")
+
+    def deadlock_test(self, cmd, description, fn_name):
+        if os.name != 'nt':
+            tempdir = tempfile.mkdtemp()
+            prefix = "aaaa/bbbbb/cccc"
+            outfile = f"{tempdir}/testdir.zip"
+            runner = TaskRunner(outfile, prefix=prefix,
+                                salt_value="abcdefghijk", tmp_dir=tempdir)
+
+            tasks: List[Task] = [UnixTask(description, cmd, log_file=C)]
+
+            runner.run_tasks(*tasks)
+            log_task = runner.literal_task("cbcollect_info log",
+                                           log_stream.getvalue(),
+                                           log_file="cbcollect_info.log",
+                                           no_header=True)
+            runner.run_tasks(log_task)
+            runner.finalize()
+
+            with open(outfile, "r") as f:
+                self.assertEqual(f.name, outfile)
+
+            _, peak = tracemalloc.get_traced_memory()
+            print_memory_trace_and_reset(fn_name, peak)
+            shutil.rmtree(tempdir)
+
+
+def print_memory_trace_and_reset(fn_name, peak):
+    print(f"Peak memory usage of '{fn_name}': {peak / 1024 / 1024} MB")
+    # 500MB is too generous but we also don't want false positives
+    assert (peak / 1024 / 1024) < 500 # this is MB
+    tracemalloc.reset_peak()
+
+def main():
+    unittest.main()
 
 if __name__ == "__main__":
-    unittest.main()
+    main()
+
+tracemalloc.stop()

@@ -31,8 +31,8 @@ import configparser
 from datetime import datetime, timedelta, tzinfo
 import array
 import mmap
-from io import BytesIO, StringIO
-from typing import BinaryIO, Dict, List, Optional, Iterable, Pattern, Tuple, TypeVar, Union, IO, Any, Callable
+from io import DEFAULT_BUFFER_SIZE, BytesIO, StringIO
+from typing import Dict, List, Optional, Iterable, Pattern, Tuple, TypeVar, Union, IO, Any, Callable
 import zipfile
 import pyzipper
 from enum import Enum, unique
@@ -40,6 +40,7 @@ from io import BytesIO, StringIO
 from abc import ABC, abstractmethod
 import gzip
 import getpass
+from time import monotonic as _time
 
 
 from installed_script_helpers import basedir, get_initargs_variants, find_binary
@@ -755,6 +756,61 @@ class Task:
             return bad_result
         return 0
 
+    # Adapted from subprocess internal code used in communicate
+    def _readerthread_stdout(self, fh, outstream):
+        while True:
+            data = fh.read(DEFAULT_BUFFER_SIZE)
+            if not data:
+                break
+            outstream.write(data)
+
+        self.last_char_written = data[-1:]
+
+    # Adapted from subprocess internal code used in communicate
+    def _readerthread_stderr(self, fh):
+        while True:
+            data = fh.read(DEFAULT_BUFFER_SIZE)
+            if not data:
+                break
+            log(data.decode(LATIN1))
+
+    # Copied from subprocess internal code for reuse by comunicate
+    def _remaining_time(self, endtime):
+        if endtime is None:
+            return None
+        else:
+            return endtime - _time()
+
+    # NOTE: does NOT close the stdout/stderr streams
+    def communicate(self, stdout, stderr, outstream, endtime, orig_timeout):
+        # Start reader threads feeding into outstream
+        if stdout and not hasattr(stdout, "stdout_thread"):
+            self.stdout_thread = \
+                threading.Thread(target=self._readerthread_stdout,
+                                 args=(stdout, outstream))
+            self.stdout_thread.daemon = True
+            self.stdout_thread.start()
+        if stderr and not hasattr(stderr, "stderr_thread"):
+            self.stderr_thread = \
+                threading.Thread(target=self._readerthread_stderr,
+                                 args=[stderr])
+            self.stderr_thread.daemon = True
+            self.stderr_thread.start()
+
+        # Wait for the reader threads, or time out.  If we time out, the
+        # threads remain reading and the fds left open in case the user
+        # calls communicate again.
+        if stdout is not None:
+            self.stdout_thread.join(self._remaining_time(endtime))
+            if self.stdout_thread.is_alive():
+                raise subprocess.TimeoutExpired(self.command, orig_timeout)
+        if stderr is not None:
+            self.stderr_thread.join(self._remaining_time(endtime))
+            if self.stderr_thread.is_alive():
+                raise subprocess.TimeoutExpired(self.command, orig_timeout)
+
+        return self.last_char_written
+
     def on_execute(self, outstream: Writer):
         p = None
         extra_flags = self._extra_flags()
@@ -793,76 +849,45 @@ class Task:
         else:
             raise Exception("No stdout attached to process")
 
-        from threading import Timer, Event
+        endtime = None
+        if self.timeout is not None:
+            endtime = _time() + self.timeout
 
-        timer = None
-        timer_fired: Event = Event()
-
-        if self.timeout is not None and self.can_kill(p):
-            def on_timeout():
-                try:
-                    self._kill(p)
-                except BaseException:
-                    # the process might have died already
-                    pass
-
-                timer_fired.set()
-            timer = Timer(self.timeout, on_timeout)
-            timer.start()
-
+        return_code = 0
         try:
-            last_char_written = None
-            while True and stdout is not None:
-                data: bytes = stdout.read(READ_SIZE)
-                if not data:
-                    break
-                outstream.write(data)
-                last_char_written = data[-1:]
+            # This self.communicate is an adaptation of Subprocess.communicate
+            # because we need to be able to read from both stdout and stderr
+            # concurrently but without buffering the entire processes' output
+            # in memory at the same time. Uses 2 threads, one for each output.
+            self.communicate(stdout, stderr, outstream, endtime, self.timeout)
+            self.maybe_append_newline(outstream, self.last_char_written)
 
-            self.maybe_append_newline(outstream, last_char_written)
+        except subprocess.TimeoutExpired:
+            if self.can_kill(p):
+                self._kill(p)
+            outstream.write(f"`{self.command}` timed out "
+                            f"after {self.timeout} seconds\n".encode())
+            log(f"[Command timed out after {self.timeout} seconds] - ",
+                new_line=False)
         finally:
-            if timer is not None:
-                timer.cancel()
-                timer.join()
-                # there's a tiny chance that command succeeds just before
-                # timer is fired; that would result in a spurious timeout
-                # message
-                if timer_fired.is_set():
-                    outstream.write(f"`{self.command}` timed out "
-                                    f"after {self.timeout} seconds\n".encode())
-                    log(f"[Command timed out after {self.timeout} seconds] - ",
-                        new_line=False)
-            if stdout:
+            if p:
+                return_code = p.wait()
+
+            if stdout and not stdout.closed:
                 stdout.close()
+            if stderr and not stderr.closed:
+                stderr.close()
 
-        code = 0
-        if p:
-            code = p.wait()
+            outstream.flush()
 
-        # Handle writing stderr to cbcollect_info.log: we used to write the
-        # errors to the output file we were currently writing to but instead
-        # we want to redirect them to the cbcollect_info.log file. See MB-61931
-        while True:
-            data_stderr: Optional[bytes] = stderr.read(READ_SIZE)
-            if not data_stderr:
-                break
-            log(data_stderr.decode(LATIN1))
+            # due to the fact that we overload usage of builtin containers like
+            # BytesIO we need to double check if the method is defined on the
+            # object or not before calling it.
+            # TODO: handle in a more graceful / OOP way. See: MB-63307
+            if "clear_wraparound" in dir(outstream):
+                outstream.clear_wraparound()
 
-        if stdout:
-            stdout.close()
-        if stderr:
-            stderr.close()
-
-        outstream.flush()
-
-        # due to the fact that we overload usage of builtin containers like
-        # BytesIO we need to double check if the method is defined on the
-        # object or not before calling it.
-        # TODO: handle in a more graceful / OOP way. See: MB-63307
-        if "clear_wraparound" in dir(outstream):
-            outstream.clear_wraparound()
-
-        return code
+        return return_code
 
     def will_run(self):
         """Determine if this task will run on this platform."""
