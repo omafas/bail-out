@@ -227,8 +227,9 @@ perform_loading_task(TaskId, Sample, Bucket, Quota, CacheDir, BucketState) ->
     Name = "cbimport_" ++ binary_to_list(TaskId),
     Env0 = [{"CB_USERNAME", "@ns_server"},
             {"CB_PASSWORD", ns_config_auth:get_password(special)}] ++
-        case ns_ssl_services_setup:client_cert_auth_state() of
-            State when State =:= "mandatory" ->
+        case {ns_ssl_services_setup:client_cert_auth_state(),
+              misc:disable_non_ssl_ports()} of
+            {State, true} when State =:= "mandatory" ->
                 ClientPassFun = ns_secrets:get_pkey_pass(client_cert),
                 [{"CB_CLIENT_CERT",
                   ns_ssl_services_setup:chain_file_path(client_cert)},
