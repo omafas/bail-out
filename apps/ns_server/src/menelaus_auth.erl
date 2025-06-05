@@ -463,7 +463,21 @@ do_authenticate({Username, Password}) ->
             ?count_auth("local", "succ"),
             {ok, init_auth_password_expired(Id), [], []};
         {error, auth_failure} ->
-            authenticate_external(Username, Password);
+            case menelaus_users:user_exists({Username, local}) of
+                true ->
+                    AllowFallback = allow_fallback_auth(),
+                    case AllowFallback of
+                        false ->
+                            ?count_auth("local", "failure"),
+                            {error, auth_failure, []};
+                        true ->
+                            Res = authenticate_external(Username, Password),
+                            maybe_log_fallback_auth_success(Username, Res),
+                            Res
+                    end;
+                false ->
+                    authenticate_external(Username, Password)
+            end;
         {error, Reason} ->
             ?count_auth("local", "failure"),
             {error, Reason, []}
@@ -978,4 +992,36 @@ check_expiration(#authn_res{expiration_datetime_utc = Expiration}) ->
     case Now > Expiration of
         true -> {error, expired};
         false -> ok
+    end.
+
+-spec allow_fallback_auth() -> boolean().
+allow_fallback_auth() ->
+    %% Previously, we allowed fallback auth unconditionally.
+    %% Now, we only allow it for users who have enable_legacy_fallback_auth
+    %% set. This is a temporary measure to allow users to authenticate with
+    %% their legacy credentials until duplicate credentials are resolved.
+    %% Note that memcached doesn't support this.
+    case cluster_compat_mode:is_cluster_morpheus() of
+        true ->
+            ns_config:read_key_fast(enable_legacy_fallback_auth, false);
+        false ->
+            true
+    end.
+
+-spec maybe_log_fallback_auth_success(
+        Username :: rbac_user_id(),
+        Res :: {error, auth_failure, auth_audit_props()} |
+               {ok, #authn_res{}, [RespHeader], auth_audit_props()}) -> ok when
+      RespHeader :: {string(), string()}.
+maybe_log_fallback_auth_success(Username, Res) ->
+    case Res of
+        {ok, _, _, _} ->
+            ale:warn(?USER_LOGGER,
+                     "Local authentication failed but external authentication "
+                     "succeeded for user ~s. This indicates duplicate user "
+                     "accounts. Please resolve the conflict.",
+                [ns_config_log:tag_user_name(Username)]),
+            ok;
+        _ ->
+            ok
     end.
