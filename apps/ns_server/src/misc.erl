@@ -2008,23 +2008,29 @@ is_windows() ->
             false
     end.
 
+-spec ensure_writable_dir(string()) -> ok | {error, term()}.
 ensure_writable_dir(Path) ->
-    filelib:ensure_dir(Path),
-    case filelib:is_dir(Path) of
-        true ->
-            TouchPath = filename:join(Path, ".touch"),
-            case misc:write_file(TouchPath, <<"">>) of
-                ok ->
-                    file:delete(TouchPath),
-                    ok;
-                _ -> error
-            end;
-        _ ->
-            case file:make_dir(Path) of
-                ok -> ok;
+    case filelib:ensure_dir(Path) of
+        ok ->
+            case filelib:is_dir(Path) of
+                true ->
+                    TouchPath = filename:join(Path, ".touch"),
+                    case misc:write_file(TouchPath, <<"">>) of
+                        ok ->
+                            file:delete(TouchPath),
+                            ok;
+                        Error ->
+                            Error
+                    end;
                 _ ->
-                    error
-            end
+                    case file:make_dir(Path) of
+                        ok -> ok;
+                        Error ->
+                            Error
+                    end
+            end;
+        Error ->
+            Error
     end.
 
 ensure_writable_dirs([]) ->
@@ -2274,6 +2280,7 @@ halt(Status) ->
     end.
 
 %% Ensure that directory exists. Analogous to running mkdir -p in shell.
+-spec mkdir_p(string()) -> ok | {error, term()}.
 mkdir_p(Path) ->
     case filelib:ensure_dir(Path) of
         ok ->
@@ -2290,9 +2297,11 @@ mkdir_p(Path) ->
                         Error ->
                             Error
                     end;
-                %% either ok or other error
-                Other ->
-                    Other
+                ok ->
+                    ok;
+                %% Error other than 'eexist'
+                Error ->
+                    Error
             end;
         Error ->
             Error

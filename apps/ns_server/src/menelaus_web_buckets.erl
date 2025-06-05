@@ -1893,7 +1893,7 @@ is_writable_dir(Dir) ->
             case misc:ensure_writable_dirs([Dir]) of
                 ok ->
                     true;
-                error ->
+                {error, _} ->
                     false
             end;
         false ->

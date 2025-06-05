@@ -9,6 +9,8 @@
 %%
 -module(path_config).
 
+-include("ns_common.hrl").
+
 -export([component_path/1, component_path/2,
          tempfile/2, tempfile/3, minidump_dir/0, ensure_directories/0,
          get_path/2]).
@@ -73,6 +75,24 @@ default_sigar_port_config_path() ->
 minidump_dir() ->
     path_config:component_path(data, "crash").
 
+%% Ensure the 'data' and 'tmp' paths exist and are writable. The path is
+%% created if needed.
 ensure_directories() ->
-    ok = misc:mkdir_p(component_path(data)),
-    ok = misc:ensure_writable_dir(component_path(tmp)).
+    Msg = "Unable to validate path ~p (reason: ~p). It must be a directory "
+          "creatable/writable by the 'couchbase' user.",
+
+    DataPath = component_path(data),
+    case misc:mkdir_p(DataPath) of
+        ok -> ok;
+        {error, Reason} ->
+            ?log_error(Msg, [DataPath, Reason]),
+            exit({data_path, DataPath, Reason})
+    end,
+
+    TmpPath = component_path(tmp),
+    case misc:ensure_writable_dir(component_path(tmp)) of
+        ok -> ok;
+        {error, TmpReason} ->
+            ?log_error(Msg, [TmpPath, TmpReason]),
+            exit({tmp_path, TmpPath, TmpReason})
+    end.

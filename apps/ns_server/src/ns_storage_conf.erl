@@ -223,7 +223,7 @@ prepare_db_ix_dirs(NewDbDir, NewIxDir) ->
                                     {errors, [Msg]}
                             end
                     end;
-                error ->
+                {error, _} ->
                     {errors, [<<"Could not set the storage path. It must be a directory writable by 'couchbase' user.">>]}
             end;
         false ->
@@ -260,7 +260,7 @@ prepare_cbas_dirs(CBASDirs) ->
                             {ok, RealDirs}
                     end
             end;
-        error ->
+        {error, _} ->
             {errors,
              [<<"Could not set analytics storage. All directories must be writable by 'couchbase' user.">>]}
     end.
@@ -312,7 +312,7 @@ prepare_ev_dir(NewEvDir) ->
             case misc:ensure_writable_dirs([NewEvDir]) of
                 ok ->
                     {ok, NewEvDir};
-                error ->
+                {error, _} ->
                     {errors, [<<"Could not set eventing path.  It must be a "
                                 "directory writable by 'couchbase' user.">>]}
             end;
