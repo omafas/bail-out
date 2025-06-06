@@ -273,7 +273,7 @@ names_change(_) ->
 
 
 all_sub_keys() ->
-    [uuid, props, collections].
+    [uuid, props, collections, encr_at_rest].
 
 all_keys(Bucket) ->
     all_keys([Bucket], all_sub_keys()).
