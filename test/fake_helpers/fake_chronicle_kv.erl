@@ -130,9 +130,9 @@ meck_setup_chronicle_kv_getters() ->
                                 make_rev(get_snapshot_seqno())}}
                 end),
     meck:expect(chronicle_kv, ro_txn,
-                fun(_Name, _Fun, _Opts) ->
+                fun(_Name, Fun, _Opts) ->
                         {ok,
-                            {get_ets_snapshot(),
+                            {Fun(get_ets_snapshot()),
                                 make_rev(get_snapshot_seqno())}}
                 end),
 
@@ -176,12 +176,12 @@ meck_setup_chronicle_kv_setters() ->
 
     meck:expect(chronicle_kv, txn,
                 fun(Name, Fun, Opts) ->
-                        transaction(Name, [], Fun, Opts)
+                        transaction(Name, all, Fun, Opts)
                 end),
 
     meck:expect(chronicle_kv, txn,
                 fun(Name, Fun) ->
-                        transaction(Name, [], Fun, [])
+                        transaction(Name, all, Fun, [])
                 end),
 
     meck:expect(chronicle_kv, set,
@@ -238,14 +238,11 @@ fetch_from_snapshot(Snapshot, Key, _Opts) ->
         Other -> Other
     end.
 
-get_keys_for_txn(_Keys, _Snapshot) ->
-    %% Don't care about fetchers, return the entire config. We
-    %% should be using lookup functions to get specific keys
-    %% anyways so this should just work, and we don't care about
-    %% perf here. We /probably/ should not care about writing to same keys at
+get_keys_for_txn(Keys, _Snapshot) ->
+    %% We /probably/ should not care about writing to same keys at
     %% the same time in such a test, so this is the simplest way to deal with
     %% this for now.
-    get_ets_snapshot().
+    maps:filter(fun(K, _) -> lists:member(K, Keys) end, get_ets_snapshot()).
 
 do_commits(Commits) ->
     {NewMap, NewSeqno} = lists:foldl(
@@ -260,7 +257,10 @@ do_commits(Commits) ->
     store_ets_snapshot(NewMap, NewSeqno).
 
 transaction(_Name, Keys, Fun, _Opts) ->
-    Snapshot = get_keys_for_txn(Keys, {txn_slow, get_ets_snapshot()}),
+    Snapshot = case Keys of
+                   all -> get_ets_snapshot();
+                   _ -> get_keys_for_txn(Keys, {txn_slow, get_ets_snapshot()})
+               end,
     %% Not correct or safe by any means, but should be acceptable for unit
     %% testing.
     case Fun(Snapshot) of

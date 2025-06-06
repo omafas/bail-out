@@ -94,6 +94,12 @@ manual_failover_test_() ->
                   end} || {Name, TestFun} <- Tests]}.
 
 manual_failover_test_setup(SetupConfig) ->
+    meck:new(config_profile, [passthrough]),
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
+
     fake_ns_config:setup(),
     fake_chronicle_kv:new(),
 
@@ -215,6 +221,7 @@ manual_failover_test_teardown(_Config, PidMap) ->
     meck:unload(testconditions),
     meck:unload(chronicle),
     meck:unload(leader_activities),
+    meck:unload(config_profile),
 
     fake_chronicle_kv:unload(),
     fake_ns_config:teardown().
@@ -458,12 +465,6 @@ auto_failover_test_setup(SetupConfig) ->
                           maps:get(unhealthy_nodes, SetupConfig))
                 end),
 
-    meck:new(config_profile, [passthrough]),
-    meck:expect(config_profile, get,
-                fun () ->
-                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
-                end),
-
     %% Needed to start the orchestrator. We don't really need the janitor to run
     %% for this test, so we will mock it instead of run it because we'd need to
     %% do some extra stuff to get it running.
@@ -499,7 +500,6 @@ auto_failover_test_teardown(Config, PidMap) ->
     meck:unload(node_status_analyzer),
     meck:unload(ns_doctor),
     meck:unload(menelaus_web_alerts_srv),
-    meck:unload(config_profile),
 
     manual_failover_test_teardown(Config, PidMap).
 
