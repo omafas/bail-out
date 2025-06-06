@@ -83,7 +83,7 @@ handle_put_secret(IdStr, Req) ->
               fun (Props) ->
                   maybe
                       IsSecretWritableMFA = {?MODULE, is_writable_remote,
-                                             [Req, node()]},
+                                             [?HIDE(Req), node()]},
                       %% replace_secret will check "old usages" inside txn
                       {ok, Res} ?= cb_cluster_secrets:replace_secret(
                                      Id, Props, IsSecretWritableMFA),
@@ -188,7 +188,7 @@ handle_delete_secret(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
     assert_is_morpheus(),
     Id = parse_id(IdStr),
-    IsSecretWritableMFA = {?MODULE, is_writable_remote, [Req, node()]},
+    IsSecretWritableMFA = {?MODULE, is_writable_remote, [?HIDE(Req), node()]},
     case cb_cluster_secrets:delete_secret(Id, IsSecretWritableMFA) of
         {ok, Name} ->
             ns_audit:delete_encryption_secret(Req, Id, Name),
@@ -208,7 +208,7 @@ handle_delete_historical_key(IdStr, HistKeyIdStr, Req) ->
     assert_is_morpheus(),
     Id = parse_id(IdStr),
     HistKeyId = list_to_binary(HistKeyIdStr),
-    IsSecretWritableMFA = {?MODULE, is_writable_remote, [Req, node()]},
+    IsSecretWritableMFA = {?MODULE, is_writable_remote, [?HIDE(Req), node()]},
     case cb_cluster_secrets:delete_historical_key(Id,
                                                   HistKeyId,
                                                   IsSecretWritableMFA) of
@@ -906,10 +906,10 @@ assert_is_morpheus() ->
               <<"Not supported until cluster is fully Morpheus">>)
     end.
 
-is_writable_remote(Req, Node, Secret, Snapshot) when Node =:= node() ->
-    is_writable(Secret, Req, Snapshot);
-is_writable_remote(Req, Node, Secret, Snapshot) ->
-    erpc:call(Node, ?MODULE, is_writable_remote, [Req, Node, Secret, Snapshot],
+is_writable_remote(ReqHidden, Node, Secret, Snapshot) when Node =:= node() ->
+    is_writable(Secret, ?UNHIDE(ReqHidden), Snapshot);
+is_writable_remote(ReqHidden, Node, Secret, Snapshot) ->
+    erpc:call(Node, ?MODULE, is_writable_remote, [ReqHidden, Node, Secret, Snapshot],
               ?IS_WRITABLE_TIMEOUT).
 
 -ifdef(TEST).
