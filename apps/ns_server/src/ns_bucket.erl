@@ -204,6 +204,7 @@
          update_buckets_config/1,
          all_keys/1,
          all_keys/2,
+         all_keys_by_uuid/3,
          get_encryption/3,
          get_dek_lifetime/2,
          get_dek_rotation_interval/2,
@@ -281,6 +282,52 @@ all_keys(Bucket) ->
 all_keys(Names, SubKeys) ->
     [sub_key(B, SubKey) || B <- Names, SubKey <- SubKeys].
 
+all_keys_by_uuid(BucketUUIDs, SubKeys, Txn) ->
+    case cluster_compat_mode:is_cluster_morpheus() of
+        true ->
+            lists:flatmap(
+                fun (BucketUUID) ->
+                    all_bucket_keys_by_uuid_morpheus(BucketUUID, SubKeys, Txn)
+                end, BucketUUIDs);
+        false ->
+            {ok, {Names, _}} = chronicle_compat:txn_get(root(), Txn),
+            UUIDSnapshot = chronicle_compat:txn_get_many(
+                             [root() | all_keys(Names, [uuid])], Txn),
+            lists:flatmap(
+                fun (BucketUUID) ->
+                        all_bucket_keys_by_uuid_pre_morpheus(BucketUUID,
+                                                             SubKeys,
+                                                             UUIDSnapshot)
+                end, BucketUUIDs)
+    end.
+
+all_bucket_keys_by_uuid_morpheus(BucketUUID, SubKeys, Txn) ->
+    case chronicle_compat:txn_get(uuid2bucket_key(BucketUUID), Txn) of
+        {ok, {Bucket, _}} ->
+            [uuid2bucket_key(BucketUUID) | all_keys([Bucket], SubKeys)];
+        {error, not_found} ->
+            []
+    end.
+
+all_bucket_keys_by_uuid_pre_morpheus(BucketUUID, SubKeys, Snapshot) ->
+    case uuid2bucket(BucketUUID, Snapshot) of
+        {ok, Bucket} ->
+            [uuid2bucket_key(BucketUUID) | all_keys([Bucket], SubKeys)];
+        {error, not_found} ->
+            []
+    end.
+
+uuid2bucket_keys(Buckets, Txn) ->
+    lists:filtermap(
+        fun (B) ->
+            case chronicle_compat:txn_get(sub_key(B, uuid), Txn) of
+                {ok, {BucketUUID, _}} ->
+                    {true, uuid2bucket_key(BucketUUID)};
+                {error, not_found} ->
+                    false
+            end
+        end, Buckets).
+
 fetch_snapshot(Bucket, Txn) ->
     fetch_snapshot(Bucket, Txn, all_sub_keys()).
 
@@ -289,10 +336,13 @@ fetch_snapshot(_Bucket, {ns_config, Config}, _SubKeys) ->
     maps:from_list([{K, {V, no_rev}} || {K, V} <- Converted]);
 fetch_snapshot(all, Txn, SubKeys) ->
     {ok, {Names, _} = NamesRev} = chronicle_compat:txn_get(root(), Txn),
-    Snapshot = chronicle_compat:txn_get_many(all_keys(Names, SubKeys), Txn),
+    UUIDKeys = uuid2bucket_keys(Names, Txn),
+    Snapshot = chronicle_compat:txn_get_many(all_keys(Names, SubKeys) ++
+                                             UUIDKeys, Txn),
     Snapshot#{root() => NamesRev};
 fetch_snapshot(Bucket, Txn, SubKeys) ->
-    chronicle_compat:txn_get_many([root() | all_keys([Bucket], SubKeys)], Txn).
+    chronicle_compat:txn_get_many([root() | all_keys([Bucket], SubKeys)] ++
+                                  uuid2bucket_keys([Bucket], Txn), Txn).
 
 get_snapshot(Bucket) ->
     get_snapshot(Bucket, all_sub_keys()).
@@ -1377,7 +1427,8 @@ do_create_bucket(BucketName, Config, BucketUUID, Manifest) ->
 create_bucket_sets(Bucket, Buckets, BucketUUID, Config) ->
     [{set, root(), lists:usort([Bucket | Buckets])},
      {set, sub_key(Bucket, props), Config},
-     {set, uuid_key(Bucket), BucketUUID}].
+     {set, uuid_key(Bucket), BucketUUID},
+     {set, uuid2bucket_key(BucketUUID), Bucket}].
 
 collections_sets(Bucket, Config, Snapshot, Manifest) ->
     case collections:enabled(Config) of
@@ -1449,7 +1500,9 @@ delete_bucket(BucketName) ->
                                 last_balanced_vbmap_key(BucketName),
                                 fusion_uploaders_key(BucketName),
                                 sub_key(BucketName, encr_at_rest),
-                                uuid_key(BucketName), PropsKey |
+                                uuid_key(BucketName),
+                                uuid2bucket_key(UUID),
+                                PropsKey |
                                 [collections:last_seen_ids_key(N, BucketName) ||
                                     N <- NodesWanted]],
                            {commit,
@@ -2436,6 +2489,9 @@ get_view_nodes(BucketConfig) ->
 uuid_key(Bucket) ->
     sub_key(Bucket, uuid).
 
+uuid2bucket_key(BucketUUID) ->
+    {bucket_by_uuid, BucketUUID}.
+
 uuid(Bucket, Snapshot) ->
     case chronicle_compat:get(Snapshot, uuid_key(Bucket), #{}) of
         {ok, UUID} ->
@@ -2451,12 +2507,22 @@ uuids(Snapshot) ->
     [{Name, uuid(Name, Snapshot)} || Name <- get_bucket_names(Snapshot)].
 
 uuid2bucket(UUID) ->
-    uuid2bucket(UUID, get_snapshot(all, [uuid])).
+    case cluster_compat_mode:is_cluster_morpheus() of
+        true ->
+            uuid2bucket(UUID, direct);
+        false ->
+            uuid2bucket(UUID, get_snapshot(all, [uuid]))
+    end.
 
 uuid2bucket(UUID, Snapshot) ->
-    case lists:keyfind(UUID, 2, uuids(Snapshot)) of
-        {BucketName, _} -> {ok, BucketName};
-        false -> {error, not_found}
+    case cluster_compat_mode:is_cluster_morpheus() of
+        true ->
+            chronicle_compat:get(Snapshot, uuid2bucket_key(UUID), #{});
+        false ->
+            case lists:keyfind(UUID, 2, uuids(Snapshot)) of
+                {BucketName, _} -> {ok, BucketName};
+                false -> {error, not_found}
+            end
     end.
 
 filter_out_unknown_buckets(BucketsWithUUIDs, Snapshot) ->
@@ -2534,7 +2600,14 @@ chronicle_upgrade_bucket(Func, BucketNames, ChronicleTxn) ->
 removed_bucket_settings() ->
     [pitr_enabled, pitr_granularity, pitr_max_history_age].
 
-chronicle_upgrade_bucket_to_morpheus(BucketName, ChronicleTxn) ->
+chronicle_add_uuid2bucket_mapping_upgrade_to_morpheus(BucketName, Txn) ->
+    %% Add mapping from UUID to bucket name.
+    UUIDKey = uuid_key(BucketName),
+    {ok, UUID} = chronicle_upgrade:get_key(UUIDKey, Txn),
+    NewKey = uuid2bucket_key(UUID),
+    chronicle_upgrade:set_key(NewKey, BucketName, Txn).
+
+chronicle_upgrade_bucket_props_to_morpheus(BucketName, ChronicleTxn) ->
     PropsKey = sub_key(BucketName, props),
     {ok, BucketConfig0} = chronicle_upgrade:get_key(PropsKey, ChronicleTxn),
     BucketConfig =
@@ -2596,8 +2669,13 @@ chronicle_upgrade_bucket_to_morpheus(BucketName, ChronicleTxn) ->
 
 chronicle_upgrade_to_morpheus(ChronicleTxn) ->
     {ok, BucketNames} = chronicle_upgrade:get_key(root(), ChronicleTxn),
-    chronicle_upgrade_bucket(chronicle_upgrade_bucket_to_morpheus(_, _),
-                             BucketNames, ChronicleTxn).
+    chronicle_upgrade_bucket(
+        fun (Name, Txn) ->
+            functools:chain(
+              Txn,
+              [chronicle_upgrade_bucket_props_to_morpheus(Name, _),
+               chronicle_add_uuid2bucket_mapping_upgrade_to_morpheus(Name, _)])
+        end, BucketNames, ChronicleTxn).
 
 default_76_enterprise_props(true = _IsEnterprise) ->
     [{cross_cluster_versioning_enabled, false},
@@ -3221,5 +3299,153 @@ get_max_buckets_test_() ->
        end}
       || {Expected, MaxSupported, NodeCores, CoresEnabled, CoresPerBucket} = T
              <- Tests]}.
+
+uuid2bucket_key_test() ->
+    fake_chronicle_kv:new(),
+    meck:new(cluster_compat_mode, [passthrough]),
+    try
+        Root = root(),
+        Bucket1 = "bucket1",
+        Bucket2 = "bucket2",
+        BucketUUID1 = <<"bucket_uuid1">>,
+        BucketUUID2 = <<"bucket_uuid2">>,
+        UUID2BucketKey1 = uuid2bucket_key(BucketUUID1),
+        UUID2BucketKey2 = uuid2bucket_key(BucketUUID2),
+        PropsKey1 = sub_key(Bucket1, props),
+        PropsKey2 = sub_key(Bucket2, props),
+        UUIDKey1 = uuid_key(Bucket1),
+        UUIDKey2 = uuid_key(Bucket2),
+        EncrAtRestKey1 = sub_key(Bucket1, encr_at_rest),
+        EncrAtRestKey2 = sub_key(Bucket2, encr_at_rest),
+        CollectionsKey1 = sub_key(Bucket1, collections),
+        CollectionsKey2 = sub_key(Bucket2, collections),
+
+        fake_chronicle_kv:update_snapshot(Root, [Bucket1, Bucket2]),
+        fake_chronicle_kv:update_snapshot(UUIDKey1, BucketUUID1),
+        fake_chronicle_kv:update_snapshot(UUIDKey2, BucketUUID2),
+        fake_chronicle_kv:update_snapshot(PropsKey1, props1),
+        fake_chronicle_kv:update_snapshot(PropsKey2, props2),
+        fake_chronicle_kv:update_snapshot(EncrAtRestKey1, encr_props1),
+        fake_chronicle_kv:update_snapshot(EncrAtRestKey2, encr_props2),
+        fake_chronicle_kv:update_snapshot(CollectionsKey1, collections1),
+        fake_chronicle_kv:update_snapshot(CollectionsKey2, collections2),
+
+        %% PRE-MORPHEUS behavior:
+        meck:expect(cluster_compat_mode, is_cluster_morpheus,
+                    fun () -> false end),
+
+        %% Testing get_snapshot
+        ?assertEqual(2, map_size(get_snapshot(Bucket1, [uuid]))),
+        ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}},
+                       UUIDKey1 := {BucketUUID1, {<<"fake">>, _}}},
+                     get_snapshot(Bucket1, [uuid])),
+        ?assertEqual(9, map_size(get_snapshot(all))),
+        ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}},
+                       UUIDKey1 := {BucketUUID1, {<<"fake">>, _}},
+                       PropsKey1 := {props1, {<<"fake">>, _}},
+                       EncrAtRestKey1 := {encr_props1, {<<"fake">>, _}},
+                       CollectionsKey1 := {collections1, {<<"fake">>, _}},
+                       UUIDKey2 := {BucketUUID2, {<<"fake">>, _}},
+                       PropsKey2 := {props2, {<<"fake">>, _}},
+                       EncrAtRestKey2 := {encr_props2, {<<"fake">>, _}},
+                       CollectionsKey2 := {collections2, {<<"fake">>, _}}},
+                    get_snapshot(all)),
+        ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}}},
+                     get_snapshot("UnknownBucket", [uuid])),
+        ?assertEqual(1, map_size(get_snapshot("UnknownBucket", [uuid]))),
+
+        %% Testing uuid2bucket
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1)),
+        ?assertEqual({ok, Bucket2}, uuid2bucket(BucketUUID2)),
+        ?assertEqual({error, not_found}, uuid2bucket(<<"not_found">>)),
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1,
+                                                get_snapshot(Bucket1))),
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1,
+                                                get_snapshot(Bucket1, [uuid]))),
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1,
+                                                get_snapshot(all, [uuid]))),
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1,
+                                                get_snapshot(all))),
+        ?assertEqual({error, not_found}, uuid2bucket(<<"not_found">>,
+                                                     get_snapshot(all))),
+
+        %% Testing all_keys_by_uuid
+        Fetcher = fun (Txn) ->
+                      BucketKeys = [root()] ++
+                                   all_keys_by_uuid([BucketUUID1, "Unknown"],
+                                                    [props, uuid],
+                                                    Txn),
+                       chronicle_compat:txn_get_many(BucketKeys, Txn)
+                  end,
+        Snapshot1 = chronicle_compat:get_snapshot([Fetcher], #{}),
+        ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}},
+                       UUIDKey1 := {BucketUUID1, {<<"fake">>, _}},
+                       PropsKey1 := {props1, {<<"fake">>, _}}},
+                     Snapshot1),
+        ?assertEqual(3, map_size(Snapshot1)),
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1, Snapshot1)),
+        ?assertEqual({error, not_found}, uuid2bucket(<<"Unknown">>,
+                                                     Snapshot1)),
+
+        %% MORPHEUS behavior:
+        meck:expect(cluster_compat_mode, is_cluster_morpheus,
+                    fun () -> true end),
+
+        fake_chronicle_kv:update_snapshot(UUID2BucketKey2, Bucket2),
+        fake_chronicle_kv:update_snapshot(UUID2BucketKey1, Bucket1),
+
+        %% Testing get_snapshot
+        ?assertEqual(3, map_size(get_snapshot(Bucket1, [uuid]))),
+        ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}},
+                       UUID2BucketKey1 := {Bucket1, {<<"fake">>, _}},
+                       UUIDKey1 := {BucketUUID1, {<<"fake">>, _}}},
+                     get_snapshot(Bucket1, [uuid])),
+        ?assertEqual(11, map_size(get_snapshot(all))),
+        ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}},
+                       UUID2BucketKey1 := {Bucket1, {<<"fake">>, _}},
+                       UUIDKey1 := {BucketUUID1, {<<"fake">>, _}},
+                       PropsKey1 := {props1, {<<"fake">>, _}},
+                       EncrAtRestKey1 := {encr_props1, {<<"fake">>, _}},
+                       CollectionsKey1 := {collections1, {<<"fake">>, _}},
+                       UUID2BucketKey2 := {Bucket2, {<<"fake">>, _}},
+                       UUIDKey2 := {BucketUUID2, {<<"fake">>, _}},
+                       PropsKey2 := {props2, {<<"fake">>, _}},
+                       EncrAtRestKey2 := {encr_props2, {<<"fake">>, _}},
+                       CollectionsKey2 := {collections2, {<<"fake">>, _}}},
+                    get_snapshot(all)),
+        ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}}},
+                     get_snapshot("UnknownBucket", [uuid])),
+        ?assertEqual(1, map_size(get_snapshot("UnknownBucket", [uuid]))),
+
+        %% Testing uuid2bucket
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1)),
+        ?assertEqual({ok, Bucket2}, uuid2bucket(BucketUUID2)),
+        ?assertEqual({error, not_found}, uuid2bucket(<<"not_found">>)),
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1,
+                                                get_snapshot(Bucket1))),
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1,
+                                                get_snapshot(Bucket1, [uuid]))),
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1,
+                                                get_snapshot(all, [uuid]))),
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1,
+                                                get_snapshot(all))),
+        ?assertEqual({error, not_found}, uuid2bucket(<<"not_found">>,
+                                                     get_snapshot(all))),
+
+        %% Testing all_keys_by_uuid
+        Snapshot2 = chronicle_compat:get_snapshot([Fetcher], #{}),
+        ?assertMatch(#{Root := {[Bucket1, Bucket2], {<<"fake">>, _}},
+                       UUID2BucketKey1 := {Bucket1, {<<"fake">>, _}},
+                       UUIDKey1 := {BucketUUID1, {<<"fake">>, _}},
+                       PropsKey1 := {props1, {<<"fake">>, _}}},
+                     Snapshot2),
+        ?assertEqual(4, map_size(Snapshot2)),
+        ?assertEqual({ok, Bucket1}, uuid2bucket(BucketUUID1, Snapshot2)),
+        ?assertEqual({error, not_found}, uuid2bucket(<<"Unknown">>,
+                                                     Snapshot2))
+    after
+        meck:unload(cluster_compat_mode),
+        fake_chronicle_kv:unload()
+    end.
 
 -endif.

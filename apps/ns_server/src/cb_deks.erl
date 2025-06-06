@@ -727,18 +727,8 @@ drop_bucket_deks(BucketUUID, DekIds) ->
                            Continuation).
 
 get_bucket_chronicle_keys(BucketUUID, Txn) ->
-    {ok, {Names, _}} = chronicle_compat:txn_get(ns_bucket:root(), Txn),
-    Snapshot = chronicle_compat:txn_get_many(
-                 [ns_bucket:root() | ns_bucket:all_keys(Names, [uuid])], Txn),
-    BucketKeys =
-        case ns_bucket:uuid2bucket(BucketUUID, Snapshot) of
-            {ok, Bucket} ->
-                [ns_bucket:sub_key(Bucket, props),
-                 ns_bucket:uuid_key(Bucket),
-                 ns_bucket:sub_key(Bucket, encr_at_rest)];
-            {error, not_found} ->
-                []
-        end,
+    BucketKeys = ns_bucket:all_keys_by_uuid([BucketUUID],
+                                            [props, encr_at_rest, uuid], Txn),
     chronicle_compat:txn_get_many(
         [ns_bucket:root() | BucketKeys] ++
          ns_cluster_membership:node_membership_keys(node()), Txn).
