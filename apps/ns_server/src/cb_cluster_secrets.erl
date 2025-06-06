@@ -451,6 +451,8 @@ delete_historical_key_internal(SecretId, HistKeyId, IsSecretWritableMFA) ->
                 {ok, Name} ->
                     sync_with_all_node_monitors(),
                     {ok, Name};
+                {error, not_found} ->
+                    {error, not_found};
                 {error, Reason} ->
                     {error, {unsafe, Reason}}
             end;

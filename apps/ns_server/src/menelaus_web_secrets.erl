@@ -142,9 +142,9 @@ with_validated_secret(Fun, CurProps, Req) ->
               ok ?= Fun(Props)
           else
               false ->
-                  menelaus_util:web_exception(403, "Forbidden");
+                  menelaus_util:web_exception(403, format_error(forbidden));
               {error, forbidden} ->
-                  menelaus_util:web_exception(403, "Forbidden");
+                  menelaus_util:web_exception(403, format_error(forbidden));
               {error, no_quorum} ->
                   menelaus_util:web_exception(503, format_error(no_quorum));
               {error, Reason} ->
@@ -194,7 +194,7 @@ handle_delete_secret(IdStr, Req) ->
             ns_audit:delete_encryption_secret(Req, Id, Name),
             menelaus_util:reply(Req, 200);
         {error, forbidden} ->
-            menelaus_util:web_exception(403, "Forbidden");
+            menelaus_util:web_exception(403, format_error(forbidden));
         {error, not_found} ->
             menelaus_util:reply_not_found(Req);
         {error, no_quorum} ->
@@ -216,7 +216,7 @@ handle_delete_historical_key(IdStr, HistKeyIdStr, Req) ->
             ns_audit:delete_historical_encryption_key(Req, Id, Name, HistKeyId),
             menelaus_util:reply(Req, 200);
         {error, forbidden} ->
-            menelaus_util:web_exception(403, "Forbidden");
+            menelaus_util:web_exception(403, format_error(forbidden));
         {error, not_found} ->
             menelaus_util:reply_not_found(Req);
         {error, no_quorum} ->
@@ -818,7 +818,10 @@ format_error({test_failed_for_some_nodes, Errors}) ->
         false ->
             ": " ++ format_error(Reason)
     end;
-
+format_error(retry) ->
+    "Please try again later";
+format_error(forbidden) ->
+    "Forbidden";
 format_error(Reason) ->
     lists:flatten(io_lib:format("~p", [Reason])).
 
