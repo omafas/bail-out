@@ -116,6 +116,16 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         set_audit_encryption(self.cluster, 'disabled', -1,
                              dek_lifetime=default_dek_lifetime,
                              dek_rotation=default_dek_rotation)
+        r = testlib.get_succ(self.cluster,
+                             '/settings/security/encryptionAtRest/log')
+        r = r.json()
+        if r['encryptionMethod'] == 'encryptionKey':
+            # Setting it to nodeSecretManager first, so all log deks get
+            # reencrypted with the master password (to unlock the secrets
+            # removal below)
+            set_log_encryption(self.cluster, 'nodeSecretManager', -1,
+                               dek_lifetime=default_dek_lifetime,
+                               dek_rotation=default_dek_rotation)
         set_log_encryption(self.cluster, 'disabled', -1,
                            dek_lifetime=default_dek_lifetime,
                            dek_rotation=default_dek_rotation)
