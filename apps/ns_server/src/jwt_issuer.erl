@@ -100,6 +100,7 @@ basic_test() ->
     meck:expect(chronicle_compat_events, subscribe, fun(_) -> ok end),
     fake_chronicle_kv:new(),
     fake_chronicle_kv:update_snapshot(?JWT_SIGNING_KEYS_KEY, generate_keys()),
+    fake_chronicle_kv:update_snapshot(ns_bucket:root(), []),
 
     {ok, CachePid} = jwt_cache:start_link(),
     CachePid ! internal_key_update,

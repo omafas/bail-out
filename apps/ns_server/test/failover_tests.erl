@@ -96,6 +96,7 @@ manual_failover_test_() ->
                   end} || {Name, TestFun} <- Tests]}.
 
 manual_failover_test_setup(SetupConfig) ->
+    config_profile:load_default_profile_for_test(),
     fake_ns_config:setup(),
     fake_chronicle_kv:new(),
 
@@ -228,7 +229,8 @@ manual_failover_test_teardown(_Config, PidMap) ->
     meck:unload(leader_activities),
 
     fake_chronicle_kv:unload(),
-    fake_ns_config:teardown().
+    fake_ns_config:teardown(),
+    config_profile:unload_profile_for_test().
 
 manual_failover_t(_SetupConfig, _R) ->
     ?assertEqual({error,not_found},
@@ -551,8 +553,6 @@ auto_failover_test_setup(SetupConfig) ->
                           maps:get(unhealthy_nodes, SetupConfig))
                 end),
 
-    config_profile:load_default_profile_for_test(),
-
     %% Needed to start the orchestrator. We don't really need the janitor to run
     %% for this test, so we will mock it instead of run it because we'd need to
     %% do some extra stuff to get it running.
@@ -595,7 +595,6 @@ auto_failover_test_teardown(Config, PidMap) ->
     meck:unload(ns_doctor),
     meck:unload(ns_email_alert),
     meck:unload(cb_atomic_persistent_term),
-    config_profile:unload_profile_for_test(),
 
     manual_failover_test_teardown(Config, PidMap).
 
