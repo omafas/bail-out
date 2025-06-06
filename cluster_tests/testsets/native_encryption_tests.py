@@ -282,6 +282,61 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.update_bucket({'name': self.bucket_name,
                                     'encryptionAtRestKeyId': -1})
 
+    def delete_historical_keys_test(self):
+        secret_json = cb_managed_secret(name='Test Secret 1',
+                                        usage=['bucket-encryption',
+                                               'config-encryption',
+                                               'log-encryption'])
+        secret_id = create_secret(self.random_node(), secret_json)
+
+        self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
+                                    'encryptionAtRestKeyId': secret_id})
+
+        set_cfg_encryption(self.cluster, 'encryptionKey', secret_id)
+        set_log_encryption(self.cluster, 'encryptionKey', secret_id)
+
+        hist_keys = get_historical_keys(self.cluster, secret_id)
+        assert len(hist_keys) == 1
+        hist_key_id0 = hist_keys[0]['id']
+
+        errors = delete_historical_key(self.random_node(), secret_id,
+                                       hist_key_id0, expected_code=400)
+        assert errors['_'] == 'Operation is unsafe. Can\'t be removed ' \
+                              'because this key still encrypts some data in ' \
+                              'configuration, logs, ' \
+                              f'bucket "{self.bucket_name}"', \
+               f'unexpected error: {errors}'
+
+        rotate_secret(self.random_node(), secret_id)
+
+        hist_keys = get_historical_keys(self.random_node(), secret_id)
+        assert len(hist_keys) == 2
+        assert hist_keys[1]['id'] == hist_key_id0
+        hist_key_id1 = hist_keys[0]['id']
+
+        # It doesn't have to become removable immediately, it may take some
+        # time to reencrypt DEKs
+        testlib.poll_for_condition(
+            lambda: delete_historical_key(self.random_node(), secret_id,
+                                          hist_key_id0),
+            sleep_time=1, attempts=50, retry_on_assert=True, verbose=True)
+        delete_historical_key(self.random_node(), secret_id, hist_key_id0,
+                              expected_code=404)
+
+        hist_keys = get_historical_keys(self.random_node(), secret_id)
+        assert len(hist_keys) == 1
+        assert hist_keys[0]['id'] == hist_key_id1
+
+        self.cluster.delete_bucket(self.bucket_name)
+        set_cfg_encryption(self.random_node(), 'nodeSecretManager', -1)
+        set_log_encryption(self.random_node(), 'nodeSecretManager', -1)
+
+        errors = delete_historical_key(self.random_node(), secret_id,
+                                       hist_key_id1, expected_code=400)
+        assert errors['_'] == 'Operation is unsafe. Can\'t delete active key', \
+               f'unexpected error: {errors}'
+
+
     def secret_not_allowed_to_encrypt_bucket_test(self):
         # Creating buckets so we can use 'bucket-encryption-<bucket_name>'
         # in usage field of the secret
@@ -2188,6 +2243,16 @@ def get_secret(cluster, secret_id, expected_code=200, auth=None):
     return r.text
 
 
+def get_historical_keys(cluster, secret_id):
+    s = get_secret(cluster, secret_id)
+    assert s['type'] == 'cb-server-managed-aes-key-256', \
+           'not supported secret type'
+    l = s['data']['keys']
+    l.sort(key=lambda k: k['creationDateTime'], reverse=True)
+    assert l[0]['active'] == True, 'active key is not the first one'
+    return l
+
+
 def get_secrets(cluster, auth=None):
     if auth is None:
         auth = cluster.auth
@@ -2235,6 +2300,20 @@ def delete_secret(cluster, secret_id, expected_code=200, auth=None):
         auth = cluster.auth
     testlib.delete(cluster, f'/settings/encryptionKeys/{secret_id}',
                    expected_code=expected_code, auth=auth)
+
+
+def delete_historical_key(cluster, secret_id, hist_key_id, expected_code=200):
+    r = testlib.delete(
+        cluster,
+        f'/settings/encryptionKeys/{secret_id}/historicalKeys/{hist_key_id}',
+        expected_code=expected_code)
+
+    if expected_code == 200:
+        return None
+    elif expected_code == 404:
+        return None
+    else:
+        return r.json()['errors']
 
 
 def verify_kek_files(cluster, secret, verify_key_count=1, **kwargs):
