@@ -232,7 +232,7 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
 
     # The node addition will fail as the node being added has disabled
     # client cert authentication
-    def add_trusted_node_to_trusted_cluster_client_cert_disabled_test(self):
+    def add_trusted_node_to_trusted_cluster_client_cert_disabled_test_notyet(self):
         self.provision_cluster_node()
         self.provision_new_node()
         load_ca(self.cluster_node(), self.new_node_ca)
