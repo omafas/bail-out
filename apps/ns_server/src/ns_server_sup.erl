@@ -170,7 +170,12 @@ child_specs() ->
 
      {audit_events,
       {gen_event, start_link, [{local, audit_events}]},
-      permanent, brutal_kill, worker, dynamic}] ++
+      permanent, brutal_kill, worker, dynamic},
+
+     %% Started before menelaus_sup, so that children such as app_telemetry_pool
+     %% can notify metrics immediately
+     {ns_server_stats, {ns_server_stats, start_link, []},
+      permanent, 1000, worker, [ns_server_stats]}] ++
 
     [suppress_max_restart_intensity:spec(
        {encryption_service,
@@ -180,11 +185,7 @@ child_specs() ->
      || cluster_compat_mode:is_enterprise()] ++
 
     [{ns_memcached_sockets_pool, {ns_memcached_sockets_pool, start_link, []},
-      permanent, 1000, worker, []},
-     %% Started before menelaus_sup, so that children such as app_telemetry_pool
-     %% can notify metrics immediately
-     {ns_server_stats, {ns_server_stats, start_link, []},
-      permanent, 1000, worker, [ns_server_stats]}] ++
+      permanent, 1000, worker, []}] ++
 
     [{cb_cluster_secrets, {cb_cluster_secrets, start_link_node_monitor, []},
       permanent, 1000, worker, []} || cluster_compat_mode:is_enterprise()] ++

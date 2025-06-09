@@ -284,6 +284,7 @@ init([]) ->
                                       EventFilter, update),
             case maybe_update_dek_path_in_config() of
                 ok ->
+                    create_encryption_service_stats(),
                     {ok, #{}};
                 {error, Reason} ->
                     {stop, Reason}
@@ -576,6 +577,20 @@ maybe_notify_stats(A) ->
     ns_server_stats:notify_counter({<<"encryption_service_failures">>,
                                     [{failure_type, A}]}).
 
+create_encryption_service_stats() ->
+    lists:foreach(
+      fun (T) ->
+          ns_server_stats:create_counter({<<"encryption_service_failures">>,
+                                          [{failure_type, T}]})
+      end, [read_key_error,
+            encrypt_key_error,
+            decrypt_key_error,
+            store_key_error,
+            rotate_integrity_tokens_error,
+            remove_old_integrity_tokens_error,
+            mac_calculation_error,
+            mac_verification_error]).
+
 maybe_log_error_to_event_log(store_key_error_test, _Msg, _ExtraArgs) ->
     ok;
 maybe_log_error_to_event_log(A, Msg, ExtraArgs) ->
@@ -623,7 +638,7 @@ garbage_collect_keys(Kind, InUseKeyIds) ->
             %% (bucket removal) and we need to make sure that the key cache
             %% is cleared in this case.
             revalidate_key_cache(),
-            ok;
+            no_change;
         _ ->
             ?log_info("~p keys gc: retiring ~0p (all keys: ~0p, in "
                       "use: ~0p)", [Kind, ToRetire, ListDirRes, InUseKeyIds]),

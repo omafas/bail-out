@@ -38,7 +38,8 @@
 
 -export([init_stats/0, notify_counter/1, notify_counter/2, notify_counter_raw/1,
          notify_gauge/2, notify_gauge/3, notify_histogram/2, notify_histogram/4,
-         notify_max/2, create_counter/1, delete_counter/1]).
+         notify_max/2, create_counter/1, delete_counter/1,
+         garbage_collect_counters/2]).
 
 -export([increment_counter/2,
          get_ns_server_stats/0,
@@ -97,6 +98,25 @@ create_counter(Metric) ->
 delete_counter(Metric) ->
     Key = {c, normalized_metric(Metric)},
     catch ets:delete(?MODULE, Key),
+    ok.
+
+garbage_collect_counters(MetricName, LabelFilter) ->
+    {MetricNameNormalized, _} = normalized_metric(MetricName),
+    Candidates =
+        try
+            ets:match_object(?MODULE, {{c, {MetricNameNormalized, '_'}}, '_'})
+        catch
+            _:_ -> []
+        end,
+    lists:foreach(
+        fun ({{c, {_, Labels}} = Key, _}) ->
+            case lists:any(fun ({K, V}) -> LabelFilter(K, V) end, Labels) of
+                true ->
+                    catch ets:delete(?MODULE, Key);
+                false ->
+                    ok
+            end
+        end, Candidates),
     ok.
 
 -spec notify_counter_raw(metric()) -> ok.

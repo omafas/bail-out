@@ -1399,11 +1399,12 @@ persist_keks(Hashes) ->
     {ok, AllSecrets} = topologically_sorted_secrets(get_all()),
 
     {RV, NewHashes} = lists:mapfoldl(
-                        fun (#{id := Id} = S, Acc) ->
+                        fun (#{id := Id, name := Name} = S, Acc) ->
                             Old = maps:get(Id, Acc, undefined),
                             case erlang:phash2(S, ?MAX_PHASH2_RANGE) of
                                 Old -> {{Id, ok}, Acc};
                                 New ->
+                                   create_encryption_key_stats(Name),
                                    case Write(S) of
                                        ok -> {{Id, ok}, Acc#{Id => New}};
                                        {error, _} = E -> {{Id, E}, Acc}
@@ -1531,7 +1532,15 @@ ensure_kmip_kek_on_disk(#{id := SecretId,
 garbage_collect_keks() ->
     AllKekIds = all_kek_ids(),
     ?log_debug("keks gc: All existing keks: ~p", [AllKekIds]),
-    encryption_service:garbage_collect_keks(AllKekIds).
+    case encryption_service:garbage_collect_keks(AllKekIds) of
+        ok -> %% some keks were retired
+            garbage_collect_key_stats(),
+            ok;
+        {error, _} = Error ->
+            Error;
+        no_change ->
+            ok
+    end.
 
 -spec all_kek_ids() -> [key_id()].
 all_kek_ids() ->
@@ -4040,6 +4049,26 @@ all_kind_stat_names() ->
     [<<"encr_at_rest_generate_dek">>,
      <<"encr_at_rest_generate_dek_failures">>,
      <<"encr_at_rest_drop_deks_events">>].
+
+create_encryption_key_stats(Name) ->
+    ns_server_stats:create_counter(
+        {<<"encryption_key_rotation_failures">>, [{key_name, Name}]}),
+    ns_server_stats:create_counter(
+        {<<"encryption_key_rotations">>, [{key_name, Name}]}).
+
+garbage_collect_key_stats() ->
+    CurList = lists:map(fun (#{name := Name}) ->
+                            list_to_binary(Name)
+                        end, get_all()),
+    GC = fun (MetricName) ->
+             ns_server_stats:garbage_collect_counters(
+               MetricName,
+               fun (<<"key_name">>, Name) -> not lists:member(Name, CurList);
+                   (_, _) -> false
+               end)
+         end,
+    GC(<<"encryption_key_rotation_failures">>),
+    GC(<<"encryption_key_rotations">>).
 
 diag_info_helper(Name, undefined) ->
     io_lib:format("~s process is not running", [Name]);
