@@ -496,7 +496,8 @@ build_cluster_capabilities() ->
     [{clusterCapabilitiesVer, [1, 0]},
      {clusterCapabilities, {Caps}},
      {clusterUUID, menelaus_web:get_uuid()},
-     {clusterName, list_to_binary(menelaus_web_pools:get_cluster_name())}].
+     {clusterName, list_to_binary(menelaus_web_pools:get_cluster_name())},
+     {prodName, list_to_binary(cluster_compat_mode:prod_name())}].
 
 do_build_node_services() ->
     Config = ns_config:get(),
