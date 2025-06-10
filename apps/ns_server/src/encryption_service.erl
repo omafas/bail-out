@@ -163,7 +163,7 @@ read_dek(Kind, DekId) ->
                        end,
     case ?wrap_error_msg(
            cb_gosecrets_runner:read_key(?RUNNER, NewKind, NewId),
-           read_key_error, [{kind, cb_deks:kind2bin(NewKind)},
+           read_key_error, [{kind, cb_deks:kind2bin(NewKind, <<"unknown">>)},
                             {key_UUID, NewId}]) of
         {ok, Json} ->
             {Props} = ejson:decode(Json),
@@ -530,7 +530,7 @@ store_key(Kind, Name, Type, KeyData, EncryptionKeyId,
                                                  is_atom(TestOnly),
                                                  is_boolean(CanBeCached) ->
     CreationDTISO = iso8601:format(CreationDT),
-    KindBin = cb_deks:kind2bin(Kind),
+    KindBin = cb_deks:kind2bin(Kind, <<"unknown">>),
     ErrorAtom = case TestOnly of
                     true -> store_key_error_test;
                     false -> store_key_error

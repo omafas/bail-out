@@ -1811,8 +1811,12 @@ handle_new_dek_ids_in_use(Kind, CurrInUseIDs, Force,
                     DeksInfo,
     UniqCurrInUseIDs = lists:uniq(CurrInUseIDs),
     N = length(lists:delete(?NULL_DEK, UniqCurrInUseIDs)),
-    ns_server_stats:notify_gauge({<<"encr_at_rest_deks_in_use">>,
-                                  [{type, cb_deks:kind2bin(Kind)}]}, N),
+    try
+        ns_server_stats:notify_gauge({<<"encr_at_rest_deks_in_use">>,
+                                      [{type, cb_deks:kind2bin(Kind)}]}, N)
+    catch
+        error:not_found -> ok
+    end,
     UpdateStatus = case maps:get(maybe_update_deks, Statuses, undefined) of
                        undefined -> ok;
                        %% We can't generate new dek because there are too many
@@ -2212,15 +2216,23 @@ generate_new_dek(Kind, CurrentDeks, EncryptionMethod, Snapshot) ->
                        [Kind, EncryptionMethod]),
             case cb_deks:generate_new(Kind, EncryptionMethod, Snapshot) of
                 {ok, DekId} ->
-                    ns_server_stats:notify_counter(
-                      {<<"encr_at_rest_generate_dek">>,
-                       [{type, cb_deks:kind2bin(Kind)}]}),
+                    try
+                        ns_server_stats:notify_counter(
+                          {<<"encr_at_rest_generate_dek">>,
+                           [{type, cb_deks:kind2bin(Kind)}]})
+                    catch
+                        error:not_found -> ok
+                    end,
                     log_succ_dek_rotation(Kind, DekId),
                     {ok, DekId};
                 {error, Reason} ->
-                    ns_server_stats:notify_counter(
-                      {<<"encr_at_rest_generate_dek_failures">>,
-                       [{type, cb_deks:kind2bin(Kind)}]}),
+                    try
+                        ns_server_stats:notify_counter(
+                          {<<"encr_at_rest_generate_dek_failures">>,
+                           [{type, cb_deks:kind2bin(Kind)}]})
+                    catch
+                        error:not_found -> ok
+                    end,
                     log_unsucc_dek_rotation(Kind, Reason),
                     {error, Reason}
             end;
@@ -3683,8 +3695,13 @@ initiate_deks_drop(Kind, IdsToDropList0,
     IdsToDropFinalList = sets:to_list(IdsToDropFinalSet),
 
     ?log_debug("Trying to drop ~p DEKs: ~0p", [Kind, IdsToDropFinalList]),
-    ns_server_stats:notify_counter({<<"encr_at_rest_drop_deks_events">>,
-                                    [{type, cb_deks:kind2bin(Kind)}]}),
+
+    try
+        ns_server_stats:notify_counter({<<"encr_at_rest_drop_deks_events">>,
+                                        [{type, cb_deks:kind2bin(Kind)}]})
+    catch
+        error:not_found -> ok
+    end,
 
     log_expired_deks(encr_at_rest_deks_expired, Kind,
                      sets:subtract(IdsToDropSet0, BeingDroppedSet)),
@@ -4023,22 +4040,26 @@ log_unsucc_kek_rotation(Id, Name, Reason, IsAutomatic) ->
 
 log_succ_dek_rotation(Kind, NewDekId) ->
     event_log:add_log(encr_at_rest_dek_rotated,
-                      [{kind, cb_deks:kind2bin(Kind)},
+                      [{kind, cb_deks:kind2bin(Kind, <<"unknown">>)},
                        {new_DEK_UUID, NewDekId}]).
 
 log_unsucc_dek_rotation(Kind, Reason) ->
+    DataTypeName = try cb_deks:kind2datatype(Kind)
+                   catch error:not_found -> <<"unknown">>
+                   end,
     ale:error(?USER_LOGGER, "DEK rotation failed for ~s: ~p",
-              [cb_deks:kind2datatype(Kind), Reason]),
+              [DataTypeName, Reason]),
     event_log:add_log(encr_at_rest_dek_rotation_failed,
-                      [{kind, cb_deks:kind2bin(Kind)},
+                      [{kind, cb_deks:kind2bin(Kind, <<"unknown">>)},
                        {reason, format_failure_reason(Reason)}]).
 
 log_expired_deks(Type, Kind, IdsSet) ->
     Ids = sets:to_list(sets:del_element(?NULL_DEK, IdsSet)),
     case Ids of
         [] -> ok;
-        _ -> event_log:add_log(Type, [{'DEK_UUIDs', Ids},
-                                      {kind, cb_deks:kind2bin(Kind)}])
+        _ -> event_log:add_log(Type,
+                               [{'DEK_UUIDs', Ids},
+                                {kind, cb_deks:kind2bin(Kind, <<"unknown">>)}])
     end.
 
 format_failure_reason(Reason) ->
@@ -4052,21 +4073,38 @@ report_data_status_stats(Kind, #{data_status := DataStatus}) ->
             partially_encrypted -> 0.5;
             encrypted -> 1
         end,
-    ns_server_stats:notify_gauge(
-      {<<"encr_at_rest_data_status">>,
-       [{data_type, cb_deks:kind2datatype(Kind)}]}, N).
+    try
+        ns_server_stats:notify_gauge(
+          {<<"encr_at_rest_data_status">>,
+           [{data_type, cb_deks:kind2datatype(Kind)}]}, N)
+    catch
+        error:not_found ->
+            ok
+    end.
 
 create_kind_stats(Kind) ->
-    KindBin = cb_deks:kind2bin(Kind),
-    lists:foreach(
-      fun (M) -> ns_server_stats:create_counter({M, [{type, KindBin}]}) end,
-      all_kind_stat_names()).
+    try cb_deks:kind2bin(Kind) of
+        KindBin ->
+            lists:foreach(
+              fun (M) ->
+                  ns_server_stats:create_counter({M, [{type, KindBin}]})
+              end, all_kind_stat_names())
+    catch
+        error:not_found ->
+            ok
+    end.
 
 delete_kind_stats(Kind) ->
-    KindBin = cb_deks:kind2bin(Kind),
-    lists:foreach(
-      fun (M) -> ns_server_stats:delete_counter({M, [{type, KindBin}]}) end,
-      all_kind_stat_names()).
+    try cb_deks:kind2bin(Kind) of
+        KindBin ->
+            lists:foreach(
+              fun (M) ->
+                  ns_server_stats:delete_counter({M, [{type, KindBin}]})
+              end, all_kind_stat_names())
+    catch
+        error:not_found ->
+            ok
+    end.
 
 all_kind_stat_names() ->
     [<<"encr_at_rest_generate_dek">>,

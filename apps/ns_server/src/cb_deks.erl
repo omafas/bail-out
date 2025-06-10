@@ -25,6 +25,7 @@
          dek_config/1,
          dek_chronicle_keys_filter/1,
          kind2bin/1,
+         kind2bin/2,
          kind2datatype/1]).
 
 -export_type([dek_id/0, dek/0, dek_kind/0, encryption_method/0]).
@@ -733,10 +734,26 @@ get_bucket_chronicle_keys(BucketUUID, Txn) ->
         [ns_bucket:root() | BucketKeys] ++
          ns_cluster_membership:node_membership_keys(node()), Txn).
 
-kind2bin({bucketDek, UUID}) -> iolist_to_binary(["bucketDek_", UUID]);
+
+kind2bin({bucketDek, UUID}) ->
+    case ns_bucket:uuid2bucket(UUID) of
+        {ok, BucketName} -> iolist_to_binary(["bucketDek_", BucketName]);
+        {error, not_found} -> erlang:error(not_found)
+    end;
 kind2bin(K) -> atom_to_binary(K).
 
-kind2datatype({bucketDek, UUID}) -> iolist_to_binary(["bucket_", UUID]);
+kind2bin(K, Default) ->
+    try
+        kind2bin(K)
+    catch
+        error:not_found -> Default
+    end.
+
+kind2datatype({bucketDek, UUID}) ->
+    case ns_bucket:uuid2bucket(UUID) of
+        {ok, BucketName} -> iolist_to_binary(["bucket_", BucketName]);
+        {error, not_found} -> erlang:error(not_found)
+    end;
 kind2datatype(bucketDek) -> <<"bucket_data">>;
 kind2datatype(kek) -> <<"keys">>;
 kind2datatype(configDek) -> <<"config">>;
