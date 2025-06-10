@@ -1837,8 +1837,18 @@ def add_db_idx_dirs(guts):
             pass
 
 
+def maybe_sanitize_path(path):
+    if os.name == 'nt':
+        return winquote_path(path)
+
+    # MacOS / Linux
+    return quote_path(path)
+
+def quote_path(path):
+    return f'"{path}"'
+
 def winquote_path(s):
-    return '"' + s.replace("\\\\", "\\").replace('/', "\\") + '"'
+    return quote_path(s.replace("\\\\", "\\").replace('/', "\\"))
 
 # python's split splits empty string to [''] which doesn't make any
 # sense. So this function works around that.
@@ -1864,8 +1874,10 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
         read_guts(guts, "log_path"), "rebalance"))
     cbasdirs = correct_split(read_guts(guts, "cbas_data_paths"), ",")
     cbasdirs = [os.path.realpath(cbasdir) for cbasdir in cbasdirs]
-    configdir = os.path.join(read_guts(guts, "path_config_datadir"), "config")
-    bindir = read_guts(guts, "path_config_bindir")
+    path_config_datadir = read_guts(guts, "path_config_datadir")
+    configdir = maybe_sanitize_path(os.path.join(path_config_datadir,
+                                                 "config"))
+    bindir = maybe_sanitize_path(read_guts(guts, "path_config_bindir"))
     cbbrowse_static_args = f"-config_dir {configdir} -bin_dir {bindir}"
     if master_password is not None:
         cbbrowse_static_args = f"{cbbrowse_static_args} -password_prompt"
