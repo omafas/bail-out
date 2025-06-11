@@ -1066,6 +1066,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                              'config-encryption',
                                              'KEK-encryption'])
         aws_secret_id = create_secret(self.random_node(), secret_json)
+        testlib.post_succ(self.random_node(),
+                          f'/settings/encryptionKeys/{aws_secret_id}/test')
         kek_id = get_kek_id(self.random_node(), aws_secret_id)
 
         # Create a bucket and encrypt it using AWS key:

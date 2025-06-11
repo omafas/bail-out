@@ -26,6 +26,7 @@
          handle_post_secret/1,
          handle_put_secret/2,
          handle_test_post_secret/1,
+         handle_test_post_secret/2,
          handle_test_put_secret/2,
          handle_delete_secret/2,
          handle_delete_historical_key/3,
@@ -109,6 +110,31 @@ handle_test_post_secret(Req) ->
               ok
           end
       end, #{}, Req).
+
+handle_test_post_secret(IdStr, Req) ->
+    menelaus_util:assert_is_enterprise(),
+    assert_is_morpheus(),
+    Id = parse_id(IdStr),
+    case cb_cluster_secrets:get_secret(Id) of
+        {ok, CurProps} ->
+          maybe
+              true ?= is_writable(CurProps, Req),
+              Nodes = ns_node_disco:nodes_actual(),
+              ok ?= cb_cluster_secrets:test_existing_secret_props(CurProps,
+                                                                  Nodes),
+              menelaus_util:reply(Req, 200),
+              ok
+          else
+              false ->
+                  menelaus_util:web_exception(403, format_error(forbidden));
+              {error, forbidden} ->
+                  menelaus_util:web_exception(403, format_error(forbidden));
+              {error, Reason} ->
+                  menelaus_util:reply_global_error(Req, format_error(Reason))
+          end;
+        {error, not_found} ->
+            menelaus_util:reply_not_found(Req)
+    end.
 
 handle_test_put_secret(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),

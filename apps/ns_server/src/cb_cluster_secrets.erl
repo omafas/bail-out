@@ -62,6 +62,7 @@
          test/2,
          test_secret_props/1,
          test_existing_secret/2,
+         test_existing_secret_props/2,
          get_secret_by_kek_id_map/1,
          ensure_can_encrypt_dek_kind/3,
          is_allowed_usage_for_secret/3,

@@ -918,6 +918,10 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["settings", "encryptionKeys", "test"] ->
                     {no_check_disallow_anonymous,
                      fun menelaus_web_secrets:handle_test_post_secret/1};
+                ["settings", "encryptionKeys", SecretId, "test"] ->
+                    {no_check_disallow_anonymous,
+                     fun menelaus_web_secrets:handle_test_post_secret/2,
+                     [SecretId]};
                 ["internalSettings"] ->
                     {{[admin, settings], write},
                      fun menelaus_web_settings:handle_post/2, [internal]};
