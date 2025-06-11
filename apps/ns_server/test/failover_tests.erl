@@ -916,7 +916,9 @@ graceful_failover_test_() ->
     Tests = [
              {"Graceful failover", fun graceful_failover_t/2},
              {"Graceful failover incorrect expected topology",
-              fun graceful_failover_incorrect_expected_topology/2}
+              fun graceful_failover_incorrect_expected_topology/2},
+             {"Graceful failover post network partition stale config",
+              fun graceful_failover_post_network_partition_stale_config/2}
             ],
 
     %% foreachx here to let us pass parameters to setup.
@@ -1023,3 +1025,29 @@ graceful_failover_incorrect_expected_topology(_SetupConfig, _R) ->
     ?assert(poll_for_counter_value(graceful_failover_success, 2)),
 
     erlang:process_flag(trap_exit, false).
+
+graceful_failover_post_network_partition_stale_config(SetupConfig, _R) ->
+    ?log_info("Starting graceful failover post network partition stale config "
+              "test"),
+
+    meck:expect(
+      chronicle_compat, pull, 0,
+      meck:seq([ok,
+                fun() ->
+                        %% Now sync the config and we realise that 'c' has
+                        %% actually been failed over
+                        OldNodes = maps:get(nodes, SetupConfig),
+                        NewNodes = maps:put('c', {inactiveFailed, [kv]},
+                                            OldNodes),
+
+                        setup_node_config(NewNodes),
+                        setup_bucket_config(maps:get(buckets, SetupConfig)),
+                        ok
+                end])),
+
+    %% For this test we will force the map such that we cannot fail over 'a'
+    %% and 'c' as we would lose a vBucket.
+    ok = ns_bucket:set_map_and_uploaders("default", [['a', 'c']], undefined),
+
+    ok = ns_orchestrator:start_graceful_failover(['a']),
+    ?assert(poll_for_counter_value(graceful_failover_fail, 1)).

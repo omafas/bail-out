@@ -1313,9 +1313,25 @@ start_link_graceful_failover(Nodes, Opts) ->
     proc_lib:start_link(erlang, apply,
                         [fun run_graceful_failover/2, [Nodes, Opts]]).
 
-run_graceful_failover(Nodes, Opts) ->
-    chronicle_compat:pull(),
+get_interesting_buckets() ->
+    AllBucketConfigs = ns_bucket:get_buckets_by_rank(),
+    [BC || BC = {_, Conf} <- AllBucketConfigs,
+           proplists:get_value(type, Conf) =:= membase,
+           %% when bucket doesn't have a vbucket map,
+           %% there's not much to do with respect to
+           %% graceful failover; so we skip these;
+           %%
+           %% note, that failover will still operate on
+           %% these buckets and, if needed, will remove
+           %% the node from server list
+           proplists:get_value(map, Conf, []) =/= []].
 
+perform_safety_checks(Nodes) ->
+    chronicle_compat:pull(),
+    InterestingBuckets = get_interesting_buckets(),
+    perform_safety_checks(Nodes, InterestingBuckets).
+
+perform_safety_checks(Nodes, InterestingBuckets) ->
     case failover:is_possible(Nodes, #{}) of
         ok ->
             ok;
@@ -1323,24 +1339,14 @@ run_graceful_failover(Nodes, Opts) ->
             erlang:exit(Error)
     end,
 
-    AllBucketConfigs = ns_bucket:get_buckets_by_rank(),
-    InterestingBuckets = [BC || BC = {_, Conf} <- AllBucketConfigs,
-                                proplists:get_value(type, Conf) =:= membase,
-                                %% when bucket doesn't have a vbucket map,
-                                %% there's not much to do with respect to
-                                %% graceful failover; so we skip these;
-                                %%
-                                %% note, that failover will still operate on
-                                %% these buckets and, if needed, will remove
-                                %% the node from server list
-                                proplists:get_value(map, Conf, []) =/= []],
-    NumBuckets = length(InterestingBuckets),
-
     case check_graceful_failover_possible(Nodes, InterestingBuckets) of
         true -> ok;
         {false, Type} ->
             erlang:exit(Type)
-    end,
+    end.
+
+run_graceful_failover(Nodes, Opts) ->
+    perform_safety_checks(Nodes),
 
     config_push(ns_node_disco:nodes_wanted()),
 
@@ -1350,6 +1356,22 @@ run_graceful_failover(Nodes, Opts) ->
            graceful_failover, majority,
            fun () ->
                    ?log_info("Starting graceful failover of ~p", [Nodes]),
+
+                   %% Whilst we pull the config before the leader activity and
+                   %% run some safety checks, it's not enough to only do that.
+                   %% We could have spent some time waiting for the leader
+                   %% activity to start, and during that time the config could
+                   %% have materially changed. The checks inside the leader
+                   %% activity after syncing the quorum are enough as the config
+                   %% cannot materially change while we run the leader activity
+                   %% (we are the recognized orchestrator). We keep the old
+                   %% checks outside the leader activity to fail faster when we
+                   %% have a partition without quorum.
+                   chronicle_compat:pull(),
+                   ?log_debug("Pulled latest chronicle config"),
+
+                   InterestingBuckets = get_interesting_buckets(),
+                   perform_safety_checks(Nodes, InterestingBuckets),
 
                    ok = testconditions:check_test_condition(
                           graceful_failover_start),
@@ -1371,6 +1393,10 @@ run_graceful_failover(Nodes, Opts) ->
                                      ActiveNodes, kv),
                    master_activity_events:note_rebalance_stage_started(
                      kv, InvolvedNodes),
+
+
+                   NumBuckets = length(InterestingBuckets),
+
                    lists:foldl(
                      fun ({BucketName, BucketConfig}, I) ->
                              do_run_graceful_failover_moves(Nodes,
