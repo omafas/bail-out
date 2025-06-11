@@ -96,7 +96,15 @@ licenses/APL2.txt.
           building {{row.progress}}%
         </div>
         <div
-           ng-show="row.status != 'Building'"
+           ng-show="row.status == 'Graph Building'"
+           uib-tooltip="{{mnGsiTableCtl.getStatusDescription(row)}}"
+           tooltip-append-to-body="true"
+           tooltip-trigger="mouseenter"
+           ng-click="$event.stopPropagation();">
+          building graph {{row.progress}}%
+        </div>
+        <div
+           ng-show="row.status != 'Building' && row.status != 'Graph Building'"
            uib-tooltip="{{mnGsiTableCtl.getStatusDescription(row)}}"
            tooltip-append-to-body="true"
            tooltip-trigger="mouseenter"

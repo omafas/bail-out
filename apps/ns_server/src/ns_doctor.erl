@@ -979,6 +979,16 @@ build_gsi_index_task([Index | Rest], Stale, Acc) ->
                     {progress, proplists:get_value(progress, Index)},
                     {statusIsStale, Stale}],
             build_gsi_index_task(Rest, Stale, [Task | Acc]);
+        <<"Graph Building">> ->
+            Task = [{type, global_indexes},
+                    {recommendedRefreshPeriod, 2.0},
+                    {status, running},
+                    {bucket, proplists:get_value(bucket, Index)},
+                    {index, proplists:get_value(index, Index)},
+                    {id, proplists:get_value(id, Index)},
+                    {progress, proplists:get_value(progress, Index)},
+                    {statusIsStale, Stale}],
+            build_gsi_index_task(Rest, Stale, [Task | Acc]);
         _ ->
             %% Skip this index if it is already built
             build_gsi_index_task(Rest, Stale, Acc)

@@ -109,6 +109,7 @@ function mnGsiTableDirective(mnHelper) {
       case 'Replicating':
       case 'Created':
       case 'Building':
+      case 'Graph Building':
       case 'Warmup':
       case 'Created (Upgrading)':
       case 'Created (Downgrading)':
@@ -122,6 +123,7 @@ function mnGsiTableDirective(mnHelper) {
       switch (row.status) {
       case 'Created': return 'Index definition has been saved. Use Build Index to build the index. It is NOT serving scan requests yet.';
       case 'Building': return 'Index is currently building. It is NOT serving scan requests yet.';
+      case 'Graph Building': return 'Index is currently building graph. It is NOT serving scan requests yet.';
       case 'Ready': return 'Index is ready to serve scan requests.';
       case 'Replicating': return 'Index is being replicated as part of a Rebalance or Alter Index operation. It is NOT serving scan requests until replication is complete.';
       case 'Paused': return 'Index is not ingesting new mutations as allocated memory has been completely used.';
