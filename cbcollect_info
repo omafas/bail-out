@@ -3242,7 +3242,7 @@ def find_primary_addr(ipv6, default=None):
 
 
 def exec_name(name):
-    if sys.platform == 'win32':
+    if os.name == 'nt':
         name += ".exe"
     return name
 
