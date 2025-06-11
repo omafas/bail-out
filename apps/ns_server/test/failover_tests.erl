@@ -642,14 +642,17 @@ perform_auto_failover(AutoFailoverPid) ->
       fun(_) ->
               AutoFailoverPid ! tick
       end,
-      lists:seq(0, 3)),
+      lists:seq(0, 3)).
 
-    poll_for_counter_value(failover_complete, 1).
+perform_auto_failover_and_poll_counter(AutoFailoverPid, Counter, Value) ->
+    perform_auto_failover(AutoFailoverPid),
+    ?assert(poll_for_counter_value(Counter, Value)).
 
 auto_failover_t(_SetupConfig, PidMap) ->
     #{auto_failover := AutoFailoverPid} = PidMap,
 
-    perform_auto_failover(AutoFailoverPid),
+    perform_auto_failover_and_poll_counter(AutoFailoverPid, failover_complete,
+                                           1),
 
     %% Should not see any auto-failover errors
     ?assertEqual([],
@@ -692,7 +695,8 @@ auto_failover_async_t(_SetupConfig, PidMap) ->
                                                        auto_failover:get_cfg()))
                 end),
 
-    perform_auto_failover(AutoFailoverPid),
+    perform_auto_failover_and_poll_counter(AutoFailoverPid, failover_complete,
+                                           1),
 
     %% Without any auto-failover errors
     ?assertEqual([],
@@ -778,8 +782,9 @@ auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
     %% the code to make it into the failover module and for the checks there to
     %% fail.
     ok = ns_bucket:set_map_and_uploaders("default", [['a', 'c']], undefined),
+
     #{auto_failover := AutoFailoverPid} = PidMap,
-    perform_auto_failover(AutoFailoverPid),
+    perform_auto_failover_and_poll_counter(AutoFailoverPid, failover_fail, 1),
 
     %% We should have failed to fail over, and, we should now have the reported
     %% error (autofailover_unsafe) stored in the auto_failover state.
@@ -817,9 +822,11 @@ auto_failover_index_safety_check_failure_t(_SetupConfig, PidMap) ->
     #{auto_failover := AutoFailoverPid} = PidMap,
     perform_auto_failover(AutoFailoverPid),
 
-    %% Auto failover should not be possible
-    ?assertEqual([{c, index, "Safety check failed."}],
-        get_auto_failover_reported_errors(AutoFailoverPid)),
+    ?assert(misc:poll_for_condition(
+              fun() ->
+                      [{c, index, "Safety check failed."}] =:=
+                          get_auto_failover_reported_errors(AutoFailoverPid)
+              end, 5000, 100)),
 
     %% We should have sent an email alert (i.e. called log_unsafe_node).
     ?assert(meck:called(ns_email_alert, alert, [auto_failover_node, '_', '_'])).
@@ -923,7 +930,7 @@ graceful_failover_test_() ->
 graceful_failover_t(_SetupConfig, _PidMap) ->
     ok = ns_orchestrator:start_graceful_failover(['a']),
 
-    poll_for_counter_value(graceful_failover_success, 1),
+    ?assert(poll_for_counter_value(graceful_failover_success, 1)),
 
     {ok, BucketConfig} = ns_bucket:get_bucket("default"),
     Servers = ns_bucket:get_servers(BucketConfig),
@@ -985,7 +992,7 @@ graceful_failover_incorrect_expected_topology(_SetupConfig, _R) ->
            #{expected_topology => #{active => ['a', 'b', 'c'],
                                     inactiveFailed => [],
                                     inactiveAdded => []}}),
-    poll_for_counter_value(graceful_failover_success, 1),
+    ?assert(poll_for_counter_value(graceful_failover_success, 1)),
 
     %% Now, this is where it matters. Can we prevent the failover of c when we
     %% think that a is still active?
@@ -1013,6 +1020,6 @@ graceful_failover_incorrect_expected_topology(_SetupConfig, _R) ->
                                     inactiveFailed => ['a'],
                                     inactiveAdded => []}}),
 
-    poll_for_counter_value(graceful_failover_success, 2),
+    ?assert(poll_for_counter_value(graceful_failover_success, 2)),
 
     erlang:process_flag(trap_exit, false).
