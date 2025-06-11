@@ -614,7 +614,9 @@ poll_for_counter_value(Counter, Value) ->
                   {ok, V} ->
                       case proplists:is_defined(Counter, V) of
                           true ->
-                              proplists:get_value(Counter, V) =:= Value;
+                              {_, CounterValue} =
+                                  proplists:get_value(Counter, V),
+                              CounterValue =:= Value;
                           false ->
                               false
                       end
