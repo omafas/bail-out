@@ -1903,8 +1903,8 @@ class NativeEncryptionPermissionsTests(testlib.BaseTestSet):
         admin = 'admin_' + testlib.random_str(4)
         create_user(admin, 'admin')
 
-        ro_admin = 'ro_admin_' + testlib.random_str(4)
-        create_user(ro_admin, 'ro_admin')
+        ro_security_admin = 'ro_security_admin_' + testlib.random_str(4)
+        create_user(ro_security_admin, 'ro_security_admin')
 
         bucket_creator = 'bucket_creator_' + testlib.random_str(4)
         create_user(bucket_creator, 'cluster_admin')
@@ -1926,7 +1926,8 @@ class NativeEncryptionPermissionsTests(testlib.BaseTestSet):
 
         self.writing = \
             {admin:          {cfg: True,  sec: True,  all_b: True,  b: True},
-             ro_admin:       {cfg: False, sec: False, all_b: False, b: False},
+             ro_security_admin: {cfg: False, sec: False, all_b: False,
+                                 b: False},
              bucket_creator: {cfg: False, sec: False, all_b: True,  b: True},
              bucket_admin:   {cfg: False, sec: False, all_b: False, b: True} ,
              bucket_reader:  {cfg: False, sec: False, all_b: False, b: False},
@@ -1934,7 +1935,7 @@ class NativeEncryptionPermissionsTests(testlib.BaseTestSet):
 
         self.reading = \
             {admin:          {cfg: True,  sec: True,  all_b: True,  b: True},
-             ro_admin:       {cfg: True,  sec: True,  all_b: True,  b: True},
+             ro_security_admin: {cfg: True,  sec: True,  all_b: True,  b: True},
              bucket_creator: {cfg: False, sec: False, all_b: True,  b: True},
              bucket_admin:   {cfg: False, sec: False, all_b: True,  b: True} ,
              bucket_reader:  {cfg: False, sec: False, all_b: True,  b: True},

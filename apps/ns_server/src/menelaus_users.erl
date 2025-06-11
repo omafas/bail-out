@@ -1318,7 +1318,8 @@ upgrade_props(?VERSION_MORPHEUS, user, _Key, UserProps) ->
 upgrade_props(_Vsn, _RecType, _Key, _Props) ->
     skip.
 
-%% For roles that have been eliminated, substitute in their replacments.
+%% For roles that have been eliminated or changed, substitute in their
+%% replacements.
 maybe_substitute_user_roles(User) ->
     lists:map(
       fun ({roles, Roles}) ->
@@ -1327,7 +1328,7 @@ maybe_substitute_user_roles(User) ->
               Other
       end, User).
 
-%% Replacement roles for ones that have been removed. This only needs to be
+%% Replacement roles for ones that have been removed or changed. Only
 %% done for the same releases as supported in our upgrade matrix. These
 %% replacments are being done in morpheus. Once morpheus is the oldest
 %% supported release we no longer have to support this replacement.
@@ -1337,6 +1338,8 @@ maybe_substitute_roles(Roles) ->
               [security_admin, user_admin_local];
           (security_admin_external) ->
               [security_admin, user_admin_external];
+          (ro_admin) ->
+              [ro_admin, ro_security_admin];
           (Role) ->
               [Role]
       end, Roles).
@@ -1451,10 +1454,15 @@ upgrade_test_() ->
            [CheckUser("external-security-admin", roles,
                       [security_admin, user_admin_external])]),
       Test(?VERSION_MORPHEUS,
+           [{{user, {"ro-admin", local}},
+             [{roles, [ro_admin]}]}],
+           [CheckUser("ro-admin", roles,
+                      [ro_admin, ro_security_admin])]),
+      Test(?VERSION_MORPHEUS,
            [{{user, {"unchanged-admin", local}},
-            [{roles, [ro_admin]}]}],
+            [{roles, [eventing_admin]}]}],
            [CheckUser("unchanged-admin", roles,
-                      [ro_admin])])]}.
+                      [eventing_admin])])]}.
 
 meck_ns_config_read_key_fast(Settings) ->
     meck:expect(
