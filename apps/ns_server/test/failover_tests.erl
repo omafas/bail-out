@@ -773,6 +773,11 @@ auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
                         ok
                 end),
 
+    %% For this test we will force the map such that we don't trip over any
+    %% auto-failover checks when attempting to fail over partition A, we want
+    %% the code to make it into the failover module and for the checks there to
+    %% fail.
+    ok = ns_bucket:set_map_and_uploaders("default", [['a', 'c']], undefined),
     #{auto_failover := AutoFailoverPid} = PidMap,
     perform_auto_failover(AutoFailoverPid),
 
