@@ -88,7 +88,10 @@ class NodeAdditionTests(testlib.BaseTestSet):
         self.n2n_test_base(self.cluster.do_join_cluster, True)
 
 
-class NodeAdditionWithCertsTests(testlib.BaseTestSet):
+class NodeAdditionWithCertsBase:
+    def __init__(self, int_cert_in_chain):
+        self.int_cert_in_chain = int_cert_in_chain
+
     @staticmethod
     def requirements():
         return [ClusterRequirements(edition="Enterprise",
@@ -97,9 +100,11 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
 
     def setup(self):
         self.cluster_ca = read_cert_file('test_CA.pem')
-        self.new_node_ca = read_cert_file('test_CA2.pem')
+        self.new_node_root_ca = read_cert_file('test_CA2.pem')
         self.cluster_ca_key = read_cert_file('test_CA.pkey')
         self.new_node_ca_key = read_cert_file('test_CA2.pkey')
+        self.new_node_int = read_cert_file('test_CA2_int.pem')
+        self.new_node_int_key = read_cert_file('test_CA2_int.pkey')
         afamily = self.cluster_node().afamily()
 
         self.cluster_node_passphrase = testlib.random_str(8)
@@ -110,11 +115,15 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
                                          self.cluster_node_passphrase)
 
         self.new_node_passphrase = testlib.random_str(8)
-        self.new_node_cert, self.new_node_key = \
+        self.new_node_cert_from_int, self.new_node_key_from_int = \
             generate_node_certs(self.new_node().addr(afamily=afamily),
-                                self.new_node_ca, self.new_node_ca_key)
-        self.new_node_key = to_pkcs8(self.new_node_key,
-                                     self.new_node_passphrase)
+                                self.new_node_int, self.new_node_int_key)
+
+        if self.int_cert_in_chain:
+            self.new_node_chain = (f"{self.new_node_cert_from_int}\n"
+                                   f"{self.new_node_int}")
+        else:
+            self.new_node_chain = self.new_node_cert_from_int
 
         self.cluster_client_passphrase = testlib.random_str(8)
         self.cluster_client_cert, self.cluster_client_key = \
@@ -125,14 +134,16 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
                                            self.cluster_client_passphrase)
 
         self.new_node_client_passphrase = testlib.random_str(8)
-        self.new_node_client_cert, self.new_node_client_key = \
-            generate_internal_client_cert(self.new_node_ca,
-                                          self.new_node_ca_key,
-                                          'test_client_name2')
-        self.new_node_client_key = to_pkcs8(self.new_node_client_key,
-                                            self.new_node_client_passphrase)
+        (self.new_node_client_cert_from_int,
+         self.new_node_client_key_from_int) = \
+            generate_internal_client_cert(self.new_node_int,
+                                          self.new_node_int_key,
+                                          'test_client_name3')
 
-        toggle_node_n2n(self.new_node(), enable=False)
+        if self.int_cert_in_chain:
+            self.new_node_ca = self.new_node_root_ca
+        else:
+            self.new_node_ca = self.new_node_root_ca + self.new_node_int
 
     def teardown(self):
         pass
@@ -142,7 +153,6 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
                                verbose=True)
         assert_cluster_size(self.cluster, 1)
         self.cluster.wait_nodes_up()
-        toggle_node_n2n(self.new_node(), enable=False)
         for n in self.cluster._nodes:
             testlib.post_succ(n, '/controller/regenerateCertificate',
                               params={'forceResetCACertificate': 'false',
@@ -213,10 +223,10 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
     def add_untrusted_node_to_trusted_ootb_cluster_test(self):
         load_ca(self.new_node(), self.cluster_ootb_ca())
         self.provision_new_node()
-        # Despite the fact that the-cluster-node is ootb, it always validates
-        # new-node's certificates when doing completeJoin
+        # Despite the fact that the-cluster-node is ootb, the new-node will
+        # validate its certificates when doing engageCluster
         r = self.cluster.add_node(self.new_node(), expected_code=400).json()
-        self.assert_cluster_unknown_ca_error(r)
+        self.assert_new_node_untrusted_error(r)
 
     def add_untrusted_node_to_untrusted_ootb_cluster_test(self):
         self.provision_new_node()
@@ -226,9 +236,9 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
             # connectivity in engageCluster
             self.assert_new_node_unknown_ca_error(r)
         else:
-            # Despite the fact that the-cluster-node is ootb, it always
-            # validates new-node's certificates when doing completeJoin
-            self.assert_cluster_unknown_ca_error(r)
+            # Despite the fact that the-cluster-node is ootb, the new-node will
+            # validate its certificates when doing engageCluster
+            self.assert_new_node_untrusted_error(r)
 
     # The node addition will fail as the node being added has disabled
     # client cert authentication
@@ -408,10 +418,9 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
         self.provision_new_node()
         r = self.cluster.do_join_cluster(self.new_node(),
                                          expected_code=400).json()
-        # Despite the fact that the-cluster-node is ootb, it always validates
-        # new-node's certificates when doing completeJoin, so it fails on
-        # the server side in this case
-        self.assert_cluster_unknown_ca_error(r)
+        # Despite the fact that the-cluster-node is ootb, the new-node will
+        # validate its certificates when doing engageCluster
+        self.assert_new_node_untrusted_error(r)
 
     def trusted_node_joins_untrusted_ootb_cluster_test(self):
         load_ca(self.cluster_node(), self.new_node_ca)
@@ -527,7 +536,6 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
         #                                 expected_code=400).json()
         #self.assert_added_node_must_use_client_cert(r)
 
-
     def provision_cluster_node(self, should_load_client_cert=False):
         cluster_node = self.cluster_node()
         load_ca(cluster_node, self.cluster_ca)
@@ -542,11 +550,20 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
     def provision_new_node(self, should_load_client_cert=False):
         new_node = self.new_node()
         load_ca(new_node, self.new_node_ca)
-        load_node_cert(new_node, self.new_node_cert, self.new_node_key,
+        load_node_cert(new_node, self.new_node_chain,
+                       self.new_node_key_from_int,
                        passphrase=self.new_node_passphrase)
         if should_load_client_cert:
-            load_client_cert(new_node, self.new_node_client_cert,
-                             self.new_node_client_key,
+
+            if self.int_cert_in_chain:
+                new_node_client_cert = (f"{self.new_node_client_cert_from_int}"
+                                        f"\n{self.new_node_int}")
+            else:
+                new_node_client_cert = self.new_node_client_cert_from_int
+            new_node_client_key = self.new_node_client_key_from_int
+
+            load_client_cert(new_node, new_node_client_cert,
+                             new_node_client_key,
                              passphrase=self.new_node_client_passphrase)
 
     def cluster_node(self):
@@ -584,6 +601,10 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
                             response[0])
         assert_failed_to_connect_error(self.cluster_node(), response[0])
 
+    def assert_new_node_untrusted_error(self, response):
+        assert_msg_in_error('Error validating new node\'s node certificate '
+                            'chain. CA certificate for this chain is not found '
+                            'in the list of trusted CA\'s', response[0])
 
     def assert_cannot_use_per_node_client_cert(self, response):
         assert_msg_in_error('Invalid credentials. Ensure client certificate '
@@ -615,7 +636,32 @@ class NodeAdditionWithCertsTests(testlib.BaseTestSet):
                             response[0])
 
 
-class NodeAdditionWithCertsIPv6Tests(testlib.BaseTestSet):
+class NodeAdditionWithCertsTests(NodeAdditionWithCertsBase,
+                                 testlib.BaseTestSet):
+
+    def __init__(self, cluster):
+        NodeAdditionWithCertsBase.__init__(self, True)
+        testlib.BaseTestSet.__init__(self, cluster)
+
+
+class NodeAdditionWithIntCertsNotInChainTests(NodeAdditionWithCertsBase,
+                                              testlib.BaseTestSet):
+    def __init__(self, cluster):
+        NodeAdditionWithCertsBase.__init__(self, False)
+        testlib.BaseTestSet.__init__(self, cluster)
+
+    def add_int_untrusted_node_to_trusted_cluster_test(self):
+        self.provision_cluster_node()
+        self.provision_new_node()
+        load_ca(self.cluster_node(), self.new_node_root_ca)
+        load_ca(self.new_node(), self.cluster_ca)
+
+        r = self.cluster.add_node(self.new_node(),
+                                  expected_code=400).json()
+        self.assert_new_node_untrusted_error(r)
+
+
+class NodeAdditionWithCertsN2NIPv6Tests(testlib.BaseTestSet):
     @staticmethod
     def requirements():
         return [ClusterRequirements(edition="Enterprise",
@@ -624,7 +670,7 @@ class NodeAdditionWithCertsIPv6Tests(testlib.BaseTestSet):
 
     def __init__(self, cluster):
         super().__init__(cluster)
-        self.wrapped = NodeAdditionWithCertsTests(cluster)
+        self.wrapped = NodeAdditionWithIntCertsNotInChainTests(cluster)
 
     def setup(self):
         self.wrapped.setup()
@@ -637,6 +683,9 @@ class NodeAdditionWithCertsIPv6Tests(testlib.BaseTestSet):
 
     def add_trusted_node_to_trusted_cluster_test(self):
         self.wrapped.add_trusted_node_to_trusted_cluster_test()
+
+    def add_int_untrusted_node_to_trusted_cluster_test(self):
+        self.wrapped.add_int_untrusted_node_to_trusted_cluster_test()
 
 
 def assert_msg_in_error(msg, error):

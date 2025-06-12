@@ -566,7 +566,7 @@ call_add_node(OtherScheme, OtherHost, OtherPort, HiddenAuth, AFamily,
                 {SVCPayload, "/controller/addNodeV2"}
         end,
 
-    GeneratedCerts = ns_server_cert:this_node_uses_self_generated_certs(
+    GeneratedCerts = ns_server_cert:this_node_uses_self_generated_node_certs(
                        ns_config:latest()),
     Options = [{connect_options, [AFamily]},
                {server_verification, not GeneratedCerts},

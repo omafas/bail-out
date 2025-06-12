@@ -22,10 +22,11 @@
 -export([decode_cert_chain/1,
          decode_single_certificate/1,
          generate_cluster_CA/2,
-         this_node_uses_self_generated_certs/0,
-         this_node_uses_self_generated_certs/1,
+         this_node_uses_self_generated_node_certs/0,
+         this_node_uses_self_generated_node_certs/1,
          this_node_uses_self_generated_client_certs/0,
          this_node_uses_self_generated_client_certs/1,
+         this_node_uses_self_generated_certs/1,
          self_generated_ca/0,
          load_certs_from_inbox/2,
          load_certs_from_inbox/3,
@@ -52,6 +53,7 @@
          extract_internal_client_cert_user/1,
          invalid_client_cert_nodes/3,
          verify_cert_hostname_strict/2,
+         decode_and_validate_chain/2,
          encrypt_pkey/2,
          chronicle_upgrade_to_morpheus/1]).
 
@@ -75,18 +77,23 @@ inbox_p12_path(client_cert) ->
     filename:join(path_config:component_path(data, "inbox"),
                   "couchbase_client.p12").
 
-this_node_uses_self_generated_certs() ->
-    this_node_uses_self_generated_certs(ns_config:latest()).
+this_node_uses_self_generated_node_certs() ->
+    this_node_uses_self_generated_node_certs(ns_config:latest()).
 
-this_node_uses_self_generated_certs(Config) ->
-    CertProps = ns_config:search(Config, {node, node(), node_cert}, []),
-    generated == proplists:get_value(type, CertProps).
+this_node_uses_self_generated_node_certs(Config) ->
+    this_node_uses_self_generated_certs(Config, node_cert).
 
 this_node_uses_self_generated_client_certs() ->
     this_node_uses_self_generated_client_certs(ns_config:latest()).
 
 this_node_uses_self_generated_client_certs(Config) ->
-    CertProps = ns_config:search(Config, {node, node(), client_cert}, []),
+    this_node_uses_self_generated_certs(Config, client_cert).
+
+this_node_uses_self_generated_certs(Config, CertType) ->
+    CertProps = ns_config:search(Config, {node, node(), CertType}, []),
+    this_node_uses_self_generated_certs(CertProps).
+
+this_node_uses_self_generated_certs(CertProps) ->
     generated == proplists:get_value(type, CertProps).
 
 self_generated_ca() ->
