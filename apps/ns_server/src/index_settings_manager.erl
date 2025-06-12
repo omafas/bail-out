@@ -401,10 +401,10 @@ config_upgrade_settings(Config, OldVersion, NewVersion) ->
         io_lib:format("{\"indexer.default.enable_shard_affinity\": ~p}",
                       [__TRUE_FALSE])).
 default_test() ->
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     Versions = [?MIN_SUPPORTED_VERSION, ?VERSION_76, ?VERSION_MORPHEUS],
     lists:foreach(fun(V) -> default_versioned(V) end, Versions),
-    config_profile:unmock_default_profile(ok).
+    config_profile:unload_profile_for_test().
 
 default_versioned(Version) ->
     Keys = fun (L) -> lists:sort([K || {K, _} <- L]) end,

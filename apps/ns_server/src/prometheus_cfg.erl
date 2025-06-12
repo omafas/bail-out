@@ -1890,7 +1890,7 @@ generate_prometheus_test_config(ExtraConfig, Services) ->
     [{F, yaml:preprocess(Yaml)} || {F, Yaml} <- Configs].
 
 default_config_test() ->
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     [{_, DefaultMainCfg}, {RulesFile, DefaultRulesCfg}] =
         generate_prometheus_test_config([], [kv]),
     RulesFileBin = list_to_binary(RulesFile),
@@ -1924,10 +1924,10 @@ default_config_test() ->
       #{groups := [#{interval := <<"10s">>,
                      rules := [_|_]}]},
       DefaultRulesCfg),
-    config_profile:unmock_default_profile(ok).
+    config_profile:unload_profile_for_test().
 
 prometheus_config_test() ->
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     MainConfig =
         fun (StatsSettings, NodeServices) ->
                 ExtraConfig = [{stats_settings, StatsSettings}],
@@ -1982,11 +1982,11 @@ prometheus_config_test() ->
       MainConfig([{prometheus_metrics_enabled, true},
                   {prometheus_metrics_scrape_interval, 42}], [kv])),
 
-    config_profile:unmock_default_profile(ok),
+    config_profile:unload_profile_for_test(),
     ok.
 
 prometheus_derived_metrics_config_test() ->
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     RulesConfig =
         fun (StatsSettings, NodeServices) ->
                 ExtraConfig = [{stats_settings, StatsSettings}],
@@ -2059,11 +2059,11 @@ prometheus_derived_metrics_config_test() ->
       #{groups := [#{interval := <<"42s">>}]},
       RulesConfig([{derived_metrics_interval, 42}], [kv])),
 
-    config_profile:unmock_default_profile(ok),
+    config_profile:unload_profile_for_test(),
     ok.
 
 prometheus_config_afamily_test() ->
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     ExtraConfig = [{{node, ?NODE, address_family}, inet6}],
     [{_, Cfg}, _] = generate_prometheus_test_config(ExtraConfig, [kv]),
     ?assert(is_binary(yaml:encode(Cfg))),
@@ -2082,7 +2082,7 @@ prometheus_config_afamily_test() ->
                              static_configs :=
                                [#{targets := [<<"[::1]:11280">>]}]}]},
       Cfg),
-    config_profile:unmock_default_profile(ok).
+    config_profile:unload_profile_for_test().
 
 prometheus_basic_decimation_test() ->
     Now = floor(os:system_time(seconds) / 60) * 60,

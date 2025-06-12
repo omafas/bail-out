@@ -551,7 +551,7 @@ auto_failover_test_setup(SetupConfig) ->
                           maps:get(unhealthy_nodes, SetupConfig))
                 end),
 
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
 
     %% Needed to start the orchestrator. We don't really need the janitor to run
     %% for this test, so we will mock it instead of run it because we'd need to
@@ -595,7 +595,7 @@ auto_failover_test_teardown(Config, PidMap) ->
     meck:unload(ns_doctor),
     meck:unload(ns_email_alert),
     meck:unload(cb_atomic_persistent_term),
-    config_profile:unmock_default_profile(ok),
+    config_profile:unload_profile_for_test(),
 
     manual_failover_test_teardown(Config, PidMap).
 

@@ -2254,11 +2254,11 @@ produce_roles_by_permission_test_() ->
                          fun () -> ?LATEST_VERSION_NUM end),
              meck:expect(cluster_compat_mode, is_developer_preview,
                          fun () -> false end),
-             config_profile:mock_default_profile()
+             config_profile:load_default_profile_for_test()
      end,
      fun (_) ->
              meck:unload(cluster_compat_mode),
-             config_profile:unmock_default_profile(ok)
+             config_profile:unload_profile_for_test()
      end,
      [{"security permission",
        Test([admin, ro_admin, security_admin],

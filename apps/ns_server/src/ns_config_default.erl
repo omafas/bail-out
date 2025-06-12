@@ -561,7 +561,7 @@ no_upgrade_on_current_version_test() ->
 
 ns_config_default_mock_setup() ->
     ns_config:mock_tombstone_agent(),
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     meck:new(sigar),
     meck:expect(sigar, get_cgroups_info,
                 fun () ->  #{supported => false} end),
@@ -580,7 +580,7 @@ ns_config_default_mock_teardown(_) ->
     meck:unload(sigar),
     ns_config:unmock_tombstone_agent(),
     meck:unload(ns_storage_conf),
-    config_profile:unmock_default_profile(ok),
+    config_profile:unload_profile_for_test(),
     meck:unload(ns_bucket).
 
 all_upgrades_test_() ->

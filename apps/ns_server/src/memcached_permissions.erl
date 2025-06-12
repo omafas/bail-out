@@ -722,10 +722,11 @@ permissions_for_user_test_() ->
              meck:new(ns_bucket, [passthrough]),
              meck:expect(ns_bucket, get_snapshot,
                          fun (_, _) -> Snapshot end),
-             config_profile:mock_default_profile()
+             config_profile:load_default_profile_for_test()
      end,
      fun (_) ->
-             meck:unload()
+             meck:unload(),
+             config_profile:unload_profile_for_test()
      end,
      [Test([admin],
            All(global_permissions_to_check()),

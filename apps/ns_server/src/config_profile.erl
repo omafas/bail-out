@@ -23,7 +23,10 @@
          load/1]).
 
 -ifdef(TEST).
--export([mock_default_profile/0, unmock_default_profile/1]).
+-export([load_profile_for_test/1,
+         load_default_profile_for_test/0,
+         unload_profile_for_test/1,
+         unload_profile_for_test/0]).
 -endif.
 
 -define(PROFILE_FILE, "/etc/couchbase.d/config_profile").
@@ -125,13 +128,19 @@ load(?PROFILE_FILE = Path) ->
     end.
 
 -ifdef(TEST).
-mock_default_profile() ->
-    meck:new(config_profile, [passthrough]),
-    meck:expect(config_profile, get,
-                fun () ->
-                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
-                end).
+load_default_profile_for_test() ->
+    load_profile_for_test(?DEFAULT_PROFILE_STR).
 
-unmock_default_profile(_X) ->
-    meck:unload(config_profile).
+load_profile_for_test(Profile) ->
+    {ok, Cwd} = file:get_cwd(),
+    Path = filename:join([Cwd, "etc", Profile ++ "_profile"]),
+    {ok, Data} = file:consult(Path),
+    set_data(Data).
+
+%% Convenience function to allow us to use eunit setup/teardown helpers.
+unload_profile_for_test(_) ->
+    unload_profile_for_test().
+unload_profile_for_test() ->
+    persistent_term:erase(?CONFIG_PROFILE).
+
 -endif.

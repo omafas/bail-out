@@ -2080,10 +2080,10 @@ cidr_mask(IP, Bits) ->
 community_allowed_topologies_test() ->
     %% Test to help catch changes in community topologies that don't
     %% maintain backwards compatibility
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     ?assertEqual(community_allowed_topologies(),
                  [[kv],[index,kv,n1ql],[fts,index,kv,n1ql]]),
-    config_profile:unmock_default_profile(ok).
+    config_profile:unload_profile_for_test().
 
 -define(ANALYTICS_COMPAT_VERSION, "1.2.3").
 -define(ANALYTICS_MIN_COMPAT_VERSION, "1.0.0").

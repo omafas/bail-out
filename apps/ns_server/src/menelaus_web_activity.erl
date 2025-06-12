@@ -118,7 +118,7 @@ get_roles(RolesRaw) ->
 
 -ifdef(TEST).
 bad_roles_test() ->
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     meck:expect(cluster_compat_mode, get_compat_version, ?cut([8, 0])),
     meck:expect(cluster_compat_mode, is_developer_preview, ?cut(false)),
     ?assertEqual({value, []}, get_roles([])),
@@ -134,7 +134,8 @@ bad_roles_test() ->
                   "The following roles are invalid: "
                   "nonsense_role,another_nonsense_role"},
                  get_roles(["nonsense_role", "another_nonsense_role"])),
-    meck:unload().
+    meck:unload(),
+    config_profile:unload_profile_for_test().
 -endif.
 
 get_groups(Groups) ->

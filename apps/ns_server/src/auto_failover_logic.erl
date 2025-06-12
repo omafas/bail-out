@@ -617,8 +617,8 @@ generate(RawSvcConfig, Tests) ->
                 ?cut(test_body(Threshold, Steps, RawSvcConfig))
         end,
     {foreach,
-     fun config_profile:mock_default_profile/0,
-     fun config_profile:unmock_default_profile/1,
+     fun config_profile:load_default_profile_for_test/0,
+     fun config_profile:unload_profile_for_test/1,
      [{Title,
        T(Threshold,
          [{compare_with(CompareWith), Frames, DownNodes} ||
@@ -707,8 +707,8 @@ min_size_test_() ->
         end,
 
     {foreach,
-     fun config_profile:mock_default_profile/0,
-     fun config_profile:unmock_default_profile/1,
+     fun config_profile:load_default_profile_for_test/0,
+     fun config_profile:unload_profile_for_test/1,
      [{lists:flatten(
          io_lib:format("Min size test. Threshold = ~p", [T])),
        ?cut(MinSizeTest(T))} || T <- [2, 3, 4]] ++

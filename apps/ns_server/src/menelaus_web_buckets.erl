@@ -5147,7 +5147,7 @@ validate_ram_quota_before_server_list_populated_test() ->
     meck:unload(menelaus_stats).
 
 validate_dura_min_level_before_server_list_populated_test() ->
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     meck:new(ns_config, [passthrough]),
     meck:expect(ns_config,
                 read_key_fast, fun(_, Default) -> Default end),
@@ -5170,11 +5170,11 @@ validate_dura_min_level_before_server_list_populated_test() ->
                    <<"You do not have enough data servers to support this "
                      "durability level">>}],
                  Errors),
-    config_profile:unmock_default_profile(ok),
+    config_profile:unload_profile_for_test(),
     meck:unload(ns_config).
 
 validate_dura_min_level_change_when_only_one_kv_node_active_test() ->
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     meck:new(ns_config, [passthrough]),
     meck:expect(ns_config,
                 read_key_fast, fun(_, Default) -> Default end),
@@ -5238,10 +5238,10 @@ validate_dura_min_level_change_when_only_one_kv_node_active_test() ->
     ?assertEqual([], Errors7),
 
     meck:unload(ns_config),
-    config_profile:unmock_default_profile(ok).
+    config_profile:unload_profile_for_test().
 
 get_conflict_resolution_type_and_thresholds_test() ->
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     meck:new(cluster_compat_mode),
     meck:expect(cluster_compat_mode, is_enterprise,
                 fun () -> false end),
@@ -5393,7 +5393,7 @@ get_conflict_resolution_type_and_thresholds_test() ->
     ?assertEqual([], ParsedDontEnableDrift3),
 
     meck:unload(cluster_compat_mode),
-    config_profile:unmock_default_profile(ok).
+    config_profile:unload_profile_for_test().
 
 maybe_update_cas_props_test() ->
     meck:new(misc, [passthrough]),
@@ -5443,7 +5443,7 @@ maybe_update_cas_props_test() ->
 
 build_dynamic_bucket_info_test_setup(Version, IsEnterprise) ->
     meck:new(ns_config, [passthrough]),
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     meck:expect(ns_config, search,
         fun(_, cluster_compat_version, _) ->
             Version
@@ -5726,7 +5726,7 @@ storage_mode_migration_validate_attributes_test() ->
                 fun (_) ->
                         false
                 end),
-    config_profile:mock_default_profile(),
+    config_profile:load_default_profile_for_test(),
     BaseParams = [{"storageBackend", "magma"}],
     %% TestArg: {AttributeParseFun, UpdateParams, CurrentProp,
     %%           {Updated, NewValue}}
@@ -5750,7 +5750,7 @@ storage_mode_migration_validate_attributes_test() ->
               storage_mode_migration_validate_attributes(TestArg)
       end, TestArgs),
 
-    config_profile:unmock_default_profile(ok),
+    config_profile:unload_profile_for_test(),
     meck:unload(ns_bucket).
 
 parse_validate_storage_mode_setup() ->
@@ -5759,7 +5759,7 @@ parse_validate_storage_mode_setup() ->
                 fun () -> true end),
     meck:expect(cluster_compat_mode, is_cluster_morpheus,
                 fun () -> true end),
-    config_profile:mock_default_profile().
+    config_profile:load_default_profile_for_test().
 
 parse_validate_storage_mode_test__(
   {{OldStorageMode, NewStorageMode, IsNewBucket, Version,
@@ -5799,7 +5799,7 @@ parse_validate_storage_mode_test__(
 
 parse_validate_storage_mode_teardown() ->
     meck:unload(cluster_compat_mode),
-    config_profile:unmock_default_profile(ok).
+    config_profile:unload_profile_for_test().
 
 parse_validate_storage_mode_test_() ->
     %% TestArgs: {{OldStorageMode, NewStorageMode,
@@ -5931,7 +5931,7 @@ rank_params_screening_test() ->
 
     %% Is76=false, rank=undefined, IsNew=false
     ?assertEqual(parse_validate_bucket_rank(NoRankParams, NotNew), ignore),
-    config_profile:unmock_default_profile(ok),
+    config_profile:unload_profile_for_test(),
     meck:unload(cluster_compat_mode).
 
 test_num_replicas_guardrail_validation(#{disk_usage := DiskUsage,
@@ -5975,7 +5975,7 @@ num_replicas_guardrail_validation_test_() ->
     {setup,
      fun () ->
              %% We need unstick, so that we can meck rpc
-             config_profile:mock_default_profile(),
+             config_profile:load_default_profile_for_test(),
              meck:new([rpc], [passthrough, unstick]),
              meck:expect(ns_config, read_key_fast,
                          fun(resource_management, _) ->
