@@ -779,7 +779,7 @@ func (s *encryptionService) cmdStoreKey(data []byte) {
 	canBeCached := (string(canBeCachedBin) == "true")
 
 	if testOnlyBool {
-		logDbg("Received request to test key %s (kind: %s, type: %s, encryptionKey: %s) on disk",
+		logDbg("Received request to test key %s (kind: %s, type: %s, encryptionKey: %s)",
 			keyNameStr, keyKindStr, keyTypeStr, encryptionKeyName)
 	} else {
 		logDbg("Received request to store key %s (kind: %s, type: %s, encryptionKey: %s, canBeCached: %t) on disk",
