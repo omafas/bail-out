@@ -1189,3 +1189,77 @@ auto_failover_multi_node_maxcount_teardown(Config, PidMap) ->
     meck:unload(service_manager),
     meck:unload(service_janitor),
     auto_failover_test_teardown(Config, PidMap).
+
+auto_failover_service_safety_check_stale_config_test_() ->
+    Nodes = #{
+              'a' => {active, [kv]},
+              'b' => {active, [index]},
+              'c' => {active, [index]},
+              'd' => {active, [index]}
+             },
+    SetupArgs =
+        #{nodes => Nodes,
+          buckets => ["default"],
+          healthy_nodes => [{'a', [kv]}, {'d', [fts, index]}],
+          unhealthy_nodes => [{'b', [index]}, {'c', [fts]}]},
+
+    Tests = [
+             {"Auto failover service safety check with stale config",
+              fun auto_failover_service_safety_check_stale_config/1}],
+
+    {foreachx,
+     fun auto_failover_multi_node_maxcount_setup/1,
+     fun auto_failover_multi_node_maxcount_teardown/2,
+     [{SetupArgs, fun(_T, R) ->
+                          {Name, ?_test(TestFun(R))}
+                  end} || {Name, TestFun} <- Tests]}.
+
+%% Test that service safety checks are performed on the updated config after
+%% getting quorum during auto-failover. This verifies that we don't proceed with
+%% failover if the updated config shows it would make a service unsafe.
+auto_failover_service_safety_check_stale_config(PidMap) ->
+    #{auto_failover := AutoFailoverPid} = PidMap,
+
+    meck:expect(chronicle_compat, pull, fun(_) -> ok end),
+
+    %% Override the service_api mock to implement the MB-66630 scenario
+    meck:expect(service_api, is_safe,
+                [index, '_'],
+                meck:seq([ok,
+                          {error ,"Index service unsafe"}])),
+
+    perform_auto_failover_and_poll_counter(AutoFailoverPid, failover_complete,
+                                           1),
+
+    %% Verify that no nodes were actually failed over due to service safety
+    %% check failure
+    FailedOverNodes =
+        ns_cluster_membership:get_nodes_with_status(inactiveFailed),
+    ?assertEqual([], FailedOverNodes,
+                 "No nodes should have been failed over due to service safety "
+                 "check failure"),
+    ?assert(meck:called(leader_activities, run_activity,
+                        [failover, majority, '_', '_']),
+            "Should have gathered quorum for failover"),
+
+    ?assert(meck:called(chronicle_compat, pull, '_'),
+            "Should have performed config sync after gathering quorum"),
+
+    %% Verify that service_api:is_safe was called at least twice:
+    %% 1. First time during auto-failover (should return ok)
+    %% 2. Second time during failover after config sync (should return error)
+    History = meck:history(service_api),
+    IndexCalls = [{Pid, Args, Result} ||
+                     {Pid, {service_api, is_safe, [index, _] = Args}, Result}
+                         <- History],
+
+    ?assert(length(IndexCalls) =:= 2,
+            io_lib:format("Must be 2 calls to service_api:is_safe, got ~p: ~p",
+                          [length(IndexCalls), IndexCalls])),
+
+    [{_, _, FirstResult}, {_, _, SecondResult} | _] = IndexCalls,
+    ?assertEqual(ok, FirstResult,
+                 "First service_api:is_safe call for index should return ok"),
+    ?assertMatch({error, "Index service unsafe"}, SecondResult,
+                 "Second service_api:is_safe call for index should return an "
+                 "error").

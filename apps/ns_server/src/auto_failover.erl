@@ -609,14 +609,16 @@ process_action({failover, NodesWithUUIDs}, S, DownNodes, NodeStatuses,
                     %% the error and return the new state
                     lists:foldl(fun log_unsafe_node/2, S, UnsafeNodes);
                 _ ->
-                    %% MB-66630:
+                    {Nodes1, S1} = trim_nodes_for_failover(ValidNodes, S),
+
                     %% Can't skip safety check since these checks are done
                     %% outside of a leader activity (not majority) and/or stale
-                    %% config.
-                    {Nodes1, S1} = trim_nodes_for_failover(ValidNodes, S),
-                    trigger_autofailover(Nodes1, NodeStatuses,
-                                         DownNodeNames, DownNodes,
-                                         #{skip_safety_check => true}, S1)
+                    %% config. These were incorrectly skipped prior to 8.0.
+                    %% Once min_supported_version is bumped to 8.0, we can
+                    %% remove the skip_safety_check option in
+                    %% failover:validate_failover_services_safety.
+                    trigger_autofailover(Nodes1, NodeStatuses, DownNodeNames,
+                                         DownNodes, #{}, S1)
             end;
         false ->
             trigger_autofailover(Nodes, NodeStatuses, DownNodeNames, DownNodes,
