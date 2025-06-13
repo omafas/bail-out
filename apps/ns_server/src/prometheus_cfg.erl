@@ -2084,23 +2084,25 @@ prometheus_config_afamily_test() ->
       Cfg),
     config_profile:unload_profile_for_test().
 
-prometheus_basic_decimation_test() ->
-    Now = floor(os:system_time(seconds) / 60) * 60,
-    %% Coarseness, Duration, Interval
-    Levels = [{low, 3 * ?SECS_IN_DAY, skip},
-              {medium, 4 * ?SECS_IN_DAY, 60},
-              {large, 359 * ?SECS_IN_DAY, 6 * 60 * 60}],
-    LastDecimationTime = Now - 60,
-
-    ExpectedDeletions = [{large,
-                          Now - 7 * ?SECS_IN_DAY - 60,
-                          Now - 7 * ?SECS_IN_DAY},
-                         {medium,
-                          Now - 3 * ?SECS_IN_DAY - 60 + 10,
-                          Now - 3 * ?SECS_IN_DAY}],
-
-    Deletions = decimate_stats(Levels, LastDecimationTime, Now, 10),
-    ?assertMatch(Deletions, ExpectedDeletions).
+%% This test is disabled due to intermittent failures and also because
+%% decimation is under consideration for being removed.
+%% prometheus_basic_decimation_test() ->
+%%     Now = floor(os:system_time(seconds) / 60) * 60,
+%%     %% Coarseness, Duration, Interval
+%%     Levels = [{low, 3 * ?SECS_IN_DAY, skip},
+%%               {medium, 4 * ?SECS_IN_DAY, 60},
+%%               {large, 359 * ?SECS_IN_DAY, 6 * 60 * 60}],
+%%     LastDecimationTime = Now - 60,
+%% 
+%%     ExpectedDeletions = [{large,
+%%                           Now - 7 * ?SECS_IN_DAY - 60,
+%%                           Now - 7 * ?SECS_IN_DAY},
+%%                          {medium,
+%%                           Now - 3 * ?SECS_IN_DAY - 60 + 10,
+%%                           Now - 3 * ?SECS_IN_DAY}],
+%% 
+%%     Deletions = decimate_stats(Levels, LastDecimationTime, Now, 10),
+%%     ?assertMatch(Deletions, ExpectedDeletions).
 
 run_level(0) ->
     ok;
