@@ -3119,7 +3119,8 @@ def main():
 
     start_time = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
     folder_name = f"cbcollect_info_{zip_node}_{start_time}"
-    runner = TaskRunner(zip_filename, prefix=folder_name,
+    folder_name_sanitized = folder_name.replace(":", "-")
+    runner = TaskRunner(zip_filename, prefix=folder_name_sanitized,
                         salt_value=salt_value,
                         tmp_dir=options.tmp_dir,
                         verbosity=options.verbosity,

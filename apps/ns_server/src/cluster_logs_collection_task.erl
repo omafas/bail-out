@@ -251,8 +251,15 @@ maybe_upload_node_result(Node, Path, BaseURL, Options) ->
     update_ets_status({{Node, upload}, started, URL}),
     wait_child(P, Node, upload).
 
+%% NOTE: This is used because on Windows we cannot have ":" in the filename, and
+%% if we are using ipv6, it's likely the node name will include those
+%% characters. The solution? just replace them with hyphens. See: MB-67182
+sanitize_nodename(NodeName) ->
+    string:replace(NodeName, ":", "-", all).
+
 start_collection_per_node(TimestampS, Parent, Options) ->
-    Basename = "collectinfo-" ++ TimestampS ++ "-" ++ atom_to_list(node()),
+    StringifiedNodeName = sanitize_nodename(atom_to_list(node())),
+    Basename = "collectinfo-" ++ TimestampS ++ "-" ++ StringifiedNodeName,
     InitargsFilename = path_config:component_path(data, "initargs"),
 
     LogPath = case proplists:get_value(log_dir, Options) of

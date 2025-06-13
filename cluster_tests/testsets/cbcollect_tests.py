@@ -14,7 +14,6 @@ import re
 from pathlib import Path
 from enum import Enum
 import testlib
-from testlib.util import Service
 from testlib import ClusterRequirements
 from testsets.secret_management_tests import post_es_config, reset_es_config, \
                                              change_password
@@ -162,25 +161,10 @@ class CbcollectTest(testlib.BaseTestSet):
                           data = {'nodes': otp_node,
                                   'taskRegexp': task_regexp})
 
-        def get_collected_file():
-            r = testlib.get_succ(node, '/pools/default/tasks').json()
-            print(f'got tasks: {r}')
-            for t in r:
-                if t['type'] == 'clusterLogsCollection':
-                    if t['node'] != otp_node:
-                        return False
-                    if t['ts'] < utcnow:
-                        return False
-                    if t['status'] != 'completed':
-                        return False
-                    print(f'SUCC: {t["perNode"]}')
-                    assert t["perNode"][otp_node]['status'] == 'collected', \
-                           f'log collection failed: {t}'
+        def check_cbcollect():
+            return get_collected_file(node, otp_node, utcnow)
 
-                    return t['perNode'][otp_node]['path']
-            return False
-
-        file = testlib.poll_for_condition(get_collected_file, sleep_time=1,
+        file = testlib.poll_for_condition(check_cbcollect, sleep_time=1,
                                           attempts=60, verbose=True)
 
         with zipfile.ZipFile(file, mode="r") as z:
@@ -410,3 +394,66 @@ def assert_cbcollect_returns_incorrect_password(node, zip_dir, **kwargs):
     assert incorrect_password_msg in err, \
           f'{incorrect_password_msg} not present in ' \
           f'cbcollect error output: {err}'
+
+# Despite the issue being only on Windows, if we test it on linux, we will
+# still see the colons (:) replaced.
+class CbcollectIpv6Test(testlib.BaseTestSet):
+    @staticmethod
+    def requirements():
+        return [ClusterRequirements(num_nodes=2, num_connected=2,
+                                    edition="Enterprise", afamily="ipv6")]
+
+    def setup(self):
+        pass
+
+    def teardown(self):
+        pass
+
+    def test_teardown(self):
+        pass
+
+    def ipv6_log_collection_test(self):
+        node = self.cluster.connected_nodes[0]
+        utcnow = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        otp_node = node.otp_node()
+
+        # make sure we are actually using one that contains ':'
+        assert otp_node.find(":") != -1
+
+        # The other API test doesn't run a "full" cbcollect, so run a full one
+        # here for increased variety.
+        response = testlib.post_succ(node, '/controller/startLogsCollection',
+                                     data = {'nodes': otp_node})
+        assert response.json() == []
+
+        def check_cbcollect():
+            return get_collected_file(node, otp_node, utcnow)
+
+        the_file = testlib.poll_for_condition(check_cbcollect, sleep_time=5,
+                                              attempts=60, verbose=True)
+        assert type(the_file) == str
+        assert the_file.find(":") == -1
+
+        # then unzip and ensure the inner folder also doesn't contain ":"
+        with zipfile.ZipFile(the_file, mode="r") as z:
+            for f in z.filelist:
+                assert f.filename.find(":") == -1
+
+# extracted for use in any test that uses the cbcollect API to start collection
+def get_collected_file(node, otp_node, utcnow):
+    r = testlib.get_succ(node, '/pools/default/tasks').json()
+    print(f'got tasks: {r}')
+    for t in r:
+        if t['type'] == 'clusterLogsCollection':
+            if t['node'] != otp_node:
+                return False
+            if t['ts'] < utcnow:
+                return False
+            if t['status'] != 'completed':
+                return False
+            print(f'SUCC: {t["perNode"]}')
+            assert t["perNode"][otp_node]['status'] == 'collected', \
+                f'log collection failed: {t}'
+
+            return t['perNode'][otp_node]['path']
+    return False
