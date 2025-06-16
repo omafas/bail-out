@@ -1706,7 +1706,7 @@ retry_rebalance(_, #rebalancing_state{type = rebalance,
                     %% the opts map such that we can just pass that in, but that
                     %% requires a bit more refactoring.
                     Params =
-                        case maps:get(expected_topology, Opts, []) of
+                        case maps:get(expected_topology, Opts, undefined) of
                             undefined ->
                                 Params0;
                             TopologyArgs ->
