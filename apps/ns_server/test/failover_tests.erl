@@ -58,7 +58,8 @@ setup_bucket_config(Buckets) ->
 
     %% Using a simple generated map with 4 vBuckets and 1 replica (2 copies).
     Map0 = mb_map:random_map(4, 2, AllKVNodes),
-    Map = mb_map:promote_replicas(Map0, AllKVNodes -- ActiveKVNodes),
+    Map1 = mb_map:generate_map(Map0, 1, AllKVNodes, []),
+    Map = mb_map:promote_replicas(Map1, AllKVNodes -- ActiveKVNodes),
 
     Val = [
            {type, membase},
