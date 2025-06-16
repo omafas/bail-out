@@ -84,6 +84,8 @@ get_metric(<<"kv_hit_ratio">>) ->
             ?cut(promQL:sum_without([<<"result">>, <<"op">>],
                                     _({[{eq, <<"name">>, <<"kv_ops">>},
                                         {eq, <<"op">>, <<"get">>}]}))), 100);
+%% This stat is deprecated starting with the 7.6.7 release. It doesn't appear
+%% to be a documented stat so can possibly be removed in a future release.
 get_metric(<<"kv_ep_cache_miss_ratio">>) ->
     percent(?cut(promQL:sum_without([<<"name">>, <<"op">>, <<"result">>],
                                     _({[{eq, <<"name">>, <<"kv_ops">>},
