@@ -473,8 +473,11 @@ set_config_active_key(_ActiveDek) ->
     force_config_encryption_keys().
 
 push_memcached_dek(MemcachedDekName, Kind) ->
-    {ok, LogDeksSnapshot} = cb_crypto:fetch_deks_snapshot(Kind),
-    ns_memcached:set_active_dek(MemcachedDekName, LogDeksSnapshot).
+    maybe
+        {ok, LogDeksSnapshot} ?= cb_crypto:fetch_deks_snapshot(Kind),
+        ok ?= cb_crypto:active_key_ok(LogDeksSnapshot),
+        ns_memcached:set_active_dek(MemcachedDekName, LogDeksSnapshot)
+    end.
 
 handle_ale_log_dek_update(CreateNewDS) ->
     Old = ale:get_global_log_deks_snapshot(),
@@ -487,16 +490,17 @@ handle_ale_log_dek_update(CreateNewDS) ->
     end.
 
 set_log_active_key(_ActiveKey) ->
-    %% DS can't be shared across nodes since it has atomic references, so we
-    %% pass in function to allow local nodes to create DS based on same keys
-    {ok, CurrDS} = cb_crypto:fetch_deks_snapshot(logDek),
-    CreateNewDS =
-        fun(PrevDS) ->
+    maybe
+        %% DS can't be shared across nodes since it has atomic references, so we
+        %% pass in function to allow local nodes to create DS based on same keys
+        {ok, CurrDS} ?= cb_crypto:fetch_deks_snapshot(logDek),
+        ok ?= cb_crypto:active_key_ok(CurrDS),
+        CreateNewDS =
+            fun(PrevDS) ->
                 {ActiveKey, AllKeys} = cb_crypto:get_all_deks(CurrDS),
                 cb_crypto:create_deks_snapshot(ActiveKey, AllKeys, PrevDS)
-        end,
+            end,
 
-    maybe
         %% Push the dek update to the local memcached instance
         ok ?= ns_memcached:set_active_dek("@logs", CurrDS),
 

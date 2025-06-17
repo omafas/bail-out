@@ -316,6 +316,7 @@ external_setup_keys() ->
 read_and_set_data_keys() ->
     maybe
         {ok, DeksSnapshot} ?= cb_crypto:fetch_deks_snapshot(configDek),
+        ok ?= cb_crypto:all_keys_ok(DeksSnapshot),
         set_chronicle_deks_snapshot(DeksSnapshot)
     else
         {error, Reason} ->
@@ -377,21 +378,24 @@ get_snapshot_enforcer_timeout() ->
     end.
 
 maybe_apply_new_keys(State = #state{last_applied_keys_hash = Hash}) ->
-    {ok, New} = cb_crypto:fetch_deks_snapshot(configDek),
-    NewWithoutHistDeks = cb_crypto:without_historical_deks(New),
-    NewHash = cb_crypto:get_deks_snapshot_hash(NewWithoutHistDeks),
-    % If what we want to apply is different from what we have applied before,
-    % we need to rewrite the chronicle data and apply new keys.
-    case (Hash /= NewHash) of
-        true ->
-            set_chronicle_deks_snapshot(New),
-            case rewrite_chronicle_data() of
-                ok ->
-                    set_chronicle_deks_snapshot(NewWithoutHistDeks),
-                    {ok, State#state{last_applied_keys_hash = NewHash}};
-                {error, Reason} ->
-                    {{error, Reason}, State}
-            end;
-        false ->
-            {ok, State}
+    maybe
+        {ok, New} ?= cb_crypto:fetch_deks_snapshot(configDek),
+        ok ?= cb_crypto:all_keys_ok(New),
+        NewWithoutHistDeks = cb_crypto:without_historical_deks(New),
+        NewHash = cb_crypto:get_deks_snapshot_hash(NewWithoutHistDeks),
+        % If what we want to apply is different from what we have applied before,
+        % we need to rewrite the chronicle data and apply new keys.
+        case (Hash /= NewHash) of
+            true ->
+                set_chronicle_deks_snapshot(New),
+                case rewrite_chronicle_data() of
+                    ok ->
+                        set_chronicle_deks_snapshot(NewWithoutHistDeks),
+                        {ok, State#state{last_applied_keys_hash = NewHash}};
+                    {error, Reason} ->
+                        {{error, Reason}, State}
+                end;
+            false ->
+                {ok, State}
+        end
     end.

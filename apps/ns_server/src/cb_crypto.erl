@@ -58,6 +58,8 @@
 
          %% Manage deks in persistent_term storage:
          fetch_deks_snapshot/1,
+         active_key_ok/1,
+         all_keys_ok/1,
          create_deks_snapshot/3,
          reset_dek_cache/2,
          get_all_deks/1,
@@ -689,16 +691,36 @@ new_aes_gcm_iv(#dek_snapshot{iv_random = IVRandom,
 fetch_deks_snapshot(DekKind) ->
     cb_atomic_persistent_term:get_or_set_if_undefined(
       {encryption_keys, DekKind},
-      fun (#dek_snapshot{all_keys = AllKeys, created_at = CreatedAt}) ->
-          AllKeysAreValid = lists:all(fun (#{type := error}) -> false;
-                                          (#{type := _}) -> true
-                                      end, AllKeys),
+      fun (#dek_snapshot{created_at = CreatedAt} = DS) ->
+          AllKeysAreValid = (all_keys_ok(DS) == ok),
           AllKeysAreValid orelse
               (calendar:universal_time() < misc:datetime_add(CreatedAt, 60))
       end,
       fun () ->
           read_deks(DekKind, undefined)
       end).
+
+active_key_ok(#dek_snapshot{active_key = undefined}) ->
+    ok;
+active_key_ok(#dek_snapshot{active_key = #{type := error}}) ->
+    {error, key_not_available};
+active_key_ok(#dek_snapshot{active_key = #{}}) ->
+    ok.
+
+all_keys_ok(#dek_snapshot{all_keys = AllKeys} = Snapshot) ->
+    case active_key_ok(Snapshot) of
+        ok ->
+            case lists:all(fun (#{type := error}) -> false;
+                               (#{type := _}) -> true
+                      end, AllKeys) of
+                true ->
+                    ok;
+                false ->
+                    {error, some_keys_not_available}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
 
 -spec create_deks_snapshot(cb_deks:dek() | undefined, [cb_deks:dek()],
                            #dek_snapshot{} | undefined) -> #dek_snapshot{}.

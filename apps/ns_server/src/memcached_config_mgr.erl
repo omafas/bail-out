@@ -193,6 +193,9 @@ prepare_bootstrap_keys(CfgDeksSnapshot) ->
         end,
     {ok, LogDeksSnapshot} = cb_crypto:fetch_deks_snapshot(logDek),
     {ok, AuditDeksSnapshot} = cb_crypto:fetch_deks_snapshot(auditDek),
+    ok = cb_crypto:all_keys_ok(CfgDeksSnapshot),
+    ok = cb_crypto:active_key_ok(LogDeksSnapshot),
+    ok = cb_crypto:active_key_ok(AuditDeksSnapshot),
     CfgDeksJson = FormatKeys(CfgDeksSnapshot, "config"),
     LogDeksJson = FormatKeys(LogDeksSnapshot, "log"),
     AuditDeksJson = FormatKeys(AuditDeksSnapshot, "audit"),
@@ -297,6 +300,7 @@ handle_call({push_config_encryption_key, NeedConfigReload}, _From,
             #state{memcached_config = CurrentMcdConfig} = State) ->
     maybe
         {ok, DeksSnapshot} ?= cb_crypto:fetch_deks_snapshot(configDek),
+        ok ?= cb_crypto:all_keys_ok(DeksSnapshot),
         {ok, Changed} ?= maybe_push_config_encryption_key(DeksSnapshot),
         ok ?= case NeedConfigReload andalso (Changed == changed) of
                   true ->

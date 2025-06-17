@@ -1668,30 +1668,34 @@ do_ensure_bucket(Sock, Bucket, BConf, false, JWT, BucketUUID) ->
             %% include the dek. But since the bucket is not created yet, that
             %% stat request should never succeed, which makes removal
             %% impossible.
-            {ok, DS} = cb_crypto:fetch_deks_snapshot({bucketDek, BucketUUID}),
+            maybe
+                {ok, DS} ?= cb_crypto:fetch_deks_snapshot(
+                              {bucketDek, BucketUUID}),
 
-            ok = write_bucket_metadata(Bucket, BucketUUID, DS),
+                ok ?= write_bucket_metadata(Bucket, BucketUUID, DS),
 
-            {ActiveDek, Deks} = cb_crypto:get_all_deks(DS),
-            {Engine, ConfigString, ConfigStringForLogging} =
-                memcached_bucket_config:start_params(BConf, ActiveDek, Deks,
-                                                     JWT),
+                {ActiveDek, Deks} = cb_crypto:get_all_deks(DS),
+                {Engine, ConfigString, ConfigStringForLogging} =
+                    memcached_bucket_config:start_params(BConf, ActiveDek, Deks,
+                                                         JWT),
 
-            BucketConfig = memcached_bucket_config:get_bucket_config(BConf),
-            Timeout = case ns_bucket:node_kv_backend_type(BucketConfig) of
-                          magma ->
-                              ?MAGMA_CREATION_TIMEOUT;
-                          _ ->
-                              %% Use whatever the default value is
-                              undefined
-                      end,
-            case mc_client_binary:create_bucket(Sock, Bucket, Engine,
-                                                ConfigString, Timeout) of
-                ok ->
-                    ?log_info("Created bucket ~p with config string ~s",
-                              [Bucket, ConfigStringForLogging]),
-                    ok = mc_client_binary:select_bucket(Sock, Bucket);
-                Error ->
+                BucketConfig = memcached_bucket_config:get_bucket_config(BConf),
+                Timeout = case ns_bucket:node_kv_backend_type(BucketConfig) of
+                              magma ->
+                                  ?MAGMA_CREATION_TIMEOUT;
+                              _ ->
+                                  %% Use whatever the default value is
+                                  undefined
+                          end,
+                ok ?= mc_client_binary:create_bucket(Sock, Bucket, Engine,
+                                                     ConfigString, Timeout),
+                ?log_info("Created bucket ~p with config string ~s",
+                          [Bucket, ConfigStringForLogging]),
+                ok = mc_client_binary:select_bucket(Sock, Bucket)
+            else
+                {error, E} ->
+                    {error, {bucket_create_error, E}};
+                Error -> %% memcached error
                     {error, {bucket_create_error, Error}}
             end;
         Other ->
@@ -2044,14 +2048,18 @@ write_bucket_metadata(BucketName, BucketUUID, DeksSnapshot) ->
 set_active_dek(TypeOrBucket, DeksSnapshot) ->
     ?log_debug("Setting active encryption key id for ~p: ~p...",
                [TypeOrBucket, cb_crypto:get_dek_id(DeksSnapshot)]),
-    RV = perform_very_long_call(
-           fun (Sock) ->
-               case mc_client_binary:set_active_encryption_key(
-                      Sock, TypeOrBucket, DeksSnapshot, ?SET_KEYS_TIMEOUT) of
-                   ok -> {reply, ok};
-                   {memcached_error, S, Msg} -> {reply, {error, {S, Msg}}}
-               end
-           end),
+    RV = maybe
+             ok ?= cb_crypto:active_key_ok(DeksSnapshot),
+             perform_very_long_call(
+               fun (Sock) ->
+                   case mc_client_binary:set_active_encryption_key(
+                          Sock, TypeOrBucket, DeksSnapshot,
+                          ?SET_KEYS_TIMEOUT) of
+                       ok -> {reply, ok};
+                       {memcached_error, S, Msg} -> {reply, {error, {S, Msg}}}
+                   end
+               end)
+         end,
 
     case RV of
         ok ->

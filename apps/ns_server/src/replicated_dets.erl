@@ -208,6 +208,7 @@ decrypt_term(<<?ENCRYPTION_MAGIC, 0, Size:32/unsigned-integer, Data:Size/binary,
     binary_to_term(Decrypted).
 
 set_deks_snapshot(DeksSnapshot) ->
+    ok = cb_crypto:all_keys_ok(DeksSnapshot),
     ok = persistent_term:put(dets_deks_snapshot, DeksSnapshot).
 
 get_deks_snapshot() ->
