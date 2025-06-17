@@ -572,9 +572,9 @@ auto_failover_test_setup(SetupConfig) ->
     meck:new(ns_email_alert, [passthrough]),
 
     meck:new(cb_atomic_persistent_term, [passthrough]),
-    meck:expect(cb_atomic_persistent_term, get_or_set_if_undefined,
+    meck:expect(cb_atomic_persistent_term, get_or_set_if_invalid,
                 fun(_, _, F) ->
-                        F()
+                        F(undefined)
                 end),
 
     %% Need to start the orchestrator so that auto_failover can follow the full

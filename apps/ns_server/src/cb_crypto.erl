@@ -689,15 +689,17 @@ new_aes_gcm_iv(#dek_snapshot{iv_random = IVRandom,
 
 -spec fetch_deks_snapshot(cb_deks:dek_kind()) -> fetch_deks_res().
 fetch_deks_snapshot(DekKind) ->
-    cb_atomic_persistent_term:get_or_set_if_undefined(
+    cb_atomic_persistent_term:get_or_set_if_invalid(
       {encryption_keys, DekKind},
       fun (#dek_snapshot{created_at = CreatedAt} = DS) ->
           AllKeysAreValid = (all_keys_ok(DS) == ok),
           AllKeysAreValid orelse
               (calendar:universal_time() < misc:datetime_add(CreatedAt, 60))
       end,
-      fun () ->
-          read_deks(DekKind, undefined)
+      fun (undefined) ->
+              read_deks(DekKind, undefined);
+          ({value, #dek_snapshot{} = PrevSnapshot}) ->
+              read_deks(DekKind, PrevSnapshot)
       end).
 
 active_key_ok(#dek_snapshot{active_key = undefined}) ->
@@ -733,10 +735,26 @@ create_deks_snapshot(ActiveDek, AllDeks, PrevDekSnapshot) ->
             undefined -> atomics:new(1, [{signed, false}]);
             #dek_snapshot{iv_atomic_counter = OldIVAtomic} -> OldIVAtomic
         end,
+    PrevAllKeys =
+        case PrevDekSnapshot of
+            undefined -> [];
+            #dek_snapshot{all_keys = PK} ->
+                [{Id, K} || #{id := Id, type := T} = K <- PK, T /= error]
+        end,
+    PrevAllKeysMap = maps:from_list(PrevAllKeys),
+    %% If "new" key is not available, take that key from the previous snapshot
+    %% Basically, new snapshot should not get "worse" than the previous one
+    GetKey = fun (undefined) ->
+                     undefined;
+                 (#{id := Id, type := error} = K) ->
+                     maps:get(Id, PrevAllKeysMap, K);
+                 (#{id := _Id, type := _Type} = K) ->
+                     K
+                 end,
     #dek_snapshot{iv_random = IVBase,
                   iv_atomic_counter = IVAtomic,
-                  active_key = ActiveDek,
-                  all_keys = AllDeks,
+                  active_key = GetKey(ActiveDek),
+                  all_keys = lists:map(GetKey, AllDeks),
                   created_at = calendar:universal_time()}.
 
 -spec reset_dek_cache(cb_deks:dek_kind(),
@@ -1634,12 +1652,72 @@ reencrypt_file_negative_cases_test() ->
     end.
 
 generate_test_deks() ->
-    KeyBin = cb_cluster_secrets:generate_raw_key(aes_256_gcm),
-    Key = #{id => cb_cluster_secrets:new_key_id(),
-            type => 'raw-aes-gcm',
-            info => #{key => fun () -> KeyBin end,
-                      encryption_key_id => <<"encryptionService">>,
-                      creation_time => {{2024, 01, 01}, {22, 00, 00}}}},
+    Key = generate_test_key(),
     cb_crypto:create_deks_snapshot(Key, [Key], undefined).
+
+generate_test_key() ->
+    KeyBin = cb_cluster_secrets:generate_raw_key(aes_256_gcm),
+    #{id => cb_cluster_secrets:new_key_id(),
+      type => 'raw-aes-gcm',
+      info => #{key => fun () -> KeyBin end,
+                encryption_key_id => <<"encryptionService">>,
+                creation_time => {{2024, 01, 01}, {22, 00, 00}}}}.
+
+test_error_key(Id) ->
+    #{id => Id,
+      type => error,
+      reason => {test_error, "test error"}}.
+
+create_deks_snapshot_test() ->
+    K1 = generate_test_key(),
+    K2 = generate_test_key(),
+    K3 = generate_test_key(),
+    EK1 = test_error_key(get_key_id(K1)),
+    EK2 = test_error_key(get_key_id(K2)),
+    EK3 = test_error_key(get_key_id(K3)),
+
+    %% No errors:
+    ?assertMatch(#dek_snapshot{active_key = undefined, all_keys = [K1]},
+                 create_deks_snapshot(undefined, [K1], undefined)),
+    ?assertMatch(#dek_snapshot{active_key = K1, all_keys = [K1]},
+                 create_deks_snapshot(K1, [K1], undefined)),
+    ?assertMatch(#dek_snapshot{active_key = K1, all_keys = [K1, K2]},
+                 create_deks_snapshot(K1, [K1, K2], undefined)),
+
+    %% Keys with errors:
+    ?assertMatch(#dek_snapshot{active_key = undefined, all_keys = [K1, EK2]},
+                 create_deks_snapshot(undefined, [K1, EK2], undefined)),
+    ?assertMatch(#dek_snapshot{active_key = EK2, all_keys = [K1, EK2]},
+                 create_deks_snapshot(EK2, [K1, EK2], undefined)),
+
+    %% Keys with errors and with prev DS:
+    PrevDS = create_deks_snapshot(K1, [K1, K2], undefined),
+    ?assertMatch(#dek_snapshot{active_key = K1, all_keys = [K1, K2]},
+                 create_deks_snapshot(K1, [K1, EK2], PrevDS)),
+    ?assertMatch(#dek_snapshot{active_key = K1, all_keys = [K2, K1]},
+                 create_deks_snapshot(EK1, [K2, EK1], PrevDS)),
+    ?assertMatch(#dek_snapshot{active_key = undefined, all_keys = [K2, K1]},
+                 create_deks_snapshot(undefined, [K2, EK1], PrevDS)),
+    ?assertMatch(#dek_snapshot{active_key = undefined, all_keys = [K2, K1]},
+                 create_deks_snapshot(undefined, [EK2, EK1], PrevDS)),
+
+    %% New DS and prev DS have different keys:
+    ?assertMatch(#dek_snapshot{active_key = K2, all_keys = [K2, K3]},
+                 create_deks_snapshot(K2, [EK2, K3], PrevDS)),
+    ?assertMatch(#dek_snapshot{active_key = K3, all_keys = [K1, K2, K3]},
+                 create_deks_snapshot(K3, [K1, EK2, K3], PrevDS)),
+    ?assertMatch(#dek_snapshot{active_key = K3, all_keys = [K3]},
+                 create_deks_snapshot(K3, [K3], PrevDS)),
+    ?assertMatch(#dek_snapshot{active_key = EK3, all_keys = [EK3, K1]},
+                 create_deks_snapshot(EK3, [EK3, EK1], PrevDS)),
+    ?assertMatch(#dek_snapshot{active_key = K1, all_keys = [EK3, K1]},
+                 create_deks_snapshot(EK1, [EK3, EK1], PrevDS)),
+
+    %% Check that the IV counter gets preserved, while the IV random gets reset:
+    NewDS = create_deks_snapshot(EK1, [EK3, EK1], PrevDS),
+    ?assertEqual(PrevDS#dek_snapshot.iv_atomic_counter,
+                 NewDS#dek_snapshot.iv_atomic_counter),
+    ?assertNotEqual(PrevDS#dek_snapshot.iv_random,
+                    NewDS#dek_snapshot.iv_random).
 
 -endif.

@@ -10,7 +10,7 @@
 -module(cb_atomic_persistent_term).
 
 %% API
--export([start_link/0, stop/1, set/2, get_or_set_if_undefined/3]).
+-export([start_link/0, stop/1, set/2, get_or_set_if_invalid/3]).
 
 %%%===================================================================
 %%% API
@@ -22,37 +22,33 @@ start_link() ->
 stop(Reason) ->
     misc:terminate_and_wait(whereis(?MODULE), Reason).
 
-get_or_set_if_undefined(Name, IsValidChecker, ValueFun) ->
+get_or_set_if_invalid(Name, IsValidChecker, ValueFun) ->
     GetValue = fun () ->
                    case persistent_term:get(Name, undefined) of
-                       undefined -> undefined;
-                       {value, Value} ->
-                           case IsValidChecker(Value) of
-                               true -> {value, Value};
-                               false -> undefined
-                           end
+                       undefined -> {false, undefined};
+                       {value, Value} -> {IsValidChecker(Value), {value, Value}}
                    end
                end,
     maybe
-        undefined ?= GetValue(),
+        {false, _} ?= GetValue(),
         work_queue:submit_sync_work(
           ?MODULE,
           fun () ->
               case GetValue() of
-                  undefined ->
-                      case ValueFun() of
-                          {ok, Value} ->
-                              persistent_term:put(Name, {value, Value}),
-                              {ok, Value};
+                  {false, PrevValue} ->
+                      case ValueFun(PrevValue) of
+                          {ok, NewValue} ->
+                              persistent_term:put(Name, {value, NewValue}),
+                              {ok, NewValue};
                           {error, _} = Error ->
                               Error
                       end;
-                  {value, Value} ->
-                      {ok, Value}
+                  {true, {value, PrevValue}} ->
+                      {ok, PrevValue}
               end
           end)
     else
-        {value, Value} -> {ok, Value}
+        {true, {value, V}} -> {ok, V}
     end.
 
 set(Name, SetFun) ->
