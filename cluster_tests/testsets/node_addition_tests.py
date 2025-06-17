@@ -684,6 +684,21 @@ class NodeAdditionWithCertsN2NIPv6Tests(testlib.BaseTestSet):
     def add_trusted_node_to_trusted_cluster_test(self):
         self.wrapped.add_trusted_node_to_trusted_cluster_test()
 
+    def add_trusted_node_to_untrusted_cluster_test(self):
+        self.wrapped.add_trusted_node_to_untrusted_cluster_test()
+
+    def add_trusted_node_to_untrusted_ootb_cluster_test(self):
+        self.wrapped.add_trusted_node_to_untrusted_ootb_cluster_test()
+
+    def add_untrusted_node_to_untrusted_ootb_cluster_test(self):
+        self.wrapped.add_untrusted_node_to_untrusted_ootb_cluster_test()
+
+    def add_trusted_ootb_node_to_untrusted_cluster_test(self):
+        self.wrapped.add_trusted_ootb_node_to_untrusted_cluster_test()
+
+    def trusted_ootb_node_joins_untrusted_cluster_test(self):
+        self.wrapped.trusted_ootb_node_joins_untrusted_cluster_test()
+
     def add_int_untrusted_node_to_trusted_cluster_test(self):
         self.wrapped.add_int_untrusted_node_to_trusted_cluster_test()
 
