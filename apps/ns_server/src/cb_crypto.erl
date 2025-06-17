@@ -1011,8 +1011,20 @@ try_decrypt(IV, Data, Tag, AD, [#{type := 'raw-aes-gcm', info := #{key := K}} | 
 read_deks(DekKind, PrevDekSnapshot) ->
     maybe
         {ok, {ActiveId, Ids, IsEnabled}} ?= cb_deks:list(DekKind),
-        Keys = cb_deks:read(DekKind, Ids),
-        {ok, ActiveKey} =
+        PrevKeys =
+            case PrevDekSnapshot of
+                undefined -> [];
+                #dek_snapshot{all_keys = PK} -> PK
+            end,
+        %% No need to reread these keys:
+        GoodPrevKeys = [K || #{id := Id, type := T} = K <- PrevKeys,
+                             T =/= error, lists:member(Id, Ids)],
+        %% Note that GoodPrevKeysIds is a subset of Ids
+        %% so, Ids == IdsMissing U GoodPrevKeysIds
+        GoodPrevKeysIds = lists:usort([get_dek_id(K) || K <- GoodPrevKeys]),
+        IdsMissing = lists:usort(Ids) -- GoodPrevKeysIds,
+        Keys = cb_deks:read(DekKind, IdsMissing) ++ GoodPrevKeys,
+        {ok, ActiveKey} ?=
             case IsEnabled of
                 true ->
                     case lists:search(fun (#{id := Id}) ->
@@ -1719,5 +1731,77 @@ create_deks_snapshot_test() ->
                  NewDS#dek_snapshot.iv_atomic_counter),
     ?assertNotEqual(PrevDS#dek_snapshot.iv_random,
                     NewDS#dek_snapshot.iv_random).
+
+read_deks_test() ->
+    K1 = generate_test_key(),
+    K1Id = get_key_id(K1),
+    K2 = generate_test_key(),
+    K2Id = get_key_id(K2),
+    K3 = generate_test_key(),
+    K3Id = get_key_id(K3),
+    EK1 = test_error_key(K1Id),
+    EK2 = test_error_key(K2Id),
+    EK3 = test_error_key(K3Id),
+
+    meck:new(cb_deks, [passthrough]),
+    try
+        meck:expect(cb_deks, read,
+                    fun (testDek, Ids) ->
+                        %% K1 - ok
+                        %% K2 - error
+                        %% K3 - crash (should not be called)
+                        ?assertNot(lists:member(K3Id, Ids)),
+                        lists:filter(fun (#{id := Id}) ->
+                                         lists:member(Id, Ids)
+                                     end, [K1, EK2])
+                    end),
+
+        %% Active key is ok, historic key is bad:
+        meck:expect(cb_deks, list,
+                    fun (testDek) -> {ok, {K1Id, [K1Id, K2Id], true}} end),
+
+        ?assertMatch({ok, #dek_snapshot{active_key = K1, all_keys = [K1, EK2]}},
+                     read_deks(testDek, undefined)),
+
+        PrevDS1 = create_deks_snapshot(undefined, [EK2, K3], undefined),
+        ?assertMatch({ok, #dek_snapshot{active_key = K1, all_keys = [K1, EK2]}},
+                     read_deks(testDek, PrevDS1)),
+
+        PrevDS2 = create_deks_snapshot(undefined, [K2, EK3], undefined),
+        ?assertMatch({ok, #dek_snapshot{active_key = K1, all_keys = [K1, K2]}},
+                     read_deks(testDek, PrevDS2)),
+
+        %% Active key is bad, historic key is ok:
+        meck:expect(cb_deks, list,
+                    fun (testDek) -> {ok, {K2Id, [K1Id, K2Id], true}} end),
+
+        ?assertMatch({ok, #dek_snapshot{active_key = EK2,
+                                        all_keys = [K1, EK2]}},
+                     read_deks(testDek, PrevDS1)),
+
+        ?assertMatch({ok, #dek_snapshot{active_key = K2, all_keys = [K1, K2]}},
+                     read_deks(testDek, PrevDS2)),
+
+        %% Do not re-read K3 (read_deks() has assert for K3 presence):
+        meck:expect(cb_deks, list,
+                    fun (testDek) -> {ok, {K3Id, [K2Id, K3Id], true}} end),
+
+        PrevDS3 = create_deks_snapshot(EK1, [EK1, K3], undefined),
+        ?assertMatch({ok, #dek_snapshot{active_key = K3,
+                                        all_keys = [EK2, K3]}},
+                     read_deks(testDek, PrevDS3)),
+
+        %% Do not re-read K3 and encryption is disabled:
+        meck:expect(cb_deks, list,
+                    fun (testDek) ->
+                        {ok, {K3Id, [K1Id, K2Id, K3Id], false}}
+                    end),
+
+        ?assertMatch({ok, #dek_snapshot{active_key = undefined,
+                                        all_keys = [K1, EK2, K3]}},
+                     read_deks(testDek, PrevDS3))
+    after
+        meck:unload(cb_deks)
+    end.
 
 -endif.
