@@ -32,7 +32,7 @@
          encrypt_key/3,
          decrypt_key/3,
          test_existing_key/1,
-         maybe_map_not_found_key_error/1,
+         maybe_map_not_found_key_error/2,
          change_password/1,
          get_keys_ref/0,
          rotate_data_key/0,
@@ -216,18 +216,21 @@ test_existing_key(KekId) when is_binary(KekId) ->
             false -> {error, decrypted_data_mismatch}
         end
     else
-        {error, Error} -> {error, maybe_map_not_found_key_error(Error)}
+        {error, Error} ->
+            {error, maybe_map_not_found_key_error(Error,
+                                                  invalid_key_settings)}
     end.
 
-maybe_map_not_found_key_error({T, "no files found matching:" ++ _ = Error})
+maybe_map_not_found_key_error({T, "no files found matching:" ++ _ = Error},
+                              Wrapper)
                                                 when T == encrypt_key_error;
                                                      T == decrypt_key_error ->
     %% We know that if this function is called the secret actually
     %% exists, so if we get this error, it means that we have problems
     %% saving the key on disk (likely because something is wrong with secret
     %% settings). Changing the error to avoid confusion.
-    {invalid_encryption_secret, Error};
-maybe_map_not_found_key_error(Error) ->
+    {Wrapper, Error};
+maybe_map_not_found_key_error(Error, _Wrapper) ->
     Error.
 
 maybe_rotate_integrity_tokens(undefined) ->

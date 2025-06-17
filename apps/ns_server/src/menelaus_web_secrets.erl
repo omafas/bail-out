@@ -816,9 +816,12 @@ format_error(timeout) ->
     "Operation timed out";
 format_error(no_connection_to_node) ->
     "No connection to node";
-format_error({invalid_encryption_secret, Msg}) ->
+format_error({invalid_key_settings, Msg}) ->
     "Unable to perform encryption/decryption with provided key, "
     "check encryption key settings (" ++ Msg ++ ")";
+format_error({failed_to_encrypt_or_decrypt_key, Msg}) ->
+    "Unable to encrypt (or decrypt) this key. Please verify the configuration "
+    "of the encryption key used to protect this key (" ++ Msg ++ ")";
 format_error(decrypted_data_mismatch) ->
     "Decrypted data does not match original data that was encrypted";
 format_error({test_failed_for_some_nodes, Errors}) ->

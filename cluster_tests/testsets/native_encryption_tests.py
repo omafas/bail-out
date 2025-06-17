@@ -1334,8 +1334,11 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.restart_all_nodes()
 
     def attempt_to_use_bad_secret_test(self):
-        expected_error = 'Unable to perform encryption/decryption with ' \
-                         'provided key, check encryption key settings'
+        cant_encrypt_err = 'Unable to perform encryption/decryption with ' \
+                           'provided key, check encryption key settings'
+        bad_encryption_key_error = 'Unable to encrypt (or decrypt) this key. ' \
+                                   'Please verify the configuration of the ' \
+                                   'encryption key used to protect this key';
         bad_secret = aws_test_secret(usage=['config-encryption',
                                             'bucket-encryption',
                                             'audit-encryption',
@@ -1348,22 +1351,22 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                 encrypt_with='encryptionKey',
                                 encrypt_secret_id=bad_aws_secret_id),
                             expected_code=400)
-        testlib.assert_in(expected_error, err['_'])
+        testlib.assert_in(bad_encryption_key_error, err['_'])
 
         err = set_cfg_encryption(self.cluster, 'encryptionKey',
                                  bad_aws_secret_id,
                                  expected_code=400)
-        testlib.assert_in(expected_error,  err['_'])
+        testlib.assert_in(cant_encrypt_err,  err['_'])
 
         err = set_audit_encryption(self.cluster, 'encryptionKey',
                                    bad_aws_secret_id,
                                    expected_code=400)
-        testlib.assert_in(expected_error,  err['_'])
+        testlib.assert_in(cant_encrypt_err,  err['_'])
 
         err = set_log_encryption(self.cluster, 'encryptionKey',
                                  bad_aws_secret_id,
                                  expected_code=400)
-        testlib.assert_in(expected_error,  err['_'])
+        testlib.assert_in(cant_encrypt_err,  err['_'])
 
         r = self.cluster.create_bucket(
                 {'name': self.bucket_name,
@@ -1374,7 +1377,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         errors = r.json()
         e = errors['errors']['encryptionAtRestKeyId']
-        testlib.assert_in(expected_error, e)
+        testlib.assert_in(cant_encrypt_err, e)
 
         self.cluster.create_bucket(
                 {'name': self.bucket_name,
@@ -1388,7 +1391,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                 expected_code=400)
         errors = r.json()
         e = errors['errors']['encryptionAtRestKeyId']
-        testlib.assert_in(expected_error, e)
+        testlib.assert_in(cant_encrypt_err, e)
 
 
     def add_node_when_kek_is_unavailable_test(self):
