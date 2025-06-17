@@ -694,7 +694,7 @@ fetch_deks_snapshot(DekKind) ->
       fun (#dek_snapshot{created_at = CreatedAt} = DS) ->
           AllKeysAreValid = (all_keys_ok(DS) == ok),
           AllKeysAreValid orelse
-              (calendar:universal_time() < misc:datetime_add(CreatedAt, 60))
+              (calendar:universal_time() < misc:datetime_add(CreatedAt, 10))
       end,
       fun (undefined) ->
               read_deks(DekKind, undefined);
