@@ -165,6 +165,7 @@
 -define(MC_AUTH_CONTINUE,   16#21).
 -define(ERANGE,             16#22).
 -define(ROLLBACK,           16#23).
+-define(ENCR_KEY_NOT_AVAIL, 16#26).
 -define(LIMIT_EXCEEDED,     16#35).
 -define(RR_TOO_LOW,         16#36).
 -define(DATA_SIZE_TOO_BIG,  16#37).

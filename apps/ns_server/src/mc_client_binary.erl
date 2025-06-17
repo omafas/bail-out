@@ -778,6 +778,8 @@ map_status(?ERANGE) ->
     erange;
 map_status(?ROLLBACK) ->
     rollback;
+map_status(?ENCR_KEY_NOT_AVAIL) ->
+    encryption_key_not_available;
 map_status(?SUBDOC_PATH_NOT_EXIST) ->
     subdoc_path_not_exist;
 map_status(?SUBDOC_NOT_DICT) ->

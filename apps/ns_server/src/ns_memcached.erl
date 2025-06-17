@@ -33,6 +33,7 @@
 -define(CHECK_INTERVAL, 10000).
 -define(CHECK_WARMUP_INTERVAL, 500).
 -define(CONNECT_DONE_RETRY_INTERVAL, 500).
+-define(KEY_NOT_AVAILABLE_RETRY_INTERVAL, 5000).
 -define(TIMEOUT,             ?get_timeout(outer, 300000)).
 -define(TIMEOUT_HEAVY,       ?get_timeout(outer_heavy, 300000)).
 -define(TIMEOUT_VERY_HEAVY,  ?get_timeout(outer_very_heavy, 360000)).
@@ -939,6 +940,20 @@ handle_info({connect_done, WorkersCount, RV},
                     ?log_debug("ensure_bucket failed as bucket ~p has not "
                                "completed coming online", [Bucket]),
                     erlang:send_after(?CONNECT_DONE_RETRY_INTERVAL, Self,
+                                      {connect_done, WorkersCount, RV}),
+                    {noreply, State};
+                {error, {bucket_create_error,
+                         {memcached_error, encryption_key_not_available, _}}} ->
+                    ?log_error("ensure_bucket failed for bucket ~p as some "
+                               "encryption keys are not available", [Bucket]),
+                    erlang:send_after(?KEY_NOT_AVAILABLE_RETRY_INTERVAL, Self,
+                                      {connect_done, WorkersCount, RV}),
+                    {noreply, State};
+                {error, {bucket_create_error, key_not_available}} ->
+                    ?log_error("Skipping bucket ~p creation as "
+                               "active encryption key is not available",
+                               [Bucket]),
+                    erlang:send_after(?KEY_NOT_AVAILABLE_RETRY_INTERVAL, Self,
                                       {connect_done, WorkersCount, RV}),
                     {noreply, State};
                 {error, bucket_paused} ->
