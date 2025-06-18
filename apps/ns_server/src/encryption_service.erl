@@ -611,15 +611,13 @@ maybe_log_error_to_user_log(encrypt_key_error, Msg, ExtraArgs) ->
 maybe_log_error_to_user_log(decrypt_key_error, Msg, ExtraArgs) ->
     ale:error(?USER_LOGGER, "Failed to decrypt data using key ~s: ~s",
               [extract_key_uuid(ExtraArgs), Msg]);
-maybe_log_error_to_user_log(store_key_error, Msg, ExtraArgs) ->
-    ale:error(?USER_LOGGER, "Failed to store key ~s: ~s",
-              [extract_key_uuid(ExtraArgs), Msg]);
 maybe_log_error_to_user_log(A, Msg, _)
-                                   when A == rotate_integrity_tokens_error;
+                                   when A == store_key_error;
+                                        A == rotate_integrity_tokens_error;
                                         A == remove_old_integrity_tokens_error;
                                         A == mac_calculation_error;
                                         A == mac_verification_error ->
-    ale:error(?USER_LOGGER, "Failed key integrity operation (~p): ~s",
+    ale:error(?USER_LOGGER, "Encryption key operation failed (~p): ~s",
               [A, Msg]);
 maybe_log_error_to_user_log(_, _, _) ->
     ok.
