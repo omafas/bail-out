@@ -318,7 +318,7 @@ parse_validate_services_list(ServicesList) ->
             {error, io_lib:format("Unknown services: ~p", [UnknownServices])};
         [] ->
             RV = lists:usort([S || {_, {_, S}} <- FoundServices]),
-            FixedServices = config_profile:get_value(fixedServices, undefined),
+            FixedServices = config_profile:get_value(fixed_services, undefined),
             case {RV, FixedServices} of
                 {[], undefined} ->
                     {error, "At least one service has to be selected"};
@@ -699,7 +699,7 @@ do_handle_eject_post(Req, OtpNode) ->
     end.
 
 setup_services_validators() ->
-    FixedServices = config_profile:get_value(fixedServices, undefined),
+    FixedServices = config_profile:get_value(fixed_services, undefined),
     [validator:boolean(setDefaultMemQuotas, _),
      validator:default(setDefaultMemQuotas, false, _)] ++
         [validator:required(services, _) || FixedServices =:= undefined] ++
@@ -784,7 +784,7 @@ handle_setup_services_post(Req) ->
       end, Req, form, setup_services_validators()).
 
 do_setup_services_post(Req, Props) ->
-    Services = config_profile:get_value(fixedServices,
+    Services = config_profile:get_value(fixed_services,
                                         proplists:get_value(services, Props)),
     SetDefaultMemQuotas = proplists:get_value(setDefaultMemQuotas, Props),
     case setup_services_check_quota(Services, SetDefaultMemQuotas) of
@@ -920,7 +920,7 @@ do_handle_add_node(Req, GroupUUID) ->
             Hostname = proplists:get_value(host, KV),
             Port = proplists:get_value(port, KV),
             Services = config_profile:get_value(
-                         fixedServices, proplists:get_value(services, KV)),
+                         fixed_services, proplists:get_value(services, KV)),
 
             menelaus_util:survive_web_server_restart(
               fun () ->

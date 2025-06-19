@@ -9,7 +9,7 @@
 {{cbas, skip_blob_storage_validation}, false}.
 {{indexer, projector_disabled}, true}.
 {{cbas, max_storage_partitions}, 1024}.
-{fixedServices, [kv, cbas]}.
+{fixed_services, [kv, cbas]}.
 {max_buckets_supported, 0}.
 {extra_roles, [{analytics_admin, [],
      [{name, <<"Enterprise Analytics Admin">>},
