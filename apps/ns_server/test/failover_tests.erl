@@ -91,7 +91,7 @@ manual_failover_test_() ->
     %% foreachx here to let us pass parameters to setup.
     {foreachx,
      fun manual_failover_test_setup/1,
-     fun manual_failover_test_teardown/2,
+     fun failover_test_teardown/2,
      [{SetupArgs, fun(T, R) ->
                           {Name, ?_test(TestFun(T, R))}
                   end} || {Name, TestFun} <- Tests]}.
@@ -213,21 +213,14 @@ manual_failover_test_setup(SetupConfig) ->
     #{leader_registry => LeaderRegistryPid,
       auto_reprovision => AutoReprovisionPid}.
 
-manual_failover_test_teardown(_Config, PidMap) ->
+failover_test_teardown(_Config, PidMap) ->
     maps:foreach(
       fun(_Process, Pid) ->
               erlang:unlink(Pid),
               misc:terminate_and_wait(Pid, shutdown)
       end, PidMap),
 
-    meck:unload(janitor_agent),
-    meck:unload(fake_ns_pubsub),
-    meck:unload(ns_pubsub),
-    meck:unload(chronicle_compat),
-    meck:unload(chronicle_master),
-    meck:unload(testconditions),
-    meck:unload(chronicle),
-    meck:unload(leader_activities),
+    meck:unload(),
 
     fake_chronicle_kv:unload(),
     fake_ns_config:teardown(),
@@ -481,11 +474,11 @@ auto_failover_test_() ->
     %% foreachx here to let us pass parameters to setup.
     {foreachx,
      fun auto_failover_test_setup/1,
-     fun auto_failover_test_teardown/2,
+     fun failover_test_teardown/2,
      [{build_setup_config(SetupArgs),
-         fun(T, R) ->
-                 {Name, ?_test(TestFun(T, R))}
-         end} || {Name, TestFun, SetupArgs} <- Tests]}.
+       fun(T, R) ->
+               {Name, ?_test(TestFun(T, R))}
+       end} || {Name, TestFun, SetupArgs} <- Tests]}.
 
 auto_failover_with_partition_test_() ->
     PartitionA = [{'a', [kv]}, {'b', [kv]}, {'q', [query]}],
@@ -514,7 +507,7 @@ auto_failover_with_partition_test_() ->
     %% foreachx here to let us pass parameters to setup.
     {foreachx,
      fun auto_failover_test_setup/1,
-     fun auto_failover_test_teardown/2,
+     fun failover_test_teardown/2,
      [{SetupArgs, fun(T, R) ->
                           {Name, ?_test(TestFun(T, R))}
                   end} || {Name, TestFun} <- Tests]}.
@@ -589,15 +582,6 @@ auto_failover_test_setup(SetupConfig) ->
           ns_rebalance_report_manager => RebalanceReportManagerPid,
           compat_mode_manager => CompatModeManagerPid,
           auto_failover => AutoFailoverPid}.
-
-auto_failover_test_teardown(Config, PidMap) ->
-    meck:unload(ns_janitor_server),
-    meck:unload(node_status_analyzer),
-    meck:unload(ns_doctor),
-    meck:unload(ns_email_alert),
-    meck:unload(cb_atomic_persistent_term),
-
-    manual_failover_test_teardown(Config, PidMap).
 
 get_auto_failover_reported_errors(AutoFailoverPid) ->
     sets:to_list(
@@ -847,10 +831,6 @@ graceful_failover_test_setup(SetupConfig) ->
 
     Pids.
 
-graceful_failover_test_teardown(Config, PidMap) ->
-    rebalance_test_mock_teardown(),
-    auto_failover_test_teardown(Config, PidMap).
-
 rebalance_test_mock_setup() ->
     fake_ns_config:update_snapshot(rebalance_out_delay_seconds, 0),
 
@@ -901,9 +881,6 @@ rebalance_test_mock_setup() ->
     meck:expect(janitor_agent, dcp_takeover,
                 fun (_, _, _, _, _) -> ok end).
 
-rebalance_test_mock_teardown() ->
-    meck:unload(rebalance_quirks).
-
 graceful_failover_test_() ->
     Nodes = #{
               'a' => {active, [kv]},
@@ -925,7 +902,7 @@ graceful_failover_test_() ->
     %% foreachx here to let us pass parameters to setup.
     {foreachx,
      fun graceful_failover_test_setup/1,
-     fun graceful_failover_test_teardown/2,
+     fun failover_test_teardown/2,
      [{SetupArgs, fun(T, R) ->
                           {Name, ?_test(TestFun(T, R))}
                   end} || {Name, TestFun} <- Tests]}.
@@ -1080,7 +1057,7 @@ multi_node_failover_maxcount_test_() ->
     %% foreachx here to let us pass parameters to setup.
     {foreachx,
      fun auto_failover_multi_node_maxcount_setup/1,
-     fun auto_failover_multi_node_maxcount_teardown/2,
+     fun failover_test_teardown/2,
      [{SetupConfig, fun(T, R) ->
                             {Name, ?_test(TestFun(T, R))}
                     end} || {Name, TestFun} <- Tests]}.
@@ -1096,7 +1073,7 @@ kv_maxcount_failover_test_() ->
 
     {foreachx,
      fun auto_failover_multi_node_maxcount_setup/1,
-     fun auto_failover_multi_node_maxcount_teardown/2,
+     fun failover_test_teardown/2,
      [{SetupConfig, fun(T, R) ->
                             {Name, ?_test(TestFun(T, R))}
                     end} || {Name, TestFun} <- Tests]}.
@@ -1185,13 +1162,6 @@ auto_failover_multi_node_maxcount_setup(SetupConfig) ->
 
     Pids.
 
-auto_failover_multi_node_maxcount_teardown(Config, PidMap) ->
-    meck:unload(ns_cluster_membership),
-    meck:unload(service_api),
-    meck:unload(service_manager),
-    meck:unload(service_janitor),
-    auto_failover_test_teardown(Config, PidMap).
-
 auto_failover_service_safety_check_stale_config_test_() ->
     Nodes = #{
               'a' => {active, [kv]},
@@ -1211,7 +1181,7 @@ auto_failover_service_safety_check_stale_config_test_() ->
 
     {foreachx,
      fun auto_failover_multi_node_maxcount_setup/1,
-     fun auto_failover_multi_node_maxcount_teardown/2,
+     fun failover_test_teardown/2,
      [{SetupArgs, fun(_T, R) ->
                           {Name, ?_test(TestFun(R))}
                   end} || {Name, TestFun} <- Tests]}.

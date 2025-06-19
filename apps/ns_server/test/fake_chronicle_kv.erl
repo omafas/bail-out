@@ -62,8 +62,9 @@ new() ->
 
 unload() ->
     ets:delete(?TABLE_NAME),
-    meck:unload(ns_node_disco),
-    meck:unload(chronicle_kv).
+
+    ?meckUnload(ns_node_disco),
+    ?meckUnload(chronicle_kv).
 
 %% -------------------------
 %% API - Snapshot Management
