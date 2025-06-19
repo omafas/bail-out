@@ -43,6 +43,8 @@
 -module(fake_ns_config).
 
 -include("ns_config.hrl").
+-include("ns_test.hrl").
+
 -include("cut.hrl").
 
 %% API
@@ -70,7 +72,7 @@ teardown() ->
     Pid = whereis(ns_config_events),
     unlink(Pid),
     misc:terminate_and_wait(Pid, normal),
-    meck:unload(ns_config).
+    ?meckUnload(ns_config).
 
 %% -------------------------
 %% API - Snapshot Management
