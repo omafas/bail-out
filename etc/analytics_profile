@@ -11,3 +11,23 @@
 {{cbas, max_storage_partitions}, 1024}.
 {fixedServices, [kv, cbas]}.
 {max_buckets_supported, 0}.
+{extra_roles, [{analytics_admin, [],
+     [{name, <<"Enterprise Analytics Admin">>},
+      {folder, admin},
+      {desc, <<"Can access Enterprise Analytics service administrative APIs "
+               "(i.e. <host>:8095/api/v1/*). This user can assign and modify "
+               "RBAC privileges. This user can read and write all data.">>}],
+      [{[analytics], [manage, access]},
+       {[ui], [read]},
+       {[pools], [read]},
+       {[app_telemetry], [write]}]},
+     {analytics_access, [],
+      [{name, <<"Enterprise Analytics Access">>},
+       {folder, analytics},
+       {desc, <<"Provides access to Enterprise Analytics metadata required "
+                "to use the service. This user can access the web console, "
+                "but does not in itself provide access to data.">>}],
+      [{[analytics], [access]},
+       {[ui], [read]},
+       {[pools], [read]},
+       {[app_telemetry], [write]}]}]}.

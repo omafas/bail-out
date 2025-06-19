@@ -75,8 +75,8 @@
 %% for RPC from ns_couchdb node
 -export([build_compiled_roles/1]).
 
--spec roles() -> [rbac_role_def(), ...].
-roles() ->
+-spec default_roles() -> [rbac_role_def(), ...].
+default_roles() ->
     [{admin, [],
       [{name, <<"Full Admin">>},
        {folder, admin},
@@ -805,6 +805,21 @@ roles() ->
        {[ui], [read]},
        {[pools], [read]}]}
     ].
+
+-spec roles() -> [rbac_role_def(), ...].
+roles() ->
+    DefaultRoles = default_roles(),
+    %% Allow roles to be added / replaced with those from the config profile.
+    ConfigRoles = config_profile:get_value(extra_roles, []),
+    ConfigNames = lists:map(fun extract_role_name/1, ConfigRoles),
+    %% Validate DefaultRoles and filter out any with conflicting names
+    FilteredDefaults = lists:filter(
+                         fun(Role) ->
+                                 not lists:member(
+                                       extract_role_name(Role), ConfigNames)
+                         end,
+                         DefaultRoles),
+    FilteredDefaults ++ ConfigRoles.
 
 ui_folders() ->
     [{admin, "Administrative"},
@@ -1537,6 +1552,10 @@ external_auth_polling_interval() ->
     ns_config:read_key_fast(external_auth_polling_interval,
                             ?DEFAULT_EXTERNAL_ROLES_POLLING_INTERVAL).
 
+-spec extract_role_name(rbac_role_def()) -> atom().
+extract_role_name(Role) ->
+    {Name, _, _, _} = Role,
+    Name.
 
 -ifdef(TEST).
 setup_meck() ->
@@ -1696,17 +1715,17 @@ compile_roles_test() ->
     TestRole1(false, [{"default", <<"wrong_id">>}, {"s", 1}]),
     TestRole1(false, [{"default", <<"default_id">>}, {"s", 2}]).
 
-admin_test() ->
+admin_test__() ->
     Roles = compile_roles([admin], roles()),
     ?assertEqual(true, is_allowed({[buckets], create}, Roles)),
     ?assertEqual(true, is_allowed({[something, something], anything}, Roles)).
 
-cluster_admin_test() ->
+cluster_admin_test__() ->
     Roles = compile_roles([cluster_admin], roles()),
     ?assertEqual(true, is_allowed({[settings, metrics], any}, Roles)),
     ?assertEqual(false, is_allowed({[admin, settings, metrics], any}, Roles)).
 
-eventing_admin_test() ->
+eventing_admin_test__() ->
     Roles = compile_roles([eventing_admin], roles()),
     ?assertEqual(false, is_allowed({[admin], any}, Roles)),
     ?assertEqual(false, is_allowed({[xdcr], any}, Roles)),
@@ -1718,7 +1737,7 @@ eventing_admin_test() ->
     ?assertEqual(true, is_allowed({[anything], read}, Roles)),
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
-backup_admin_test() ->
+backup_admin_test__() ->
     Roles = compile_roles([backup_admin], roles()),
     ?assertEqual(false, is_allowed({[admin, users], read}, Roles)),
     ?assertEqual(false, is_allowed({[admin, users], write}, Roles)),
@@ -1727,7 +1746,7 @@ backup_admin_test() ->
     ?assertEqual(true, is_allowed({[backup], all}, Roles)),
     ?assertEqual(true, is_allowed({[anything], all}, Roles)).
 
-ro_admin_test() ->
+ro_admin_test__() ->
     Roles = compile_roles([ro_admin], roles()),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
     ?assertEqual(true,
@@ -1751,7 +1770,7 @@ ro_admin_test() ->
     ?assertEqual(true, is_allowed({[backup], read}, Roles)),
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
-security_admin_test() ->
+security_admin_test__() ->
     Roles = compile_roles([security_admin], roles()),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
     ?assertEqual(true,
@@ -1775,7 +1794,7 @@ security_admin_test() ->
     ?assertEqual(false, is_allowed({[backup], read}, Roles)),
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
-ro_security_admin_test() ->
+ro_security_admin_test__() ->
     Roles = compile_roles([ro_security_admin], roles()),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
     ?assertEqual(true,
@@ -1799,7 +1818,7 @@ ro_security_admin_test() ->
     ?assertEqual(false, is_allowed({[backup], read}, Roles)),
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
-user_admin_local_test() ->
+user_admin_local_test__() ->
     Roles = compile_roles([user_admin_local], roles()),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
     ?assertEqual(true,
@@ -1827,7 +1846,7 @@ user_admin_local_test() ->
     ?assertEqual(false, is_allowed({[backup], read}, Roles)),
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
-user_admin_external_test() ->
+user_admin_external_test__() ->
     Roles = compile_roles([user_admin_external], roles()),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
     ?assertEqual(true,
@@ -1855,7 +1874,7 @@ user_admin_external_test() ->
     ?assertEqual(false, is_allowed({[backup], read}, Roles)),
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
-regulator_access_test() ->
+regulator_access_test__() ->
     Roles = compile_roles([regulator_access],
                           roles() ++ add_serverless_roles(true)),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
@@ -1902,7 +1921,7 @@ roles_with_admin_event_metakv_permissions() ->
 
 %% Ensure none of the roles, except those who are granted permission,
 %% have access to the admin event/metakv permission.
-admin_event_metakv_permissions_test() ->
+admin_event_metakv_permissions_test__() ->
     AllRoles = roles() ++ add_serverless_roles(true),
     AllNames0 = extract_all_names(AllRoles),
     AllNames =
@@ -1917,7 +1936,7 @@ admin_event_metakv_permissions_test() ->
 roles_bucket_sys_write_permissions() ->
     [admin, eventing_admin, backup_admin, data_backup].
 
-system_collections_write_permissions_test() ->
+system_collections_write_permissions_test__() ->
     AllRoles = roles() ++ add_serverless_roles(true),
     AllNames = extract_all_names(AllRoles),
 
@@ -1958,7 +1977,7 @@ system_collections_write_permissions_test() ->
                                                    "_query"]},
                                      data, docs], swrite}, Roles1)).
 
-system_collections_read_permissions_test() ->
+system_collections_read_permissions_test__() ->
     AllRoles = roles() ++ add_serverless_roles(true),
     AllNames = extract_all_names(AllRoles),
 
@@ -1996,8 +2015,8 @@ system_collections_read_permissions_test() ->
                                      ["test", ?SYSTEM_SCOPE_NAME, "_mobile"]},
                                     data, docs], sread}, Roles)),
     ?assertEqual(true, is_allowed({[{collection,
-                                      ["test", ?SYSTEM_SCOPE_NAME, "_query"]},
-                                     data, docs], sread}, Roles)).
+                                     ["test", ?SYSTEM_SCOPE_NAME, "_query"]},
+                                    data, docs], sread}, Roles)).
 
 bucket_views_admin_check_global(Roles) ->
     ?assertEqual(false, is_allowed({[xdcr], read}, Roles)),
@@ -2027,13 +2046,13 @@ bucket_admin_check_default(Roles) ->
     ?assertEqual(
        true, is_allowed({[{bucket, "default"}, anything], anything}, Roles)).
 
-bucket_admin_test() ->
+bucket_admin_test__() ->
     Roles = compile_roles([{bucket_admin, ["default"]}], roles()),
     bucket_admin_check_default(Roles),
     bucket_views_admin_check_another(Roles),
     bucket_views_admin_check_global(Roles).
 
-bucket_admin_wildcard_test() ->
+bucket_admin_wildcard_test__() ->
     Roles = compile_roles([{bucket_admin, [any]}], roles()),
     bucket_admin_check_default(Roles),
     bucket_views_admin_check_global(Roles).
@@ -2051,13 +2070,13 @@ views_admin_check_default(Roles) ->
                  is_allowed({[{bucket, "default"}, settings], write}, Roles)),
     ?assertEqual(false, is_allowed({[{bucket, "default"}], read}, Roles)).
 
-views_admin_test() ->
+views_admin_test__() ->
     Roles = compile_roles([{views_admin, ["default"]}], roles()),
     views_admin_check_default(Roles),
     bucket_views_admin_check_another(Roles),
     bucket_views_admin_check_global(Roles).
 
-views_admin_wildcard_test() ->
+views_admin_wildcard_test__() ->
     Roles = compile_roles([{views_admin, [any]}], roles()),
     views_admin_check_default(Roles),
     bucket_views_admin_check_global(Roles).
@@ -2069,14 +2088,14 @@ bucket_full_access_check(Roles, Bucket, Allowed) ->
     ?assertEqual(Allowed, is_allowed({[{bucket, Bucket}], flush}, Roles)),
     ?assertEqual(false, is_allowed({[{bucket, Bucket}], write}, Roles)).
 
-bucket_full_access_test() ->
+bucket_full_access_test__() ->
     Roles = compile_roles([{bucket_full_access, ["default"]}], roles()),
     bucket_full_access_check(Roles, "default", true),
     bucket_full_access_check(Roles, "another", false),
     ?assertEqual(true, is_allowed({[pools], read}, Roles)),
     ?assertEqual(false, is_allowed({[another], read}, Roles)).
 
-replication_admin_test() ->
+replication_admin_test__() ->
     Roles = compile_roles([replication_admin], roles()),
     ?assertEqual(true,
                  is_allowed({[{bucket, "default"}, xdcr], anything}, Roles)),
@@ -2155,7 +2174,8 @@ collection_roles_test_() ->
           [false, false, false, false, false, false, false, false]}
         ],
 
-    {foreach, fun () -> ok end,
+    {setup, fun config_profile:load_default_profile_for_test/0,
+     fun config_profile:unload_profile_for_test/1,
      [{Title ++ ", role = " ++ atom_to_list(Role),
        fun () ->
                compile_and_assert(Role, Perm, Params,
@@ -2204,7 +2224,8 @@ query_functions_test_() ->
                          [false, false, false, false])}]
           end, Roles),
 
-    {foreach, fun () -> ok end, Tests}.
+    {setup, fun config_profile:load_default_profile_for_test/0,
+     fun config_profile:unload_profile_for_test/1, Tests}.
 
 eventing_functions_test_() ->
     Roles = [{eventing_manage_functions, [eventing, function], manage}],
@@ -2234,9 +2255,10 @@ eventing_functions_test_() ->
                            [false, false, false])}]
           end, Roles),
 
-        {foreach, fun () -> ok end, Tests}.
+    {setup, fun config_profile:load_default_profile_for_test/0,
+     fun config_profile:unload_profile_for_test/1, Tests}.
 
-validate_role_test() ->
+validate_role_test__() ->
     ValidateRole = validate_role(_, roles(), toy_buckets()),
     ?assertEqual({ok, admin}, ValidateRole(admin)),
     ?assertEqual({ok, {bucket_admin, [{"test", <<"test_id">>}]}},
@@ -2282,6 +2304,31 @@ enum_roles(Roles, ParamsList) ->
       end, ParamsList).
 
 produce_roles_by_permission_test_() ->
+    try
+        config_profile:load_default_profile_for_test()
+    of
+        _ ->
+            {setup,
+             fun() ->
+                     meck:new(cluster_compat_mode, [passthrough]),
+                     meck:expect(cluster_compat_mode, is_enterprise,
+                                 fun () -> true end),
+                     meck:expect(cluster_compat_mode, get_compat_version,
+                                 fun () -> ?LATEST_VERSION_NUM end),
+                     meck:expect(cluster_compat_mode, is_developer_preview,
+                                 fun () -> false end),
+                     config_profile:load_default_profile_for_test()
+             end,
+             fun (_) ->
+                     meck:unload(cluster_compat_mode),
+                     config_profile:unload_profile_for_test()
+             end,
+             produce_roles_by_permission_test__()}
+    after
+        config_profile:unload_profile_for_test()
+    end.
+
+produce_roles_by_permission_test__() ->
     GetRoles =
         fun (Permission) ->
                 proplists:get_keys(
@@ -2297,21 +2344,7 @@ produce_roles_by_permission_test_() ->
         end,
     TestBucket = {"test", <<"test_id">>},
     DefaultBucket = {"default", <<"default_id">>},
-    {foreach,
-     fun() ->
-             meck:new(cluster_compat_mode, [passthrough]),
-             meck:expect(cluster_compat_mode, is_enterprise,
-                         fun () -> true end),
-             meck:expect(cluster_compat_mode, get_compat_version,
-                         fun () -> ?LATEST_VERSION_NUM end),
-             meck:expect(cluster_compat_mode, is_developer_preview,
-                         fun () -> false end),
-             config_profile:load_default_profile_for_test()
-     end,
-     fun (_) ->
-             meck:unload(cluster_compat_mode),
-             config_profile:unload_profile_for_test()
-     end,
+
      [{"security permission",
        Test([admin, security_admin, ro_security_admin],
             {[admin, security], any})},
@@ -2414,7 +2447,7 @@ produce_roles_by_permission_test_() ->
                             mobile_sync_gateway, query_list_index,
                             query_manage_index],
                            [[any]]),
-            {[{bucket, any}, n1ql, index], read})}]}.
+            {[{bucket, any}, n1ql, index], read})}].
 
 
 params_version_get_snapshot(TestProps, _, SubKeys) ->
@@ -2491,7 +2524,7 @@ roles_format_test() ->
 
     teardown_meck().
 
-params_from_permissions_test() ->
+params_from_permissions_test__() ->
     CompiledRoles =
         [[{[{collection,["ab","_default","_default"]},data,docs],
            [read,range_scan,sread]},
@@ -2518,5 +2551,102 @@ params_from_permissions_test() ->
          ["bc","_system","_mobile"]],
 
     ?assertEqual(Expected, get_params_from_permissions(CompiledRoles)).
+
+extended_roles_test() ->
+    meck:new(config_profile, [passthrough]),
+    try
+        MyRoles = [{superman, [],
+                    [{name, <<"Superman">>},
+                     {folder, admin},
+                     {desc, <<"Able to leap tall buildings in a single bound!">>},
+                     {ce, true}],
+                    [{[admin, security_info], none},
+                     {[], all}]},
+                   {analytics_select, [],
+                    [{name, <<"Analytics Select">>},
+                     {folder, analytics},
+                     {desc, <<"This user can access the web console.">>}],
+                    [{[ui], [read]}]}],
+        meck:expect(config_profile, get,
+                    fun () ->
+                            [{name, "my_profile"},
+                             {extra_roles, MyRoles}]
+                    end),
+        validate_test_roles(roles()),
+        Roles = compile_roles([superman], roles()),
+        ?assertEqual(true, is_allowed({[anything], access}, Roles)),
+        ?assertEqual(false, is_allowed({[admin, security_info], read}, Roles)),
+        Roles2 = compile_roles([analytics_select], roles()),
+        ?assertEqual(true, is_allowed({[ui], read}, Roles2)),
+        ?assertEqual(false, is_allowed({[pools], read}, Roles2))
+    after
+        meck:unload(config_profile)
+    end.
+
+analytics_access_test() ->
+    config_profile:load_profile_for_test(?ANALYTICS_PROFILE_STR),
+    try
+        Roles = compile_roles([analytics_access], roles()),
+        ?assertEqual(true, is_allowed({[analytics], access}, Roles)),
+        ?assertEqual(false, is_allowed(
+                              {[admin, settings, metrics], any}, Roles))
+    after
+        config_profile:unload_profile_for_test()
+    end.
+
+analytics_admin_empty_profile_test() ->
+    %% use "default" explicitly here so that this test passes when run on a
+    %% workspace based on enterprise-analytics manifest
+    config_profile:load_profile_for_test("default"),
+    try
+        Roles = compile_roles([analytics_admin], roles()),
+        ?log_debug(
+           "compile_roles: ~p",
+           [Roles]),
+        ?assertEqual(true,
+                     is_allowed(
+                       {[{bucket, "foobar"}, analytics], manage}, Roles)),
+        ?assertEqual(false, is_allowed({[analytics], access}, Roles))
+    after
+        config_profile:unload_profile_for_test()
+    end.
+
+analytics_admin_test() ->
+    config_profile:load_profile_for_test(?ANALYTICS_PROFILE_STR),
+    try
+        Roles = compile_roles([analytics_admin], roles()),
+        ?assertEqual(false,
+                     is_allowed(
+                       {[{bucket, "foobar"}, analytics], manage}, Roles)),
+        ?assertEqual(true, is_allowed({[analytics], access}, Roles))
+    after
+        config_profile:unload_profile_for_test()
+    end.
+
+all_test_() ->
+    {setup,
+     fun config_profile:load_default_profile_for_test/0,
+     fun config_profile:unload_profile_for_test/1,
+     [fun admin_test__/0,
+      fun cluster_admin_test__/0,
+      fun eventing_admin_test__/0,
+      fun backup_admin_test__/0,
+      fun ro_admin_test__/0,
+      fun security_admin_test__/0,
+      fun ro_security_admin_test__/0,
+      fun user_admin_local_test__/0,
+      fun user_admin_external_test__/0,
+      fun regulator_access_test__/0,
+      fun admin_event_metakv_permissions_test__/0,
+      fun system_collections_write_permissions_test__/0,
+      fun system_collections_read_permissions_test__/0,
+      fun bucket_admin_test__/0,
+      fun bucket_admin_wildcard_test__/0,
+      fun views_admin_test__/0,
+      fun views_admin_wildcard_test__/0,
+      fun bucket_full_access_test__/0,
+      fun replication_admin_test__/0,
+      fun validate_role_test__/0,
+      fun params_from_permissions_test__/0]}.
 
 -endif.
