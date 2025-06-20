@@ -107,24 +107,8 @@ manual_failover_test_setup(SetupConfig) ->
     setup_node_config(maps:get(nodes, SetupConfig)),
     setup_bucket_config(maps:get(buckets, SetupConfig)),
 
-    meck:new(leader_activities),
-    meck:expect(leader_activities, run_activity,
-                fun(_Name, _Quorum, Body) ->
-                        Body()
-                end),
-    meck:expect(leader_activities, run_activity,
-                fun(_Name, _Quorum, Body, _Opts) ->
-                        Body()
-                end),
-    meck:expect(leader_activities, deactivate_quorum_nodes,
-                fun(_) -> ok end),
-
-
     meck:new(chronicle),
     meck:expect(chronicle, check_quorum, fun() -> true end),
-
-    meck:new(testconditions, [passthrough]),
-    meck:expect(testconditions, get, fun(_) -> ok end),
 
     meck:new(chronicle_master, [passthrough]),
     meck:expect(chronicle_master, deactivate_nodes,
@@ -141,84 +125,13 @@ manual_failover_test_setup(SetupConfig) ->
     %% it up and tear it down via the usual means in case the test fails.
     meck:new(chronicle_compat, [passthrough]),
 
-    %% We will spawn auto-reprovision for this test. To spawn it we must spawn
-    %% the leader_registry. Needed for leader_registry
-    meck:new(fake_ns_pubsub, [non_strict]),
-    meck:new(ns_pubsub),
-    meck:expect(ns_pubsub, subscribe_link,
-                fun(_, Handler) ->
-                        %% Stash the handler in some function, notify_key
-                        meck:expect(fake_ns_pubsub, notify_key,
-                                    fun(Key) ->
-                                            Handler(Key)
-                                    end),
-                        ok
-                end),
-
-    {ok, LeaderRegistryPid} = leader_registry:start_link(),
-    gen_server:cast(LeaderRegistryPid, {new_leader, node()}),
-
-    %% Janitor_agent mecks required to perform a full failover (with map).
-    meck:new(janitor_agent, [passthrough]),
-    meck:expect(janitor_agent, query_vbuckets,
-                fun(_,_,_,_) ->
-                        %% We don't need to return anything useful for this
-                        %% failover, we are failing over all but one node so
-                        %% we don't have to choose between any.
-                        {dict:from_list([{1, []}]), []}
-                end),
-
-    meck:expect(janitor_agent, fetch_vbucket_states,
-                fun(VBucket, _) ->
-                        %% We need to return some semi-valid vBucket stat map
-                        %% from this. We might use a couple of different maps
-                        %% for this test, so here we will generate it from
-                        %% the map (assuming only 1 vBucket).
-                        {ok, BucketConfig} = ns_bucket:get_bucket("default"),
-                        ArrayMap = array:from_list(
-                                     proplists:get_value(map, BucketConfig)),
-                        [Active | Replicas] = array:get(VBucket, ArrayMap),
-                        Seqnos = [{high_prepared_seqno, 1},
-                                  {high_seqno, 1}],
-                        A = [{Active, active, Seqnos}],
-                        R = [{Replica, replica, Seqnos} || Replica <- Replicas],
-                        A ++ R
-                end),
-
-    meck:expect(janitor_agent, find_vbucket_state,
-                fun(Node, States) ->
-                        meck:passthrough([Node, States])
-                end),
-
-    meck:expect(janitor_agent, apply_new_bucket_config,
-                fun(_,_,_,_) ->
-                        %% Just sets stuff in memcached, uninteresting here
-                        ok
-                end),
-
-    meck:expect(janitor_agent, mark_bucket_warmed,
-                fun(_,_) ->
-                        %% Just sets stuff in memcached, uninteresting here
-                        ok
-                end),
-
-    %% We need to check auto_reprovision settings via a gen_server call so we
-    %% must start up auto_reprovision. We can disable it though, because we
-    %% don't really care which options it has set.
-    fake_chronicle_kv:update_snapshot(auto_reprovision_cfg, [{enabled, false}]),
-    {ok, AutoReprovisionPid} = auto_reprovision:start_link(),
-
-    %% Return a map of pids here, we will need to shut them all down in the
-    %% teardown. Name them in case the test needs to lookup specific pids.
-    #{leader_registry => LeaderRegistryPid,
-      auto_reprovision => AutoReprovisionPid}.
+    %% Test setups return a map of pids for later shutdown in the teardown
+    mock_helpers:setup_mocks([testconditions, leader_activities,
+                              auto_reprovision,
+                              janitor_agent]).
 
 failover_test_teardown(_Config, PidMap) ->
-    maps:foreach(
-      fun(_Process, Pid) ->
-              erlang:unlink(Pid),
-              misc:terminate_and_wait(Pid, shutdown)
-      end, PidMap),
+    mock_helpers:shutdown_processes(PidMap),
 
     meck:unload(),
 
@@ -515,11 +428,6 @@ auto_failover_with_partition_test_() ->
 auto_failover_test_setup(SetupConfig) ->
     Pids = manual_failover_test_setup(SetupConfig),
 
-    %% Needed to complete a failover(/subsequent rebalance)
-    fake_ns_config:update_snapshot(rest_creds, null),
-    {ok, RebalanceReportManagerPid} = ns_rebalance_report_manager:start_link(),
-    {ok, CompatModeManagerPid} = compat_mode_manager:start_link(),
-
     %% Config for auto_failover, disabled by default. We will manually enable it
     %% or work around that in our tests. We disable it by default to avoid ticks
     %% that we may not want to handle.
@@ -530,11 +438,6 @@ auto_failover_test_setup(SetupConfig) ->
          {count, 0},
          {max_count, 5},
          {failover_preserve_durability_majority, true}]}]),
-
-    %% We need this to not throw an error in auto_failover tick, but we won't
-    %% use the status so an empty list is fine.
-    meck:new(ns_doctor),
-    meck:expect(ns_doctor, get_nodes, fun() -> [] end),
 
     meck:new(node_status_analyzer),
     meck:expect(node_status_analyzer, get_statuses,
@@ -547,41 +450,13 @@ auto_failover_test_setup(SetupConfig) ->
                           maps:get(unhealthy_nodes, SetupConfig))
                 end),
 
-    %% Needed to start the orchestrator. We don't really need the janitor to run
-    %% for this test, so we will mock it instead of run it because we'd need to
-    %% do some extra stuff to get it running.
-    meck:new(ns_janitor_server),
-    meck:expect(ns_janitor_server, start_cleanup,
-                fun(_) -> {ok, self()} end),
-    meck:expect(ns_janitor_server, terminate_cleanup,
-                fun(_) ->
-                        CallerPid = self(),
-                        CallerPid ! {cleanup_done, foo, bar},
-                        ok
-                end),
-
     %% May be required if the test tries to send an email alert (and wants to
     %% see that this has happened).
     meck:new(ns_email_alert, [passthrough]),
 
-    meck:new(cb_atomic_persistent_term, [passthrough]),
-    meck:expect(cb_atomic_persistent_term, get_or_set_if_invalid,
-                fun(_, _, F) ->
-                        F(undefined)
-                end),
-
-    %% Need to start the orchestrator so that auto_failover can follow the full
-    %% code path.
-    {ok, OrchestratorPid} = ns_orchestrator:start_link(),
-
-    %% And we must start auto_failover itself to tick it and test it as it would
-    %% normally run.
-    {ok, AutoFailoverPid} = auto_failover:start_link(),
-
-    Pids#{orchestrator => OrchestratorPid,
-          ns_rebalance_report_manager => RebalanceReportManagerPid,
-          compat_mode_manager => CompatModeManagerPid,
-          auto_failover => AutoFailoverPid}.
+    mock_helpers:setup_mocks([compat_mode_manager,
+                              ns_orchestrator,
+                              auto_failover], Pids).
 
 get_auto_failover_reported_errors(AutoFailoverPid) ->
     sets:to_list(
@@ -829,17 +704,12 @@ graceful_failover_test_setup(SetupConfig) ->
     %% made during that.
     rebalance_test_mock_setup(),
 
-    Pids.
+    mock_helpers:setup_mocks([rebalance_quirks], Pids).
 
 rebalance_test_mock_setup() ->
     fake_ns_config:update_snapshot(rebalance_out_delay_seconds, 0),
 
     meck:expect(chronicle_compat, push, fun(_) -> ok end),
-
-    %% Not worth mocking the component parts to make this work, we should not
-    %% have any quirks anyways.
-    meck:new(rebalance_quirks, [passthrough]),
-    meck:expect(rebalance_quirks, get_quirks, fun(_,_) -> [] end),
 
     meck:expect(janitor_agent, prepare_nodes_for_rebalance,
                 fun(_,_,_) ->
