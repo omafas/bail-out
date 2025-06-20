@@ -3198,11 +3198,6 @@ def main():
         for f in glob.glob(ffdc_pat):
             all_tasks.append(CollectFFDCFileTask(f"Collecting {f}", f, False, ""))
 
-    addr = zip_node.split("@")[-1]
-    if addr == "127.0.0.1" or addr == "::1":
-        zip_node = '@'.join(zip_node.split(
-            "@")[:-1] + [find_primary_addr(ipv6, addr)])
-
     if options.verbosity:
         log("Python version: %s" % sys.version)
 
@@ -3221,24 +3216,6 @@ def main():
     elif upload_url:
         do_upload_and_exit(zip_filename, upload_url, options.upload_proxy,
                            tmp_dir=options.tmp_dir)
-
-
-def find_primary_addr(ipv6, default=None):
-    Family = socket.AF_INET6 if ipv6 else socket.AF_INET
-    DnsAddr = "2001:4860:4860::8844" if ipv6 else "8.8.8.8"
-    s = socket.socket(Family, socket.SOCK_DGRAM)
-    try:
-        s.connect((DnsAddr, 56))
-        if ipv6:
-            addr, port, _, _ = s.getsockname()
-        else:
-            addr, port = s.getsockname()
-
-        return addr
-    except socket.error:
-        return default
-    finally:
-        s.close()
 
 
 def exec_name(name):
