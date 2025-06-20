@@ -31,6 +31,8 @@
 handle_get_metrics(Req) ->
     Resp = menelaus_util:respond(Req, {200, [], chunked}),
     ns_server_stats:report_prom_stats(fun (M) -> report_metric(M, Resp) end,
+                                      fun (M) -> report_metric_meta(M,
+                                                                    Resp) end,
                                       false),
     Settings = prometheus_cfg:settings(),
     Services = proplists:get_value(external_prometheus_services, Settings),
@@ -38,13 +40,16 @@ handle_get_metrics(Req) ->
     case proplists:get_bool(high_cardinality_enabled, NsServerProps) of
         true ->
             ns_server_stats:report_prom_stats(
-              fun (M) -> report_metric(M, Resp) end, true);
+              fun (M) -> report_metric(M, Resp) end,
+              fun (M) -> report_metric_meta(M, Resp) end,
+              true);
         false -> ok
     end,
     case proplists:get_bool(derived_stats_enabled, NsServerProps) of
         true ->
             ns_server_stats:report_derived_stats(
-              fun (M) -> report_metric(M, Resp) end);
+              fun (M) -> report_metric(M, Resp) end,
+              fun (M) -> report_metric_meta(M, Resp) end);
         false ->
             ok
     end,
@@ -263,7 +268,9 @@ handle_get_local_metrics(IsHighCard, Req) ->
 
     Resp = menelaus_util:respond(Req, {200, [], chunked}),
     ns_server_stats:report_prom_stats(
-      fun (M) -> report_metric(M, Resp) end, IsHighCard, Timeout),
+      fun (M) -> report_metric(M, Resp) end,
+      fun (M) -> report_metric_meta(M, Resp) end,
+      IsHighCard, Timeout),
     mochiweb_response:write_chunk(<<>>, Resp).
 
 handle_create_snapshot(Req) ->
@@ -311,6 +318,7 @@ ensure_allowed_prom_req("/federate" ++ _) -> ok;
 ensure_allowed_prom_req(_) ->
     menelaus_util:web_exception(404, "not found").
 
+
 report_metric({Metric, Labels, Value}, Resp) ->
     LabelsIOList = [[name_to_iolist(K), <<"=\"">>, format_label_value(V),
                      <<"\"">>] || {K, V} <- Labels],
@@ -322,6 +330,17 @@ report_metric({Prefix, Metric, Labels, Value}, Resp) ->
     Prefixed = [Prefix, <<"_">>, name_to_iolist(Metric)],
     report_metric({Prefixed, Labels, Value}, Resp).
 
+report_metric_meta(FullName, Resp) ->
+    FullName0 = iolist_to_binary(name_to_iolist(FullName)),
+    case cb_stats_info:get_info(FullName0) of
+        not_found ->
+            ok;
+        {Type0, Help0} ->
+            Type = format_type(FullName0, Type0),
+            Help = format_help(FullName0, Help0),
+            mochiweb_response:write_chunk([Type, Help], Resp)
+    end.
+
 name_to_iolist(A) when is_atom(A) -> atom_to_binary(A, latin1);
 name_to_iolist(A) -> A.
 
@@ -332,6 +351,12 @@ format_label_value(Val) ->
           re:replace(Acc, Re, Replace, [global, {return, binary}])
       end, ValBin, [{<<"\\\\">>, <<"\\\\\\\\">>},
                     {<<"\"">>, <<"\\\\\"">>}]).
+
+format_type(Metric, Type) ->
+    [<<"# TYPE ">>, Metric, <<" ">>, Type, <<"\n">>].
+
+format_help(Metric, Help) ->
+    [<<"# HELP ">>, Metric, <<" ">>, Help, <<"\n">>].
 
 -ifdef(TEST).
 

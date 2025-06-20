@@ -44,9 +44,9 @@
          add_histo/2,
          delete_bucket_stats/1,
          stale_histo_epoch_cleaner/0,
-         report_derived_stats/1,
-         report_prom_stats/2,
-         report_prom_stats/3]).
+         report_derived_stats/2,
+         report_prom_stats/3,
+         report_prom_stats/4]).
 
 -type os_pid() :: integer().
 
@@ -154,13 +154,15 @@ notify_max({Metric, Window, BucketSize}, Val) ->
 
 -spec report_prom_stats(
         fun (({atom() | binary(), [label()], gauge_value()}) -> ok),
+        fun (({atom() | binary(), [label()], gauge_value()}) -> ok),
         boolean(), undefined | pos_integer()) -> ok.
-report_prom_stats(ReportFun, IsHighCard, undefined) ->
-    report_prom_stats(ReportFun, IsHighCard);
-report_prom_stats(ReportFun, IsHighCard, Timeout) ->
-    case async:run_with_timeout(fun () ->
-                                        report_prom_stats(ReportFun, IsHighCard)
-                                end, Timeout) of
+report_prom_stats(ReportMetricFun, ReportMetaFun, IsHighCard, undefined) ->
+    report_prom_stats(ReportMetricFun, ReportMetaFun, IsHighCard);
+report_prom_stats(ReportMetricFun, ReportMetaFun, IsHighCard, Timeout) ->
+    case async:run_with_timeout(
+           fun () ->
+                   report_prom_stats(ReportMetricFun, ReportMetaFun, IsHighCard)
+           end, Timeout) of
         {ok, Res} -> Res;
         {error, timeout} ->
             ?log_debug("Metrics collection timed out (~p)", [Timeout]),
@@ -169,8 +171,9 @@ report_prom_stats(ReportFun, IsHighCard, Timeout) ->
 
 -spec report_prom_stats(
         fun (({atom() | binary(), [label()], gauge_value()}) -> ok),
+        fun (({atom() | binary(), [label()], gauge_value()}) -> ok),
         boolean()) -> ok.
-report_prom_stats(ReportFun, IsHighCard) ->
+report_prom_stats(ReportMetricFun, ReportMetaFun, IsHighCard) ->
     Try = fun (Name, F) ->
               try F()
               catch C:E:ST ->
@@ -180,20 +183,44 @@ report_prom_stats(ReportFun, IsHighCard) ->
           end,
     case IsHighCard of
         true ->
-            Try(ns_server, fun () -> report_ns_server_hc_stats(ReportFun) end),
-            Try(cluster, fun () -> report_cluster_stats(ReportFun) end),
-            Try(erlang, fun () -> report_erlang_stats(ReportFun) end);
+            Try(ns_server, fun () -> report_ns_server_hc_stats(
+                                       ReportMetricFun,
+                                       ReportMetaFun)
+                           end),
+            Try(cluster, fun () -> report_cluster_stats(
+                                     ReportMetricFun,
+                                     ReportMetaFun)
+                         end),
+            Try(erlang, fun () -> report_erlang_stats(
+                                    ReportMetricFun,
+                                    ReportMetaFun)
+                        end);
         false ->
-            Try(ns_server, fun () -> report_ns_server_lc_stats(ReportFun) end),
-            Try(audit, fun () -> report_audit_stats(ReportFun) end),
-            Try(system, fun () -> report_system_stats(ReportFun) end),
-            Try(couchdb, fun () -> report_couchdb_stats(ReportFun) end),
-            Try(cbauth, fun () -> report_cbauth_stats(ReportFun) end)
+            Try(ns_server, fun () -> report_ns_server_lc_stats(
+                                       ReportMetricFun,
+                                       ReportMetaFun)
+                           end),
+            Try(audit, fun () -> report_audit_stats(
+                                   ReportMetricFun,
+                                   ReportMetaFun)
+                       end),
+            Try(system, fun () -> report_system_stats(
+                                    ReportMetricFun,
+                                    ReportMetaFun)
+                        end),
+            Try(couchdb, fun () -> report_couchdb_stats(
+                                     ReportMetricFun,
+                                     ReportMetaFun)
+                         end),
+            Try(cbauth, fun () -> report_cbauth_stats(
+                                    ReportMetricFun,
+                                    ReportMetaFun)
+                        end)
     end,
     ok.
 
-report_derived_stats(ReportFun) ->
-    try report_ns_server_derived_stats(ReportFun)
+report_derived_stats(ReportFun, ReportMetaFun) ->
+    try report_ns_server_derived_stats(ReportFun, ReportMetaFun)
     catch C:E:ST ->
               ?log_error("Derived stats reporting exception: ~p:~p~n~p",
                          [C, E, ST])
@@ -242,7 +269,7 @@ key_to_binary(Key) when is_binary(Key) ->
 key_to_binary(Key) when is_list(Key) ->
     list_to_binary(Key).
 
-report_system_stats(ReportFun) ->
+report_system_stats(ReportMetricFun, ReportMetaFun) ->
     Stats = gen_server:call(?MODULE, get_stats),
     SystemStats = proplists:get_value("@system", Stats, []),
     lists:foreach(
@@ -261,8 +288,9 @@ report_system_stats(ReportFun) ->
                     _ ->
                         {KeyBin, []}
                 end,
+              ReportMetaFun([<<"sys_">>, StatName]),
               Labels = Labels0 ++ [{<<"category">>, <<"system">>}],
-              ReportFun({<<"sys">>, StatName, Labels, Val})
+              ReportMetricFun({<<"sys">>, StatName, Labels, Val})
       end, SystemStats),
 
     SysProcStats = proplists:get_value("@system-processes", Stats, []),
@@ -277,9 +305,10 @@ report_system_stats(ReportFun) ->
                     _ ->
                         {Name0, []}
                 end,
+            ReportMetaFun([<<"sysproc_">>, Name]),
             Labels = Labels0 ++ [{<<"proc">>, Proc},
                                  {<<"category">>, <<"system-processes">>}],
-            ReportFun({<<"sysproc">>, Name, Labels, Val})
+            ReportMetricFun({<<"sysproc">>, Name, Labels, Val})
         end, SysProcStats),
 
     DiskStats = proplists:get_value("@system-disks", Stats, []),
@@ -292,33 +321,38 @@ report_system_stats(ReportFun) ->
                            to_seconds_bin(Val, millisecond)};
                       _ -> {Name, Val}
                   end,
-              ReportFun({<<"sys_disk">>, MappedName, [{<<"disk">>, Disk}],
-                         MappedValue})
+              ReportMetaFun([<<"sys_disk_">>, MappedName]),
+              ReportMetricFun({<<"sys_disk">>, MappedName, [{<<"disk">>, Disk}],
+                               MappedValue})
       end,
       DiskStats),
     Mounts = ns_disksup:get_disk_data(),
+    ReportMetaFun(<<"sys_disk_usage_ratio">>),
     lists:foreach(
       fun ({Disk, _Size, Usage}) ->
               %% Prometheus recommends using the unit "ratio" with a value range
               %% of 0 - 1, so we divide by 100
-              ReportFun({<<"sys_disk_usage_ratio">>,
-                         [{<<"disk">>, Disk}], Usage / 100})
+              ReportMetricFun({<<"sys_disk_usage_ratio">>,
+                               [{<<"disk">>, Disk}], Usage / 100})
       end, Mounts).
 
-report_audit_stats(ReportFun) ->
+report_audit_stats(ReportMetricFun, ReportMetaFun) ->
     {ok, Stats} = ns_audit:stats(),
     AuditQueueLen = proplists:get_value(queue_length, Stats, 0),
     AuditRetries = proplists:get_value(unsuccessful_retries, Stats, 0),
-    ReportFun({<<"audit">>, <<"queue_length">>,
-              [{<<"category">>, <<"audit">>}], AuditQueueLen}),
-    ReportFun({<<"audit">>, <<"unsuccessful_retries">>,
-              [{<<"category">>, <<"audit">>}], AuditRetries}).
+    ReportMetaFun(<<"audit_queue_length">>),
+    ReportMetricFun({<<"audit">>, <<"queue_length">>,
+                     [{<<"category">>, <<"audit">>}], AuditQueueLen}),
+    ReportMetaFun(<<"audit_unsuccessful_retries">>),
+    ReportMetricFun({<<"audit">>, <<"unsuccessful_retries">>,
+                     [{<<"category">>, <<"audit">>}], AuditRetries}).
 
-report_couchdb_stats(ReportFun) ->
+report_couchdb_stats(ReportMetricFun, ReportMetaFun) ->
     ThisNodeBuckets = ns_bucket:node_bucket_names_of_type(node(), membase),
-    [report_couch_stats(B, ReportFun) || B <- ThisNodeBuckets].
+    [report_couch_stats(B, ReportMetricFun, ReportMetaFun) ||
+     B <- ThisNodeBuckets].
 
-report_couch_stats(Bucket, ReportFun) ->
+report_couch_stats(Bucket, ReportMetricFun, ReportMetaFun) ->
     Stats = try
                 ns_couchdb_api:fetch_raw_stats(Bucket)
             catch
@@ -333,24 +367,33 @@ report_couch_stats(Bucket, ReportFun) ->
     Labels = [{<<"bucket">>, Bucket}],
     case ViewsDiskSize of
         undefined -> ok;
-        _ -> ReportFun({couch_views_actual_disk_size, Labels, ViewsDiskSize})
+        _ ->
+            ReportMetaFun(couch_views_actual_disk_size),
+            ReportMetricFun({couch_views_actual_disk_size, Labels,
+                             ViewsDiskSize})
     end,
     lists:foreach(
       fun ({Sig, Disk, Data, Ops}) ->
             L = [{<<"signature">>, Sig} | Labels],
-            ReportFun({couch_views_disk_size, L, Disk}),
-            ReportFun({couch_views_data_size, L, Data}),
-            ReportFun({couch_views_ops, L, Ops})
+            ReportMetaFun(couch_views_disk_size),
+            ReportMetricFun({couch_views_disk_size, L, Disk}),
+            ReportMetaFun(couch_views_data_size),
+            ReportMetricFun({couch_views_data_size, L, Data}),
+            ReportMetaFun(couch_views_ops),
+            ReportMetricFun({couch_views_ops, L, Ops})
       end, ViewsStats),
     lists:foreach(
       fun ({Sig, Disk, Data, Ops}) ->
             L = [{<<"signature">>, Sig} | Labels],
-            ReportFun({couch_spatial_disk_size, L, Disk}),
-            ReportFun({couch_spatial_data_size, L, Data}),
-            ReportFun({couch_spatial_ops, L, Ops})
+            ReportMetaFun(couch_spatial_disk_size),
+            ReportMetricFun({couch_spatial_disk_size, L, Disk}),
+            ReportMetaFun(couch_spatial_data_size),
+            ReportMetricFun({couch_spatial_data_size, L, Data}),
+            ReportMetaFun(couch_spatial_ops),
+            ReportMetricFun({couch_spatial_ops, L, Ops})
       end, SpatialStats).
 
-report_cbauth_stats(ReportFun) ->
+report_cbauth_stats(ReportMetricFun, ReportMetaFun) ->
     Stats = menelaus_cbauth:stats(),
     lists:foreach(
         fun ({ServiceName, {<<"cacheStats">>, CacheStatsList}}) ->
@@ -358,15 +401,18 @@ report_cbauth_stats(ReportFun) ->
                 fun ({CacheStats}) ->
                     CacheName = proplists:get_value(<<"name">>,
                                                     CacheStats, undefined),
-                    report_cbauth_cache_stats(ReportFun, ServiceName,
+                    report_cbauth_cache_stats(ReportMetricFun, ReportMetaFun,
+                                              ServiceName,
                                               CacheStats, CacheName)
                 end, CacheStatsList)
         end, Stats).
 
-report_cbauth_cache_stats(_ReportFun, ServiceName, _CacheStats, undefined) ->
+report_cbauth_cache_stats(_ReportMetricFun, _ReportMetaFun, ServiceName,
+                          _CacheStats, undefined) ->
     ?log_error("Found empty cache name for service ~p. Ignoring the stats.",
                [ServiceName]);
-report_cbauth_cache_stats(ReportFun, ServiceName, CacheStats, CacheName) ->
+report_cbauth_cache_stats(ReportMetricFun, ReportMetaFun, ServiceName,
+                          CacheStats, CacheName) ->
     lists:foreach(
         fun ({Name, ReportingName}) ->
             case proplists:get_value(Name, CacheStats, undefined) of
@@ -376,11 +422,15 @@ report_cbauth_cache_stats(ReportFun, ServiceName, CacheStats, CacheName) ->
                                "Ignoring the stats.",
                                [Name, ServiceName]);
                 Val ->
-                    ReportFun({[?METRIC_PREFIX, CacheName],
-                               ReportingName,
-                               [{<<"category">>, <<"cbauth">>},
-                                {<<"service">>, ServiceName}],
-                               Val})
+                    StatName = [<<CacheName/binary, <<"_">>/binary,
+                                  ReportingName/binary>>],
+                    FullName = [?METRIC_PREFIX, StatName],
+                    ReportMetaFun(FullName),
+                    ReportMetricFun({[?METRIC_PREFIX, CacheName],
+                                     ReportingName,
+                                     [{<<"category">>, <<"cbauth">>},
+                                      {<<"service">>, ServiceName}],
+                                     Val})
             end
         end,
         [{<<"maxSize">>, <<"max_items">>},
@@ -388,21 +438,22 @@ report_cbauth_cache_stats(ReportFun, ServiceName, CacheStats, CacheName) ->
          {<<"hit">>, <<"hit_total">>},
          {<<"miss">>, <<"miss_total">>}]).
 
-report_ns_server_lc_stats(ReportFun) ->
+report_ns_server_lc_stats(ReportMetricFun, ReportMetaFun) ->
     lists:foreach(
       fun (Key) ->
           case ets:lookup(?MODULE, Key) of
               [] -> ok;
-              [M] -> report_stat(M, ReportFun)
+              [M] -> report_stat(M, ReportMetricFun, ReportMetaFun)
           end
       end, low_cardinality_stats()).
 
-report_ns_server_hc_stats(ReportFun) ->
+report_ns_server_hc_stats(ReportMetricFun, ReportMetaFun) ->
     ets:foldl(
       fun (M, _) ->
               case lists:member(element(1, M), low_cardinality_stats()) of
                   true -> ok;
-                  false -> report_stat(M, ReportFun)
+                  false ->
+                      report_stat(M, ReportMetricFun, ReportMetaFun)
               end,
               ok
       end, [], ?MODULE),
@@ -420,7 +471,7 @@ convert_to_reported_event(<<"stop">>) -> <<"stopped">>;
 convert_to_reported_event(_) -> skip.
 
 %% Report cluster-wide stats (stored in chronicle).
-report_cluster_stats(ReportFun) ->
+report_cluster_stats(ReportMetricFun, ReportMetaFun) ->
     Counters = ns_cluster:counters(),
     lists:foreach(
       fun ({Key, Val}) ->
@@ -443,8 +494,9 @@ report_cluster_stats(ReportFun) ->
                 skip ->
                     ok;
                 _ ->
+                    ReportMetaFun([?METRIC_PREFIX, StatName]),
                     Label = [{<<"event">>, Event}],
-                    ReportFun({<<"cm">>, StatName, Label, Val})
+                    ReportMetricFun({<<"cm">>, StatName, Label, Val})
             end
       end, Counters).
 
@@ -478,7 +530,7 @@ maybe_delete_stat(Bucket, Metric, Key, Labels) ->
             ok
     end.
 
-report_erlang_stats(ReportFun) ->
+report_erlang_stats(ReportMetricFun, ReportMetaFun) ->
     InterestingErlangStats = [
         port_count,
         port_limit,
@@ -486,16 +538,19 @@ report_erlang_stats(ReportFun) ->
         process_limit
     ],
     lists:foreach(
-        fun(Stat) ->
-            ReportFun({[?METRIC_PREFIX, <<"erlang_">>, atom_to_binary(Stat)],
-                       [], erlang:system_info(Stat)})
-        end, InterestingErlangStats).
+      fun(Stat) ->
+              StatName = [<<"erlang_">>, atom_to_binary(Stat)],
+              FullName = [?METRIC_PREFIX, StatName],
+              ReportMetaFun(FullName),
+              ReportMetricFun({FullName,
+                               [], erlang:system_info(Stat)})
+      end, InterestingErlangStats).
 
 %% Derived stats are those where ns_server has instructed prometheus to
 %% do the calculations. The result of this is the stat resides in the local
 %% prometheus instance. In order to report the stat in ns_server's REST
 %% results we have to query prometheus for the stat and then report it.
-report_ns_server_derived_stats(ReportFun) ->
+report_ns_server_derived_stats(ReportFun, ReportMetaFun) ->
     Settings = prometheus_cfg:settings(),
     Derived = [N || {N, _} <- prometheus_cfg:derived_metrics(ns_server,
                                                              Settings)],
@@ -508,39 +563,52 @@ report_ns_server_derived_stats(ReportFun) ->
         {ok, Metrics} ->
             lists:map(
               fun ({[{<<"metric">>, {Props}}, {<<"value">>, [_, Value]}]}) ->
-                      report_derived_stats(Props, Value, ReportFun);
+                      report_derived_stats(Props, Value, ReportFun,
+                                           ReportMetaFun);
                   ({[{<<"value">>, [_, Value]}, {<<"metric">>, {Props}}]}) ->
-                      report_derived_stats(Props, Value, ReportFun)
+                      report_derived_stats(Props, Value, ReportFun,
+                                           ReportMetaFun)
               end, Metrics);
         {error, Err} ->
             ?log_error("Failed to get derived ns_server stats: ~p", [Err])
     end.
 
-report_derived_stats(Props, Value, ReportFun) ->
+report_derived_stats(Props, Value, ReportFun, ReportMetaFun) ->
     Name = proplists:get_value(<<"__name__">>, Props),
     Props2 = proplists:delete(<<"__name__">>, Props),
     Props3 = proplists:delete(<<"name">>, Props2),
+    ReportMetaFun(Name),
     ReportFun({Name, Props3, Value}).
 
 low_cardinality_stats() ->
     [{c, {<<"rest_request_enters">>, []}},
      {c, {<<"rest_request_leaves">>, []}}].
 
-report_stat({{g, {BinName, Labels}}, {_TS, Value}}, ReportFun) ->
-    ReportFun({[?METRIC_PREFIX, BinName], Labels, Value});
-report_stat({{c, {BinName, Labels}}, Value}, ReportFun) ->
-    NameIOList = [[?METRIC_PREFIX, BinName], <<"_total">>],
-    ReportFun({NameIOList, Labels, Value});
-report_stat({{mw, F, Window, {BinName, Labels}}, BucketsQ}, ReportFun) ->
+report_stat({{g, {BinName, Labels}}, {_TS, Value}}, ReportMetricFun,
+            ReportMetaFun) ->
+    FullName = [?METRIC_PREFIX, BinName],
+    ReportMetaFun(FullName),
+    ReportMetricFun({FullName, Labels, Value});
+report_stat({{c, {BinName, Labels}}, Value}, ReportMetricFun,
+           ReportMetaFun) ->
+    FullName = [[?METRIC_PREFIX, BinName], <<"_total">>],
+    ReportMetaFun(FullName),
+    ReportMetricFun({FullName, Labels, Value});
+report_stat({{mw, F, Window, {BinName, Labels}}, BucketsQ}, ReportMetricFun,
+           ReportMetaFun) ->
     Now = erlang:monotonic_time(millisecond),
     PrunedBucketsQ = prune_buckets(Now - Window, BucketsQ),
     Values = [V || {_, V} <- queue:to_list(PrunedBucketsQ)],
     Value = aggregate_moving_window_buckets(F, Values),
-    ReportFun({[?METRIC_PREFIX, BinName], Labels, Value});
-report_stat(Histogram, ReportFun) ->
+    FullName = [?METRIC_PREFIX, BinName],
+    ReportMetaFun(FullName),
+    ReportMetricFun({FullName, Labels, Value});
+report_stat(Histogram, ReportMetricFun, ReportMetaFun) ->
     [{h, {Name, Labels}, _Max, Units}, Sum, Inf | Buckets] =
         tuple_to_list(Histogram),
     BinName = iolist_to_binary([Name, <<"_seconds">>]),
+
+    ReportMetaFun([?METRIC_PREFIX, BinName]),
 
     BucketName = [?METRIC_PREFIX, BinName, <<"_bucket">>],
     {_, BucketsTotal} =
@@ -548,15 +616,15 @@ report_stat(Histogram, ReportFun) ->
           fun (Val, {Le, CurTotal}) ->
               BucketValue = CurTotal + Val,
               LeBin = to_seconds_bin(Le, Units),
-              ReportFun({BucketName, [{le, LeBin} | Labels], BucketValue}),
+              ReportMetricFun({BucketName, [{le, LeBin} | Labels],
+                               BucketValue}),
               {Le * 10, BucketValue}
           end, {1, 0}, Buckets),
     Total = BucketsTotal + Inf,
-    ReportFun({BucketName, [{le, <<"+Inf">>}| Labels], Total}),
-    ReportFun({[?METRIC_PREFIX, BinName, <<"_count">>], Labels,
-               Total}),
-    ReportFun({[?METRIC_PREFIX, BinName, <<"_sum">>], Labels,
-               to_seconds_bin(Sum, Units)}).
+    ReportMetricFun({BucketName, [{le, <<"+Inf">>}| Labels], Total}),
+    ReportMetricFun({[?METRIC_PREFIX, BinName, <<"_count">>], Labels, Total}),
+    ReportMetricFun({[?METRIC_PREFIX, BinName, <<"_sum">>], Labels,
+                     to_seconds_bin(Sum, Units)}).
 
 init([]) ->
     init_stats(),
@@ -568,6 +636,8 @@ init([]) ->
     _ = spawn_link(fun stale_histo_epoch_cleaner/0),
 
     spawn_ale_stats_collector(),
+
+    cb_stats_info:init_info(),
 
     {ok, restart_populate_stats_timer(0,
            restart_cleanup_stats_timer(
