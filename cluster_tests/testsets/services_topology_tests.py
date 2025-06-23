@@ -50,7 +50,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
                     enumerate(ServicesTopologyTests.initial_topology)}
         return [ClusterRequirements(edition="Serverless",
                                     balanced=True, num_nodes=3, num_connected=3,
-                                    services = topology)]
+                                    include_services= topology)]
 
     def otp_node(self, index):
         return self.otp_nodes[index]

@@ -26,10 +26,11 @@ class ClusterRequirements:
     def __init__(self,
                  edition=None, num_nodes=None, min_num_nodes=None,
                  memsize=None, min_memsize=None, num_connected=None,
-                 min_num_connected=None, afamily=None, services=None,
-                 master_password_state=None, num_vbuckets=None,
-                 encryption=None, balanced=None, buckets=None,
-                 test_generated_cluster=None, dev_preview=None):
+                 min_num_connected=None, afamily=None, exact_services=None,
+                 include_services=None, exclude_services=None,
+                 master_password_state=None, num_vbuckets=None, encryption=None,
+                 balanced=None, buckets=None, test_generated_cluster=None,
+                 dev_preview=None):
 
         def maybe(ReqClass, *args):
             if all(x is None for x in args):
@@ -43,7 +44,8 @@ class ClusterRequirements:
                                    min_num_connected),
                 'memsize': maybe(MemSize, memsize, min_memsize),
                 'afamily': maybe(AFamily, afamily),
-                'services': maybe(Services, services),
+                'services': maybe(Services, exact_services, include_services,
+                                  exclude_services),
                 'master_password_state': maybe(MasterPasswordState,
                                                master_password_state),
                 'num_vbuckets': maybe(NumVbuckets, num_vbuckets),
@@ -578,19 +580,73 @@ class Services(Requirement):
                                 [Service.KV, Service.INDEX, Service.QUERY,
                                  Service.FTS]]
 
-    def __init__(self, deploy: Union[List[Service], Dict[str, List[Service]]]):
-        self.deploy = services_to_strings(deploy)
-        super().__init__(deploy=self.deploy)
-        self.connect_args = {"deploy": self.deploy}
+    def __init__(self,
+                 exact_services: Union[None, List[Service]],
+                 include_services: Union[None, List[Service],
+                                         Dict[str, List[Service]]],
+                 exclude_services: Union[None, List[Service]]):
+        if exact_services is not None:
+            if include_services is not None or exclude_services is not None:
+                raise ValueError("Can't specify both exact_services and either "
+                                 "of include_services or exclude_services")
+            include_services = exact_services
+            exclude_services = list(set(Service) - set(exact_services))
+
+        if isinstance(include_services, list):
+            all_services = include_services
+        elif isinstance(include_services, dict):
+            all_services = [service
+                            for node_services in include_services.values()
+                            for service in node_services]
+        else:
+            all_services = []
+
+        if exclude_services is not None:
+            unexpected_services = [service for service in exclude_services
+                                   if service in all_services]
+            if unexpected_services:
+                raise ValueError("Services found in exclude and include:",
+                                 unexpected_services)
+            if Service.KV in exclude_services:
+                raise ValueError("Can't exclude KV")
+
+        if include_services is None:
+            self.include_services = []
+        else:
+            self.include_services = services_to_strings(include_services)
+
+        if exact_services is None:
+            self.exact_services = None
+        else:
+            self.exact_services = self.include_services
+
+        if exclude_services is None:
+            self.exclude_services = []
+        else:
+            self.exclude_services = services_to_strings(exclude_services)
+
+        super().__init__(exact_services=self.exact_services,
+                         include_services=self.include_services,
+                         exclude_services=self.exclude_services)
+        self.connect_args = {"deploy": self.include_services}
 
     def __str__(self):
-        if isinstance(self.deploy, list):
-            return "deploy: " + " ".join(self.deploy)
-        else:
-            def format_node(key, value):
-                return f"{key}(" + " ".join(value) + ")"
-            return "deploy: " + " ".join([format_node(key, self.deploy[key])
-                                          for key in self.deploy])
+        if self.exact_services is not None:
+            return "exact services: " + " ".join(self.exact_services)
+
+        s = []
+        if self.include_services:
+            if isinstance(self.include_services, list):
+                s.append("include services: " + " ".join(self.include_services))
+            elif isinstance(self.include_services, dict):
+                def format_node(key, value):
+                    return f"{key}(" + " ".join(value) + ")"
+                s.append("include services: " +
+                         " ".join([format_node(key, self.include_services[key])
+                                   for key in self.include_services]))
+        if isinstance(self.exclude_services, list) and self.exclude_services:
+            s.append("exclude services: " + " ".join(self.exclude_services))
+        return ", ".join(s)
 
     def is_met(self, cluster):
         for i, node in enumerate(sorted(cluster.connected_nodes)):
@@ -603,15 +659,18 @@ class Services(Requirement):
                     this_node_services = node_info['services']
 
             services_to_check = []
-            if isinstance(self.deploy, list):
-                services_to_check = self.deploy
+            if isinstance(self.include_services, list):
+                services_to_check = self.include_services
             else:
                 nname = f'n{i}'
-                if nname in self.deploy:
-                    services_to_check = self.deploy[nname]
+                if nname in self.include_services:
+                    services_to_check = self.include_services[nname]
 
             for s in services_to_check:
                 if s not in this_node_services:
+                    return False
+            for s in self.exclude_services:
+                if s in this_node_services:
                     return False
 
         return True
@@ -635,7 +694,7 @@ class Services(Requirement):
             services = [Service.KV] + random.sample(
                                         services,
                                         k=random.randint(0, len(services) - 1))
-        return Services(services)
+        return Services(services, [], [])
 
 
 # We are not enforcing it when creating a cluster (like by setting something

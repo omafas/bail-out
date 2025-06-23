@@ -21,7 +21,7 @@ class ResourceManagementAPITests(testlib.BaseTestSet):
         # - Provisioned edition required for all guard rails to be configurable
         # TODO: Add Service.INDEX once indexing has added support
         return testlib.ClusterRequirements(edition="Provisioned",
-                                           services=[Service.KV])
+                                           include_services=[Service.KV])
 
     def setup(self):
         # Set the promQL queries to default values to ensure that they are
@@ -409,7 +409,7 @@ class GuardrailSelfManagedAPITests(testlib.BaseTestSet):
     def requirements():
         # - Self-managed edition has limited guardrails configured
         return testlib.ClusterRequirements(edition="Enterprise",
-                                           services=[Service.KV])
+                                           include_services=[Service.KV])
 
     def setup(self):
         self.original_settings = testlib.get_succ(

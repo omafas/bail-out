@@ -15,7 +15,8 @@ class IntCredsRotationTests(testlib.BaseTestSet):
     @staticmethod
     def requirements():
         return testlib.ClusterRequirements(min_num_nodes=2,
-                                           services=[Service.KV, Service.QUERY])
+                                           include_services=[Service.KV,
+                                                             Service.QUERY])
 
     def setup(self):
         d = 'ns_config:read_key_fast(int_creds_protection_sleep, undefined).'

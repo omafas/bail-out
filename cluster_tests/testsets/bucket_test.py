@@ -2141,7 +2141,7 @@ class NewBucketWithUnbalancedServerGroups(testlib.BaseTestSet):
         return testlib.ClusterRequirements(num_nodes=4, num_connected=4,
                                            num_vbuckets=1024,
                                            balanced=True,
-                                           services=[Service.KV])
+                                           include_services=[Service.KV])
 
     def setup(self):
         pass

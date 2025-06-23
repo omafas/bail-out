@@ -22,7 +22,7 @@ class HardResetTests(testlib.BaseTestSet):
         return testlib.ClusterRequirements(
             num_nodes=2,
             num_connected=2,
-            services=HardResetTests.services_to_run,
+            include_services=HardResetTests.services_to_run,
             balanced=True)
 
     def setup(self):

@@ -20,7 +20,7 @@ class CrudTests(testlib.BaseTestSet):
     @staticmethod
     def requirements():
         return testlib.ClusterRequirements(
-            services=[Service.KV],
+            include_services=[Service.KV],
             num_vbuckets=16,
             buckets=[{"name": bucket_name,
                       "ramQuota": 100}])

@@ -132,11 +132,11 @@ class SettingsManagersTests(testlib.BaseTestSet):
     @staticmethod
     def requirements():
         return testlib.ClusterRequirements(num_nodes=1, min_memsize=1024,
-                                           services=[Service.KV,
-                                                     Service.INDEX,
-                                                     Service.EVENTING,
-                                                     Service.CBAS,
-                                                     Service.QUERY])
+                                           include_services=[Service.KV,
+                                                             Service.INDEX,
+                                                             Service.EVENTING,
+                                                             Service.CBAS,
+                                                             Service.QUERY])
 
     def setup(self):
         pass

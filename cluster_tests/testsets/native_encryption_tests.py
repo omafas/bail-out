@@ -46,7 +46,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
     def requirements():
         return testlib.ClusterRequirements(num_nodes = 3,
                                            edition='Enterprise',
-                                           services={'n0': [Service.KV],
+                                           include_services={'n0': [Service.KV],
                                                      'n1': [Service.QUERY],
                                                      'n2': [Service.KV]},
                                            buckets=[],

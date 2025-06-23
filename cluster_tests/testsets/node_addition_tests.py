@@ -773,7 +773,7 @@ class NodeRemovalStreamingChunked(testlib.BaseTestSet):
     def requirements():
         return [ClusterRequirements(edition="Enterprise",
                                     min_num_nodes=2, num_connected=2,
-                                    services=[Service.KV, Service.CBAS],
+                                    include_services=[Service.KV, Service.CBAS],
                                     balanced=True,
                                     num_vbuckets=16,
                                     buckets=[{"name": BUCKET_NAME,

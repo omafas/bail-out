@@ -76,7 +76,8 @@ class SamlTests(testlib.BaseTestSet):
                                            num_vbuckets=16,
                                            buckets=[{'name': bucket,
                                                      'ramQuota': 100}],
-                                           services=SamlTests.services_to_run)
+                                           include_services=
+                                           SamlTests.services_to_run)
 
     def setup(self):
         testlib.put_succ(self.cluster,

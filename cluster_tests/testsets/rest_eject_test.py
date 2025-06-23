@@ -17,7 +17,7 @@ class RestEjectTest(testlib.BaseTestSet):
     def requirements():
         return testlib.ClusterRequirements(
             num_nodes=3,
-            services=[Service.KV],
+            include_services=[Service.KV],
             balanced=True,
             num_vbuckets=16,
             buckets=[{"name": "testbucket",

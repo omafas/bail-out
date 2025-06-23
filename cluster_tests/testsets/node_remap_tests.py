@@ -53,7 +53,8 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
                 # provided cluster.
                 testlib.ClusterRequirements(edition="Enterprise",
                                             num_nodes=2,
-                                            services=list(testlib.Service),
+                                            include_services=
+                                            list(testlib.Service),
                                             min_memsize=1024,
                                             balanced=True,
                                             buckets=[],
@@ -64,7 +65,8 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
                 # provided cluster.
                 testlib.ClusterRequirements(edition="Enterprise",
                                             num_nodes=1,
-                                            services=[testlib.Service.KV],
+                                            include_services=
+                                            [testlib.Service.KV],
                                             min_memsize=1024,
                                             buckets=[],
                                             test_generated_cluster=True,

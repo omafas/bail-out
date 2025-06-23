@@ -107,7 +107,8 @@ class JWTTests(testlib.BaseTestSet):
                                            buckets=[
                                                {'name': JWTTests.test_bucket,
                                                      'ramQuota': 100}],
-                                           services=[Service.KV, Service.QUERY])
+                                           include_services=[Service.KV,
+                                                             Service.QUERY])
 
     def setup(self):
         # Set shorter intervals for testing

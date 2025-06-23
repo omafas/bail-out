@@ -22,9 +22,9 @@ class UsersTestSet(testlib.BaseTestSet):
     @staticmethod
     def requirements():
         return testlib.ClusterRequirements(
-            services=[Service.KV,
-                      Service.QUERY,
-                      Service.CBAS],
+            include_services=[Service.KV,
+                              Service.QUERY,
+                              Service.CBAS],
             # i.e. wait for service up
             balanced=True,
             num_vbuckets=16,

@@ -48,7 +48,8 @@ class FusionTests(testlib.BaseTestSet):
 
     @staticmethod
     def requirements():
-        return [ClusterRequirements(edition="Enterprise", services=[Service.KV],
+        return [ClusterRequirements(edition="Enterprise",
+                                    include_services=[Service.KV],
                                     min_num_nodes=2, num_connected=1,
                                     num_vbuckets=16, buckets=[])]
 
