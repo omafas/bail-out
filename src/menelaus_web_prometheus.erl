@@ -12,6 +12,8 @@
 -export([handle_get_local_metrics/2, handle_create_snapshot/1,
          handle_get_metrics/1, handle_sd_config_yaml/1, handle_sd_config/1,
          proxy_prometheus_api/2]).
+%% For use by unit tests
+-export([report_metric/2, report_metric_meta/2]).
 
 -include("ns_common.hrl").
 -include("cut.hrl").

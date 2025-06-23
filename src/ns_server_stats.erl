@@ -269,11 +269,53 @@ key_to_binary(Key) when is_binary(Key) ->
 key_to_binary(Key) when is_list(Key) ->
     list_to_binary(Key).
 
+%% Split the <proc-name>/<stat-name> list in order to group them by
+%% <stat-name>. For example, these stats:
+%%
+%%   {<<"sigar_port/page_faults_raw">>,552},
+%%   {<<"saslauthd-port/page_faults_raw">>,838},
+%%   {<<"prometheus/page_faults_raw">>,6217},
+%%
+%% are grouped by stat-name:
+%%
+%%   [
+%%    {<<"page_faults_raw">>,
+%%     [
+%%      {<<"sigar_port">>,552},
+%%      {<<"saslauthd-port">>,838},
+%%      {<<"prometheus">>,6217}
+%%     ]
+%%    }
+%%   ]
+%%
+%% so they can be reported as:
+%%
+%%   sysproc_page_faults_raw{proc="sigar_port",category="system-processes"}
+%%   sysproc_page_faults_raw{proc="saslauthd-port",category="system-processes"}
+%%   sysproc_page_faults_raw{proc="prometheus,category="system-processes"}
+%%
+sysproc_group_by(SysProcStats) ->
+    %% Convert the list into [{StatName, {ProcName, Value}]
+    Converted =
+        [{StatName, {ProcName, Value}} ||
+         {StatProcName, Value} <- SysProcStats,
+         [ProcName, StatName] <- [binary:split(StatProcName, <<"/">>)]],
+
+    maps:groups_from_list(
+      fun ({StatName, _}) -> StatName end,
+      fun ({_, Value}) -> Value end,
+      Converted).
+
 report_system_stats(ReportMetricFun, ReportMetaFun) ->
     Stats = gen_server:call(?MODULE, get_stats),
+    Mounts = ns_disksup:get_disk_data(),
+    report_system_stats(ReportMetricFun, ReportMetaFun, Stats, Mounts).
+
+report_system_stats(ReportMetricFun, ReportMetaFun, Stats, Mounts) ->
     SystemStats = proplists:get_value("@system", Stats, []),
-    lists:foreach(
-      fun ({Key, Val}) ->
+    SystemStatsSorted = lists:sort(SystemStats),
+    lists:foldl(
+      fun ({Key, Val}, AccIn) ->
               KeyBin = key_to_binary(Key),
               {StatName, Labels0} =
                 case KeyBin of
@@ -288,46 +330,73 @@ report_system_stats(ReportMetricFun, ReportMetaFun) ->
                     _ ->
                         {KeyBin, []}
                 end,
-              ReportMetaFun([<<"sys_">>, StatName]),
+              case StatName =:= AccIn of
+                  true ->
+                      %% Same stat name as prior one so no need to output
+                      %% meta again.
+                      ok;
+                  false ->
+                      ReportMetaFun([<<"sys_">>, StatName])
+              end,
               Labels = Labels0 ++ [{<<"category">>, <<"system">>}],
-              ReportMetricFun({<<"sys">>, StatName, Labels, Val})
-      end, SystemStats),
+              ReportMetricFun({<<"sys">>, StatName, Labels, Val}),
+              StatName
+      end, undefined, SystemStatsSorted),
 
     SysProcStats = proplists:get_value("@system-processes", Stats, []),
-    lists:foreach(
-        fun ({KeyBin, Val}) ->
-            [Proc, Name0] = binary:split(KeyBin, <<"/">>),
-            {Name, Labels0} =
-                case Name0 of
+    SysProcGroupBy = sysproc_group_by(SysProcStats),
+
+    maps:foreach(
+      fun (StatName, ProcNamesValues) ->
+              {ReportedName, Labels0} =
+                case StatName of
                     <<"cpu_seconds_total_", Mode/binary>> ->
-                        {<<"cpu_seconds_total">>,
-                         [{<<"mode">>, Mode}]};
+                        {<<"cpu_seconds_total">>, [{<<"mode">>, Mode}]};
                     _ ->
-                        {Name0, []}
+                        {StatName, []}
                 end,
-            ReportMetaFun([<<"sysproc_">>, Name]),
-            Labels = Labels0 ++ [{<<"proc">>, Proc},
-                                 {<<"category">>, <<"system-processes">>}],
-            ReportMetricFun({<<"sysproc">>, Name, Labels, Val})
-        end, SysProcStats),
+              ReportMetaFun([<<"sysproc_">>, ReportedName]),
+              lists:foreach(
+                fun ({ProcName, Value}) ->
+                        Labels = Labels0 ++
+                            [{<<"proc">>, ProcName},
+                             {<<"category">>, <<"system-processes">>}],
+                        ReportMetricFun({<<"sysproc">>, ReportedName,
+                                         Labels, Value})
+                end, ProcNamesValues)
+      end, SysProcGroupBy),
 
     DiskStats = proplists:get_value("@system-disks", Stats, []),
-    lists:foreach(
-      fun({{Disk, Name}, Val}) ->
-              {MappedName, MappedValue} =
-                  case binary:split(Name, <<"_ms">>) of
-                      [Start, <<>>] ->
-                          {<<Start/binary, "_seconds">>,
-                           to_seconds_bin(Val, millisecond)};
-                      _ -> {Name, Val}
-                  end,
-              ReportMetaFun([<<"sys_disk_">>, MappedName]),
-              ReportMetricFun({<<"sys_disk">>, MappedName, [{<<"disk">>, Disk}],
-                               MappedValue})
-      end,
-      DiskStats),
-    Mounts = ns_disksup:get_disk_data(),
-    ReportMetaFun(<<"sys_disk_usage_ratio">>),
+    DiskStatsOrdered =
+        maps:groups_from_list(
+          fun ({{_DiskName, StatName}, _Value}) ->
+                  case binary:split(StatName, <<"_ms">>) of
+                      [Start, <<>>] -> <<Start/binary, "_seconds">>;
+                      _ -> StatName
+                  end
+          end,
+          fun ({{DiskName, StatName}, Value}) ->
+                  ReportedValue =
+                    case binary:split(StatName, <<"_ms">>) of
+                        [_Start, <<>>] ->
+                             to_seconds_bin(Value, millisecond);
+                        _ -> Value
+                    end,
+                  {DiskName, ReportedValue}
+          end,
+          DiskStats),
+
+    maps:foreach(
+      fun (StatName, DiskValueList) ->
+              ReportMetaFun([<<"sys_disk_">>, StatName]),
+              lists:foreach(
+                fun ({DiskName, Value}) ->
+                        ReportMetricFun({<<"sys_disk">>, StatName,
+                                         [{<<"disk">>, DiskName}], Value})
+                end, DiskValueList)
+      end, DiskStatsOrdered),
+
+    length(Mounts) =:= 0 orelse ReportMetaFun(<<"sys_disk_usage_ratio">>),
     lists:foreach(
       fun ({Disk, _Size, Usage}) ->
               %% Prometheus recommends using the unit "ratio" with a value range
@@ -395,69 +464,157 @@ report_couch_stats(Bucket, ReportMetricFun, ReportMetaFun) ->
 
 report_cbauth_stats(ReportMetricFun, ReportMetaFun) ->
     Stats = menelaus_cbauth:stats(),
-    lists:foreach(
-        fun ({ServiceName, {<<"cacheStats">>, CacheStatsList}}) ->
-            lists:foreach(
-                fun ({CacheStats}) ->
-                    CacheName = proplists:get_value(<<"name">>,
-                                                    CacheStats, undefined),
-                    report_cbauth_cache_stats(ReportMetricFun, ReportMetaFun,
-                                              ServiceName,
-                                              CacheStats, CacheName)
-                end, CacheStatsList)
-        end, Stats).
+    report_cbauth_stats(ReportMetricFun, ReportMetaFun, Stats).
 
-report_cbauth_cache_stats(_ReportMetricFun, _ReportMetaFun, ServiceName,
-                          _CacheStats, undefined) ->
-    ?log_error("Found empty cache name for service ~p. Ignoring the stats.",
-               [ServiceName]);
-report_cbauth_cache_stats(ReportMetricFun, ReportMetaFun, ServiceName,
-                          CacheStats, CacheName) ->
-    lists:foreach(
-        fun ({Name, ReportingName}) ->
-            case proplists:get_value(Name, CacheStats, undefined) of
-                undefined ->
-                    ?log_error("Expected to find ~p value in the cbauth stats "
-                               "report of service ~p, but couldn't find it. "
-                               "Ignoring the stats.",
-                               [Name, ServiceName]);
-                Val ->
-                    StatName = [<<CacheName/binary, <<"_">>/binary,
-                                  ReportingName/binary>>],
-                    FullName = [?METRIC_PREFIX, StatName],
-                    ReportMetaFun(FullName),
-                    ReportMetricFun({[?METRIC_PREFIX, CacheName],
-                                     ReportingName,
-                                     [{<<"category">>, <<"cbauth">>},
-                                      {<<"service">>, ServiceName}],
-                                     Val})
-            end
-        end,
-        [{<<"maxSize">>, <<"max_items">>},
-         {<<"size">>, <<"current_items">>},
-         {<<"hit">>, <<"hit_total">>},
-         {<<"miss">>, <<"miss_total">>}]).
+report_cbauth_stats(ReportMetricFun, ReportMetaFun, Stats) ->
+
+    %% We have to "expand" the stats so that we can return meta for only the
+    %% first occurrence of each stat. The basic format of the stats prior to
+    %% this expansion:
+    %%
+    %%      "projector"
+    %%         "cacheStats"
+    %%            "name" : "uuid_cache"
+    %%               "maxSize" : 0
+    %%               "size" : 0
+    %%               "hit" : 0
+    %%               "miss" : 0
+    %%            "name" : "user_bkts_cache"
+    %%               "maxSize" : 0
+    %%               "size" : 0
+    %%               "hit" : 0
+    %%               "miss" : 0
+    %%               <etc>
+    %%      "n1ql"
+    %%         "cacheStats"
+    %%            "name" : "uuid_cache"
+    %%               "maxSize" : 0
+    %%               "size" : 0
+    %%               "hit" : 0
+    %%               "miss" : 0
+    %%            "name" : "user_bkts_cache"
+    %%               "maxSize" : 0
+    %%               "size" : 0
+    %%               "hit" : 0
+    %%               "miss" : 0
+    %%       <etc>
+    %%
+    %% Where we need to report, e.g. via /metrics, the same stat for each
+    %% service grouped under the common TYPE. Note in this example "maxSize"
+    %% gets mapped to "max_items" and both the projector and n1ql report
+    %% the same set of stats.
+    %%
+    %% # TYPE cm_user_bkts_cache_max_items counter
+    %% cm_user_bkts_cache_max_items{category="cbauth",service="n1ql"} 0
+    %% cm_user_bkts_cache_max_items{category="cbauth",service="projector"} 0
+    %%
+
+    ExpandedStats =
+        lists:foldl(
+          fun ({ServiceName, {<<"cacheStats">>, CacheStatsList}}, AccIn) ->
+                  ServiceCacheStats =
+                    lists:foldl(
+                      fun ({CacheStats}, AccIn2) ->
+                              CacheName = proplists:get_value(<<"name">>,
+                                                              CacheStats,
+                                                              undefined),
+                              case CacheName of
+                                  undefined ->
+                                      ?log_error("Found empty cache name for "
+                                                 "service ~p. Ignoring the "
+                                                 "stats.",
+                                                 [ServiceName]),
+                                      AccIn2;
+                                  _ ->
+                                      S = get_cbauth_cache_stats(CacheStats,
+                                                                 CacheName,
+                                                                 ServiceName),
+                                      [S | AccIn2]
+                              end
+                      end, [], CacheStatsList),
+                  [ServiceCacheStats | AccIn]
+      end, [], Stats),
+
+    FlattenedStats = lists:flatten(ExpandedStats),
+
+    Grouped = maps:groups_from_list(
+                fun ({StatName, _}) -> StatName end,
+                fun ({_, StatInfo}) -> StatInfo end,
+                FlattenedStats),
+
+    maps:foreach(
+      fun (StatName, StatInfoList) ->
+              ReportMetaFun([?METRIC_PREFIX, StatName]),
+              lists:foreach(
+                fun ([CacheName, ReportingName, ServiceName, Value]) ->
+                        Labels = [{<<"category">>, <<"cbauth">>},
+                                  {<<"service">>, ServiceName}],
+                        ReportMetricFun({[?METRIC_PREFIX, CacheName],
+                                         ReportingName, Labels, Value})
+                end, StatInfoList)
+      end, Grouped).
+
+get_cbauth_cache_stats(CacheStats, CacheName, ServiceName) ->
+    lists:foldl(
+      fun ({Name, ReportingName}, AccIn) ->
+              case proplists:get_value(Name, CacheStats, undefined) of
+                  undefined ->
+                      ?log_error("Expected to find ~p value in the cbauth "
+                                 "stats report of service ~p, but couldn't "
+                                 "find it. Ignoring the stats.",
+                                 [Name, ServiceName]),
+                      AccIn;
+                  Val ->
+                      StatName = [<<CacheName/binary, <<"_">>/binary,
+                                    ReportingName/binary>>],
+                      [{StatName,
+                        [CacheName, ReportingName, ServiceName, Val]} | AccIn]
+              end
+      end, [],
+      [{<<"maxSize">>, <<"max_items">>},
+       {<<"size">>, <<"current_items">>},
+       {<<"hit">>, <<"hit_total">>},
+       {<<"miss">>, <<"miss_total">>}]).
 
 report_ns_server_lc_stats(ReportMetricFun, ReportMetaFun) ->
-    lists:foreach(
-      fun (Key) ->
-          case ets:lookup(?MODULE, Key) of
-              [] -> ok;
-              [M] -> report_stat(M, ReportMetricFun, ReportMetaFun)
-          end
-      end, low_cardinality_stats()).
+    Stats =
+        lists:filtermap(
+          fun (Key) ->
+                  case ets:lookup(?MODULE, Key) of
+                      [] -> false;
+                      [M] -> {true, M}
+                  end
+          end, low_cardinality_stats()),
+    report_ns_server_stats_helper(Stats, ReportMetricFun, ReportMetaFun).
 
 report_ns_server_hc_stats(ReportMetricFun, ReportMetaFun) ->
-    ets:foldl(
-      fun (M, _) ->
-              case lists:member(element(1, M), low_cardinality_stats()) of
-                  true -> ok;
-                  false ->
-                      report_stat(M, ReportMetricFun, ReportMetaFun)
-              end,
-              ok
-      end, [], ?MODULE),
-    ok.
+    Stats = ets:tab2list(?MODULE),
+    report_ns_server_stats_helper(Stats, ReportMetricFun, ReportMetaFun).
+
+report_ns_server_stats_helper(Stats, ReportMetricFun, ReportMetaFun) ->
+    Ordered =
+        maps:groups_from_list(
+          fun (S) -> extract_name_and_type(element(1, S)) end,
+          Stats),
+
+    maps:foreach(
+      fun (_Key, StatInfo) ->
+              lists:foldl(
+                fun (M, Skip) ->
+                        report_stat(M, ReportMetricFun, ReportMetaFun, Skip),
+                        %% Only report meta once
+                        true
+                end, false, StatInfo)
+      end, Ordered).
+
+extract_name_and_type({g, {BinName, _Labels}}) ->
+    {g, BinName};
+extract_name_and_type({c, {BinName, _Labels}}) ->
+    {c, BinName};
+extract_name_and_type({mw, _F, _Window, {BinName, _Labels}}) ->
+    {mw, BinName};
+extract_name_and_type({h, {BinName, _Labels}, _Max, _Units}) ->
+    {h, BinName}.
 
 convert_to_reported_event(<<"start">>) -> <<"initiated">>;
 convert_to_reported_event(<<"success">>) -> <<"completed">>;
@@ -585,25 +742,25 @@ low_cardinality_stats() ->
      {c, {<<"rest_request_leaves">>, []}}].
 
 report_stat({{g, {BinName, Labels}}, {_TS, Value}}, ReportMetricFun,
-            ReportMetaFun) ->
+            ReportMetaFun, SkipMeta) ->
     FullName = [?METRIC_PREFIX, BinName],
-    ReportMetaFun(FullName),
+    SkipMeta orelse ReportMetaFun(FullName),
     ReportMetricFun({FullName, Labels, Value});
 report_stat({{c, {BinName, Labels}}, Value}, ReportMetricFun,
-           ReportMetaFun) ->
+           ReportMetaFun, SkipMeta) ->
     FullName = [[?METRIC_PREFIX, BinName], <<"_total">>],
-    ReportMetaFun(FullName),
+    SkipMeta orelse ReportMetaFun(FullName),
     ReportMetricFun({FullName, Labels, Value});
 report_stat({{mw, F, Window, {BinName, Labels}}, BucketsQ}, ReportMetricFun,
-           ReportMetaFun) ->
+           ReportMetaFun, SkipMeta) ->
     Now = erlang:monotonic_time(millisecond),
     PrunedBucketsQ = prune_buckets(Now - Window, BucketsQ),
     Values = [V || {_, V} <- queue:to_list(PrunedBucketsQ)],
     Value = aggregate_moving_window_buckets(F, Values),
     FullName = [?METRIC_PREFIX, BinName],
-    ReportMetaFun(FullName),
+    SkipMeta orelse ReportMetaFun(FullName),
     ReportMetricFun({FullName, Labels, Value});
-report_stat(Histogram, ReportMetricFun, ReportMetaFun) ->
+report_stat(Histogram, ReportMetricFun, ReportMetaFun, _SkipMeta) ->
     [{h, {Name, Labels}, _Max, Units}, Sum, Inf | Buckets] =
         tuple_to_list(Histogram),
     BinName = iolist_to_binary([Name, <<"_seconds">>]),
@@ -1274,5 +1431,530 @@ stats_deletion_test() ->
     ?assertEqual(0, ets:info(?MODULE, size)),
 
     ets:delete(?MODULE).
+
+stats_type_and_help_test_() ->
+    {foreach,
+     fun () ->
+             cb_stats_info:init_info(),
+             ets:new(?MODULE, [public, named_table, ordered_set]),
+             %% Rather than respond to the non-existent request we save
+             %% the response into a process dictionary; preserving the
+             %% ordering. After all the responses have been done we can
+             %% get the content of the process dictionary and see that it
+             %% matches our expectation.
+             meck:expect(mochiweb_response, write_chunk,
+                         fun (LineIn, _) ->
+                                 Line = iolist_to_binary(LineIn),
+                                 New = case get(log) of
+                                           undefined -> [Line];
+                                           List -> List ++ [Line]
+                                       end,
+                                 put(log, New)
+                         end)
+     end,
+     fun (_) ->
+             erase(log),
+             cb_stats_info:delete_info(),
+             ets:delete(?MODULE),
+             meck:unload()
+     end,
+     [{"system stats", fun () -> test_system_stats() end},
+      {"lc stats", fun () ->  test_lc_stats() end},
+      {"hc stats", fun () -> test_hc_stats() end},
+      {"cbauth stats", fun () -> test_cbauth_stats() end},
+      {"empty system stats", fun () -> test_empty_system_stats() end},
+      {"missing stat info", fun () -> test_missing_stat_info() end}
+     ]}.
+
+test_system_stats() ->
+    Stats =
+        [{"@system",
+          [{cpu_host_seconds_total_idle,62},
+           {cpu_host_seconds_total_user,12},
+           {cpu_host_seconds_total_sys,35},
+           {cpu_host_seconds_total_other,10},
+           {cpu_cores_available,10},
+           {cpu_host_cores_available,10}]},
+         {"@system-processes",
+          [{<<"sigar_port/start_time">>,1751991353612},
+           {<<"sigar_port/page_faults_raw">>,524},
+           {<<"ns_server/page_faults_raw">>,21317},
+           {<<"ns_server/mem_size">>,422200868864},
+           {<<"memcached/start_time">>,1751991359703},
+           {<<"sigar_port/mem_size">>,421024055296},
+           {<<"ns_server/start_time">>,1751991349389},
+           {<<"memcached/page_faults_raw">>,5136},
+           {<<"memcached/mem_size">>,421345214464}]},
+         {"@system-disks",
+          [{{<<"xvda">>,<<"queue">>},0},
+           {{<<"xvda">>,<<"read_bytes">>},607673344},
+           {{<<"xvda">>,<<"read_time_ms">>},15000},
+           {{<<"xvda">>,<<"reads">>},12342},
+           {{<<"xvda">>,<<"time_ms">>},52000},
+           {{<<"xvda">>,<<"write_bytes">>},6328144384},
+           {{<<"xvda">>,<<"write_time_ms">>},317000},
+           {{<<"xvda">>,<<"writes">>},146065},
+           {{<<"xvda1">>,<<"queue">>},0},
+           {{<<"xvda1">>,<<"read_bytes">>},604199936},
+           {{<<"xvda1">>,<<"read_time_ms">>},137000},
+           {{<<"xvda1">>,<<"reads">>},12072},
+           {{<<"xvda1">>,<<"time_ms">>},55000},
+           {{<<"xvda1">>,<<"write_bytes">>},6328143872},
+           {{<<"xvda1">>,<<"write_time_ms">>},317000},
+           {{<<"xvda1">>,<<"writes">>},146064}]}],
+
+    Mounts =
+        [{"/dev",3986500,100},
+         {"/run",811552,1000},
+         {"/sys/firmware/efi/efivars",56,4700},
+         {"/",31270768,4800},
+         {"/dev/shm",4057756,0},
+         {"/run/lock",5120,0}],
+
+    ReportMetric =
+        fun (Info) ->
+                menelaus_web_prometheus:report_metric(Info, not_used)
+        end,
+    ReportMeta =
+        fun (FullName) ->
+            menelaus_web_prometheus:report_metric_meta(FullName, not_used)
+        end,
+
+    report_system_stats(ReportMetric, ReportMeta, Stats, Mounts),
+
+    Results = get(log),
+
+    ?assertEqual(
+       [<<"# TYPE sys_cpu_cores_available gauge\n"
+          "# HELP sys_cpu_cores_available Number of available CPU cores "
+          "in the control group\n">>,
+        <<"sys_cpu_cores_available{category=\"system\"} 10\n">>,
+        <<"# TYPE sys_cpu_host_cores_available gauge\n"
+          "# HELP sys_cpu_host_cores_available Number of available CPU "
+          "cores in the host\n">>,
+        <<"sys_cpu_host_cores_available{category=\"system\"} 10\n">>,
+        <<"# TYPE sys_cpu_host_seconds_total counter\n"
+          "# HELP sys_cpu_host_seconds_total Number of CPU seconds "
+          "utilized in the host, by mode\n">>,
+        <<"sys_cpu_host_seconds_total{mode=\"idle\",category=\"system\"} "
+          "62\n">>,
+        <<"sys_cpu_host_seconds_total{mode=\"other\",category=\"system\"} "
+          "10\n">>,
+        <<"sys_cpu_host_seconds_total{mode=\"sys\",category=\"system\"} "
+          "35\n">>,
+        <<"sys_cpu_host_seconds_total{mode=\"user\",category=\"system\"} "
+          "12\n">>,
+        <<"# TYPE sysproc_mem_size gauge\n"
+          "# HELP sysproc_mem_size Amount of memory used, by process\n">>,
+        <<"sysproc_mem_size{proc=\"ns_server\",category=\"system-processes\"} "
+          "422200868864\n">>,
+        <<"sysproc_mem_size{proc=\"sigar_port\",category=\"system-processes\"} "
+          "421024055296\n">>,
+        <<"sysproc_mem_size{proc=\"memcached\",category=\"system-processes\"} "
+          "421345214464\n">>,
+        <<"# TYPE sysproc_page_faults_raw gauge\n"
+          "# HELP sysproc_page_faults_raw Number of page faults, by "
+          "process\n">>,
+        <<"sysproc_page_faults_raw{proc=\"sigar_port\",category=\"system-"
+          "processes\"} 524\n">>,
+        <<"sysproc_page_faults_raw{proc=\"ns_server\",category=\"system-"
+          "processes\"} 21317\n">>,
+        <<"sysproc_page_faults_raw{proc=\"memcached\",category=\"system-"
+          "processes\"} 5136\n">>,
+        <<"# TYPE sysproc_start_time counter\n"
+          "# HELP sysproc_start_time OS specific time when process was "
+          "started\n">>,
+        <<"sysproc_start_time{proc=\"sigar_port\",category=\"system-"
+          "processes\"} 1751991353612\n">>,
+        <<"sysproc_start_time{proc=\"memcached\",category=\"system-"
+          "processes\"} 1751991359703\n">>,
+        <<"sysproc_start_time{proc=\"ns_server\",category=\"system-"
+          "processes\"} 1751991349389\n">>,
+        <<"# TYPE sys_disk_queue gauge\n"
+          "# HELP sys_disk_queue Current disk queue length of the disk\n">>,
+        <<"sys_disk_queue{disk=\"xvda\"} 0\n">>,
+        <<"sys_disk_queue{disk=\"xvda1\"} 0\n">>,
+        <<"# TYPE sys_disk_read_bytes counter\n"
+          "# HELP sys_disk_read_bytes Number of bytes read by the disk\n">>,
+        <<"sys_disk_read_bytes{disk=\"xvda\"} 607673344\n">>,
+        <<"sys_disk_read_bytes{disk=\"xvda1\"} 604199936\n">>,
+        <<"# TYPE sys_disk_read_time_seconds counter\n"
+          "# HELP sys_disk_read_time_seconds Amount of time that the disk "
+          "spent reading\n">>,
+        <<"sys_disk_read_time_seconds{disk=\"xvda\"} 15.0\n">>,
+        <<"sys_disk_read_time_seconds{disk=\"xvda1\"} 137.0\n">>,
+        <<"# TYPE sys_disk_reads counter\n"
+          "# HELP sys_disk_reads Number of reads that the disk performed\n">>,
+        <<"sys_disk_reads{disk=\"xvda\"} 12342\n">>,
+        <<"sys_disk_reads{disk=\"xvda1\"} 12072\n">>,
+        <<"# TYPE sys_disk_time_seconds counter\n"
+          "# HELP sys_disk_time_seconds Amount of time that the disk spent "
+          "performing IO\n">>,
+        <<"sys_disk_time_seconds{disk=\"xvda\"} 52.0\n">>,
+        <<"sys_disk_time_seconds{disk=\"xvda1\"} 55.0\n">>,
+        <<"# TYPE sys_disk_write_bytes counter\n"
+          "# HELP sys_disk_write_bytes Number of bytes written by the disk\n">>,
+        <<"sys_disk_write_bytes{disk=\"xvda\"} 6328144384\n">>,
+        <<"sys_disk_write_bytes{disk=\"xvda1\"} 6328143872\n">>,
+        <<"# TYPE sys_disk_write_time_seconds counter\n"
+          "# HELP sys_disk_write_time_seconds Amount of time that the disk "
+          "spent writing\n">>,
+        <<"sys_disk_write_time_seconds{disk=\"xvda\"} 317.0\n">>,
+        <<"sys_disk_write_time_seconds{disk=\"xvda1\"} 317.0\n">>,
+        <<"# TYPE sys_disk_writes counter\n"
+          "# HELP sys_disk_writes Number of writes that the disk performed\n">>,
+        <<"sys_disk_writes{disk=\"xvda\"} 146065\n">>,
+        <<"sys_disk_writes{disk=\"xvda1\"} 146064\n">>,
+        <<"# TYPE sys_disk_usage_ratio gauge\n"
+          "# HELP sys_disk_usage_ratio Total usage % of a disk or "
+          "partition\n">>,
+        <<"sys_disk_usage_ratio{disk=\"/dev\"} 1.00000000000000000000e+00\n">>,
+        <<"sys_disk_usage_ratio{disk=\"/run\"} 1.00000000000000000000e+01\n">>,
+        <<"sys_disk_usage_ratio{disk=\"/sys/firmware/efi/efivars\"} "
+          "4.70000000000000000000e+01\n">>,
+        <<"sys_disk_usage_ratio{disk=\"/\"} "
+          "4.80000000000000000000e+01\n">>,
+        <<"sys_disk_usage_ratio{disk=\"/dev/shm\"} "
+          "0.00000000000000000000e+00\n">>,
+        <<"sys_disk_usage_ratio{disk=\"/run/lock\"} "
+          "0.00000000000000000000e+00\n">>],
+       Results).
+
+test_lc_stats() ->
+    ReportMetric =
+        fun (Info) ->
+                menelaus_web_prometheus:report_metric(Info, not_used)
+        end,
+    ReportMeta =
+        fun (FullName) ->
+            menelaus_web_prometheus:report_metric_meta(FullName, not_used)
+        end,
+    lists:foreach(
+     fun (N) ->
+             case N rem 2 of
+                 0 ->
+                     ns_server_stats:notify_counter(<<"rest_request_enters">>);
+                 1 ->
+                     ns_server_stats:notify_counter(<<"rest_request_leaves">>)
+             end
+     end, lists:seq(1, 20)),
+
+    report_ns_server_lc_stats(ReportMetric, ReportMeta),
+
+    Results = get(log),
+
+    ?assertEqual(
+       [<<"# TYPE cm_rest_request_enters_total counter\n"
+          "# HELP cm_rest_request_enters_total Number of REST requests "
+          "to enter ns_server\n">>,
+        <<"cm_rest_request_enters_total{} 10\n">>,
+        <<"# TYPE cm_rest_request_leaves_total counter\n"
+          "# HELP cm_rest_request_leaves_total Number of REST requests "
+          "to exit ns_server\n">>,
+        <<"cm_rest_request_leaves_total{} 10\n">>],
+       Results).
+
+test_hc_stats() ->
+    ReportMetric =
+        fun (Info) ->
+                menelaus_web_prometheus:report_metric(Info, not_used)
+        end,
+    ReportMeta =
+        fun (FullName) ->
+            menelaus_web_prometheus:report_metric_meta(FullName, not_used)
+        end,
+
+    lists:foreach(
+      fun ({Method, Path}) ->
+              ns_server_stats:notify_counter(
+                {<<"http_requests">>, [{scheme, "http"}, {method, Method},
+                                       {path, Path},
+                                       {user, "user"}, {code, 200}]}),
+              ns_server_stats:notify_histogram(<<"http_requests">>, 123)
+      end,
+      [{"GET", "/pools/path1"},
+       {"GET", "/pools/path2"},
+       {"PUT", "/pools/path2"},
+       {"PUT", "/pools/path1"},
+       {"GET", "/pools/path2"},
+       {"PUT", "/pools/path2"},
+       {"GET", "/pools/path2"}]),
+
+     lists:foreach(
+       fun ({Type, Code}) ->
+               ns_server_stats:notify_counter(
+                 {<<"outgoing_http_requests">>, [{code, Code}, {type, Type}]})
+       end,
+       [{"indexer", 200},
+        {"prometheus", 400},
+        {"prometheus", 202},
+        {"indexer", 400},
+        {"prometheus", 200},
+        {"indexer", 200},
+        {"prometheus", 202},
+        {"indexer", 400},
+        {"prometheus", 200},
+        {"indexer", 200}]),
+
+    report_ns_server_hc_stats(ReportMetric, ReportMeta),
+
+    Results = get(log),
+
+    ?assertEqual(
+       [<<"# TYPE cm_http_requests_total counter\n"
+          "# HELP cm_http_requests_total Total number of HTTP requests "
+          "categorized\n">>,
+        <<"cm_http_requests_total{code=\"200\",method=\"GET\",path="
+          "\"/pools/path1\",scheme=\"http\",user=\"user\"} 1\n">>,
+        <<"cm_http_requests_total{code=\"200\",method=\"GET\",path="
+          "\"/pools/path2\",scheme=\"http\",user=\"user\"} 3\n">>,
+        <<"cm_http_requests_total{code=\"200\",method=\"PUT\",path="
+          "\"/pools/path1\",scheme=\"http\",user=\"user\"} 1\n">>,
+        <<"cm_http_requests_total{code=\"200\",method=\"PUT\",path="
+          "\"/pools/path2\",scheme=\"http\",user=\"user\"} 2\n">>,
+        <<"# TYPE cm_outgoing_http_requests_total counter\n"
+          "# HELP cm_outgoing_http_requests_total Total number of outgoing HTTP requests\n">>,
+        <<"cm_outgoing_http_requests_total{code=\"200\","
+          "type=\"indexer\"} 3\n">>,
+        <<"cm_outgoing_http_requests_total{code=\"200\","
+          "type=\"prometheus\"} 2\n">>,
+        <<"cm_outgoing_http_requests_total{code=\"202\","
+          "type=\"prometheus\"} 2\n">>,
+        <<"cm_outgoing_http_requests_total{code=\"400\","
+          "type=\"indexer\"} 2\n">>,
+        <<"cm_outgoing_http_requests_total{code=\"400\","
+          "type=\"prometheus\"} 1\n">>,
+        <<"# TYPE cm_http_requests_seconds histogram\n"
+          "# HELP cm_http_requests_seconds Number of bucket HTTP requests\n">>,
+        <<"cm_http_requests_seconds_bucket{le=\"0.001\"} 0\n">>,
+        <<"cm_http_requests_seconds_bucket{le=\"0.01\"} 0\n">>,
+        <<"cm_http_requests_seconds_bucket{le=\"0.1\"} 0\n">>,
+        <<"cm_http_requests_seconds_bucket{le=\"1.0\"} 7\n">>,
+        <<"cm_http_requests_seconds_bucket{le=\"10.0\"} 7\n">>,
+        <<"cm_http_requests_seconds_bucket{le=\"+Inf\"} 7\n">>,
+        <<"cm_http_requests_seconds_count{} 7\n">>,
+        <<"cm_http_requests_seconds_sum{} 0.861\n">>],
+       Results).
+
+test_cbauth_stats() ->
+    ReportMetric =
+        fun (Info) ->
+                menelaus_web_prometheus:report_metric(Info, not_used)
+        end,
+    ReportMeta =
+        fun (FullName) ->
+            menelaus_web_prometheus:report_metric_meta(FullName, not_used)
+        end,
+
+    Stats = [{<<"n1ql">>,
+              {<<"cacheStats">>,
+               [{[{<<"name">>,<<"uuid_cache">>},
+                  {<<"maxSize">>,0},
+                  {<<"size">>,0},
+                  {<<"hit">>,0},
+                  {<<"miss">>,0}]},
+                {[{<<"name">>,<<"user_bkts_cache">>},
+                  {<<"maxSize">>,0},
+                  {<<"size">>,0},
+                  {<<"hit">>,0},
+                  {<<"miss">>,0}]}]}},
+             {<<"index">>,
+              {<<"cacheStats">>,
+               [{[{<<"name">>,<<"uuid_cache">>},
+                  {<<"maxSize">>,0},
+                  {<<"size">>,0},
+                  {<<"hit">>,0},
+                  {<<"miss">>,0}]},
+                {[{<<"name">>,<<"user_bkts_cache">>},
+                  {<<"maxSize">>,0},
+                  {<<"size">>,0},
+                  {<<"hit">>,0},
+                  {<<"miss">>,0}]}]}},
+             {<<"xdcr">>,
+              {<<"cacheStats">>,
+               [{[{<<"name">>,<<"uuid_cache">>},
+                  {<<"maxSize">>,0},
+                  {<<"size">>,0},
+                  {<<"hit">>,0},
+                  {<<"miss">>,0}]},
+                {[{<<"name">>,<<"user_bkts_cache">>},
+                  {<<"maxSize">>,0},
+                  {<<"size">>,0},
+                  {<<"hit">>,0},
+                  {<<"miss">>,0}]}]}}],
+
+    report_cbauth_stats(ReportMetric, ReportMeta, Stats),
+
+    Results = get(log),
+
+    ?assertEqual(
+       [<<"# TYPE cm_user_bkts_cache_current_items gauge\n"
+          "# HELP cm_user_bkts_cache_current_items Current number of items "
+          "available in cbauth bkts cache\n">>,
+        <<"cm_user_bkts_cache_current_items{category=\"cbauth\",service="
+          "\"xdcr\"} 0\n">>,
+        <<"cm_user_bkts_cache_current_items{category=\"cbauth\",service="
+          "\"index\"} 0\n">>,
+        <<"cm_user_bkts_cache_current_items{category=\"cbauth\",service="
+          "\"n1ql\"} 0\n">>,
+        <<"# TYPE cm_user_bkts_cache_hit_total counter\n"
+          "# HELP cm_user_bkts_cache_hit_total Total number of cbauth bkts "
+          "cache hits\n">>,
+        <<"cm_user_bkts_cache_hit_total{category=\"cbauth\",service="
+          "\"xdcr\"} 0\n">>,
+        <<"cm_user_bkts_cache_hit_total{category=\"cbauth\",service="
+          "\"index\"} 0\n">>,
+        <<"cm_user_bkts_cache_hit_total{category=\"cbauth\",service="
+          "\"n1ql\"} 0\n">>,
+        <<"# TYPE cm_user_bkts_cache_max_items gauge\n"
+          "# HELP cm_user_bkts_cache_max_items Maximum capacity of cbauth "
+          "bkts cache\n">>,
+        <<"cm_user_bkts_cache_max_items{category=\"cbauth\",service="
+          "\"xdcr\"} 0\n">>,
+        <<"cm_user_bkts_cache_max_items{category=\"cbauth\",service="
+          "\"index\"} 0\n">>,
+        <<"cm_user_bkts_cache_max_items{category=\"cbauth\",service="
+          "\"n1ql\"} 0\n">>,
+        <<"# TYPE cm_user_bkts_cache_miss_total counter\n"
+          "# HELP cm_user_bkts_cache_miss_total Total number of cbauth bkts "
+          "cache misses\n">>,
+        <<"cm_user_bkts_cache_miss_total{category=\"cbauth\",service="
+          "\"xdcr\"} 0\n">>,
+        <<"cm_user_bkts_cache_miss_total{category=\"cbauth\",service="
+          "\"index\"} 0\n">>,
+        <<"cm_user_bkts_cache_miss_total{category=\"cbauth\",service="
+          "\"n1ql\"} 0\n">>,
+        <<"# TYPE cm_uuid_cache_current_items gauge\n"
+          "# HELP cm_uuid_cache_current_items Current number of items "
+          "available in cbauth uuid cache\n">>,
+        <<"cm_uuid_cache_current_items{category=\"cbauth\",service="
+          "\"xdcr\"} 0\n">>,
+        <<"cm_uuid_cache_current_items{category=\"cbauth\",service="
+          "\"index\"} 0\n">>,
+        <<"cm_uuid_cache_current_items{category=\"cbauth\",service="
+          "\"n1ql\"} 0\n">>,
+        <<"# TYPE cm_uuid_cache_hit_total counter\n"
+          "# HELP cm_uuid_cache_hit_total Total number of cbauth uuid cache "
+          "hits\n">>,
+        <<"cm_uuid_cache_hit_total{category=\"cbauth\",service="
+          "\"xdcr\"} 0\n">>,
+        <<"cm_uuid_cache_hit_total{category=\"cbauth\",service="
+          "\"index\"} 0\n">>,
+        <<"cm_uuid_cache_hit_total{category=\"cbauth\",service="
+          "\"n1ql\"} 0\n">>,
+        <<"# TYPE cm_uuid_cache_max_items gauge\n"
+          "# HELP cm_uuid_cache_max_items Maximum capacity of cbauth uuid "
+          "cache\n">>,
+        <<"cm_uuid_cache_max_items{category=\"cbauth\",service=\"xdcr\"} 0\n">>,
+        <<"cm_uuid_cache_max_items{category=\"cbauth\",service="
+          "\"index\"} 0\n">>,
+        <<"cm_uuid_cache_max_items{category=\"cbauth\",service=\"n1ql\"} 0\n">>,
+        <<"# TYPE cm_uuid_cache_miss_total counter\n"
+          "# HELP cm_uuid_cache_miss_total Total number of cbauth uuid cache "
+          "misses\n">>,
+        <<"cm_uuid_cache_miss_total{category=\"cbauth\",service="
+          "\"xdcr\"} 0\n">>,
+        <<"cm_uuid_cache_miss_total{category=\"cbauth\",service="
+          "\"index\"} 0\n">>,
+        <<"cm_uuid_cache_miss_total{category=\"cbauth\",service="
+          "\"n1ql\"} 0\n">>],
+       Results).
+
+test_empty_system_stats() ->
+    EmptyStats =
+        [{"@system", []},
+         {"@system-processes", []},
+         {"@system-disks", []}],
+
+    EmptyMounts = [],
+
+    ReportMetric =
+        fun (Info) ->
+                menelaus_web_prometheus:report_metric(Info, not_used)
+        end,
+    ReportMeta =
+        fun (FullName) ->
+            menelaus_web_prometheus:report_metric_meta(FullName, not_used)
+        end,
+
+    report_system_stats(ReportMetric, ReportMeta, EmptyStats, EmptyMounts),
+
+    Results = get(log),
+
+    ?assertEqual(undefined, Results).
+
+test_missing_stat_info() ->
+    ReportMetric =
+        fun (Info) ->
+                menelaus_web_prometheus:report_metric(Info, not_used)
+        end,
+    ReportMeta =
+        fun (FullName) ->
+            menelaus_web_prometheus:report_metric_meta(FullName, not_used)
+        end,
+
+    %% First a known stat to ensure infra is set up.
+    Result = cb_stats_info:get_info(<<"cm_uuid_cache_miss_total">>),
+    ?assertEqual({<<"counter">>,
+                  <<"Total number of cbauth uuid cache misses">>},
+                 Result),
+
+    %% Now a stat that is missing from the meta json file
+    ?assertEqual(not_found,
+                 cb_stats_info:get_info(<<"stat_with_no_info">>), not_found),
+
+    %% Test a mixture of stats with info along with stats without info.
+    %% The stats without info will still get reported but the error log
+    %% will contain:
+    %%
+    %%   Failed to find '<<"bad-metric">>' in the metrics_metadata.json file
+    %%
+    Stats =
+        [{"@system",
+          [{cpu_host_seconds_total_idle,62},
+           {sys_stat_without_info,33},
+           {cpu_host_seconds_total_user,12}]},
+         {"@system-processes",
+          [{<<"sigar_port/start_time">>,1751991353612},
+           {<<"sigar_port/proc_stats_without_info">>, 565},
+           {<<"sigar_port/page_faults_raw">>,524}]},
+         {"@system-disks",
+          [{{<<"xvda">>,<<"queue">>},0},
+           {{<<"xvda">>,<<"disk_stat_without_info">>},607673344},
+           {{<<"xvda">>,<<"read_time_ms">>},15000}]}],
+
+        report_system_stats(ReportMetric, ReportMeta, Stats, []),
+
+        Results = get(log),
+
+        ?assertEqual(
+           [<<"# TYPE sys_cpu_host_seconds_total counter\n"
+              "# HELP sys_cpu_host_seconds_total Number of CPU seconds "
+              "utilized in the host, by mode\n">>,
+            <<"sys_cpu_host_seconds_total{mode=\"idle\",category="
+              "\"system\"} 62\n">>,
+            <<"sys_cpu_host_seconds_total{mode=\"user\",category="
+              "\"system\"} 12\n">>,
+            <<"sys_sys_stat_without_info{category=\"system\"} 33\n">>,
+            <<"# TYPE sysproc_page_faults_raw gauge\n"
+              "# HELP sysproc_page_faults_raw Number of page faults, by "
+              "process\n">>,
+            <<"sysproc_page_faults_raw{proc=\"sigar_port\",category="
+              "\"system-processes\"} 524\n">>,
+            <<"sysproc_proc_stats_without_info{proc=\"sigar_port\",category="
+              "\"system-processes\"} 565\n">>,
+            <<"# TYPE sysproc_start_time counter\n"
+              "# HELP sysproc_start_time OS specific time when process "
+              "was started\n">>,
+            <<"sysproc_start_time{proc=\"sigar_port\",category="
+              "\"system-processes\"} 1751991353612\n">>,
+            <<"sys_disk_disk_stat_without_info{disk=\"xvda\"} 607673344\n">>,
+            <<"# TYPE sys_disk_queue gauge\n"
+              "# HELP sys_disk_queue Current disk queue length of the disk\n">>,
+            <<"sys_disk_queue{disk=\"xvda\"} 0\n">>,
+            <<"# TYPE sys_disk_read_time_seconds counter\n"
+              "# HELP sys_disk_read_time_seconds Amount of time that the "
+              "disk spent reading\n">>,
+            <<"sys_disk_read_time_seconds{disk=\"xvda\"} 15.0\n">>], Results).
 
 -endif.

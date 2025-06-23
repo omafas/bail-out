@@ -11,7 +11,8 @@
 -include("ns_common.hrl").
 
 -export([init_info/0,
-         get_info/1]).
+         get_info/1,
+         delete_info/0]).
 
 -record(stat_info, {name = <<>> :: binary(),
                     type = <<>> :: binary(),
@@ -26,6 +27,10 @@ init_info() ->
     %% ns_server metrics_metadata.json file.
     ets:new(?MODULE, [public, named_table, set, {keypos, #stat_info.name}]),
     process_metrics_metadata().
+
+%% Used by unit tests
+delete_info() ->
+    ets:delete(?MODULE).
 
 %% Read the ns_server metrics_metadata.json file which contains information
 %% such as the TYPE and HELP for stats.
