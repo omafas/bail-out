@@ -16,60 +16,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--spec add_service_map_to_snapshot(atom(), list(), map()) -> map().
-add_service_map_to_snapshot(Node, Services, Snapshot) ->
-    lists:foldl(
-        fun(kv, AccSnapshot) ->
-                %% KV is handled in a special way
-                AccSnapshot;
-            (Service, S) ->
-                case maps:find({service_map, Service}, S) of
-                    error -> S#{{service_map, Service} => [Node]};
-                    {ok, Nodes} -> S#{{service_map, Service} => [Node | Nodes]}
-                end
-        end, Snapshot, Services).
-
-%% Map should be of the form Key => {State, Services (list)}.
--spec setup_node_config(map()) -> true.
-setup_node_config(NodesMap) ->
-    ClusterSnapshot =
-        maps:fold(
-            fun(Node, {State, Services}, Snapshot) ->
-                    S = add_service_map_to_snapshot(Node, Services, Snapshot),
-                    S#{{node, Node, membership} => State,
-                        {node, Node, services} => Services,
-                        {node, Node, failover_vbuckets} => []}
-            end, #{}, NodesMap),
-    fake_chronicle_kv:update_snapshot(ClusterSnapshot),
-
-    Nodes = maps:keys(NodesMap),
-    fake_chronicle_kv:update_snapshot(nodes_wanted, Nodes).
-
-%% Takes a list of bucket names (strings).
-%% Requires that node config is setup (i.e. we must be able to read from the
-%% config which nodes have the data service).
--spec setup_bucket_config(list()) -> true.
-setup_bucket_config(Buckets) ->
-    fake_chronicle_kv:update_snapshot(bucket_names, Buckets),
-
-    AllNodes = ns_cluster_membership:nodes_wanted(),
-    AllKVNodes = ns_cluster_membership:service_nodes(AllNodes, kv),
-    ActiveKVNodes = ns_cluster_membership:service_active_nodes(kv),
-
-    %% Using a simple generated map with 4 vBuckets and 1 replica (2 copies).
-    Map0 = mb_map:random_map(4, 2, AllKVNodes),
-    Map1 = mb_map:generate_map(Map0, 1, AllKVNodes, []),
-    Map = mb_map:promote_replicas(Map1, AllKVNodes -- ActiveKVNodes),
-
-    Val = [
-           {type, membase},
-           {servers, ActiveKVNodes},
-           {map, Map}
-          ],
-
-    fake_chronicle_kv:update_snapshot(
-      maps:from_list([{{bucket, B, props}, Val} || B <- Buckets])).
-
 manual_failover_test_() ->
     Nodes = #{
               'a' => {active, [kv]},
@@ -104,8 +50,8 @@ manual_failover_test_setup(SetupConfig) ->
     fake_ns_config:setup_cluster_compat_version(?LATEST_VERSION_NUM),
     fake_chronicle_kv:setup_cluster_compat_version(?LATEST_VERSION_NUM),
 
-    setup_node_config(maps:get(nodes, SetupConfig)),
-    setup_bucket_config(maps:get(buckets, SetupConfig)),
+    fake_config_helpers:setup_node_config(maps:get(nodes, SetupConfig)),
+    fake_config_helpers:setup_bucket_config(maps:get(buckets, SetupConfig)),
 
     meck:new(chronicle),
     meck:expect(chronicle, check_quorum, fun() -> true end),
@@ -225,8 +171,9 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
                         NewNodes = maps:put('c', {inactiveFailed, [kv]},
                                             OldNodes),
 
-                        setup_node_config(NewNodes),
-                        setup_bucket_config(maps:get(buckets, SetupConfig)),
+                        fake_config_helpers:setup_node_config(NewNodes),
+                        fake_config_helpers:setup_bucket_config(
+                          maps:get(buckets, SetupConfig)),
                         ok
                 end),
 
@@ -629,7 +576,7 @@ auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
                                      maps:get(partition_without_quorum,
                                               SetupConfig)),
 
-                        setup_node_config(NewNodes),
+                        fake_config_helpers:setup_node_config(NewNodes),
 
                         %% Set our new map ('c' has failed over)
                         ok = ns_bucket:set_map_and_uploaders("default",
@@ -888,7 +835,7 @@ graceful_failover_post_network_partition_stale_config(SetupConfig, _R) ->
                         NewNodes = maps:put('c', {inactiveFailed, [kv]},
                                             OldNodes),
 
-                        setup_node_config(NewNodes),
+                        fake_config_helpers:setup_node_config(NewNodes),
 
                         %% Reflect the change in server config in our new bucket
                         %% map too.
