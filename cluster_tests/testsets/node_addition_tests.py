@@ -49,10 +49,12 @@ class NodeAdditionTests(testlib.BaseTestSet):
     def requirements():
         return [ClusterRequirements(edition="Enterprise",
                                     min_num_nodes=3, num_connected=1,
-                                    afamily="ipv4"),
+                                    afamily="ipv4",
+                                    exact_services=[Service.KV]),
                 ClusterRequirements(edition="Enterprise",
                                     min_num_nodes=3, num_connected=1,
-                                    afamily="ipv6")]
+                                    afamily="ipv6",
+                                    exact_services=[Service.KV])]
 
     def n2n_test_base(self, method, enable: bool):
         """
@@ -96,7 +98,8 @@ class NodeAdditionWithCertsBase:
     def requirements():
         return [ClusterRequirements(edition="Enterprise",
                                     min_num_nodes=2, num_connected=1,
-                                    encryption=False, afamily='ipv4')]
+                                    encryption=False, afamily='ipv4',
+                                    exact_services=[Service.KV])]
 
     def setup(self):
         self.cluster_ca = read_cert_file('test_CA.pem')
@@ -666,7 +669,8 @@ class NodeAdditionWithCertsN2NIPv6Tests(testlib.BaseTestSet):
     def requirements():
         return [ClusterRequirements(edition="Enterprise",
                                     min_num_nodes=2, num_connected=1,
-                                    encryption=True, afamily='ipv6')]
+                                    encryption=True, afamily='ipv6',
+                                    exact_services=[Service.KV])]
 
     def __init__(self, cluster):
         super().__init__(cluster)
