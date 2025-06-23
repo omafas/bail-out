@@ -531,7 +531,7 @@ roles() ->
                 "for a given bucket, scope or collection. This user cannot "
                 "read data.">>
        }],
-      [{[{collection, ?RBAC_COLLECTION_PARAMS}, n1ql, index], [list]},
+      [{[{collection, ?RBAC_COLLECTION_PARAMS}, n1ql, index], [list, read]},
        {[{collection, ?RBAC_COLLECTION_PARAMS}, collections], [read]},
        {[{bucket, bucket_name}, settings], [read]},
        {[{bucket, bucket_name}, stats], [read]},
@@ -2407,7 +2407,14 @@ produce_roles_by_permission_test_() ->
                 enum_roles([bucket_full_access, data_backup, data_writer,
                             mobile_sync_gateway, query_insert],
                            [[any]]),
-            {[{bucket, "wrong"}, data, docs], insert})}]}.
+            {[{bucket, "wrong"}, data, docs], insert})},
+      {"read indexes",
+       Test([admin, ro_admin, backup_admin, eventing_admin] ++
+                enum_roles([bucket_full_access,
+                            mobile_sync_gateway, query_list_index,
+                            query_manage_index],
+                           [[any]]),
+            {[{bucket, any}, n1ql, index], read})}]}.
 
 
 params_version_get_snapshot(TestProps, _, SubKeys) ->
