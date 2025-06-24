@@ -2119,8 +2119,8 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
                      "pgrep -f java.*couchbase[^*]*Driver | xargs -r -I{} jcmd {} VM.info",
                      log_file="analytics_jvm.log")
         ]
-        cbasdir = correct_split(read_guts(guts, "cbas_data_paths"), ",")[0]
-        if os.path.exists(os.path.join(cbasdir, '@columnar')):
+        profile = get_profile_name(guts)
+        if profile and re.match(r"^analytics.*", profile):
             cbas_tasks.extend([
                 make_cbas("select * from `Metadata`.`Role`"),
                 make_cbas("select * from `Metadata`.`AssignedRole`"),
