@@ -1959,6 +1959,9 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
         cbas_diag_url = 'http://%s:%s/analytics/node/diagnostics?timeout=%d' % (
             local_url_addr, cbas_port, cbas_diag_timeout * 1000)
         cbas_parent_port = cbas_port
+        red_req = "?redact=true" if options.redact_level != "none" else ""
+        cbas_comp_req = f"http://{local_url_addr}:{cbas_port}/analytics/admin/completed_requests{red_req}"
+        cbas_active_req = f"http://{local_url_addr}:{cbas_port}/analytics/admin/active_requests{red_req}"
 
         def make_cbas(statement):
             return make_cbas_statement_task(statement,
@@ -1972,6 +1975,20 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
                 timeout=cbas_diag_timeout,
                 url=cbas_diag_url,
                 log_file="analytics_diag.json",
+                no_header=True),
+            make_curl_task(
+                name="Analytics /analytics/admin/completed_requests: ",
+                user="@",
+                password=memcached_pass,
+                url=cbas_comp_req,
+                log_file="analytics_completed_requests.json",
+                no_header=True),
+            make_curl_task(
+                name="Analytics /analytics/admin/active_requests: ",
+                user="@",
+                password=memcached_pass,
+                url=cbas_active_req,
+                log_file="analytics_active_requests.json",
                 no_header=True),
             make_cbas("select * from `Metadata`.`Dataverse`"),
             make_cbas("select * from `Metadata`.`Dataset`"),
