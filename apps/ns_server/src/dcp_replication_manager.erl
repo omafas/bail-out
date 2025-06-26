@@ -45,6 +45,8 @@ init(Bucket) ->
     {ok, #state{bucket = Bucket}}.
 
 get_actual_replications(Bucket) ->
+    %% Infinite timeout because this gen_server can be blocked essentially
+    %% indefinitely for vbucket takeover
     try gen_server:call(server_name(Bucket), get_actual_replications, infinity) of
         RV ->
             RV
@@ -54,10 +56,14 @@ get_actual_replications(Bucket) ->
 
 -spec get_replicator_pid(bucket_name(), vbucket_id()) -> pid().
 get_replicator_pid(Bucket, Partition) ->
+    %% Infinite timeout because this gen_server can be blocked essentially
+    %% indefinitely for vbucket takeover
     gen_server:call(server_name(Bucket), {get_replicator_pid, Partition}, infinity).
 
 set_desired_replications(Bucket, DesiredReps) ->
     NeededNodes = [Node || {Node, [_|_]} <- DesiredReps],
+    %% Infinite timeout because this gen_server can be blocked essentially
+    %% indefinitely for vbucket takeover
     gen_server:call(server_name(Bucket),
                     {manage_replicators, NeededNodes}, infinity),
 
@@ -78,12 +84,16 @@ set_desired_replications(Bucket, DesiredReps) ->
 
 -spec get_connection_count(bucket_name()) -> pos_integer().
 get_connection_count(Bucket) ->
-    gen_server:call(server_name(Bucket), get_connection_count).
+    %% Infinite timeout because this gen_server can be blocked essentially
+    %% indefinitely for vbucket takeover
+    gen_server:call(server_name(Bucket), get_connection_count, infinity).
 
 -spec set_connection_count(bucket_name(), pos_integer()) -> ok.
 set_connection_count(Bucket, ConnectionCount) ->
+    %% Infinite timeout because this gen_server can be blocked essentially
+    %% indefinitely for vbucket takeover
     gen_server:call(server_name(Bucket),
-        {set_connection_count, ConnectionCount}).
+                    {set_connection_count, ConnectionCount}, infinity).
 
 -spec get_connection_for_partition(pos_integer() | bucket_name(),
     vbucket_id()) -> pos_integer().
