@@ -262,3 +262,25 @@ testconditions(PidMap) ->
     meck:new(testconditions, [passthrough]),
     meck:expect(testconditions, get, fun(_) -> ok end),
     PidMap#{?FUNCTION_NAME => mocked}.
+
+%%%===================================================================
+%%% Misc functions
+%%%===================================================================
+
+-spec poll_for_counter_value(atom(), any()) -> boolean().
+poll_for_counter_value(Counter, Value) ->
+    misc:poll_for_condition(
+      fun() ->
+              case chronicle_compat:get(counters, #{}) of
+                  {error, not_found} -> false;
+                  {ok, V} ->
+                      case proplists:is_defined(Counter, V) of
+                          true ->
+                              {_, CounterValue} =
+                                  proplists:get_value(Counter, V),
+                              CounterValue =:= Value;
+                          false ->
+                              false
+                      end
+              end
+      end, 10000, 100).

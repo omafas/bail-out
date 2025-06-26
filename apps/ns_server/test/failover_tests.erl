@@ -412,23 +412,6 @@ get_auto_failover_reported_errors(AutoFailoverPid) ->
 get_auto_failover_tick_period(AutoFailoverPid) ->
     auto_failover:get_tick_period_from_state(sys:get_state(AutoFailoverPid)).
 
-poll_for_counter_value(Counter, Value) ->
-    misc:poll_for_condition(
-      fun() ->
-              case chronicle_compat:get(counters, #{}) of
-                  {error, not_found} -> false;
-                  {ok, V} ->
-                      case proplists:is_defined(Counter, V) of
-                          true ->
-                              {_, CounterValue} =
-                                  proplists:get_value(Counter, V),
-                              CounterValue =:= Value;
-                          false ->
-                              false
-                      end
-              end
-      end, 5000, 100).
-
 perform_auto_failover(AutoFailoverPid) ->
     %% Override tick period. This lets us tick auto_failover as few times as
     %% possible in the test as we essentially don't have to wait for nodes to
@@ -455,7 +438,7 @@ perform_auto_failover(AutoFailoverPid) ->
 
 perform_auto_failover_and_poll_counter(AutoFailoverPid, Counter, Value) ->
     perform_auto_failover(AutoFailoverPid),
-    ?assert(poll_for_counter_value(Counter, Value)).
+    ?assert(mock_helpers:poll_for_counter_value(Counter, Value)).
 
 auto_failover_t(_SetupConfig, PidMap) ->
     #{auto_failover := AutoFailoverPid} = PidMap,
@@ -727,7 +710,7 @@ graceful_failover_test_() ->
 graceful_failover_t(_SetupConfig, _PidMap) ->
     ok = ns_orchestrator:start_graceful_failover(['a']),
 
-    ?assert(poll_for_counter_value(graceful_failover_success, 1)),
+    ?assert(mock_helpers:poll_for_counter_value(graceful_failover_success, 1)),
 
     {ok, BucketConfig} = ns_bucket:get_bucket("default"),
     Servers = ns_bucket:get_servers(BucketConfig),
@@ -789,7 +772,7 @@ graceful_failover_incorrect_expected_topology(_SetupConfig, _R) ->
            #{expected_topology => #{active => ['a', 'b', 'c'],
                                     inactiveFailed => [],
                                     inactiveAdded => []}}),
-    ?assert(poll_for_counter_value(graceful_failover_success, 1)),
+    ?assert(mock_helpers:poll_for_counter_value(graceful_failover_success, 1)),
 
     %% Now, this is where it matters. Can we prevent the failover of c when we
     %% think that a is still active?
@@ -817,7 +800,7 @@ graceful_failover_incorrect_expected_topology(_SetupConfig, _R) ->
                                     inactiveFailed => ['a'],
                                     inactiveAdded => []}}),
 
-    ?assert(poll_for_counter_value(graceful_failover_success, 2)),
+    ?assert(mock_helpers:poll_for_counter_value(graceful_failover_success, 2)),
 
     erlang:process_flag(trap_exit, false).
 
@@ -849,7 +832,7 @@ graceful_failover_post_network_partition_stale_config(SetupConfig, _R) ->
     ok = ns_bucket:set_map_and_uploaders("default", [['a', 'c']], undefined),
 
     ok = ns_orchestrator:start_graceful_failover(['a']),
-    ?assert(poll_for_counter_value(graceful_failover_fail, 1)).
+    ?assert(mock_helpers:poll_for_counter_value(graceful_failover_fail, 1)).
 
 multi_node_maxcount_test_config() ->
     #{buckets => ["default"],
@@ -900,7 +883,7 @@ multi_node_failover_maxcount_test(_SetupConfig, Pids) ->
 
     perform_auto_failover(AutoFailoverPid),
 
-    ?assert(poll_for_counter_value(failover_complete, 1)),
+    ?assert(mock_helpers:poll_for_counter_value(failover_complete, 1)),
 
     ?assert(meck:called(service_api, is_safe, [index, '_']),
             "service_api:is_safe should be called for index service"),
@@ -929,7 +912,7 @@ kv_maxcount_failover_test(_SetupConfig, Pids) ->
     perform_auto_failover(AutoFailoverPid),
 
     %% Wait for failover to complete
-    ?assert(poll_for_counter_value(failover_complete, 1)),
+    ?assert(mock_helpers:poll_for_counter_value(failover_complete, 1)),
 
     ?assert(meck:called(service_api, is_safe, [index, '_']),
             "service_api:is_safe should be called for index service"),
