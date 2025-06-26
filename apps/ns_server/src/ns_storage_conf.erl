@@ -717,8 +717,8 @@ delete_unused_buckets_db_files() ->
 
 memcached_delete_unused_buckets(BucketsInCfg) ->
     maybe
-        Buckets = ns_memcached:get_all_buckets_details(),
-        true ?= is_list(Buckets),
+        {ok, Buckets} ?= ns_memcached:get_all_buckets_details(),
+        true = is_list(Buckets),
         BucketsInMemcached =
             lists:filtermap(fun ({Props}) ->
                             case proplists:get_value(<<"name">>, Props) of
@@ -733,14 +733,14 @@ memcached_delete_unused_buckets(BucketsInCfg) ->
                                   Bucket,?ENSURE_DELETE_COMMAND_TIMEOUT)) ||
                              Bucket <- BucketsToDelete])
     else
-        {error, Reason} ->
+        {error, Err} -> %% e.g. {error,couldnt_connect_to_memcached}
             ?log_error("Failed to get all buckets details from memcached. "
-                       "Reason = ~p", [Reason]),
-            {error, Reason};
-        {memcached_error, Reason, Msg} ->
+                       "Error = ~p", [Err]),
+            {error, Err};
+        {memcached_error, Reason, Msg} = Err ->
             ?log_error("Failed to get all buckets details from memcached. "
                        "Reason = ~p, Msg = ~p", [Reason, Msg]),
-            {error, {memcached_error, Reason, Msg}}
+            {error, Err}
     end.
 
 ensure_delete_command_sent(Bucket, Timeout) ->

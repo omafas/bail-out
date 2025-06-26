@@ -516,13 +516,15 @@ compact_vbucket(Sock, VBucket, PurgeBeforeTS, PurgeBeforeSeqNo, DropDeletes,
 stats(Sock) ->
     stats(Sock, <<>>, fun (K, V, Acc) -> [{K, V}|Acc] end, []).
 
-stats(Sock, Key, CB, CBData) ->
+-spec stats(port(), binary(), recv_callback(), any()) ->
+          {ok, any()} | mc_error().
+stats(Sock, Key, CB, Acc) ->
     report_counter(?FUNCTION_NAME),
     case cmd(?STAT, Sock,
              fun (_MH, ME, CD) ->
                      CB(ME#mc_entry.key, ME#mc_entry.data, CD)
              end,
-             CBData,
+             Acc,
              {#mc_header{}, #mc_entry{key=Key}}) of
         {ok, #mc_header{status=?SUCCESS}, _E, Stats} ->
             {ok, Stats};

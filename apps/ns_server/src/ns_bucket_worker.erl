@@ -275,7 +275,7 @@ transient_buckets(#state{transient_buckets = {_Pid, _MRef, Buckets}}) ->
 %% Check if memcached has any config-only buckets which are not associated
 %% with a running uploader and delete them.
 cleanup_orphan_buckets(#state{running_uploaders = RunningUploaders}) ->
-    Buckets = ns_memcached:get_all_buckets_details(),
+    {ok, Buckets} = ns_memcached:get_all_buckets_details(),
 
     lists:foreach(
       fun({Bucket}) ->
