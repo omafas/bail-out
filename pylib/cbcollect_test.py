@@ -20,7 +20,7 @@ def load_cbcollect():
 
     spec = spec_from_loader("cbcollect_info",
                             SourceFileLoader("cbcollect_info",
-                                             "../cbcollect_info"))
+                                             "../build/cbcollect_info"))
     if spec:
         cbcollect_info = module_from_spec(spec)
         loader = spec.loader

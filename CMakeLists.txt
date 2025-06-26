@@ -390,7 +390,8 @@ INSTALL(FILES
         pylib/gosecrets_client_lib.py
         DESTINATION lib/python)
 
-PyWrapper (SCRIPTS cbcollect_info)
+CONFIGURE_FILE (cbcollect_info.in cbcollect_info @ONLY)
+PyWrapper (SCRIPTS "${CMAKE_CURRENT_BINARY_DIR}/cbcollect_info")
 PyWrapper (SCRIPTS scripts/node_remap)
 PyWrapper (SCRIPTS scripts/dump-keys)
 PyWrapper (SCRIPTS scripts/dump-bucket-deks)

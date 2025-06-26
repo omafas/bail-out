@@ -2994,7 +2994,7 @@ def main():
         javabindir = os.path.join(options.root, 'lib', 'cbas', 'runtime', 'bin')
         path = [bindir,
                 javabindir,
-                '/opt/couchbase/bin',
+                '@CMAKE_INSTALL_PREFIX@/bin',
                 os.environ['PATH'],
                 '/bin',
                 '/sbin',
@@ -3051,7 +3051,7 @@ def main():
         elif platform.system() == 'Darwin':
             prefix = '~/Library/Application Support/Couchbase'
         else:
-            prefix = '/opt/couchbase'
+            prefix = '@CMAKE_INSTALL_PREFIX@'
 
         guts = {
             "db_dir": os.path.join(
