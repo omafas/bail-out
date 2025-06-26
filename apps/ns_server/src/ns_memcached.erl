@@ -1606,7 +1606,7 @@ ensure_bucket(Sock, Bucket, BucketSelected, JWT, BucketUUID) ->
                      {memcached_error, key_eexists, not_used}}};
         false ->
             case get_bucket_state(Bucket) of
-                <<"paused">> ->
+                {ok, <<"paused">>} ->
                     {error, bucket_paused};
                 _ ->
                     ensure_bucket_inner(Sock, Bucket, BucketSelected, JWT,
@@ -2186,6 +2186,8 @@ get_metadata_file_dek_ids_direct(BucketUUID) ->
     BucketMetadataFile = bucket_metadata_file(DBSubDir),
     cb_crypto:get_file_dek_ids(BucketMetadataFile).
 
+-spec get_bucket_stats(binary(), binary(), binary()) ->
+          {ok, any()} | mc_error() | {error, couldnt_connect_to_memcached}.
 get_bucket_stats(RootKey, StatKey, SubKey) ->
     perform_very_long_call(
       fun(Sock) ->
@@ -2198,8 +2200,8 @@ get_bucket_stats(RootKey, StatKey, SubKey) ->
                           ejson:decode(
                             misc:expect_prop_value(StatKey,
                                                    BucketsDetailsRaw)),
-                      {reply, proplists:get_value(SubKey, BucketDetails)};
-                  Err ->
+                      {reply, {ok, proplists:get_value(SubKey, BucketDetails)}};
+                  {memcached_error, _, _} = Err ->
                       {reply, Err}
               end
       end).
