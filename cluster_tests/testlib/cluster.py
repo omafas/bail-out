@@ -469,6 +469,17 @@ class Cluster:
 
         return True
 
+    # Return nodes running the specified service.
+    def get_nodes_hosting_service(self, service: Service):
+        service_string = service.value
+        resp = testlib.get_succ(self, "/pools/nodes").json()
+        node_hostnames = [node_info['hostname']
+                          for node_info in resp["nodes"]
+                          if service_string in node_info['services']]
+        return [node for node in self._nodes
+                if node.hostname() in node_hostnames]
+
+
     def get_orchestrator_node(self, node=None):
         cluster_or_node = self if node is None else node
         resp = testlib.get_succ(cluster_or_node,

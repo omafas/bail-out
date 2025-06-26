@@ -11,13 +11,18 @@ import time
 import math
 import sys
 from pprint import pprint
+from testlib.util import Service
 
 
 class StatsRangeAPITests(testlib.BaseTestSet):
 
     @staticmethod
     def requirements():
-        return [testlib.ClusterRequirements(min_num_nodes=2)]
+        return testlib.ClusterRequirements(
+            min_num_nodes=2,
+            # Some stats needs a bucket to be present
+            buckets=[{"name": "statsRangeTestBucket",
+                      "ramQuota": 200}])
 
     def setup(self):
         self.align_timestamps_start = -100
@@ -247,8 +252,15 @@ class StatsRangeAPITests(testlib.BaseTestSet):
     # of ns_server) are returned via /metrics. To do so ns_server queries
     # prometheus for the stats and includes them in the results.
     def derived_stats_test(self):
-        expected_stats = ["couch_docs_actual_disk_size",
-                          "sysproc_cpu_utilization",
+        # Wait for node to provide this computed stat. This stat is only on a
+        # kv node so we can't do it in setup.
+        nodes_with_kv = self.cluster.get_nodes_hosting_service(Service.KV)
+        testlib.poll_for_condition(
+                lambda: is_computed_stat_reported(
+                    nodes_with_kv[0]),
+                1, timeout=120, verbose=True, msg='waiting for computed stat')
+
+        expected_stats = ["sysproc_cpu_utilization",
                           "sys_cpu_host_utilization_rate",
                           "sys_cpu_host_user_rate",
                           "sys_cpu_host_sys_rate",
@@ -306,6 +318,14 @@ def is_sys_stats_reported(node):
         return False
 
     return len(r['data']['result'][0]['values']) >= 10
+
+
+def is_computed_stat_reported(node):
+    r = testlib.get(node, '/metrics')
+    if r.status_code != 200:
+        return False
+
+    return "couch_docs_actual_disk_size" in r.text
 
 
 def node_aggregation_common_params():
