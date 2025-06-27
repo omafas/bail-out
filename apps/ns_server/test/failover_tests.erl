@@ -1044,7 +1044,11 @@ graceful_failover_post_network_partition_stale_config(SetupConfig, _R) ->
                                             OldNodes),
 
                         setup_node_config(NewNodes),
-                        setup_bucket_config(maps:get(buckets, SetupConfig)),
+
+                        %% Reflect the change in server config in our new bucket
+                        %% map too.
+                        ns_bucket:set_map_and_uploaders(
+                          "default", [['a', undefined]], undefined),
                         ok
                 end])),
 
