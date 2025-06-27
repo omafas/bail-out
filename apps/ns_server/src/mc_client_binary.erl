@@ -12,6 +12,7 @@
 -include("ns_common.hrl").
 -include("mc_constants.hrl").
 -include("mc_entry.hrl").
+-include("cb_cluster_secrets.hrl").
 
 -define(MAX_MC_TIMEOUT, 300000).
 %% we normally speak to local memcached when issuing delete
@@ -1068,10 +1069,15 @@ prune_log_or_audit_encr_keys(Sock, Type, KeyIds, Timeout) ->
             process_error_response(Response)
     end.
 
+-spec set_active_encryption_key(port(), string(), cb_crypto:dek_snapshot(),
+                                non_neg_integer()) -> ok | mc_error().
 set_active_encryption_key(Sock, Bucket, DeksSnapshot, Timeout) ->
     report_counter(?FUNCTION_NAME),
     {ActiveDek, AllDeks} = cb_crypto:get_all_deks(DeksSnapshot),
-    DeksJson = memcached_bucket_config:format_mcd_keys(ActiveDek, AllDeks),
+    KeyStoreJson = memcached_bucket_config:format_mcd_keys(ActiveDek, AllDeks),
+    UnavailKeys = [Id || ?DEK_ERROR_PATTERN(Id, _) <- AllDeks],
+    DeksJson = {[{<<"keystore">>, KeyStoreJson},
+                 {<<"unavailable">>, UnavailKeys}]},
     Entry = #mc_entry{key = iolist_to_binary(Bucket),
                       data = ejson:encode(DeksJson)},
     case cmd(?CMD_SET_ENCRYPTION_KEY, Sock, undefined, undefined,
