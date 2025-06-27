@@ -288,7 +288,7 @@ file_encrypt_init(DekSnapshot) ->
                         #{encr_compression => encr_compression_cfg(),
                           decr_compression => decr_compression_cfg()}) ->
           {ok, {binary(), #file_encr_state{}}} | {error, term()}.
-file_encrypt_init(#dek_snapshot{active_key = #{type := error}}, _) ->
+file_encrypt_init(#dek_snapshot{active_key = ?DEK_ERROR_PATTERN(_, _)}, _) ->
     {error, key_not_available};
 file_encrypt_init(#dek_snapshot{active_key = ActiveKey,
                                 iv_random = IVRandom,
@@ -356,7 +356,7 @@ file_encrypt_cont(Path, FileSize,
                   _ -> {error, {unsupported_compression_type, CompressionType}}
               end,
         case ActiveKey of
-            #{id := KeyId, type := error} ->
+            ?DEK_ERROR_PATTERN(KeyId, _) ->
                 {error, key_not_available};
             #{id := KeyId} ->
                 {ok, #file_encr_state{ad_prefix = ADPrefix,
@@ -704,7 +704,7 @@ fetch_deks_snapshot(DekKind) ->
 
 active_key_ok(#dek_snapshot{active_key = undefined}) ->
     ok;
-active_key_ok(#dek_snapshot{active_key = #{type := error}}) ->
+active_key_ok(#dek_snapshot{active_key = ?DEK_ERROR_PATTERN(_, _)}) ->
     {error, key_not_available};
 active_key_ok(#dek_snapshot{active_key = #{}}) ->
     ok.
@@ -712,7 +712,7 @@ active_key_ok(#dek_snapshot{active_key = #{}}) ->
 all_keys_ok(#dek_snapshot{all_keys = AllKeys} = Snapshot) ->
     case active_key_ok(Snapshot) of
         ok ->
-            case lists:all(fun (#{type := error}) -> false;
+            case lists:all(fun (?DEK_ERROR_PATTERN(_, _)) -> false;
                                (#{type := _}) -> true
                       end, AllKeys) of
                 true ->
@@ -746,7 +746,7 @@ create_deks_snapshot(ActiveDek, AllDeks, PrevDekSnapshot) ->
     %% Basically, new snapshot should not get "worse" than the previous one
     GetKey = fun (undefined) ->
                      undefined;
-                 (#{id := Id, type := error} = K) ->
+                 (?DEK_ERROR_PATTERN(Id, _) = K) ->
                      maps:get(Id, PrevAllKeysMap, K);
                  (#{id := _Id, type := _Type} = K) ->
                      K
@@ -970,7 +970,7 @@ validate_encr_file(FilePath) ->
     end.
 
 
-encrypt_internal(_Data, _AD, _IVRandom, _IVAtomic, #{type := error}) ->
+encrypt_internal(_Data, _AD, _IVRandom, _IVAtomic, ?DEK_ERROR_PATTERN(_, _)) ->
     {error, key_not_available};
 encrypt_internal(Data, AD, IVRandom, IVAtomic, #{type := 'raw-aes-gcm',
                                                  info := #{key := KeyFun}}) ->
@@ -997,7 +997,7 @@ decrypt_internal(Data, AD, DekList) ->
     end.
 
 try_decrypt(_IV, _Data, _Tag, _AD, []) -> {error, decrypt_error};
-try_decrypt(IV, Data, Tag, AD, [#{type := error} | T]) ->
+try_decrypt(IV, Data, Tag, AD, [?DEK_ERROR_PATTERN(_, _) | T]) ->
     try_decrypt(IV, Data, Tag, AD, T);
 try_decrypt(IV, Data, Tag, AD, [#{type := 'raw-aes-gcm', info := #{key := K}} | T]) ->
     case crypto:crypto_one_time_aead(aes_256_gcm, K(), IV, Data, AD,
@@ -1229,7 +1229,7 @@ bite_next_chunk(<<_/binary>>) ->
 
 find_key(WantedId, #dek_snapshot{all_keys = AllDeks}) ->
     case lists:search(fun (#{id := Id}) -> Id == WantedId end, AllDeks) of
-        {value, #{type := error}} -> {error, key_not_available};
+        {value, ?DEK_ERROR_PATTERN(_, _)} -> {error, key_not_available};
         {value, Key} -> {ok, Key};
         false -> {error, key_not_found}
     end.
@@ -1669,16 +1669,13 @@ generate_test_deks() ->
 
 generate_test_key() ->
     KeyBin = cb_cluster_secrets:generate_raw_key(aes_256_gcm),
-    #{id => cb_cluster_secrets:new_key_id(),
-      type => 'raw-aes-gcm',
-      info => #{key => fun () -> KeyBin end,
-                encryption_key_id => <<"encryptionService">>,
-                creation_time => {{2024, 01, 01}, {22, 00, 00}}}}.
+    encryption_service:new_dek_record(
+      cb_cluster_secrets:new_key_id(), 'raw-aes-gcm',
+      encryption_service:new_raw_aes_dek_info(KeyBin, <<"encryptionService">>,
+                                              {{2024, 01, 01}, {22, 00, 00}})).
 
 test_error_key(Id) ->
-    #{id => Id,
-      type => error,
-      reason => {test_error, "test error"}}.
+    encryption_service:new_dek_record(Id, error, {test_error, "test error"}).
 
 create_deks_snapshot_test() ->
     K1 = generate_test_key(),
@@ -1687,6 +1684,14 @@ create_deks_snapshot_test() ->
     EK1 = test_error_key(get_key_id(K1)),
     EK2 = test_error_key(get_key_id(K2)),
     EK3 = test_error_key(get_key_id(K3)),
+
+    ?assertNotMatch(?DEK_ERROR_PATTERN(_, _), K1),
+    ?assertNotMatch(?DEK_ERROR_PATTERN(_, _), K2),
+    ?assertNotMatch(?DEK_ERROR_PATTERN(_, _), K3),
+
+    ?assertMatch(?DEK_ERROR_PATTERN(_, _), EK1),
+    ?assertMatch(?DEK_ERROR_PATTERN(_, _), EK2),
+    ?assertMatch(?DEK_ERROR_PATTERN(_, _), EK3),
 
     %% No errors:
     ?assertMatch(#dek_snapshot{active_key = undefined, all_keys = [K1]},

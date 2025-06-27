@@ -55,7 +55,9 @@
          get_key_ids_in_use/0,
          mac/1,
          verify_mac/2,
-         revalidate_key_cache/0]).
+         revalidate_key_cache/0,
+         new_dek_record/3,
+         new_raw_aes_dek_info/3]).
 
 
 -export_type([stored_key_error/0]).
@@ -166,29 +168,88 @@ read_dek(Kind, DekId) ->
            read_key_error, [{kind, cb_deks:kind2bin(NewKind, <<"unknown">>)},
                             {key_UUID, NewId}]) of
         {ok, Json} ->
-            {Props} = ejson:decode(Json),
-            Res = maps:from_list(
-                    lists:map(fun ({<<"type">>, <<"raw-aes-gcm">>}) -> 
-                                      {type, 'raw-aes-gcm'};
-                                  ({<<"info">>, InfoProps}) ->
-                                      {info, decode_key_info(InfoProps)}
-                              end, Props)),
-            {ok, Res#{id => DekId}};
+            case decode_dek(DekId, Json) of
+                {ok, Dek} -> {ok, Dek};
+                {error, Error} ->
+                    Msg = io_lib:format("Failed to decode dek: ~p", [Error]),
+                    {error, {dek_decode_error, lists:flatten(Msg)}}
+            end;
         {error, Error} ->
             {error, Error}
     end.
 
-decode_key_info({InfoProps}) ->
-    maps:from_list(
-      lists:map(
-        fun ({<<"key">>, B64Key}) ->
-                Key = base64:decode(B64Key),
-                {key, fun () -> Key end};
-            ({<<"encryptionKeyId">>, KekId}) ->
-                {encryption_key_id, KekId};
-            ({<<"creationTime">>, CreationTimeISO}) ->
-                {creation_time, iso8601:parse(CreationTimeISO)}
-        end, InfoProps)).
+decode_dek(DekId, Json) ->
+    maybe
+        {ok, Props} ?= try ejson:decode(Json) of
+                           {P} -> {ok, P};
+                           _ -> {error, dek_not_json_object}
+                       catch
+                           _:Error -> {error, Error}
+                       end,
+        ok ?= case proplists:get_value(<<"type">>, Props) of
+                  undefined -> {error, missing_type};
+                  <<"raw-aes-gcm">> -> ok;
+                  T -> {error, {unknown_dek_type, T}}
+              end,
+        {ok, Info} ?= decode_key_info(proplists:get_value(<<"info">>, Props)),
+        {ok, new_dek_record(DekId, 'raw-aes-gcm', Info)}
+    end.
+
+decode_key_info({InfoProps}) when is_list(InfoProps) ->
+    maybe
+        {ok, Key} ?=
+            case proplists:get_value(<<"key">>, InfoProps) of
+                undefined -> {error, missing_key};
+                B64Key ->
+                    try
+                        {ok, base64:decode(B64Key)}
+                    catch
+                        _:_ -> {error, invalid_key_base64}
+                    end
+            end,
+        {ok, EncryptionKeyId} ?=
+            case proplists:get_value(<<"encryptionKeyId">>, InfoProps) of
+                undefined -> {error, missing_encryption_key_id};
+                KekId -> {ok, KekId}
+            end,
+        {ok, CreationTime} ?=
+            case proplists:get_value(<<"creationTime">>, InfoProps) of
+                undefined -> {error, missing_creation_time};
+                CreationTimeISO ->
+                    try
+                        {ok, iso8601:parse(CreationTimeISO)}
+                    catch
+                        _:_ -> {error, invalid_creation_time}
+                    end
+            end,
+        {ok, new_raw_aes_dek_info(Key, EncryptionKeyId, CreationTime)}
+    end;
+decode_key_info(_InfoProps) ->
+    {error, dek_info_not_json_object}.
+
+new_dek_record(Id, error, Reason) when is_binary(Id) ->
+    #{id => Id, type => error, reason => Reason};
+new_dek_record(Id, 'raw-aes-gcm', Info) when is_binary(Id) ->
+    #{id => Id, type => 'raw-aes-gcm', info => Info}.
+
+new_raw_aes_dek_info(Key, EncryptionKeyId, CreationTime) ->
+    #{key => ?HIDE(Key),
+      encryption_key_id => EncryptionKeyId,
+      creation_time => CreationTime}.
+
+-ifdef(TEST).
+
+dek_error_pattern_test() ->
+    ?assertMatch(?DEK_ERROR_PATTERN(<<"id">>, {test, "reason"}),
+                 new_dek_record(<<"id">>, error, {test, "reason"})),
+    ?assertNotMatch(?DEK_ERROR_PATTERN(_, _),
+                    new_dek_record(<<"id">>, 'raw-aes-gcm',
+                                   new_raw_aes_dek_info(
+                                     <<"key">>,
+                                     <<"encryptionKeyId">>,
+                                     {{2024, 01, 01}, {22, 00, 00}}))).
+
+-endif.
 
 encrypt_key(Data, AD, KekId) when is_binary(Data), is_binary(AD),
                                   is_binary(KekId) ->

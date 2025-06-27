@@ -69,9 +69,8 @@ def read_keys(key_specs, config_path, gosecrets_path=None,
             if res == 'success':
                 data_parsed = json.loads(data)
                 key_type = data_parsed['type']
-                key_b64 = data_parsed['info']['key']
                 keys_map[key_id] = {'result': key_type,
-                                    'response': {'key': key_b64}}
+                                    'response': data_parsed['info']}
             else:
                 if all_must_succeed:
                     error = f'Could not get key "{key_id}": {data.decode()}'

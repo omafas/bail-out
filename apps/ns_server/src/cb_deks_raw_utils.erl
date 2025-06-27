@@ -153,18 +153,10 @@ external_read_keys(DekKind, KeyIds, Opts) ->
         {Deks, Errors} =
             misc:partitionmap(
               fun ({Id, {Props}}) ->
-                      case maps:from_list(Props) of
-                          #{<<"result">> := <<"error">>,
-                            <<"response">> := Error} ->
-                              {right, {Id, Error}};
-                          #{<<"result">> := <<"raw-aes-gcm">>,
-                            <<"response">> := KeyProps} ->
-                              {left, #{type => 'raw-aes-gcm',
-                                       id => Id,
-                                       info =>
-                                           encryption_service:decode_key_info(
-                                             KeyProps)}}
-                      end
+                  case decode_dump_keys_response(Id, Props) of
+                      {ok, Dek} -> {left, Dek};
+                      {error, Error} -> {right, {Id, Error}}
+                  end
               end, JsonKeys),
         {ok, {Deks, Errors}}
     else
@@ -172,6 +164,26 @@ external_read_keys(DekKind, KeyIds, Opts) ->
             Error;
         {Status, ErrorsBin} when is_integer(Status) ->
             {error, {dump_keys_returned, Status, ErrorsBin}}
+    end.
+
+decode_dump_keys_response(Id, Props) ->
+    case maps:from_list(Props) of
+        #{<<"result">> := <<"error">>,
+          <<"response">> := Error} ->
+            {error, Error};
+        #{<<"result">> := <<"raw-aes-gcm">>,
+          <<"response">> := KeyProps} ->
+            case encryption_service:decode_key_info(KeyProps) of
+                {ok, Info} ->
+                    {ok, encryption_service:new_dek_record(Id, 'raw-aes-gcm',
+                                                           Info)};
+                {error, Error} ->
+                    Msg = io_lib:format("Failed to decode dek info: ~p",
+                                        [Error]),
+                    {error, iolist_to_binary(Msg)}
+            end;
+        _ ->
+            {error, <<"Invalid dek format">>}
     end.
 
 -spec read_deks_file(string(), fun((cb_deks:dek_id()) -> cb_deks:dek()),

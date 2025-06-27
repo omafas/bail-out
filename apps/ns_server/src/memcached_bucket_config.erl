@@ -351,7 +351,7 @@ format_mcd_keys(ActiveDek, Deks, Sanitizer) ->
                    end,
     {[{keys, DeksJsonMcd}, {active, ActiveKeyMcd}]}.
 
-format_mcd_key(#{id := _Id, type := error}, _) ->
+format_mcd_key(?DEK_ERROR_PATTERN(_, _), _) ->
     false;
 format_mcd_key(#{id := Id, type := 'raw-aes-gcm', info := #{key := KeyFun}},
                Sanitizer) ->

@@ -76,7 +76,7 @@ read(Kind, DekIds) ->
                 {ok, B} -> B;
                 {error, R} ->
                     ?log_error("Failed to read key ~s: ~p", [DekId, R]),
-                    #{id => DekId, type => error, reason => R}
+                    encryption_service:new_dek_record(DekId, error, R)
             end
         end, DekIds).
 
@@ -194,7 +194,7 @@ maybe_reencrypt_deks(Kind, Deks, NewEncryptionKeyFun) ->
                "must be encrypted with current active key", [Kind]),
     ToReencrypt =
         lists:filtermap(
-          fun (#{type := error}) -> false;
+          fun (?DEK_ERROR_PATTERN(_, _)) -> false;
               (Dek) ->
                   case NewEncryptionKeyFun(Dek) of
                       {true, V} -> {true, {Dek, V}};

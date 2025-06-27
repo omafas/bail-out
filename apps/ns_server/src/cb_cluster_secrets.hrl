@@ -14,4 +14,7 @@
 -define(NULL_DEK, null_dek_id).
 -define(DEK_INFINITY_LIFETIME, 0).
 
+-define(DEK_ERROR_PATTERN(Id, Reason),
+        #{type := error, id := Id, reason := Reason}).
+
 -endif.

@@ -1600,9 +1600,9 @@ reread_bad_deks(Kind, #state{deks_info = DeksInfo} = State) ->
             {UpdatedDeks, AnyNewDeks} =
                 lists:mapfoldl(
                   fun (#{id := _, type := 'raw-aes-gcm'} = K, Acc) -> {K, Acc};
-                      (#{id := Id, type := error}, Acc) ->
+                      (?DEK_ERROR_PATTERN(Id, _), Acc) ->
                           case cb_deks:read(Kind, [Id]) of
-                              [#{type := error} = K] -> {K, Acc};
+                              [?DEK_ERROR_PATTERN(_, _) = K] -> {K, Acc};
                               [K] -> {K, true}
                           end
                   end, false, DekIds),
@@ -1619,7 +1619,7 @@ reread_bad_deks(Kind, #state{deks_info = DeksInfo} = State) ->
                          false ->
                              State2
                      end,
-            case lists:any(fun (#{type := error}) -> true;
+            case lists:any(fun (?DEK_ERROR_PATTERN(_, _)) -> true;
                                (_) -> false
                            end, UpdatedDeks) of
                 true ->
@@ -1929,7 +1929,7 @@ call_set_active_cb(Kind, #state{deks_info = DeksInfo} = State) ->
                  lists:map(fun (#{id := Id, type := T}) -> {Id, T} end, Keys)},
                 ?MAX_PHASH2_RANGE),
     case NewActiveKey of
-        #{type := error} ->
+        ?DEK_ERROR_PATTERN(_, _) ->
             {error, State, active_key_not_available};
         _ when NewHash == PrevHash ->
             ?log_debug("No changes in ~p deks, skipping calling "
@@ -2961,7 +2961,7 @@ dek_expiration_times(Kind, #{deks := Deks, is_enabled := IsEnabled,
             {error, Err}
     end.
 
-dek_expiration_time(_, _, #{type := error}) -> false;
+dek_expiration_time(_, _, ?DEK_ERROR_PATTERN(_, _)) -> false;
 dek_expiration_time(undefined, undefined, _) -> false;
 dek_expiration_time(undefined, DropKeysTS,
                     #{type := 'raw-aes-gcm',
@@ -3046,7 +3046,7 @@ dek_rotation_time(Kind, #{is_enabled := true, active_id := ActiveId,
             [_ | _] -> {value, lists:min(Candidates)}
         end
     else
-        {value, #{type := error}} ->
+        {value, ?DEK_ERROR_PATTERN(_, _)} ->
             ?log_error("Active ~p dek ~p is not available (read error?), "
                        "will try to generate a new one", [Kind, ActiveId]),
             {value, now};
@@ -3840,7 +3840,7 @@ extract_dek_info(Kind, #state{deks_info = DeksInfo}) ->
             lists:filtermap(
               fun (#{type := 'raw-aes-gcm', info := Info} = K) ->
                       {true, K#{info => maps:remove(key, Info)}};
-                  (#{type := error}) ->
+                  (?DEK_ERROR_PATTERN(_, _)) ->
                       false
               end, Keys)
         end,
@@ -4199,7 +4199,7 @@ diag_deks(DeksMap) ->
                  || Dek <- maps:get(deks, Info, [])]])
          end, maps:to_list(DeksMap)))].
 
-diag_dek(#{type := error, id := Id, reason := Reason}) ->
+diag_dek(?DEK_ERROR_PATTERN(Id, Reason)) ->
     io_lib:format("~s (ERROR)~n          ~p",
                   [format_dek_id_for_diag(Id), Reason]);
 diag_dek(#{type := Type, id := Id, info := Info}) ->

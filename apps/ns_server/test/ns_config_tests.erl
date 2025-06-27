@@ -280,11 +280,12 @@ test_bin_persist() ->
 
 generate_test_deks() ->
     KeyBin = cb_cluster_secrets:generate_raw_key(aes_256_gcm),
-    Key = #{id => cb_cluster_secrets:new_key_id(),
-            type => 'raw-aes-gcm',
-            info => #{key => fun () -> KeyBin end,
-                      encryption_key_id => <<"encryptionService">>,
-                      creation_time => {{2024, 01, 01}, {22, 00, 00}}}},
+    Key = encryption_service:new_dek_record(
+            cb_cluster_secrets:new_key_id(),
+            'raw-aes-gcm',
+            encryption_service:new_raw_aes_dek_info(
+              KeyBin, <<"encryptionService">>,
+              {{2024, 01, 01}, {22, 00, 00}})),
     cb_crypto:create_deks_snapshot(Key, [Key], undefined).
 
 test_load_config_improper() ->
