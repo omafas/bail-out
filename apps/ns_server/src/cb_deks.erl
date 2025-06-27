@@ -550,6 +550,7 @@ force_config_encryption_keys() ->
         ok ?= memcached_config_mgr:push_config_encryption_key(true),
         ok ?= memcached_passwords:sync_reload(),
         ok ?= memcached_permissions:sync_reload(),
+        ok ?= ns_audit_cfg:maybe_apply_new_keys(),
         ok ?= memcached_config_mgr:drop_historical_deks(),
         ok ?= ns_config:resave(),
         ok ?= menelaus_users:apply_keys_and_resave(),
@@ -574,10 +575,12 @@ get_config_dek_ids_in_use() ->
         {ok, Ids8} ?= chronicle_local:get_encryption_dek_ids(),
         {ok, Ids9} ?= ns_ssl_services_setup:get_key_ids_in_use(),
         {ok, Ids10} ?= encryption_service:get_key_ids_in_use(),
+        {ok, Ids11} ?= ns_audit_cfg:get_key_ids_in_use(),
         {ok, lists:map(fun (undefined) -> ?NULL_DEK;
                            (Id) -> Id
                        end, lists:uniq(Ids1 ++ Ids2 ++ Ids3 ++ Ids4 ++ Ids5 ++
-                                       Ids6 ++ Ids7 ++ Ids8 ++ Ids9 ++ Ids10))}
+                                       Ids6 ++ Ids7 ++ Ids8 ++ Ids9 ++ Ids10 ++
+                                       Ids11))}
     end.
 
 get_dek_ids_in_use(logDek) ->

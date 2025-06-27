@@ -20,13 +20,18 @@
          handle_info/2, terminate/2, code_change/3]).
 
 -export([start_link/0, get_global/0, set_global/1, sync_set_global/1,
-         default_audit_json_path/0, get_log_path/0, get_uid/0]).
+         default_audit_json_path/0, get_log_path/0, get_uid/0,
+         maybe_apply_new_keys/0, get_key_ids_in_use/0]).
 
 -export([upgrade_descriptors/0, get_descriptors/1, is_enabled/0,
          jsonifier/1, get_non_filterable_descriptors/0, read_config/1]).
 
 -record(state, {global,
-                merged}).
+                merged,
+                encr_key_in_use}).
+
+-define(APPLY_NEW_KEYS_TIMEOUT, ?get_timeout(apply_new_keys, 10000)).
+-define(GET_KEY_IDS_IN_USE_TIMEOUT, ?get_timeout(get_key_ids_in_use, 10000)).
 
 jsonifier(log_path) ->
     fun list_to_binary/1;
@@ -85,6 +90,12 @@ sync_set_global(KVList) ->
 sync() ->
     gen_server:call(?MODULE, sync, infinity).
 
+maybe_apply_new_keys() ->
+    gen_server:call(?MODULE, maybe_apply_new_keys, ?APPLY_NEW_KEYS_TIMEOUT).
+
+get_key_ids_in_use() ->
+    gen_server:call(?MODULE, get_key_ids_in_use, ?GET_KEY_IDS_IN_USE_TIMEOUT).
+
 init([]) ->
     {Global, Local} = read_config(),
     Merged = prepare_params(Global, Local),
@@ -102,9 +113,11 @@ init([]) ->
                                      []
                              end),
 
-    write_audit_json(Merged),
+    {ok, DekSnapshot} = cb_crypto:fetch_deks_snapshot(configDek),
+    EncryptionKeyIdInUse = write_audit_json(Merged, DekSnapshot),
     self() ! notify_memcached,
-    {ok, #state{global = Global, merged = Merged}}.
+    {ok, #state{global = Global, merged = Merged,
+                encr_key_in_use = EncryptionKeyIdInUse}}.
 
 handle_call(get_uid, _From, #state{merged = Merged} = State) ->
     {reply, proplists:get_value(uuid, Merged), State};
@@ -118,6 +131,18 @@ handle_call(get_global, _From, #state{global = Global,
                 [{uid, UID} | Global]
         end,
     {reply, Return, State};
+handle_call(maybe_apply_new_keys, _From, #state{encr_key_in_use = CurDekId,
+                                                merged = Merged} = State) ->
+    {ok, DekSnapshot} = cb_crypto:fetch_deks_snapshot(configDek),
+    case cb_crypto:get_dek_id(DekSnapshot) =:= CurDekId of
+        true ->
+            {reply, ok, State};
+        false ->
+            EncryptionKeyIdInUse = write_audit_json(Merged, DekSnapshot),
+            {reply, ok, State#state{encr_key_in_use = EncryptionKeyIdInUse}}
+    end;
+handle_call(get_key_ids_in_use, _From, State) ->
+    {reply, {ok, [State#state.encr_key_in_use]}, State};
 handle_call(sync, _From, State) ->
     {reply, ok, State}.
 
@@ -135,12 +160,14 @@ handle_info(update_audit_json, #state{merged = OldMerged}) ->
     NewState = #state{global = Global, merged = Merged},
     case Merged of
         OldMerged ->
-            ok;
+            {noreply, NewState};
         _ ->
-            write_audit_json(Merged),
-            notify_memcached(NewState)
-    end,
-    {noreply, NewState}.
+            {ok, DekSnapshot} = cb_crypto:fetch_deks_snapshot(configDek),
+            EncryptionKeyIdInUse = write_audit_json(Merged, DekSnapshot),
+            NewState2 = NewState#state{encr_key_in_use = EncryptionKeyIdInUse},
+            notify_memcached(NewState2),
+            {noreply, NewState2}
+    end.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -224,7 +251,7 @@ massage_params(Params) ->
 
     [{uuid, UID} | NewParams].
 
-write_audit_json(Params) ->
+write_audit_json(Params, DekSnapshot) ->
     Version = version(),
     CompleteParams = [{descriptors_path, path_config:component_path(sec)},
                       {version, Version}] ++ Params,
@@ -239,7 +266,8 @@ write_audit_json(Params) ->
                [Path, ns_config_log:sanitize(JsonParams)]),
 
     Bytes = misc:ejson_encode_pretty({Json}),
-    ok = misc:atomic_write_file(Path, Bytes).
+    ok = cb_crypto:atomic_write_file(Path, Bytes, DekSnapshot),
+    cb_crypto:get_dek_id(DekSnapshot).
 
 read_config() ->
     read_config(ns_config:latest()).
