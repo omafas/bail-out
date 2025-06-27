@@ -264,7 +264,6 @@ class StatsRangeAPITests(testlib.BaseTestSet):
     # of ns_server) are returned via /metrics. To do so ns_server queries
     # prometheus for the stats and includes them in the results.
     def derived_stats_test(self):
-
         # Wait for node to provide this computed stat. This stat is only on a
         # kv node so we can't do it in setup.
         nodes_with_kv = self.cluster.get_nodes_hosting_service(Service.KV)
