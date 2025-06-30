@@ -155,6 +155,11 @@ compat_mode_events(PidMap) ->
                                                       compat_mode_events}),
     PidMap#{?FUNCTION_NAME => CompatModeEventsPid}.
 
+ns_node_disco_events(PidMap) ->
+    {ok, NSNodeDiscoEventsPid} = gen_event:start_link({local,
+                                                       ns_node_disco_events}),
+    PidMap#{?FUNCTION_NAME => NSNodeDiscoEventsPid}.
+
 %%%===================================================================
 %%% Mock setup functions
 %%%
@@ -256,21 +261,4 @@ rebalance_quirks(PidMap) ->
 testconditions(PidMap) ->
     meck:new(testconditions, [passthrough]),
     meck:expect(testconditions, get, fun(_) -> ok end),
-    PidMap#{?FUNCTION_NAME => mocked}.
-
-ns_pubsub(PidMap) ->
-    meck:new(fake_ns_pubsub, [non_strict]),
-    meck:new(ns_pubsub, [passthrough]),
-    meck:expect(ns_pubsub, subscribe_link,
-                %% We are only handling chronicle_compat_events this way,
-                %% everything else is done via the appropriate gen_event.
-                fun(_, Handler) ->
-                        %% Stash the handler in some function, notify_key
-                        meck:expect(fake_ns_pubsub, notify_key,
-                                    fun(Key) ->
-                                            Handler(Key)
-                                    end),
-                        ok
-                end),
-
     PidMap#{?FUNCTION_NAME => mocked}.
