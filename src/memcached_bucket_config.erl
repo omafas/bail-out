@@ -100,7 +100,7 @@ maybe_restart() ->
 get_eviction_policy(Persistent, BucketConfig) ->
     case ns_bucket:is_persistent(BucketConfig) of
         Persistent ->
-            case ns_bucket:eviction_policy(BucketConfig) of
+            case ns_bucket:node_eviction_policy(BucketConfig) of
                 nru_eviction ->
                     auto_delete;
                 no_eviction ->

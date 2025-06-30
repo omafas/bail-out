@@ -424,6 +424,20 @@ do_build_nodes_info_fun(#ctx{ns_config = Config,
                 fun (_, _) -> [] end
         end,
 
+    PerNodeEvictionPolicyBuilder =
+        case WithBucket of
+            true ->
+                fun (_Node, undefined) ->
+                        [];
+                    (Node, BucketName) ->
+                        {ok, BucketConfig} =
+                            ns_bucket:get_bucket(BucketName, Snapshot),
+                        build_eviction_policy(Node, BucketConfig)
+                end;
+            false ->
+                fun (_, _) -> [] end
+        end,
+
     fun(WantENode, Bucket) ->
             InfoNode = ns_doctor:get_node(WantENode, NodeStatuses),
             StableInfo =
@@ -447,7 +461,8 @@ do_build_nodes_info_fun(#ctx{ns_config = Config,
                  end,
                  build_failover_status(Snapshot, WantENode),
                  LimitsAndBucketPlacerInfoBuilder(WantENode)] ++
-                   PerNodeStorageBackendBuilder(WantENode, Bucket),
+                   PerNodeStorageBackendBuilder(WantENode, Bucket) ++
+                   PerNodeEvictionPolicyBuilder(WantENode, Bucket),
 
             NodeHash = erlang:phash2(StableInfo),
 
@@ -471,6 +486,28 @@ build_storage_backend(Node, BucketConfig) ->
             _ ->
                 [{storageBackend, NodeStorageBackend}]
         end.
+
+build_eviction_policy(Node, BucketConfig) ->
+    case ns_config:read_key_fast(allow_online_eviction_policy_change, false) of
+        true ->
+            NodeEvictionPolicy = ns_bucket:node_eviction_policy_override(
+                                   Node, BucketConfig),
+            case NodeEvictionPolicy of
+                undefined ->
+                    [];
+                _ ->
+                    EvictionPolicyBinary =
+                        case NodeEvictionPolicy of
+                            value_only -> <<"valueOnly">>;
+                            full_eviction -> <<"fullEviction">>;
+                            no_eviction -> <<"noEviction">>;
+                            nru_eviction -> <<"nruEviction">>
+                        end,
+                    [{evictionPolicy, EvictionPolicyBinary}]
+            end;
+        false ->
+            []
+    end.
 
 build_failover_status(Snapshot, Node) ->
     PrevFailoverNodes = chronicle_master:get_prev_failover_nodes(Snapshot),

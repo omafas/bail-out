@@ -770,6 +770,10 @@ storage_mode_migration_error(history_retention_enabled_on_bucket) ->
     {"Cannot migrate storage mode. history_retention enabled on bucket.", 400};
 storage_mode_migration_error(history_retention_enabled_on_collections) ->
     {"Cannot migrate storage mode. history_retention enabled on collections.",
+     400};
+storage_mode_migration_error(eviction_policy_no_restart_required) ->
+    {"Eviction policy changes during storage mode migration require "
+     "--no-restart option.",
      400}.
 
 reply_storage_mode_migration_error(Req, Error) ->
@@ -827,6 +831,10 @@ update_via_orchestrator(Req, BucketId, StorageMode, BucketType, UpdatedProps,
         {error, cc_versioning_already_enabled} ->
             reply_text(Req, "Cross cluster versioning already enabled", 409);
         {error, {storage_mode_migration, janitor_not_run}} when CanRetry ->
+            ns_orchestrator:ensure_janitor_run({bucket, BucketId}, 5000),
+            update_via_orchestrator(Req, BucketId, StorageMode, BucketType,
+                                    UpdatedProps, false, Options);
+        {error, {eviction_policy_change, janitor_not_run}} when CanRetry ->
             ns_orchestrator:ensure_janitor_run({bucket, BucketId}, 5000),
             update_via_orchestrator(Req, BucketId, StorageMode, BucketType,
                                     UpdatedProps, false, Options);
