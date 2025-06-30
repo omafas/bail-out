@@ -71,9 +71,13 @@
 -define(SECURITY_READ, {[admin, security, admin], read}).
 -define(SECURITY_WRITE, {[admin, security, admin], write}).
 
+-define(EXTERNAL_READ_PRE_MORPHEUS, {[admin, security, external], read}).
+-define(EXTERNAL_WRITE_PRE_MORPHEUS, {[admin, security, external], write}).
 -define(EXTERNAL_READ, {[admin, users, external], read}).
 -define(EXTERNAL_WRITE, {[admin, users, external], write}).
 
+-define(LOCAL_READ_PRE_MORPHEUS, {[admin, security, local], read}).
+-define(LOCAL_WRITE_PRE_MORPHEUS, {[admin, security, local], write}).
 -define(LOCAL_READ, {[admin, users, local], read}).
 -define(LOCAL_WRITE, {[admin, users, local], write}).
 
@@ -421,7 +425,8 @@ security_filter(Req) ->
     end.
 
 user_admin_filter(Req) ->
-    case menelaus_auth:has_permission(?USER_ADMIN_READ, Req) of
+    case not cluster_compat_mode:is_cluster_morpheus() orelse
+         menelaus_auth:has_permission(?USER_ADMIN_READ, Req) of
         true ->
             pipes:filter(fun (_) -> true end);
         false ->
@@ -433,17 +438,37 @@ user_admin_filter(Req) ->
               end, #{})
     end.
 
+%% To maintain backwards compatibility we have to use the old access
+%% permissions until the cluster is entirely running 8.0.
 get_domain_access_permission(read, Domain) ->
-    case Domain of
-        admin -> ?SECURITY_READ;
-        local -> ?LOCAL_READ;
-        external -> ?EXTERNAL_READ
+    case cluster_compat_mode:is_cluster_morpheus() of
+        true ->
+            case Domain of
+                admin -> ?SECURITY_READ;
+                local -> ?LOCAL_READ;
+                external -> ?EXTERNAL_READ
+            end;
+        false ->
+            case Domain of
+                admin -> ?SECURITY_READ;
+                local -> ?LOCAL_READ_PRE_MORPHEUS;
+                external -> ?EXTERNAL_READ_PRE_MORPHEUS
+            end
     end;
 get_domain_access_permission(write, Domain) ->
-    case Domain of
-        admin -> ?SECURITY_WRITE;
-        local -> ?LOCAL_WRITE;
-        external -> ?EXTERNAL_WRITE
+    case cluster_compat_mode:is_cluster_morpheus() of
+        true ->
+            case Domain of
+                admin -> ?SECURITY_WRITE;
+                local -> ?LOCAL_WRITE;
+                external -> ?EXTERNAL_WRITE
+            end;
+        false ->
+            case Domain of
+                admin -> ?SECURITY_WRITE;
+                local -> ?LOCAL_WRITE_PRE_MORPHEUS;
+                external -> ?EXTERNAL_WRITE_PRE_MORPHEUS
+            end
     end.
 
 domain_filter(Domain, Req) ->
@@ -1146,13 +1171,21 @@ parse_groups(GroupsStr) ->
     GroupsTokens = string:tokens(GroupsStr, ","),
     [string:trim(G) || G <- GroupsTokens].
 
+maybe_substitute_roles(Roles) ->
+    case cluster_compat_mode:is_cluster_morpheus() of
+        true ->
+            menelaus_users:maybe_substitute_roles(Roles);
+        false ->
+            Roles
+    end.
+
 validate_roles(Name, State) ->
     validator:validate(
       fun (RawRoles) ->
               Roles = parse_roles(RawRoles),
               BadRoles = [BadRole || BadRole = {error, _} <- Roles],
               GoodRoles0 = Roles -- BadRoles,
-              GoodRoles = menelaus_users:maybe_substitute_roles(GoodRoles0),
+              GoodRoles = maybe_substitute_roles(GoodRoles0),
               {_, MoreBadRoles} =
                   menelaus_roles:validate_roles(GoodRoles),
               case {BadRoles, MoreBadRoles} of
@@ -1209,7 +1242,8 @@ verify_security_roles_access(Req, Permission, Roles) ->
     end.
 
 verify_user_admin_roles_access(Req, Access, Roles) ->
-    case overlap(Roles, get_user_admin_roles()) of
+    case cluster_compat_mode:is_cluster_morpheus() andalso
+         overlap(Roles, get_user_admin_roles()) of
         true ->
             Permission = case Access of
                              read -> ?USER_ADMIN_READ;
