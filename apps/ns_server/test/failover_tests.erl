@@ -630,56 +630,11 @@ graceful_failover_test_setup(SetupConfig) ->
         {name, <<"Group 1">>},
         {nodes, ['a', 'b', 'c']}]]),
 
-    %% Graceful failover does a rebalance so we need to mock many of the calls
-    %% made during that.
-    rebalance_test_mock_setup(),
-
-    mock_helpers:setup_mocks([rebalance_quirks, ns_node_disco_events], Pids).
-
-rebalance_test_mock_setup() ->
     fake_ns_config:update_snapshot(rebalance_out_delay_seconds, 0),
 
     meck:expect(chronicle_compat, push, fun(_) -> ok end),
 
-    meck:expect(janitor_agent, prepare_nodes_for_rebalance,
-                fun(_,_,_) ->
-                        ok
-                end),
-
-    meck:expect(janitor_agent, get_mass_dcp_docs_estimate,
-                fun (_, _, VBs) ->
-                        {ok, lists:duplicate(length(VBs), {0, 0, random_state})}
-                end),
-
-    meck:expect(janitor_agent, inhibit_view_compaction,
-                fun (_, _, _) -> nack end),
-
-    meck:expect(janitor_agent, uninhibit_view_compaction,
-                fun (_, _, _, _) -> ok end),
-
-    meck:expect(janitor_agent, bulk_set_vbucket_state,
-                fun (_, _, _, _) -> ok end),
-
-    meck:expect(janitor_agent, initiate_indexing,
-                fun (_, _, _, _, _) -> ok end),
-
-    meck:expect(janitor_agent, wait_dcp_data_move,
-                fun (_, _, _, _, _) -> ok end),
-
-    meck:expect(janitor_agent, get_vbucket_high_seqno,
-                fun (_, _, _, _) -> 0 end),
-
-    meck:expect(janitor_agent, wait_seqno_persisted,
-                fun (_, _, _, _, _) -> ok end),
-
-    meck:expect(janitor_agent, set_vbucket_state,
-                fun (_, _, _, _, _, _, _, _) -> ok end),
-
-    meck:expect(janitor_agent, wait_index_updated,
-                fun (_, _, _, _, _) -> ok end),
-
-    meck:expect(janitor_agent, dcp_takeover,
-                fun (_, _, _, _, _) -> ok end).
+    mock_helpers:setup_mocks([rebalance_quirks, ns_node_disco_events], Pids).
 
 graceful_failover_test_() ->
     Nodes = #{

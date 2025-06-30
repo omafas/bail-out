@@ -251,6 +251,13 @@ meck_setup_setters() ->
     meck:expect(ns_config, set,
                 fun(Key, Value) ->
                         update_snapshot(Key, Value)
+                end),
+
+    meck:expect(ns_config, run_txn_with_config,
+                fun(Config, Body) ->
+                        Body(Config, fun(Key, Value, _Cfg) ->
+                                             update_snapshot(Key, Value)
+                                     end)
                 end).
 
 %% ----------------------------------

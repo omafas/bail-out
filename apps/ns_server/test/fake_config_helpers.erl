@@ -11,37 +11,47 @@
 %% Helpers for setting up fake config (chronicle_kv/ns_config)for tests.
 -module(fake_config_helpers).
 
+-include("ns_common.hrl").
+
 -export([setup_node_config/1,
          setup_bucket_config/1]).
 
 -spec add_service_map_to_snapshot(atom(), list(), map()) -> map().
 add_service_map_to_snapshot(Node, Services, Snapshot) ->
-    lists:foldl(
-        fun(kv, AccSnapshot) ->
-                %% KV is handled in a special way
-                AccSnapshot;
-            (Service, S) ->
-                case maps:find({service_map, Service}, S) of
-                    error -> S#{{service_map, Service} => [Node]};
-                    {ok, Nodes} -> S#{{service_map, Service} => [Node | Nodes]}
-                end
-        end, Snapshot, Services).
+    Acc = lists:foldl(
+            fun(kv, AccSnapshot) ->
+                    %% KV is handled in a special way
+                    AccSnapshot;
+               (Service, S) ->
+                    case maps:find({service_map, Service}, S) of
+                        error ->
+                            S#{{service_map, Service} => [Node]};
+                        {ok, Nodes} ->
+                            S#{{service_map, Service} => [Node | Nodes]}
+                    end
+            end, Snapshot, Services),
+
+    Acc.
 
 %% Map should be of the form Key => {State, Services (list)}.
 -spec setup_node_config(map()) -> true.
 setup_node_config(NodesMap) ->
     ClusterSnapshot =
         maps:fold(
-            fun(Node, {State, Services}, Snapshot) ->
-                    S = add_service_map_to_snapshot(Node, Services, Snapshot),
-                    S#{{node, Node, membership} => State,
-                        {node, Node, services} => Services,
-                        {node, Node, failover_vbuckets} => []}
-            end, #{}, NodesMap),
+          fun(Node, {State, Services}, Snapshot) ->
+                  S = add_service_map_to_snapshot(Node, Services, Snapshot),
+                  S#{{node, Node, membership} => State,
+                     {node, Node, services} => Services,
+                     {node, Node, failover_vbuckets} => []}
+          end, #{}, NodesMap),
     fake_chronicle_kv:update_snapshot(ClusterSnapshot),
 
     Nodes = maps:keys(NodesMap),
-    fake_chronicle_kv:update_snapshot(nodes_wanted, Nodes).
+    fake_chronicle_kv:update_snapshot(nodes_wanted, Nodes),
+
+    %% Set a high memory quota to avoid any memory quota issues, don't care
+    %% about the actual value.
+    memory_quota:set_quotas(ns_config:get(), [{kv, ?MAX_32BIT_SIGNED_INT}]).
 
 %% Takes a list of bucket names (strings).
 %% Requires that node config is setup (i.e. we must be able to read from the
@@ -62,6 +72,8 @@ setup_bucket_config(Buckets) ->
     Val = [
            {type, membase},
            {servers, ActiveKVNodes},
+           {desired_servers, ActiveKVNodes},
+           {num_replicas, 1},
            {map, Map}
           ],
 
