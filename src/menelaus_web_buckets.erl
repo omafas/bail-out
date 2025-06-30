@@ -719,7 +719,13 @@ handle_bucket_update_inner(BucketId, Req, Params, Limit) ->
         {false, _, {ok, ParsedProps, _}} ->
             BucketType = proplists:get_value(bucketType, ParsedProps),
             UpdatedProps = ns_bucket:extract_bucket_props(ParsedProps),
-            case update_bucket(Ctx, BucketId, BucketType, UpdatedProps, Req) of
+            Options =
+                case proplists:get_value(no_restart, ParsedProps, false) of
+                    true -> [no_restart];
+                    false -> []
+                end,
+            case update_bucket(Ctx, BucketId, BucketType, UpdatedProps,
+                               Options, Req) of
                 retry ->
                     handle_bucket_update_inner(BucketId, Req, Params,
                                                Limit - 1);
@@ -790,14 +796,10 @@ maybe_update_cas_props(BucketId, BucketConfig, UpdatedProps, true = _CcvEn) ->
 maybe_update_cas_props(_, _, UpdatedProps, false = _CcEn) ->
     {ok, UpdatedProps}.
 
-update_via_orchestrator(Req, BucketId, StorageMode, BucketType, UpdatedProps) ->
-    update_via_orchestrator(Req, BucketId, StorageMode, BucketType,
-                            UpdatedProps, true).
-
 update_via_orchestrator(Req, BucketId, StorageMode, BucketType, UpdatedProps,
-                        CanRetry) ->
+                        CanRetry, Options) ->
     case ns_orchestrator:update_bucket(BucketType, StorageMode,
-                                       BucketId, UpdatedProps) of
+                                       BucketId, UpdatedProps, Options) of
         ok ->
             ns_audit:modify_bucket(Req, BucketId, BucketType, UpdatedProps),
             DisplayBucketType = ns_bucket:display_type(BucketType,
@@ -827,7 +829,7 @@ update_via_orchestrator(Req, BucketId, StorageMode, BucketType, UpdatedProps,
         {error, {storage_mode_migration, janitor_not_run}} when CanRetry ->
             ns_orchestrator:ensure_janitor_run({bucket, BucketId}, 5000),
             update_via_orchestrator(Req, BucketId, StorageMode, BucketType,
-                                    UpdatedProps, false);
+                                    UpdatedProps, false, Options);
         {error, {storage_mode_migration, Error}} ->
             reply_storage_mode_migration_error(Req, Error);
         {exit, {not_found, _}, _} ->
@@ -835,7 +837,7 @@ update_via_orchestrator(Req, BucketId, StorageMode, BucketType, UpdatedProps,
             retry
     end.
 
-update_bucket(Ctx, BucketId, BucketType, UpdatedProps, Req) ->
+update_bucket(Ctx, BucketId, BucketType, UpdatedProps, Options, Req) ->
     #bv_ctx{bucket_config = BucketConfig} = Ctx,
     StorageMode = ns_bucket:storage_mode(BucketConfig),
     CcvEn = proplists:get_value(cross_cluster_versioning_enabled,
@@ -844,7 +846,7 @@ update_bucket(Ctx, BucketId, BucketType, UpdatedProps, Req) ->
     case maybe_update_cas_props(BucketId, BucketConfig, UpdatedProps, CcvEn) of
         {ok, UpdateProps1} ->
             update_via_orchestrator(Req, BucketId, StorageMode, BucketType,
-                                    UpdateProps1);
+                                    UpdateProps1, true, Options);
         {error, max_cas_vbucket_retrieval_no_map} ->
             reply_text(Req, "Unable to retrieve max_cas due to no vBucket map",
                             503);
@@ -1387,7 +1389,8 @@ basic_bucket_params_screening(Ctx, Params) ->
     CommonParams = validate_common_params(Ctx, Params),
     TypeSpecificParams =
         validate_bucket_type_specific_params(CommonParams, Params, Ctx),
-    Candidates = CommonParams ++ TypeSpecificParams,
+    NoRestartParam = parse_validate_no_restart(Params),
+    Candidates = CommonParams ++ TypeSpecificParams ++ [NoRestartParam],
     assert_candidates(Candidates),
     %% Basic parameter checking has been done. Take the non-error key/values
     %% and do additional checking (e.g. relationships between different
@@ -3079,6 +3082,37 @@ parse_validate_workload_pattern_default(Params) ->
             {error, workloadPatternDefault,
              <<"Workload pattern default must be 'readHeavy', 'writeHeavy' or "
                "'mixed'">>}
+    end.
+
+parse_validate_no_restart(Params) ->
+    case proplists:get_value("noRestart", Params) of
+        undefined ->
+            ignore;
+        Value ->
+            case ns_config:read_key_fast(allow_online_eviction_policy_change,
+                                         false) of
+                true ->
+                    case menelaus_util:parse_validate_boolean(Value) of
+                        {ok, BoolValue} ->
+                            case proplists:get_value("evictionPolicy",
+                                                     Params) of
+                                undefined ->
+                                    {error, no_restart,
+                                     <<"noRestart option has no effect unless "
+                                       "evictionPolicy is being changed">>};
+                                _ ->
+                                    {ok, no_restart, BoolValue}
+                            end;
+                        _Error ->
+                            {error, no_restart,
+                             <<"noRestart must be a boolean (true/false)">>}
+                    end;
+                false ->
+                    {error, no_restart,
+                     <<"noRestart option is not supported. Enable "
+                       "allow_online_eviction_policy_change to use this "
+                       "feature">>}
+            end
     end.
 
 

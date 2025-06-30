@@ -121,6 +121,7 @@
          clear_hibernation_state/1,
          update_bucket_props/2,
          update_bucket_props/4,
+         update_bucket_props/5,
          storage_mode_migration_in_progress/1,
          node_bucket_names/1,
          node_bucket_names/2,
@@ -1396,12 +1397,15 @@ do_update_override_props(Props, BucketConfig, Key, FetchFun) ->
 %% If bucket with given name exists, but with different type, we
 %% should return {exit, {not_found, _}, _}
 update_bucket_props(Type, OldStorageMode, BucketName, Props) ->
+    update_bucket_props(Type, OldStorageMode, BucketName, Props, []).
+
+update_bucket_props(Type, OldStorageMode, BucketName, Props, Options) ->
     case lists:member(BucketName,
                       get_bucket_names_of_type({Type, OldStorageMode})) of
         true ->
             try
                 update_bucket_props_inner(
-                  Type, OldStorageMode, BucketName, Props)
+                  Type, OldStorageMode, BucketName, Props, Options)
             catch
                 throw:Error ->
                     Error
@@ -1434,12 +1438,12 @@ maybe_delete_cas_props_inner(false = _CcvEn, Props) ->
 maybe_delete_cas_props_inner(true = _CcvEn, Props) ->
     {Props, []}.
 
-update_bucket_props_inner(Type, OldStorageMode, BucketName, Props) ->
+update_bucket_props_inner(Type, OldStorageMode, BucketName, Props, Options) ->
     {ok, BucketConfig} = get_bucket(BucketName),
     PrevProps = extract_bucket_props(BucketConfig),
     DisplayBucketType = display_type(Type, OldStorageMode),
 
-    case update_bucket_props_allowed(Props, BucketConfig) of
+    case update_bucket_props_allowed(Props, BucketConfig, Options) of
         true ->
             ok;
         {false, Error} ->
@@ -1523,14 +1527,14 @@ update_bucket_props_inner(Type, OldStorageMode, BucketName, Props) ->
             RV
     end.
 
--spec update_bucket_props_allowed(proplists:proplist(), proplists:proplist()) ->
-          true | {false, Error::term()}.
-update_bucket_props_allowed(NewProps, BucketConfig) ->
+-spec update_bucket_props_allowed(proplists:proplist(), proplists:proplist(),
+                                  [atom()]) -> true | {false, Error::term()}.
+update_bucket_props_allowed(NewProps, BucketConfig, Options) ->
     Res = functools:sequence_(
             [?cut(is_storage_mode_update_allowed(
                     NewProps, BucketConfig)),
              ?cut(update_bucket_props_allowed_inner(
-                    NewProps, BucketConfig))]),
+                    NewProps, BucketConfig, Options))]),
     case Res of
         ok ->
             true;
@@ -1585,7 +1589,7 @@ is_storage_mode_update_allowed(NewProps, BucketConfig) ->
             ok
     end.
 
-update_bucket_props_allowed_inner(NewProps, BucketConfig) ->
+update_bucket_props_allowed_inner(NewProps, BucketConfig, _Options) ->
     case storage_mode_migration_in_progress(BucketConfig) of
         true ->
             %% We allow only ram_quota and storage_mode settings to be changed
@@ -2436,30 +2440,30 @@ update_bucket_props_allowed_test() ->
                     {type, membase},
                     {ram_quota, 1024},
                     {foo, blah}],
-    ?assert(update_bucket_props_allowed(NewProps, BucketConfig)),
+    ?assert(update_bucket_props_allowed(NewProps, BucketConfig, [])),
 
     %% per-node override keys set in the BucketConfig.
     %% Expectation: storage_mode update allowed.
     BucketConfig1 = BucketConfig ++ [{{node, n1, storage_mode}, magma}],
-    ?assert(update_bucket_props_allowed(NewProps, BucketConfig1)),
+    ?assert(update_bucket_props_allowed(NewProps, BucketConfig1, [])),
 
     %% per-node override keys set in the BucketConfig.
     %% Expectation: ram_quota update allowed.
     NewProps1 = [{ram_quota, 2048}],
-    ?assert(update_bucket_props_allowed(NewProps1, BucketConfig1)),
+    ?assert(update_bucket_props_allowed(NewProps1, BucketConfig1, [])),
 
     NewProps2 = [{foo, not_blah}],
 
     %% per-node override keys set in the BucketConfig.
     %% Expectation: can not change any bucket props.
     ?assertEqual({false, {storage_mode_migration, in_progress}},
-                 update_bucket_props_allowed(NewProps2, BucketConfig1)),
+                 update_bucket_props_allowed(NewProps2, BucketConfig1, [])),
 
     %% per-node override keys set in the BucketConfig.
     %% Expectation: can not add any new bucket props.
     NewProps3 = [{bar, blah}],
     ?assertEqual({false, {storage_mode_migration, in_progress}},
-                 update_bucket_props_allowed(NewProps3, BucketConfig1)).
+                 update_bucket_props_allowed(NewProps3, BucketConfig1, [])).
 
 update_override_props_test() ->
     Servers = [n0, n1],
