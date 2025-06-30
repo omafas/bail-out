@@ -465,8 +465,8 @@ upgrade_config(Config) ->
                 %% test will still pass, despite the fact that offline upgrades
                 %% from the version immediately prior to CurrentVersion would
                 %% not actually be allowed.
-                [{set, {node, node(), config_version}, {8,0}} |
-                 upgrade_config_from_76_to_morpheus(Config)];
+                [{set, {node, node(), config_version}, {7,9}} |
+                 upgrade_config_from_76_to_phoenix(Config)];
         OldVersion ->
             ?log_error("Detected an attempt to offline upgrade from "
                        "unsupported version ~p. Terminating.", [OldVersion]),
@@ -528,11 +528,11 @@ do_upgrade_config_from_7_2_to_76(_Config, DefaultConfig) ->
     [upgrade_key(memcached_config, DefaultConfig),
      upgrade_key(memcached_defaults, DefaultConfig)].
 
-upgrade_config_from_76_to_morpheus(Config) ->
-    DefaultConfig = default(?VERSION_MORPHEUS),
-    do_upgrade_config_from_76_to_morpheus(Config, DefaultConfig).
+upgrade_config_from_76_to_phoenix(Config) ->
+    DefaultConfig = default(?VERSION_PHOENIX),
+    do_upgrade_config_from_76_to_phoenix(Config, DefaultConfig).
 
-do_upgrade_config_from_76_to_morpheus(_Config, DefaultConfig) ->
+do_upgrade_config_from_76_to_phoenix(_Config, DefaultConfig) ->
     [upgrade_key(memcached_config, DefaultConfig),
      upgrade_key(memcached_defaults, DefaultConfig)].
 

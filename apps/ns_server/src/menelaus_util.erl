@@ -73,7 +73,7 @@
          assert_is_dev_preview/0,
          assert_profile_flag/2,
          assert_is_76/0,
-         assert_is_morpheus/0,
+         assert_is_phoenix/0,
          assert_config_profile_flag/1,
          assert_not_config_profile_flag/1,
          choose_node_consistently/2,
@@ -176,9 +176,9 @@ redirect_permanently(Path, Req) ->
             X -> Scheme ++ X ++ Path
         end,
 
-    %% fallback default set to true from morpheus -> onward.
+    %% fallback default set to true from phoenix -> onward.
     case ns_config:read_key_fast(use_relative_web_redirects,
-                                 cluster_compat_mode:is_cluster_morpheus()) of
+                                 cluster_compat_mode:is_cluster_phoenix()) of
         true ->
             reply_redirect(Path, Req); %% uses relative redirect
         false ->
@@ -765,8 +765,8 @@ assert_profile_flag(Flag, ParamName) ->
 assert_is_76() ->
     assert_cluster_version(fun cluster_compat_mode:is_cluster_76/0).
 
-assert_is_morpheus() ->
-    assert_cluster_version(fun cluster_compat_mode:is_cluster_morpheus/0).
+assert_is_phoenix() ->
+    assert_cluster_version(fun cluster_compat_mode:is_cluster_phoenix/0).
 
 assert_cluster_version(Fun) ->
     assert(

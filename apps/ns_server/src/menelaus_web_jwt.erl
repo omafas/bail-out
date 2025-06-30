@@ -206,7 +206,7 @@ handle_settings(Method, Req) ->
     try
         menelaus_util:assert_is_dev_preview(),
         menelaus_util:assert_is_enterprise(),
-        menelaus_util:assert_is_morpheus(),
+        menelaus_util:assert_is_phoenix(),
         case Method of
             'GET' -> handle_settings_get(Req);
             'PUT' -> handle_settings_put(Req);

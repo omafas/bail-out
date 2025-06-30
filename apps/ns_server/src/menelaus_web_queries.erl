@@ -67,7 +67,7 @@ settings_post_validators() ->
             false ->
                 []
         end ++
-        case cluster_compat_mode:is_cluster_morpheus() of
+        case cluster_compat_mode:is_cluster_phoenix() of
             true ->
                 [validator:integer(queryCompletedStreamSize, _),
                  validator:range(queryCompletedStreamSize, 0, max_uint64, _)];

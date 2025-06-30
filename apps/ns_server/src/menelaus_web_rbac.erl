@@ -302,7 +302,7 @@ format_password_change_time(undefined) -> undefined;
 format_password_change_time(Time) ->
     Timestamp = misc:time_to_timestamp(Time, millisecond),
     %% This check is for consistent reporting of time across the cluster
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_phoenix() of
         true ->
             Datetime = calendar:now_to_universal_time(Timestamp),
             misc:utc_to_iso8601(Datetime, local);
@@ -315,7 +315,7 @@ format_activity_time(undefined) -> undefined;
 format_activity_time(TS) ->
     Datetime = calendar:gregorian_seconds_to_datetime(TS),
     %% This check is for consistent reporting of time across the cluster
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_phoenix() of
         true ->
             misc:utc_to_iso8601(Datetime, local);
         false ->
@@ -941,7 +941,7 @@ verify_digits(P) ->
       end, P).
 
 password_special_characters() ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_phoenix() of
         false ->
             "@%+\\/'\"!#$^?:,(){}[]~`-_";
         true ->
@@ -1091,7 +1091,7 @@ put_user_validators(Req, GetUserIdFun, GroupCheckFun, ValidatePassword,
                                           || G <- Groups])
                     end
         end,
-    IsMorpheus = cluster_compat_mode:is_cluster_morpheus(),
+    IsPhoenix = cluster_compat_mode:is_cluster_phoenix(),
 
     [validator:touch(name, _),
      validate_user_groups(groups, GroupCheckFun, Req, _),
@@ -1107,10 +1107,10 @@ put_user_validators(Req, GetUserIdFun, GroupCheckFun, ValidatePassword,
         [validator_verify_security_roles_access(
            roles, Req, ?SECURITY_WRITE, ExtraRolesFun, _) || not DoingRestore]
         ++
-        [validate_locked(GetUserIdFun, _) || IsMorpheus] ++
+        [validate_locked(GetUserIdFun, _) || IsPhoenix] ++
         [validate_password(_) || ValidatePassword] ++
         [validator:boolean(temporaryPassword, _)
-         || IsMorpheus and ValidatePassword] ++
+         || IsPhoenix and ValidatePassword] ++
         [validator:unsupported(_)].
 
 bad_roles_error(BadRoles) ->
@@ -1316,10 +1316,10 @@ change_password_validators() ->
      validator:unsupported(_)].
 
 patch_user_validators() ->
-    IsMorpheus = cluster_compat_mode:is_cluster_morpheus(),
+    IsPhoenix = cluster_compat_mode:is_cluster_phoenix(),
     [validator:has_params(_),
      validator:valid_in_enterprise_only(locked, _)] ++
-        [validator:boolean(locked, _) || IsMorpheus] ++
+        [validator:boolean(locked, _) || IsPhoenix] ++
         change_password_validators().
 
 handle_change_password(Req) ->
@@ -3171,7 +3171,7 @@ validate_cred_username_test() ->
 
 gen_password_test() ->
     meck:new(cluster_compat_mode, [passthrough]),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus,
+    meck:expect(cluster_compat_mode, is_cluster_phoenix,
                 fun () -> true end),
 
     Pass1 = gen_password({20, [uppercase]}),
@@ -3202,7 +3202,7 @@ gen_password_monkey_test_() ->
         end,
     Test = fun () ->
                    meck:new(cluster_compat_mode, [passthrough]),
-                   meck:expect(cluster_compat_mode, is_cluster_morpheus,
+                   meck:expect(cluster_compat_mode, is_cluster_phoenix,
                                fun () -> true end),
                    [gen_password(
                       GetRandomPolicy()) || _ <- lists:seq(1,100000)],

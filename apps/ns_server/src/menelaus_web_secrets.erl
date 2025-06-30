@@ -62,7 +62,7 @@ handle_get_secret(IdStr, Req) when is_list(IdStr) ->
 
 handle_post_secret(Req) ->
     menelaus_util:assert_is_enterprise(),
-    assert_is_morpheus(),
+    assert_is_phoenix(),
     with_validated_secret(
       fun (ToAdd) ->
           maybe
@@ -76,7 +76,7 @@ handle_post_secret(Req) ->
 
 handle_put_secret(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
-    assert_is_morpheus(),
+    assert_is_phoenix(),
     Id = parse_id(IdStr),
     case cb_cluster_secrets:get_secret(Id) of
         {ok, CurProps} ->
@@ -101,7 +101,7 @@ handle_put_secret(IdStr, Req) ->
 
 handle_test_post_secret(Req) ->
     menelaus_util:assert_is_enterprise(),
-    assert_is_morpheus(),
+    assert_is_phoenix(),
     with_validated_secret(
       fun (Params) ->
           maybe
@@ -113,7 +113,7 @@ handle_test_post_secret(Req) ->
 
 handle_test_post_secret(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
-    assert_is_morpheus(),
+    assert_is_phoenix(),
     Id = parse_id(IdStr),
     case cb_cluster_secrets:get_secret(Id) of
         {ok, CurProps} ->
@@ -138,7 +138,7 @@ handle_test_post_secret(IdStr, Req) ->
 
 handle_test_put_secret(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
-    assert_is_morpheus(),
+    assert_is_phoenix(),
     Id = parse_id(IdStr),
     case cb_cluster_secrets:get_secret(Id) of
         {ok, CurProps} ->
@@ -212,7 +212,7 @@ enforce_static_field_validator(Name, CurValue, State) ->
 
 handle_delete_secret(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
-    assert_is_morpheus(),
+    assert_is_phoenix(),
     Id = parse_id(IdStr),
     IsSecretWritableMFA = {?MODULE, is_writable_remote, [?HIDE(Req), node()]},
     case cb_cluster_secrets:delete_secret(Id, IsSecretWritableMFA) of
@@ -231,7 +231,7 @@ handle_delete_secret(IdStr, Req) ->
 
 handle_delete_historical_key(IdStr, HistKeyIdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
-    assert_is_morpheus(),
+    assert_is_phoenix(),
     Id = parse_id(IdStr),
     HistKeyId = list_to_binary(HistKeyIdStr),
     IsSecretWritableMFA = {?MODULE, is_writable_remote, [?HIDE(Req), node()]},
@@ -252,7 +252,7 @@ handle_delete_historical_key(IdStr, HistKeyIdStr, Req) ->
 
 handle_rotate(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
-    assert_is_morpheus(),
+    assert_is_phoenix(),
     Id = parse_id(IdStr),
     case cb_cluster_secrets:rotate(Id) of
         {ok, Name} ->
@@ -922,17 +922,17 @@ format_secrets_used_by_list(UsedByMap, Snapshot) ->
 format_secret_props(Props) ->
     export_secret(Props).
 
-%% Not using menelaus_util:assert_is_morpheus() because it returns text
+%% Not using menelaus_util:assert_is_phoenix() because it returns text
 %% instead of "global error" json, which is needed for the UI to show
 %% the error in a proper way
-assert_is_morpheus() ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+assert_is_phoenix() ->
+    case cluster_compat_mode:is_cluster_phoenix() of
         true ->
             ok;
         false ->
             menelaus_util:global_error_exception(
               400,
-              <<"Not supported until cluster is fully Morpheus">>)
+              <<"Not supported until cluster is fully Phoenix">>)
     end.
 
 is_writable_remote(ReqHidden, Node, Secret, Snapshot) when Node =:= node() ->

@@ -188,7 +188,7 @@ hidden_failover_ephemeral_setting() ->
     end.
 
 allow_failover_ephemeral_no_replicas() ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_phoenix() of
         true -> proplists:get_bool(allow_failover_ephemeral_no_replicas,
                                    get_cfg());
         false -> hidden_failover_ephemeral_setting()

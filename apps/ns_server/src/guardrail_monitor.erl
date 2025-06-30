@@ -59,7 +59,7 @@
 
 -spec is_enabled() -> boolean().
 is_enabled() ->
-    cluster_compat_mode:is_cluster_morpheus()
+    cluster_compat_mode:is_cluster_phoenix()
         orelse (cluster_compat_mode:is_cluster_76()
                 andalso config_profile:get_bool({resource_management,
                                                  enabled})).
@@ -764,7 +764,7 @@ basic_test_setup() ->
     meck:new([ns_server_stats], [passthrough]),
 
     meck:expect(cluster_compat_mode, is_cluster_76, ?cut(true)),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus, ?cut(true)),
+    meck:expect(cluster_compat_mode, is_cluster_phoenix, ?cut(true)),
     meck:expect(cluster_compat_mode, is_enterprise, ?cut(true)),
     meck:expect(config_profile, get_bool,
                 fun ({resource_management, enabled}) -> true end),
@@ -1495,7 +1495,7 @@ regular_checks_t() ->
                 fun ({node, _, _}, _) -> ok end),
 
     meck:expect(cluster_compat_mode, is_cluster_76, ?cut(true)),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus, ?cut(true)),
+    meck:expect(cluster_compat_mode, is_cluster_phoenix, ?cut(true)),
     meck:expect(cluster_compat_mode, is_enterprise, ?cut(true)),
     meck:expect(config_profile, get_bool,
                 fun ({resource_management, enabled}) -> false end),
@@ -1635,7 +1635,7 @@ initial_check_t() ->
                 fun ({node, _, _}, _) -> ok end),
 
     meck:expect(cluster_compat_mode, is_cluster_76, ?cut(true)),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus, ?cut(true)),
+    meck:expect(cluster_compat_mode, is_cluster_phoenix, ?cut(true)),
     meck:expect(cluster_compat_mode, is_enterprise, ?cut(true)),
     meck:expect(config_profile, get_bool,
                 fun ({resource_management, enabled}) -> false end),

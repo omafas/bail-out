@@ -347,9 +347,9 @@ build_bucket_capabilities(BucketConfig) ->
                      {'subdoc.ReplicaRead',
                       cluster_compat_mode:is_cluster_76()},
                      {'subdoc.BinaryXattr',
-                      cluster_compat_mode:is_cluster_morpheus()},
+                      cluster_compat_mode:is_cluster_phoenix()},
                      {'subdoc.AccessDeleted',
-                      cluster_compat_mode:is_cluster_morpheus()}] ++
+                      cluster_compat_mode:is_cluster_phoenix()}] ++
                      maybe_range_scan_capability(BucketConfig),
 
                 [C || {C, true} <- Conditional] ++
@@ -592,7 +592,7 @@ get_bucket_capabilities(?VERSION_76,
                         _IsMagma) ->
     [couchapi, 'dcp.IgnorePurgedTombstones', rangeScan, preserveExpiry,
      'subdoc.ReplicaRead', querySystemCollection, mobileSystemCollection];
-get_bucket_capabilities(?VERSION_MORPHEUS,
+get_bucket_capabilities(?VERSION_PHOENIX,
                         IsEnterprise,
                         IsMagma) ->
     get_bucket_capabilities(?VERSION_76, IsEnterprise, IsMagma) ++
@@ -652,7 +652,7 @@ verify_compatibility_test() ->
     config_profile:load_default_profile_for_test(),
     meck:expect(cluster_compat_mode, is_cluster_72, fun () -> true end),
     meck:expect(cluster_compat_mode, is_cluster_76, fun () -> true end),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus, fun () -> true end),
+    meck:expect(cluster_compat_mode, is_cluster_phoenix, fun () -> true end),
     meck:expect(cluster_compat_mode, is_enterprise, fun () -> true end),
     meck:expect(cluster_compat_mode, get_cluster_capabilities,
                 fun () -> [{n1ql, [costBasedOptimizer, indexAdvisor]}] end),

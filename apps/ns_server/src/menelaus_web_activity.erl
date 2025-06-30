@@ -37,14 +37,14 @@ default() ->
 
 handle_get(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_morpheus(),
+    menelaus_util:assert_is_phoenix(),
 
     menelaus_web_settings2:handle_get([], params(), fun type_spec/1,
                                       get_config(), Req).
 
 handle_post(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_morpheus(),
+    menelaus_util:assert_is_phoenix(),
 
     menelaus_web_settings2:handle_post(
       fun (Params, Req2) ->
@@ -119,7 +119,7 @@ get_roles(RolesRaw) ->
 -ifdef(TEST).
 bad_roles_test() ->
     config_profile:load_default_profile_for_test(),
-    meck:expect(cluster_compat_mode, get_compat_version, ?cut([8, 0])),
+    meck:expect(cluster_compat_mode, get_compat_version, ?cut([7, 9])),
     meck:expect(cluster_compat_mode, is_developer_preview, ?cut(false)),
     ?assertEqual({value, []}, get_roles([])),
     ?assertEqual({value, [cluster_admin]}, get_roles(["cluster_admin"])),

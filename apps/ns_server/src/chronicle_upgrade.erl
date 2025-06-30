@@ -128,9 +128,9 @@ upgrade_to(?VERSION_72, UpgradeTxn) ->
        [ns_bucket:chronicle_upgrade_to_76(_)])};
 
 upgrade_to(?VERSION_76, UpgradeTxn) ->
-    {?VERSION_MORPHEUS,
+    {?VERSION_PHOENIX,
      functools:chain(
        UpgradeTxn,
-       [ns_bucket:chronicle_upgrade_to_morpheus(_),
-        jwt_issuer:chronicle_upgrade_to_morpheus(_),
-        ns_server_cert:chronicle_upgrade_to_morpheus(_)])}.
+       [ns_bucket:chronicle_upgrade_to_phoenix(_),
+        jwt_issuer:chronicle_upgrade_to_phoenix(_),
+        ns_server_cert:chronicle_upgrade_to_phoenix(_)])}.

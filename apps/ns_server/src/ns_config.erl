@@ -1146,7 +1146,7 @@ load_config(ConfigPath, DirPath, PolicyMod, DekSnapshot) ->
             Dynamic0 = case load_file(bin, C, DekSnapshot) of
                            {ok, DRead} ->
                                %% This is needed for backward compatibility
-                               %% (to read config.dat created by pre-morpheus)
+                               %% (to read config.dat created by pre-phoenix)
                                PolicyMod:decrypt(DRead);
                            not_found ->
                                ?log_info("No dynamic config file found. Assuming we're brand new node"),

@@ -1143,7 +1143,7 @@ read_cert_info(Type) ->
                 {ok, binary_to_term(Bin)}
             catch
                 _:_ ->
-                    %% It is possible that the file is in pre-morpheus format:
+                    %% It is possible that the file is in pre-phoenix format:
                     case file:consult(CertInfoFile) of
                         {ok, [CertsInfo]} -> {ok, CertsInfo};
                         {error, _} = Error -> Error
@@ -1874,7 +1874,7 @@ resave_encrypted_files_test_() ->
      fun (#{}) ->
          [
           %% Making sure read_cert_info() is backward compatible with
-          %% pre-morpheus format
+          %% pre-phoenix format
           ?_test(
             begin
                 NodeCertInfo = {generated, <<"node-version-1">>},

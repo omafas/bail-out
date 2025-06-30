@@ -23,7 +23,7 @@
 encr_method(Param, SecretIdName, EncrType) ->
     AllowedInMixedClusters = case EncrType of
                                  config_encryption -> true;
-                                 _ -> cluster_compat_mode:is_cluster_morpheus()
+                                 _ -> cluster_compat_mode:is_cluster_phoenix()
                              end,
     {Param,
      #{cfg_key => [EncrType, encryption],
@@ -232,7 +232,7 @@ type_spec({encryption_method, AllowedInMixedClusters}) ->
                             fun (disabled) -> ok;
                                 (_V) when AllowedInMixedClusters -> ok;
                                 (_V) -> {error, "Not supported until cluster "
-                                                "is fully Morpheus"}
+                                                "is fully Phoenix"}
                             end, _1, _2))],
       formatter => fun (encryption_service) -> {value, <<"nodeSecretManager">>};
                        (disabled) -> {value, <<"disabled">>};

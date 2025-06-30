@@ -454,7 +454,7 @@ is_allowed_on_cluster([scram_sha256_enabled]) ->
 is_allowed_on_cluster([scram_sha512_enabled]) ->
     cluster_compat_mode:is_cluster_76();
 is_allowed_on_cluster([oauthbearer_enabled]) ->
-    cluster_compat_mode:is_cluster_morpheus() andalso
+    cluster_compat_mode:is_cluster_phoenix() andalso
         cluster_compat_mode:is_developer_preview();
 is_allowed_on_cluster([argon2id_time]) ->
     cluster_compat_mode:is_cluster_76();
@@ -691,7 +691,7 @@ conf(internal) ->
      {memcached_password_hash_iterations_internal, scramShaIterations,
       ?DEFAULT_SCRAM_ITER, get_number(?PBKDF2_ITER_MIN, ?PBKDF2_ITER_MAX)},
      {use_relative_web_redirects, useRelativeWebRedirects,
-      cluster_compat_mode:is_cluster_morpheus(),
+      cluster_compat_mode:is_cluster_phoenix(),
       fun get_bool/1},
      {max_docs_skip, maxDocsSkip, ?DEFAULT_MAX_DOCS_SKIP,
       get_number(?LOWEST_ALLOWED_MAX_DOCS_SKIP,
@@ -1604,7 +1604,7 @@ non_negative_integer_or_max(Value) ->
     {error, lists:flatten(io_lib:format(?NONNEGATIVE_INT_OR_MAX_ERR, [Value]))}.
 
 handle_delete_cgroup_override(ServiceName, Req) ->
-    case cgroups:supported_and_morpheus() of
+    case cgroups:supported_and_phoenix() of
         true ->
             ServiceStrings = [atom_to_list(X) || X <- cgroups:all_services()],
             case lists:member(ServiceName, ServiceStrings) of
@@ -1625,7 +1625,7 @@ handle_delete_cgroup_override(ServiceName, Req) ->
     end.
 
 handle_post_cgroup_overrides(Req) ->
-    case cgroups:supported_and_morpheus() of
+    case cgroups:supported_and_phoenix() of
         true ->
             validator:handle(
               fun (Props) ->
@@ -1657,7 +1657,7 @@ handle_post_cgroup_overrides(Req) ->
     end.
 
 handle_get_cgroup_overrides(Req) ->
-    case cgroups:supported_and_morpheus() of
+    case cgroups:supported_and_phoenix() of
         true ->
             reply_json(Req,
                        {prep_json_encoding(

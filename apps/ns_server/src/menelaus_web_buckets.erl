@@ -425,7 +425,7 @@ build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx) ->
          false ->
              []
      end,
-     case cluster_compat_mode:is_cluster_morpheus() andalso
+     case cluster_compat_mode:is_cluster_phoenix() andalso
           ns_bucket:bucket_type(BucketConfig) =:= membase of
          true ->
              [{expiryPagerSleepTime,
@@ -467,7 +467,7 @@ build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx) ->
              [{driftAheadThresholdMs, DriftAheadThreshold},
               {driftBehindThresholdMs, DriftBehindThreshold}]
      end,
-     case cluster_compat_mode:is_cluster_morpheus() of
+     case cluster_compat_mode:is_cluster_phoenix() of
          true ->
             Snapshot = menelaus_web_node:get_snapshot(Ctx),
             BucketUUID = ns_bucket:uuid(Id, Snapshot),
@@ -479,7 +479,7 @@ build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx) ->
      end].
 
 build_encryption_at_rest_bucket_info(BucketConfig) ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_phoenix() of
         true ->
             [{encryptionAtRestKeyId,
               proplists:get_value(encryption_secret_id, BucketConfig,
@@ -497,7 +497,7 @@ build_encryption_at_rest_bucket_info(BucketConfig) ->
     end.
 
 build_continuous_backup_info(BucketConfig) ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_phoenix() of
         true ->
             [{continuousBackupEnabled,
               ns_bucket:get_continuous_backup_enabled(BucketConfig)},
@@ -1672,7 +1672,7 @@ validate_bucket_type_specific_params(CommonParams, Params,
 
     case BucketType of
         memcached ->
-            %% Remove in major release after morpheus.
+            %% Remove in major release after phoenix.
             [{error, bucketType,
               <<"memcached buckets are no longer supported">>}];
         membase ->
@@ -1689,7 +1689,7 @@ validate_membase_bucket_params(CommonParams, Params, Name,
     ReplicasNumResult = validate_replicas_number(Params, IsNew),
     IsStorageModeMigration = is_storage_mode_migration(
                                IsNew, BucketConfig, Params),
-    IsMorpheus = cluster_compat_mode:is_version_morpheus(Version),
+    IsPhoenix = cluster_compat_mode:is_version_phoenix(Version),
     IsPersistent = is_ephemeral(Params, BucketConfig, IsNew) =:= false,
 
     HistRetSecs = parse_validate_history_retention_seconds(
@@ -1710,24 +1710,24 @@ validate_membase_bucket_params(CommonParams, Params, Name,
                                      config_profile:is_serverless()),
          parse_validate_durability_min_level(Params, BucketConfig, IsNew),
          parse_validate_durability_impossible_fallback(Params, IsNew,
-                                                       IsMorpheus),
-         parse_validate_warmup_behavior(Params, IsNew, IsMorpheus),
-         parse_validate_access_scanner_enabled(Params, IsNew, IsMorpheus,
+                                                       IsPhoenix),
+         parse_validate_warmup_behavior(Params, IsNew, IsPhoenix),
+         parse_validate_access_scanner_enabled(Params, IsNew, IsPhoenix,
                                                IsPersistent),
-         parse_validate_expiry_pager_sleep_time(Params, IsNew, IsMorpheus),
-         parse_validate_memory_low_watermark(Params, IsNew, IsMorpheus),
-         parse_validate_memory_high_watermark(Params, IsNew, IsMorpheus),
+         parse_validate_expiry_pager_sleep_time(Params, IsNew, IsPhoenix),
+         parse_validate_memory_low_watermark(Params, IsNew, IsPhoenix),
+         parse_validate_memory_high_watermark(Params, IsNew, IsPhoenix),
          parse_validate_continuous_backup_enabled(Params, BucketConfig, IsNew,
-                                                  IsMorpheus,
+                                                  IsPhoenix,
                                                   IsStorageModeMigration),
          parse_validate_continuous_backup_interval(Params, BucketConfig, IsNew,
-                                                   IsMorpheus,
+                                                   IsPhoenix,
                                                    IsStorageModeMigration),
          parse_validate_continuous_backup_location(Params, BucketConfig, IsNew,
-                                                   IsMorpheus,
+                                                   IsPhoenix,
                                                    IsStorageModeMigration),
-         parse_validate_invalid_hlc_strategy(Params, IsNew, IsMorpheus),
-         parse_validate_hlc_max_future_threshold(Params, IsNew, IsMorpheus),
+         parse_validate_invalid_hlc_strategy(Params, IsNew, IsPhoenix),
+         parse_validate_hlc_max_future_threshold(Params, IsNew, IsPhoenix),
          parse_validate_storage_quota_percentage(
            Params, BucketConfig, IsNew, IsEnterprise,
            IsStorageModeMigration),
@@ -1750,18 +1750,18 @@ validate_membase_bucket_params(CommonParams, Params, Name,
                                                       Version, IsNew,
                                                       IsEnterprise,
                                                       IsStorageModeMigration),
-         parse_validate_dcp_connections_between_nodes(Params, IsNew, IsMorpheus,
+         parse_validate_dcp_connections_between_nodes(Params, IsNew, IsPhoenix,
                                                       IsEnterprise),
          parse_validate_fusion_logstore_uri(
-           Params, IsNew, IsMorpheus, IsEnterprise),
+           Params, IsNew, IsPhoenix, IsEnterprise),
          parse_validate_dcp_backfill_idle_protection_enabled(Params,
                                                              BucketConfig,
                                                              IsNew,
-                                                             IsMorpheus),
+                                                             IsPhoenix),
          parse_validate_dcp_backfill_idle_limit_seconds(Params, IsNew,
-                                                        IsMorpheus),
+                                                        IsPhoenix),
          parse_validate_dcp_backfill_idle_disk_threshold(Params, IsNew,
-                                                         IsMorpheus),
+                                                         IsPhoenix),
          parse_validate_workload_pattern_default(Params)
         | validate_bucket_auto_compaction_settings(Params)] ++
         parse_validate_limits(
@@ -1779,19 +1779,19 @@ validate_membase_bucket_params(CommonParams, Params, Name,
         validate_bucket_placer_params(Params, IsNew, BucketConfig) ++
         BucketParams.
 
-parse_validate_hlc_max_future_threshold(Params, _IsNew, false = _IsMorpheus) ->
+parse_validate_hlc_max_future_threshold(Params, _IsNew, false = _IsPhoenix) ->
     parse_validate_param_not_supported(
       "hlcMaxFutureThreshold", Params,
-      fun not_supported_until_morpheus_error/1);
-parse_validate_hlc_max_future_threshold(Params, IsNew, true = _IsMorpheus) ->
+      fun not_supported_until_phoenix_error/1);
+parse_validate_hlc_max_future_threshold(Params, IsNew, true = _IsPhoenix) ->
     parse_validate_numeric_param(Params, hlcMaxFutureThreshold,
                                  hlc_max_future_threshold, IsNew).
 
-parse_validate_invalid_hlc_strategy(Params, _IsNew, false = _IsMorpheus) ->
+parse_validate_invalid_hlc_strategy(Params, _IsNew, false = _IsPhoenix) ->
     parse_validate_param_not_supported(
       "invalidHlcStrategy", Params,
-      fun not_supported_until_morpheus_error/1);
-parse_validate_invalid_hlc_strategy(Params, IsNew, _IsMorpheus) ->
+      fun not_supported_until_phoenix_error/1);
+parse_validate_invalid_hlc_strategy(Params, IsNew, _IsPhoenix) ->
     parse_validate_one_of(Params, invalidHlcStrategy, invalid_hlc_strategy,
                           IsNew, ["error", "ignore", "replace"]).
 
@@ -1823,22 +1823,22 @@ validate_one_of(Value, Param, ConfigKey, ValidValues) ->
     end.
 
 parse_validate_continuous_backup_enabled(Params, BucketConfig, IsNew,
-                                         IsMorpheus, IsStorageModeMigration) ->
+                                         IsPhoenix, IsStorageModeMigration) ->
     IsMagma = is_magma(Params, BucketConfig, IsNew, IsStorageModeMigration),
-    parse_validate_continuous_backup_enabled_inner(Params, IsNew, IsMorpheus,
+    parse_validate_continuous_backup_enabled_inner(Params, IsNew, IsPhoenix,
                                                    IsMagma).
 
-parse_validate_continuous_backup_enabled_inner(Params, _IsNew, _IsMorpheus,
+parse_validate_continuous_backup_enabled_inner(Params, _IsNew, _IsPhoenix,
                                                false = _IsMagma) ->
     parse_validate_param_not_supported(
       "continuousBackupEnabled", Params, fun only_supported_on_magma/1);
 parse_validate_continuous_backup_enabled_inner(Params, _IsNew,
-                                               false = _IsMorpheus, _IsMagma) ->
+                                               false = _IsPhoenix, _IsMagma) ->
     parse_validate_param_not_supported(
       "continuousBackupEnabled", Params,
-      fun not_supported_until_morpheus_error/1);
+      fun not_supported_until_phoenix_error/1);
 parse_validate_continuous_backup_enabled_inner(Params, IsNew,
-                                               true = _IsMorpheus,
+                                               true = _IsPhoenix,
                                                true = _IsMagma) ->
     Result = menelaus_util:parse_validate_boolean_field(
                "continuousBackupEnabled", '_', Params),
@@ -1846,45 +1846,45 @@ parse_validate_continuous_backup_enabled_inner(Params, IsNew,
                                      continuous_backup_enabled, Result, IsNew).
 
 parse_validate_continuous_backup_interval(Params, BucketConfig, IsNew,
-                                          IsMorpheus, IsStorageModeMigration) ->
+                                          IsPhoenix, IsStorageModeMigration) ->
     IsMagma = is_magma(Params, BucketConfig, IsNew, IsStorageModeMigration),
-    parse_validate_continuous_backup_interval_inner(Params, IsNew, IsMorpheus,
+    parse_validate_continuous_backup_interval_inner(Params, IsNew, IsPhoenix,
                                                     IsMagma).
 
-parse_validate_continuous_backup_interval_inner(Params, _IsNew, _IsMorpheus,
+parse_validate_continuous_backup_interval_inner(Params, _IsNew, _IsPhoenix,
                                                 false = _IsMagma) ->
     parse_validate_param_not_supported(
       "continuousBackupInterval", Params, fun only_supported_on_magma/1);
 parse_validate_continuous_backup_interval_inner(Params, _IsNew,
-                                                false = _IsMorpheus,
+                                                false = _IsPhoenix,
                                                 _IsMagma) ->
     parse_validate_param_not_supported(
       "continuousBackupInterval", Params,
-      fun not_supported_until_morpheus_error/1);
+      fun not_supported_until_phoenix_error/1);
 parse_validate_continuous_backup_interval_inner(Params, IsNew,
-                                                true = _IsMorpheus,
+                                                true = _IsPhoenix,
                                                 true = _IsMagma) ->
     parse_validate_numeric_param(Params, continuousBackupInterval,
                                  continuous_backup_interval, IsNew).
 
 parse_validate_continuous_backup_location(Params, BucketConfig, IsNew,
-                                          IsMorpheus, IsStorageModeMigration) ->
+                                          IsPhoenix, IsStorageModeMigration) ->
     IsMagma = is_magma(Params, BucketConfig, IsNew, IsStorageModeMigration),
-    parse_validate_continuous_backup_location_inner(Params, IsNew, IsMorpheus,
+    parse_validate_continuous_backup_location_inner(Params, IsNew, IsPhoenix,
                                                     IsMagma).
 
-parse_validate_continuous_backup_location_inner(Params, _IsNew, _IsMorpheus,
+parse_validate_continuous_backup_location_inner(Params, _IsNew, _IsPhoenix,
                                                 false = _IsMagma) ->
     parse_validate_param_not_supported(
       "continuousBackupLocation", Params, fun only_supported_on_magma/1);
 parse_validate_continuous_backup_location_inner(Params, _IsNew,
-                                                false = _IsMorpheus,
+                                                false = _IsPhoenix,
                                                 _IsMagma) ->
     parse_validate_param_not_supported(
       "continuousBackupLocation", Params,
-      fun not_supported_until_morpheus_error/1);
+      fun not_supported_until_phoenix_error/1);
 parse_validate_continuous_backup_location_inner(Params, IsNew,
-                                                true = _IsMorpheus,
+                                                true = _IsPhoenix,
                                                 true = _IsMagma) ->
     parse_validate_path_or_uri(Params, continuousBackupLocation,
                                continuous_backup_location, IsNew).
@@ -1977,7 +1977,7 @@ get_bucket_type(false = _IsNew, BucketConfig, _Params)
     ns_bucket:bucket_type(BucketConfig);
 get_bucket_type(_IsNew, _BucketConfig, Params) ->
     case proplists:get_value("bucketType", Params) of
-        %% Remove in major release after morpheus.
+        %% Remove in major release after phoenix.
         "memcached" -> memcached;
         "membase" -> membase;
         "couchbase" -> membase;
@@ -2151,7 +2151,7 @@ parse_validate_bucket_auto_compaction_settings(Params) ->
 
 validate_bucket_encryption_at_rest_settings(Name, Params, Version, IsEnterprise,
                                             IsPersistent) ->
-    Allowed = cluster_compat_mode:is_version_morpheus(Version),
+    Allowed = cluster_compat_mode:is_version_phoenix(Version),
     case parse_validate_encryption_secret_id(Name, Params) of
         [{ok, encryption_secret_id, Id}] when not IsEnterprise,
                                               Id /= ?SECRET_ID_NOT_SET ->
@@ -2161,7 +2161,7 @@ validate_bucket_encryption_at_rest_settings(Name, Params, Version, IsEnterprise,
                                               Id /= ?SECRET_ID_NOT_SET ->
             [{error, encryptionAtRestKeyId,
               <<"Encryption At-Rest is not allowed until the entire cluster "
-                "is upgraded to Morpheus">>}];
+                "is upgraded to Phoenix">>}];
         [{ok, encryption_secret_id, Id}] when not IsPersistent,
                                               Id /= ?SECRET_ID_NOT_SET ->
             [{error, encryptionAtRestKeyId,
@@ -2381,11 +2381,11 @@ parse_validate_ephemeral_durability_min_level(_Other) ->
        "ephemeral buckets">>}.
 
 parse_validate_durability_impossible_fallback(Params, _IsNew,
-                                              false = _IsMorpheus) ->
+                                              false = _IsPhoenix) ->
     parse_validate_param_not_supported(
       "durabilityImpossibleFallback", Params,
-      fun not_supported_until_morpheus_error/1);
-parse_validate_durability_impossible_fallback(Params, IsNew, _IsMorpheus) ->
+      fun not_supported_until_phoenix_error/1);
+parse_validate_durability_impossible_fallback(Params, IsNew, _IsPhoenix) ->
     Mode = proplists:get_value("durabilityImpossibleFallback", Params),
     validate_with_missing(Mode, "disabled", IsNew,
                           fun parse_validate_durability_impossible_fallback/1).
@@ -2399,11 +2399,11 @@ parse_validate_durability_impossible_fallback(_) ->
      <<"Durability impossible fallback must be either 'disabled' or "
        "'fallbackToActiveAck'">>}.
 
-parse_validate_warmup_behavior(Params, _IsNew, false = _IsMorpheus) ->
+parse_validate_warmup_behavior(Params, _IsNew, false = _IsPhoenix) ->
     parse_validate_param_not_supported(
       "warmupBehavior", Params,
-      fun not_supported_until_morpheus_error/1);
-parse_validate_warmup_behavior(Params, IsNew, _IsMorpheus) ->
+      fun not_supported_until_phoenix_error/1);
+parse_validate_warmup_behavior(Params, IsNew, _IsPhoenix) ->
     Behavior = proplists:get_value("warmupBehavior", Params),
     validate_with_missing(Behavior, "background", IsNew,
                           fun parse_validate_warmup_behavior/1).
@@ -2461,9 +2461,9 @@ parse_validate_param_not_supported(Key, Params, ErrorFun) ->
             ignore
     end.
 
-not_supported_until_morpheus_error(Param) ->
+not_supported_until_phoenix_error(Param) ->
     {error, Param,
-     <<"Argument is not supported until cluster is fully morpheus">>}.
+     <<"Argument is not supported until cluster is fully phoenix">>}.
 
 not_supported_for_ephemeral_buckets(Param) ->
     {error, Param,
@@ -2618,46 +2618,46 @@ validate_numeric_param(Value, Param, ConfigKey) ->
             value_not_in_range_error(Param, Value, Min, Max)
     end.
 
-parse_validate_access_scanner_enabled(Params, _IsNew, false = _IsMorpheus,
+parse_validate_access_scanner_enabled(Params, _IsNew, false = _IsPhoenix,
                                       _IsPersistent) ->
     parse_validate_param_not_supported(
-      "accessScannerEnabled", Params, fun not_supported_until_morpheus_error/1);
-parse_validate_access_scanner_enabled(Params, _IsNew, true = _IsMorpheus,
+      "accessScannerEnabled", Params, fun not_supported_until_phoenix_error/1);
+parse_validate_access_scanner_enabled(Params, _IsNew, true = _IsPhoenix,
                                       false = _IsPersistent) ->
     parse_validate_param_not_supported(
       "accessScannerEnabled", Params,
       fun not_supported_for_ephemeral_buckets/1);
-parse_validate_access_scanner_enabled(Params, IsNew, true = _IsMorpheus,
+parse_validate_access_scanner_enabled(Params, IsNew, true = _IsPhoenix,
                                       true = _IsPersistent) ->
     Result = menelaus_util:parse_validate_boolean_field("accessScannerEnabled",
                                                         '_', Params),
     process_boolean_param_validation(accessScannerEnabled,
                                      access_scanner_enabled, Result, IsNew).
 
-parse_validate_expiry_pager_sleep_time(Params, _IsNew, false = _IsMorpheus) ->
+parse_validate_expiry_pager_sleep_time(Params, _IsNew, false = _IsPhoenix) ->
     parse_validate_param_not_supported(
-      "expiryPagerSleepTime", Params, fun not_supported_until_morpheus_error/1);
-parse_validate_expiry_pager_sleep_time(Params, IsNew, true = _IsMorpheus) ->
+      "expiryPagerSleepTime", Params, fun not_supported_until_phoenix_error/1);
+parse_validate_expiry_pager_sleep_time(Params, IsNew, true = _IsPhoenix) ->
     parse_validate_numeric_param(Params, expiryPagerSleepTime,
                                  expiry_pager_sleep_time, IsNew).
 
-parse_validate_memory_low_watermark(Params, _IsNew, false = _IsMorpheus) ->
+parse_validate_memory_low_watermark(Params, _IsNew, false = _IsPhoenix) ->
     parse_validate_param_not_supported(
-      "memoryLowWatermark", Params, fun not_supported_until_morpheus_error/1);
-parse_validate_memory_low_watermark(Params, IsNew, true = _IsMorpheus) ->
+      "memoryLowWatermark", Params, fun not_supported_until_phoenix_error/1);
+parse_validate_memory_low_watermark(Params, IsNew, true = _IsPhoenix) ->
     parse_validate_numeric_param(Params, memoryLowWatermark,
                                  memory_low_watermark, IsNew).
 
-parse_validate_memory_high_watermark(Params, _IsNew, false = _IsMorpheus) ->
+parse_validate_memory_high_watermark(Params, _IsNew, false = _IsPhoenix) ->
     parse_validate_param_not_supported(
-      "memoryHighWatermark", Params, fun not_supported_until_morpheus_error/1);
-parse_validate_memory_high_watermark(Params, IsNew, true = _IsMorpheus) ->
+      "memoryHighWatermark", Params, fun not_supported_until_phoenix_error/1);
+parse_validate_memory_high_watermark(Params, IsNew, true = _IsPhoenix) ->
     parse_validate_numeric_param(Params, memoryHighWatermark,
                                  memory_high_watermark, IsNew).
 
 get_storage_mode_based_on_storage_backend(Params, IsEnterprise) ->
     DefaultStorageBackend =
-        case IsEnterprise andalso cluster_compat_mode:is_cluster_morpheus() of
+        case IsEnterprise andalso cluster_compat_mode:is_cluster_phoenix() of
             true ->
                 "magma";
             false ->
@@ -3434,28 +3434,28 @@ parse_validate_magma_data_blocksize_inner(_Key, Value, true = _IsEnterprise,
                                           true = _IsMagma, ValidatorFn) ->
     ValidatorFn(Value, IsNew).
 
-parse_validate_dcp_connections_between_nodes(Params, _IsNew, _IsMorpheus,
+parse_validate_dcp_connections_between_nodes(Params, _IsNew, _IsPhoenix,
                                              false = _IsEnterprise) ->
     parse_validate_param_not_enterprise("dcpConnectionsBetweenNodes", Params);
 parse_validate_dcp_connections_between_nodes(Params, _IsNew,
-                                             false = _IsMorpheus,
+                                             false = _IsPhoenix,
                                              _IsEnterprise) ->
     parse_validate_param_not_supported(
       "dcpConnectionsBetweenNodes", Params,
-      fun not_supported_until_morpheus_error/1);
-parse_validate_dcp_connections_between_nodes(Params, IsNew, _IsMorpheus,
+      fun not_supported_until_phoenix_error/1);
+parse_validate_dcp_connections_between_nodes(Params, IsNew, _IsPhoenix,
                                              _IsEnterprise) ->
     parse_validate_numeric_param(Params, dcpConnectionsBetweenNodes,
                                  dcp_connections_between_nodes, IsNew).
 
 parse_validate_dcp_backfill_idle_protection_enabled(Params, _BCfg, _IsNew,
-                                                    false = _IsMorpheus) ->
+                                                    false = _IsPhoenix) ->
     parse_validate_param_not_supported(
       "dcpBackfillIdleProtectionEnabled",
       Params,
-      fun not_supported_until_morpheus_error/1);
+      fun not_supported_until_phoenix_error/1);
 parse_validate_dcp_backfill_idle_protection_enabled(Params, BCfg, IsNew,
-                                                    true = _IsMorpheus) ->
+                                                    true = _IsPhoenix) ->
     Key = "dcpBackfillIdleProtectionEnabled",
     Result = menelaus_util:parse_validate_boolean_field(Key, '_', Params),
 
@@ -3471,20 +3471,20 @@ parse_validate_dcp_backfill_idle_protection_enabled(Params, BCfg, IsNew,
                                      DefaultFun).
 
 parse_validate_dcp_backfill_idle_limit_seconds(Params, _IsNew,
-                                               false = _IsMorpheus) ->
+                                               false = _IsPhoenix) ->
     parse_validate_param_not_supported(
       "dcpBackfillIdleLimitSeconds", Params,
-      fun not_supported_until_morpheus_error/1);
-parse_validate_dcp_backfill_idle_limit_seconds(Params, IsNew, _IsMorpheus) ->
+      fun not_supported_until_phoenix_error/1);
+parse_validate_dcp_backfill_idle_limit_seconds(Params, IsNew, _IsPhoenix) ->
     parse_validate_numeric_param(Params, dcpBackfillIdleLimitSeconds,
                                  dcp_backfill_idle_limit_seconds, IsNew).
 
 parse_validate_dcp_backfill_idle_disk_threshold(Params, _IsNew,
-                                                false = _IsMorpheus) ->
+                                                false = _IsPhoenix) ->
     parse_validate_param_not_supported(
       "dcpBackfillIdleDiskThreshold", Params,
-      fun not_supported_until_morpheus_error/1);
-parse_validate_dcp_backfill_idle_disk_threshold(Params, IsNew, _IsMorpheus) ->
+      fun not_supported_until_phoenix_error/1);
+parse_validate_dcp_backfill_idle_disk_threshold(Params, IsNew, _IsPhoenix) ->
     parse_validate_numeric_param(Params, dcpBackfillIdleDiskThreshold,
                                  dcp_backfill_idle_disk_threshold, IsNew).
 
@@ -3680,17 +3680,17 @@ parse_validate_conflict_resolution_type(_Other) ->
      <<"Conflict resolution type must be 'seqno' or 'lww' or 'custom'">>}.
 
 parse_validate_fusion_logstore_uri(
-  Params, _IsNew, _IsMorpheus, _IsEnterprise = false) ->
+  Params, _IsNew, _IsPhoenix, _IsEnterprise = false) ->
     parse_validate_param_not_enterprise(?FUSION_LOGSTORE_URI, Params);
 parse_validate_fusion_logstore_uri(
-  Params, _IsNew, _IsMorpheus = false, _IsEnterprise) ->
+  Params, _IsNew, _IsPhoenix = false, _IsEnterprise) ->
     parse_validate_param_not_supported(
-      ?FUSION_LOGSTORE_URI, Params, fun not_supported_until_morpheus_error/1);
+      ?FUSION_LOGSTORE_URI, Params, fun not_supported_until_phoenix_error/1);
 parse_validate_fusion_logstore_uri(
-  Params, _IsNew = false, _IsMorpheus, _IsEnterprise) ->
+  Params, _IsNew = false, _IsPhoenix, _IsEnterprise) ->
     parse_validate_create_only(?FUSION_LOGSTORE_URI, Params);
 parse_validate_fusion_logstore_uri(
-  Params, _IsNew = true, _IsMorpheus = true, _IsEnterprise = true) ->
+  Params, _IsNew = true, _IsPhoenix = true, _IsEnterprise = true) ->
     IsMagma = is_magma(Params, undefined, true, false),
     case IsMagma of
         false ->
@@ -3979,7 +3979,7 @@ basic_bucket_params_screening_setup() ->
                 fun (_, Default) -> Default end),
     meck:expect(cluster_compat_mode, is_cluster_76,
                 fun () -> true end),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus,
+    meck:expect(cluster_compat_mode, is_cluster_phoenix,
                 fun () -> true end),
     meck:expect(cluster_compat_mode, is_enterprise,
                 fun () -> true end),
@@ -5014,12 +5014,12 @@ parse_validate_fusion_logstore_uri_test_() ->
     Combinations = combinations(5, [true, false]),
     {foreach, fun () -> ok end, fun (_) -> ok end,
      lists:map(
-       fun ([IsNew, IsMorpheus, IsEnterprise, IsMagma, IsValid]) ->
+       fun ([IsNew, IsPhoenix, IsEnterprise, IsMagma, IsValid]) ->
                {lists:flatten(
                   io_lib:format(
-                    "IsNew=~p, IsMorpheus=~p, IsEnterprise=~p, IsMagma=~p, "
+                    "IsNew=~p, IsPhoenix=~p, IsEnterprise=~p, IsMagma=~p, "
                     "IsValid=~p",
-                    [IsNew, IsMorpheus, IsEnterprise, IsMagma, IsValid])),
+                    [IsNew, IsPhoenix, IsEnterprise, IsMagma, IsValid])),
                 fun () ->
                         Uri = case IsValid of
                                   true -> "s3://something";
@@ -5033,7 +5033,7 @@ parse_validate_fusion_logstore_uri_test_() ->
                         Params = [{"bucketType", "membase"},
                                   {?FUSION_LOGSTORE_URI, Uri}] ++ BackendParam,
                         Resp = parse_validate_fusion_logstore_uri(
-                                 Params, IsNew, IsMorpheus, IsEnterprise),
+                                 Params, IsNew, IsPhoenix, IsEnterprise),
                         ExpectedErrors =
                             lists:flatten(
                               [[<<"Must be a valid uri">> || not IsValid],
@@ -5042,7 +5042,7 @@ parse_validate_fusion_logstore_uri_test_() ->
                                [<<"\"fusionLogstoreURI\" can only be set in "
                                   "Enterprise edition">> || not IsEnterprise],
                                [<<"Argument is not supported until cluster is "
-                                  "fully morpheus">> || not IsMorpheus],
+                                  "fully phoenix">> || not IsPhoenix],
                                [<<"\"fusionLogstoreURI\" allowed only during "
                                   "bucket creation">> || not IsNew]]),
                         case ExpectedErrors of
@@ -5658,7 +5658,7 @@ storage_mode_migration_meck_setup(Version) ->
                 fun () ->
                         Version
                 end),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus,
+    meck:expect(cluster_compat_mode, is_cluster_phoenix,
                 fun () ->
                         true
                 end),
@@ -5823,7 +5823,7 @@ parse_validate_storage_mode_setup() ->
     meck:new(cluster_compat_mode, [passthrough]),
     meck:expect(cluster_compat_mode, is_enterprise,
                 fun () -> true end),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus,
+    meck:expect(cluster_compat_mode, is_cluster_phoenix,
                 fun () -> true end),
     config_profile:load_default_profile_for_test().
 

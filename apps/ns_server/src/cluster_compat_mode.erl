@@ -27,8 +27,8 @@
          is_version_72/1,
          is_cluster_76/0,
          is_version_76/1,
-         is_cluster_morpheus/0,
-         is_version_morpheus/1,
+         is_cluster_phoenix/0,
+         is_version_phoenix/1,
          is_enterprise/0,
          is_enterprise/1,
          is_saslauthd_enabled/0,
@@ -140,11 +140,11 @@ is_version_76(ClusterVersion) ->
 is_cluster_76() ->
     is_enabled(?VERSION_76).
 
-is_version_morpheus(ClusterVersion) ->
-    is_enabled_at(ClusterVersion, ?VERSION_MORPHEUS).
+is_version_phoenix(ClusterVersion) ->
+    is_enabled_at(ClusterVersion, ?VERSION_PHOENIX).
 
-is_cluster_morpheus() ->
-    is_enabled(?VERSION_MORPHEUS).
+is_cluster_phoenix() ->
+    is_enabled(?VERSION_PHOENIX).
 
 is_index_aware_rebalance_on() ->
     not ns_config:read_key_fast(index_aware_rebalance_disabled, false).
@@ -213,8 +213,8 @@ consider_switching_compat_mode() ->
 
 upgrades() ->
     [{?VERSION_76, rbac, menelaus_users, upgrade},
-     {?VERSION_MORPHEUS, rbac, menelaus_users, upgrade},
-     {?VERSION_MORPHEUS, metakv, chronicle_metakv, upgrade_to_morpheus}] ++
+     {?VERSION_PHOENIX, rbac, menelaus_users, upgrade},
+     {?VERSION_PHOENIX, metakv, chronicle_metakv, upgrade_to_phoenix}] ++
     config_profile:get_value(upgrades, []).
 
 do_upgrades(undefined, _, _, _) ->

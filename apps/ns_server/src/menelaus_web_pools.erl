@@ -431,7 +431,7 @@ build_alerts(UUID) ->
 build_one_alert({_Key, Msg, Time, DisablePopUp}) ->
     Timestamp = misc:time_to_timestamp(Time),
     %% This check is for consistent reporting of time across the cluster
-    StrTime = case cluster_compat_mode:is_cluster_morpheus() of
+    StrTime = case cluster_compat_mode:is_cluster_phoenix() of
                   true ->
                       Datetime = calendar:now_to_universal_time(Timestamp),
                       misc:utc_to_iso8601(Datetime, local);

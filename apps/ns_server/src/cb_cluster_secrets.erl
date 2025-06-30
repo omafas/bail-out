@@ -819,7 +819,7 @@ node_supports_encryption_at_rest(NodeInfo) ->
         undefined ->
             no_info;
         SupportedVersion ->
-            cluster_compat_mode:is_version_morpheus(SupportedVersion)
+            cluster_compat_mode:is_version_phoenix(SupportedVersion)
     end.
 
 nodes_with_encryption_at_rest(Nodes) ->

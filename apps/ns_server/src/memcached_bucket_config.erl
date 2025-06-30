@@ -100,7 +100,7 @@ params(membase, BucketName, BucketConfig, MemQuota, UUID, DBSubDir) ->
       proplists:get_value(compression_mode, BucketConfig)},
      {"max_num_shards", [],
       ns_bucket:magma_max_shards(BucketConfig, ?DEFAULT_MAGMA_SHARDS)}] ++
-        case cluster_compat_mode:is_cluster_morpheus() of
+        case cluster_compat_mode:is_cluster_phoenix() of
             false -> [];
             true ->
                 [{"dcp_backfill_idle_protection_enabled", [{reload, dcp}],
@@ -174,7 +174,7 @@ persistent_metadata_purge_age(BucketName, BucketConfig) ->
 
 
 get_invalid_hlc_strategy(BucketConfig) ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_phoenix() of
         false ->
             undefined;
         true ->
@@ -182,7 +182,7 @@ get_invalid_hlc_strategy(BucketConfig) ->
     end.
 
 get_hlc_max_future_threshold(BucketConfig) ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_phoenix() of
         false ->
             undefined;
         true ->

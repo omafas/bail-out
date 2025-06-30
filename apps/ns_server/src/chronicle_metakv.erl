@@ -39,7 +39,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--export([upgrade_to_morpheus/3,
+-export([upgrade_to_phoenix/3,
          get/1,
          get_snapshot/1,
          get_dir/2,
@@ -80,7 +80,7 @@
                                 {cas, key(), revision()} |
                                 duplicate_keys}.
 
-upgrade_to_morpheus(_, _, _) ->
+upgrade_to_phoenix(_, _, _) ->
     case chronicle_agent:get_info_for_rsm(metakv) of
         {error, no_rsm} ->
             ?log_debug("Add metakv rsm to chronicle"),

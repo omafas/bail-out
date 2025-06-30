@@ -108,7 +108,7 @@ settings_post_validators() ->
             false ->
                 []
         end ++
-        case cluster_compat_mode:is_cluster_morpheus() of
+        case cluster_compat_mode:is_cluster_phoenix() of
             true ->
                 [validator:boolean(deferBuild, _)];
             false ->

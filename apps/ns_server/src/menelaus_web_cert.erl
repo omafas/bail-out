@@ -653,7 +653,7 @@ validate_client_cert_auth_state(StateVal, Prefixes, Cfg, Errors) ->
 
 validate_state("mandatory", CfgPair, Cfg, Errors) ->
     case misc:should_cluster_data_be_encrypted() andalso
-         not cluster_compat_mode:is_cluster_morpheus() of
+         not cluster_compat_mode:is_cluster_phoenix() of
         false ->
             {[CfgPair | Cfg], Errors};
         true ->
@@ -662,12 +662,12 @@ validate_state("mandatory", CfgPair, Cfg, Errors) ->
                 {Cfg, [{error, M} | Errors]}
     end;
 validate_state("hybrid", CfgPair, Cfg, Errors) ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_phoenix() of
         true ->
             {[CfgPair | Cfg], Errors};
         false ->
             M = "Cannot set 'state' to 'hybrid' until the cluster is fully "
-                "morpheus",
+                "phoenix",
             {Cfg, [{error, M}, Errors]}
     end;
 validate_state(_, CfgPair, Cfg, Errors) ->

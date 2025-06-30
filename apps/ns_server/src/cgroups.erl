@@ -15,7 +15,7 @@
 -include("ns_common.hrl").
 
 -export([supported/0,
-         supported_and_morpheus/0,
+         supported_and_phoenix/0,
          all_services/0,
          write_memory_high/2,
          write_memory_max/2,
@@ -79,9 +79,9 @@ supported() ->
     cgroups:os_type() =:= {unix, linux} andalso
         config_profile:is_provisioned() andalso system_checks().
 
--spec(supported_and_morpheus() -> boolean()).
-supported_and_morpheus() ->
-    supported() andalso cluster_compat_mode:is_cluster_morpheus() andalso
+-spec(supported_and_phoenix() -> boolean()).
+supported_and_phoenix() ->
+    supported() andalso cluster_compat_mode:is_cluster_phoenix() andalso
         cluster_compat_mode:is_enterprise().
 
 -spec(supported_on_all_nodes() -> boolean()).
@@ -106,7 +106,7 @@ supported_on_all_nodes(Nodes) ->
 %% be max/max if this key is not enabled.
 -spec(has_feature_enabled() -> boolean()).
 has_feature_enabled() ->
-    cluster_compat_mode:is_cluster_morpheus() andalso
+    cluster_compat_mode:is_cluster_phoenix() andalso
         cluster_compat_mode:is_enterprise() andalso
         ns_config:read_key_fast(enable_cgroups, false).
 

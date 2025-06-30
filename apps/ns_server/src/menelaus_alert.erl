@@ -99,7 +99,7 @@ filter_params(Params) ->
 handle_events_validators() ->
     [validator:iso_8601_utc(sinceTime, [], _),
      validator:integer(limit, -1, max_uint64, _)] ++
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_phoenix() of
         true ->
             [validator:string(component, _),
              validator:one_of(component, event_log:valid_component(), _),
@@ -421,7 +421,7 @@ build_log_structs(LogEntriesIn, MinTStamp, Limit) ->
                           %% This check is for consistent reporting of time
                           %% across the cluster
                           ST =
-                              case cluster_compat_mode:is_cluster_morpheus() of
+                              case cluster_compat_mode:is_cluster_phoenix() of
                                   true ->
                                       misc:local_and_utc_to_iso8601(
                                         ServerTime,

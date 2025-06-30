@@ -32,7 +32,7 @@
          known_settings/0,
          on_update/2,
          config_upgrade_to_76/1,
-         config_upgrade_to_morpheus/1]).
+         config_upgrade_to_phoenix/1]).
 
 -import(json_settings_manager,
         [id_lens/1, allow_missing_lens/1]).
@@ -175,7 +175,7 @@ general_settings_lens_props(ClusterVersion) ->
         false ->
             []
     end ++
-    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_MORPHEUS) of
+    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_PHOENIX) of
         true ->
             [{deferBuild,
               id_lens(<<"indexer.settings.defer_build">>)}];
@@ -223,7 +223,7 @@ general_settings_defaults(ClusterVersion) ->
         false ->
             []
     end ++
-    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_MORPHEUS) of
+    case cluster_compat_mode:is_enabled_at(ClusterVersion, ?VERSION_PHOENIX) of
         true ->
             [{deferBuild, false}];
         false ->
@@ -329,8 +329,8 @@ config_upgrade_to_76(Config) ->
     config_upgrade_settings(Config, ?MIN_SUPPORTED_VERSION,
                             ?VERSION_76).
 
-config_upgrade_to_morpheus(Config) ->
-    config_upgrade_settings(Config, ?VERSION_76, ?VERSION_MORPHEUS).
+config_upgrade_to_phoenix(Config) ->
+    config_upgrade_settings(Config, ?VERSION_76, ?VERSION_PHOENIX).
 
 -spec(default_shard_affinity() -> boolean()).
 default_shard_affinity() ->
@@ -402,7 +402,7 @@ config_upgrade_settings(Config, OldVersion, NewVersion) ->
                       [__TRUE_FALSE])).
 default_test() ->
     config_profile:load_default_profile_for_test(),
-    Versions = [?MIN_SUPPORTED_VERSION, ?VERSION_76, ?VERSION_MORPHEUS],
+    Versions = [?MIN_SUPPORTED_VERSION, ?VERSION_76, ?VERSION_PHOENIX],
     lists:foreach(fun(V) -> default_versioned(V) end, Versions),
     config_profile:unload_profile_for_test().
 
@@ -507,7 +507,7 @@ config_upgrade_test_generic(Config, ShardAffinityValue) ->
                       [ShardAffinityValue]),
     ?assertEqual(list_to_binary(Result), Data),
 
-    CmdList2 = config_upgrade_to_morpheus(Config),
+    CmdList2 = config_upgrade_to_phoenix(Config),
     [{set, {metakv, Meta2}, Data2}] = CmdList2,
     ?assertEqual(<<"/indexing/settings/config">>, Meta2),
     ?assertEqual(<<"{\"indexer.settings.defer_build\":false}">>,

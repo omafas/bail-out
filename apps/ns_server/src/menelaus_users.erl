@@ -1312,7 +1312,7 @@ upgrade_props(?VERSION_76, auth, _Key, AuthProps) ->
     {ok, functools:chain(AuthProps,
                          [scram_sha:fix_pre_76_auth_info(_),
                           get_rid_of_plain_key(_)])};
-upgrade_props(?VERSION_MORPHEUS, user, _Key, UserProps) ->
+upgrade_props(?VERSION_PHOENIX, user, _Key, UserProps) ->
     {ok, functools:chain(UserProps,
                          [maybe_substitute_user_roles(_)])};
 upgrade_props(_Vsn, _RecType, _Key, _Props) ->
@@ -1330,7 +1330,7 @@ maybe_substitute_user_roles(User) ->
 
 %% Replacement roles for ones that have been removed or changed. Only
 %% done for the same releases as supported in our upgrade matrix. These
-%% replacments are being done in morpheus. Once morpheus is the oldest
+%% replacments are being done in phoenix. Once phoenix is the oldest
 %% supported release we no longer have to support this replacement.
 maybe_substitute_roles(Roles) ->
     lists:flatmap(
@@ -1443,22 +1443,22 @@ upgrade_test_() ->
                                          <<"Vkelr1rzrz9tT0Z/AhLvKJVuWJs=">>}]}]},
                        {?SCRAM_SALT_KEY, <<"0ues3mfZqA4OjuljBI/uQY5L0jI=">>},
                        {?SCRAM_ITERATIONS_KEY, 4000}])]),
-      Test(?VERSION_MORPHEUS,
+      Test(?VERSION_PHOENIX,
            [{{user, {"local-security-admin", local}},
              [{roles, [security_admin_local]}]}],
            [CheckUser("local-security-admin", roles,
                       [security_admin, user_admin_local])]),
-      Test(?VERSION_MORPHEUS,
+      Test(?VERSION_PHOENIX,
            [{{user, {"external-security-admin", local}},
              [{roles, [security_admin_external]}]}],
            [CheckUser("external-security-admin", roles,
                       [security_admin, user_admin_external])]),
-      Test(?VERSION_MORPHEUS,
+      Test(?VERSION_PHOENIX,
            [{{user, {"ro-admin", local}},
              [{roles, [ro_admin]}]}],
            [CheckUser("ro-admin", roles,
                       [ro_admin, ro_security_admin])]),
-      Test(?VERSION_MORPHEUS,
+      Test(?VERSION_PHOENIX,
            [{{user, {"unchanged-admin", local}},
             [{roles, [eventing_admin]}]}],
            [CheckUser("unchanged-admin", roles,
@@ -1578,7 +1578,7 @@ maybe_update_plain_auth_hashes_test_() ->
                cluster_compat_mode, is_cluster_76,
                fun () -> true end),
              meck:expect(
-               cluster_compat_mode, is_cluster_morpheus,
+               cluster_compat_mode, is_cluster_phoenix,
                fun () -> true end)
      end,
      fun (_X, _R) ->
@@ -1638,7 +1638,7 @@ maybe_update_auth_test() ->
     try
         meck:expect(cluster_compat_mode, is_cluster_76,
                     fun () -> true end),
-        meck:expect(cluster_compat_mode, is_cluster_morpheus,
+        meck:expect(cluster_compat_mode, is_cluster_phoenix,
                     fun () -> true end),
 
         %% Testing 2 things here:
