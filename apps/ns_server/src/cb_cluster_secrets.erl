@@ -82,7 +82,8 @@
          diag_info/0,
          reencrypt_deks/0,
          node_supports_encryption_at_rest/1,
-         max_dek_num/1]).
+         max_dek_num/1,
+         fetch_snapshot_in_txn/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -300,7 +301,7 @@ add_new_secret_internal(Props) ->
                else
                    {error, Reason} -> {abort, {error, Reason}}
                end
-            end),
+            end, #{read_consistency => quorum}),
     case RV of
         {ok, #{id := Id, name := Name} = Res} ->
             ResJson = menelaus_web_secrets:format_secret_props(Res),
@@ -358,7 +359,7 @@ replace_secret_internal(Id, NewProps, IsSecretWritableMFA) ->
                   {error, _} = Err ->
                       {abort, Err}
               end
-           end),
+          end, #{read_consistency => quorum}),
     case Res of
         {ok, {#{name := Name} = ResProps, PrevProps}} ->
             ResPropsJson = menelaus_web_secrets:format_secret_props(ResProps),
@@ -3919,7 +3920,9 @@ chronicle_transaction(Keys, Fun) ->
     end.
 
 chronicle_compat_txn(Fun) ->
-    try chronicle_compat:txn(Fun) of
+    chronicle_compat_txn(Fun, #{}).
+chronicle_compat_txn(Fun, Opts) ->
+    try chronicle_compat:txn(Fun, Opts) of
         {ok, _Rev} -> ok;
         {ok, _Rev, Res} -> {ok, Res};
         Else -> Else

@@ -155,6 +155,18 @@ handle_test_put_secret(IdStr, Req) ->
     end.
 
 with_validated_secret(Fun, CurProps, Req) ->
+    %% We need to fetch snapshot with read_consistency in order to deal with
+    %% the following scenario:
+    %% 1. User creates a bucket on a node which is not an orchestrator
+    %%    (real creation happens on orchestrator)
+    %% 2. Then the user tries to create a secret with bucket-encryption
+    %%    usage for this bucket (also on non-orchestrator node)
+    %% 3. This can fail because that node doesn't know about the bucket yet
+    %%    (parsing of the bucket encryption usage will fail).
+    Snapshot = chronicle_compat:get_snapshot(
+                 %[ns_bucket:fetch_snapshot(all, _, [uuid])],
+                 [cb_cluster_secrets:fetch_snapshot_in_txn(_)],
+                 #{read_consistency => quorum}),
     validator:handle(
       fun (RawProps) ->
           maybe
@@ -176,19 +188,19 @@ with_validated_secret(Fun, CurProps, Req) ->
               {error, Reason} ->
                   menelaus_util:reply_global_error(Req, format_error(Reason))
           end
-      end, Req, json, secret_validators(CurProps)).
+      end, Req, json, secret_validators(CurProps, Snapshot)).
 
 %% Note: CurProps can only be used for static fields validation here.
 %% Any field that can be modified and needs to use CurProps should be
 %% checked in transaction in cb_cluster_secret:replace_secret_internal.
-secret_validators(CurProps) ->
+secret_validators(CurProps, Snapshot) ->
     [validator:trimmed_string(name, _),
      validator:required(name, _),
      validator:validate(
        fun ("") -> {error, "Must not not be empty"};
            (Str) ->
                Id = maps:get(id, CurProps, ?SECRET_ID_NOT_SET),
-               case cb_cluster_secrets:is_name_unique(Id, Str, direct) of
+               case cb_cluster_secrets:is_name_unique(Id, Str, Snapshot) of
                    true -> ok;
                    %% Checking it here and inside transaction later
                    %% Check here is needed mostly to make it user friendly in UI
@@ -199,9 +211,9 @@ secret_validators(CurProps) ->
                              ?KMIP_KEY_TYPE], _),
      validator:convert(type, binary_to_atom(_, latin1), _),
      validator:required(type, _),
-     validate_key_usage(usage, _),
+     validate_key_usage(usage, Snapshot, _),
      validator:required(usage, _),
-     validate_secrets_data(data, CurProps, _),
+     validate_secrets_data(data, CurProps, Snapshot, _),
      validator:required(data, _),
      validator:unsupported(_)].
 
@@ -434,7 +446,7 @@ format_key(Props, ActiveKeyId) ->
 format_datetime(DateTime) ->
     misc:utc_to_iso8601(DateTime, local).
 
-validate_key_usage(Name, State) ->
+validate_key_usage(Name, Snapshot, State) ->
     validator:string_array(
       Name,
       fun (Str) ->
@@ -442,7 +454,7 @@ validate_key_usage(Name, State) ->
               <<"bucket-encryption">> ->
                   {value, {bucket_encryption, <<"*">>}};
               <<"bucket-encryption-", N/binary>> when size(N) > 0 ->
-                  case ns_bucket:uuid(binary_to_list(N), direct) of
+                  case ns_bucket:uuid(binary_to_list(N), Snapshot) of
                       not_present ->
                           {error, io_lib:format("Bucket ~s not found", [N])};
                       BucketUUID when is_binary(BucketUUID) ->
@@ -464,7 +476,7 @@ validate_key_usage(Name, State) ->
 %% Note: CurSecretProps can only be used for static fields validation here.
 %% Any field that can be modified and needs to use CurProps should be
 %% checked in transaction in cb_cluster_secret:replace_secret_internal.
-validate_secrets_data(Name, CurSecretProps, State) ->
+validate_secrets_data(Name, CurSecretProps, Snapshot, State) ->
     Type = validator:get_value(type, State),
     CurType = maps:get(type, CurSecretProps, Type),
     case Type == CurType of
@@ -472,11 +484,11 @@ validate_secrets_data(Name, CurSecretProps, State) ->
             Validators =
                 case Type of
                     ?CB_MANAGED_KEY_TYPE ->
-                        cb_managed_key_validators(CurSecretProps);
+                        cb_managed_key_validators(CurSecretProps, Snapshot);
                     ?AWSKMS_KEY_TYPE ->
                         awskms_key_validators(CurSecretProps);
                     ?KMIP_KEY_TYPE ->
-                        kmip_key_validators(CurSecretProps);
+                        kmip_key_validators(CurSecretProps, Snapshot);
                     _ -> []
                 end,
             validator:decoded_json(
@@ -492,7 +504,7 @@ validate_secrets_data(Name, CurSecretProps, State) ->
 %% Note: CurSecretProps can only be used for static fields validation here.
 %% Any field that can be modified and needs to use CurProps should be
 %% checked in transaction in cb_cluster_secret:replace_secret_internal.
-cb_managed_key_validators(CurSecretProps) ->
+cb_managed_key_validators(CurSecretProps, Snapshot) ->
     [validator:boolean(canBeCached, _),
      validator:default(canBeCached, true, _),
      validator:boolean(autoRotation, _),
@@ -504,12 +516,12 @@ cb_managed_key_validators(CurSecretProps) ->
      validator:validate(fun (_) -> {error, "read only"} end, keys, _),
      validator:one_of(encryptWith, ["nodeSecretManager", "encryptionKey"], _),
      validator:convert(encryptWith, binary_to_atom(_, latin1), _),
-     validate_encrypt_with(encryptWith, _),
+     validate_encrypt_with(encryptWith, Snapshot, _),
      validator:default(encryptWith, nodeSecretManager, _),
      validator:integer(encryptWithKeyId, -1, max_uint64, _),
      validate_encrypt_secret_id(encryptWithKeyId, CurSecretProps, _)].
 
-validate_encrypt_with(Name, State) ->
+validate_encrypt_with(Name, Snapshot, State) ->
     validator:validate(
       fun (encryptionKey) ->
               case validator:get_value(encryptWithKeyId, State) of
@@ -520,7 +532,7 @@ validate_encrypt_with(Name, State) ->
               end;
           (nodeSecretManager) ->
               case cb_crypto:get_encryption_method(config_encryption, cluster,
-                                                   direct) of
+                                                   Snapshot) of
                   {ok, disabled} ->
                       {error, format_error(config_encryption_disabled)};
                   {ok, _} ->
@@ -605,7 +617,7 @@ validate_optional_file(Name, State) ->
           end
       end, Name, State).
 
-kmip_key_validators(CurSecretProps) ->
+kmip_key_validators(CurSecretProps, Snapshot) ->
     [validator:string(host, _),
      validator:required(host, _),
      validator:integer(port, 1, 65535, _),
@@ -649,7 +661,7 @@ kmip_key_validators(CurSecretProps) ->
      validator:validate(fun (_) -> {error, "read only"} end, historicalKeys, _),
      validator:one_of(encryptWith, ["nodeSecretManager", "encryptionKey"], _),
      validator:convert(encryptWith, binary_to_atom(_, latin1), _),
-     validate_encrypt_with(encryptWith, _),
+     validate_encrypt_with(encryptWith, Snapshot, _),
      validator:default(encryptWith, nodeSecretManager, _),
      validator:integer(encryptWithKeyId, -1, max_uint64, _),
      validate_encrypt_secret_id(encryptWithKeyId, CurSecretProps, _)] ++
