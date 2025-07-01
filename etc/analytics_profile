@@ -8,6 +8,7 @@
 {{cbas, enable_blob_storage}, true}.
 {{cbas, skip_blob_storage_validation}, false}.
 {{indexer, projector_disabled}, true}.
+{{kv, cont_backup_disabled}, true}.
 {{cbas, max_storage_partitions}, 1024}.
 {fixed_services, [kv, cbas]}.
 {max_buckets_supported, 0}.
