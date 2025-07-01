@@ -2316,7 +2316,8 @@ validate_secret_in_txn(NewProps, PrevProps, Snapshot) ->
         ok ?= validate_dek_related_usage_change(NewProps, PrevProps, Snapshot),
         ok ?= validate_encryption_secret_id(NewProps, Snapshot),
         ok ?= validate_for_config_encryption(NewProps, Snapshot),
-        ok ?= validate_name_uniqueness(NewProps, Snapshot)
+        ok ?= validate_name_uniqueness(NewProps, Snapshot),
+        ok ?= validate_secret_usages(NewProps, Snapshot)
     end.
 
 -spec execute_on_master({module(), atom(), [term()]}) -> term().
@@ -3761,6 +3762,32 @@ validate_name_uniqueness(#{id := Id, name := Name}, Snapshot) ->
     case is_name_unique(Id, Name, Snapshot) of
         true -> ok;
         false -> {error, name_not_unique}
+    end.
+
+-spec validate_secret_usages(secret_props(), chronicle_snapshot()) ->
+          ok | {error, bucket_not_found}.
+validate_secret_usages(#{usage := Usages}, Snapshot) ->
+    %% We validated usages when we were parsing it, but since then buckets
+    %% might have been deleted, so we need to validate them again in txn
+    validate_usages(Usages, Snapshot).
+
+validate_usages([], _Snapshot) -> ok;
+validate_usages([Usage | Rest], Snapshot) ->
+    Res =
+        case Usage of
+            {bucket_encryption, <<"*">>} -> ok;
+            {bucket_encryption, BucketUUID} ->
+                case ns_bucket:uuid2bucket(BucketUUID, Snapshot) of
+                    {ok, _} -> ok;
+                    {error, not_found} -> {error, bucket_not_found}
+                end;
+            U when U =:= config_encryption; U =:= audit_encryption;
+                   U =:= log_encryption; U =:= secrets_encryption ->
+                ok
+        end,
+    maybe
+        ok ?= Res,
+        validate_usages(Rest, Snapshot)
     end.
 
 -spec validate_secrets_consistency([secret_props()]) ->
