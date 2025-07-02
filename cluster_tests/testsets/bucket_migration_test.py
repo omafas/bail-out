@@ -207,22 +207,20 @@ def assert_ejected_node_override_props_deleted(
         f"ejected node: {ejected_otp_node}"
 
 
-def assert_per_node_storage_mode_in_memcached(
-    node, bucket_name, expected_storage_mode
-):
-    storage_mode = (
-        testlib.diag_eval(
-            node,
-            f'ns_memcached:get_config_stats("{bucket_name}", <<"ep_backend">>).',
-        )
-        .content.decode("ascii")
-        .strip('<<"')
-        .strip('">>')
-    )
+def wait_for_bucket_online_on_all_nodes(cluster, bucket_name):
+    """Wait for bucket to be online on all nodes in the cluster"""
 
-    if expected_storage_mode == "couchstore":
-        expected_storage_mode = "couchdb"
-    assert storage_mode == expected_storage_mode
+    def is_bucket_online_on_all_nodes():
+        r = get_bucket(cluster, bucket_name)
+        return all([node["status"] == "healthy" for node in r["nodes"]])
+
+    testlib.poll_for_condition(
+        is_bucket_online_on_all_nodes,
+        sleep_time=0.5,
+        attempts=20,
+        timeout=60,
+        msg=f"waiting for bucket {bucket_name} to be online on all nodes",
+    )
 
 
 def assert_per_node_eviction_policy_in_memcached(
@@ -249,6 +247,24 @@ def assert_per_node_eviction_policy_in_memcached(
         expected_eviction_policy, expected_eviction_policy
     )
     assert eviction_policy == expected_eviction_policy
+
+
+def assert_per_node_storage_mode_in_memcached(
+    node, bucket_name, expected_storage_mode
+):
+    storage_mode = (
+        testlib.diag_eval(
+            node,
+            f'ns_memcached:get_config_stats("{bucket_name}", <<"ep_backend">>).',
+        )
+        .content.decode("ascii")
+        .strip('<<"')
+        .strip('">>')
+    )
+
+    if expected_storage_mode == "couchstore":
+        expected_storage_mode = "couchdb"
+    assert storage_mode == expected_storage_mode
 
 
 def _find_available_new_node(cluster, old_nodes):
@@ -806,17 +822,7 @@ class BucketMigrationTest(testlib.BaseTestSet):
             new_eviction_policy="fullEviction",
         )
 
-        def is_bucket_online_on_all_nodes():
-            r = get_bucket(self.cluster, bucket_name)
-            return all([node["status"] == "healthy" for node in r["nodes"]])
-
-        testlib.poll_for_condition(
-            is_bucket_online_on_all_nodes,
-            sleep_time=0.5,
-            attempts=20,
-            timeout=60,
-            msg="poll bucket is online on all nodes",
-        )
+        wait_for_bucket_online_on_all_nodes(self.cluster, bucket_name)
 
         # Failover a node and delta-recover it - the bucket should still have
         # per-node storage_mode/eviction_policy override props. Storage mode
@@ -844,3 +850,199 @@ class BucketMigrationTest(testlib.BaseTestSet):
         assert_per_node_eviction_policy_in_memcached(
             failover_node, bucket_name, "valueOnly"
         )
+
+    def eviction_policy_only_via_rebalance_test(self):
+        """Test eviction policy change on magma bucket with --no-restart"""
+        bucket_name = "bucket-magma-eviction-test"
+
+        # Create bucket with magma and fullEviction eviction policy
+        create_bucket(self.cluster, bucket_name, "magma", 1024, "fullEviction")
+
+        # Update bucket with eviction policy change + --no-restart
+        update_data = {
+            "name": bucket_name,
+            "evictionPolicy": "valueOnly",
+            "noRestart": "true",
+        }
+
+        self.cluster.update_bucket(update_data)
+
+        # Verify eviction policy overrides are added
+        assert_per_node_eviction_policy_keys_added(
+            self.cluster, bucket_name, "fullEviction"
+        )
+
+        # Wait for bucket to be online on all nodes before checking memcached
+        wait_for_bucket_online_on_all_nodes(self.cluster, bucket_name)
+
+        for node in self.cluster.connected_nodes:
+            assert_per_node_eviction_policy_in_memcached(
+                node,
+                bucket_name,
+                "fullEviction",
+            )
+
+        # Perform single node swap rebalance to apply the changes
+        perform_single_node_swap_rebalance(
+            self.cluster,
+            bucket_name,
+            node_index=0,
+            expected_eviction_policy="valueOnly",
+        )
+
+        self.cluster.delete_bucket(bucket_name)
+
+    def eviction_policy_only_via_full_recovery_test(self):
+        """Test eviction policy change with --no-restart, then full recovery"""
+        bucket_name = "bucket-eviction-fullrec-test"
+
+        # Create bucket with couchstore + valueOnly
+        create_bucket(
+            self.cluster, bucket_name, "couchstore", 1024, "valueOnly"
+        )
+
+        # Change eviction policy with --no-restart
+        update_data = {
+            "name": bucket_name,
+            "evictionPolicy": "fullEviction",
+            "noRestart": "true",
+        }
+
+        self.cluster.update_bucket(update_data)
+
+        # Verify eviction policy overrides are added
+        assert_per_node_eviction_policy_keys_added(
+            self.cluster, bucket_name, "valueOnly"
+        )
+
+        wait_for_bucket_online_on_all_nodes(self.cluster, bucket_name)
+
+        for node in self.cluster.connected_nodes:
+            assert_per_node_eviction_policy_in_memcached(
+                node,
+                bucket_name,
+                "valueOnly",  # Should still be original value
+            )
+
+        perform_failover_full_recovery(
+            self.cluster, bucket_name, expected_eviction_policy="fullEviction"
+        )
+
+        self.cluster.delete_bucket(bucket_name)
+
+    def eviction_policy_only_via_delta_recovery_test(self):
+        """Test eviction policy change with --no-restart, then delta recovery"""
+        bucket_name = "bucket-eviction-deltarec-test"
+
+        # Create bucket with couchstore + fullEviction
+        create_bucket(
+            self.cluster, bucket_name, "couchstore", 1024, "fullEviction"
+        )
+
+        # Change eviction policy with --no-restart
+        update_data = {
+            "name": bucket_name,
+            "evictionPolicy": "valueOnly",
+            "noRestart": "true",
+        }
+
+        self.cluster.update_bucket(update_data)
+
+        # Verify eviction policy overrides are added
+        assert_per_node_eviction_policy_keys_added(
+            self.cluster, bucket_name, "fullEviction"
+        )
+
+        wait_for_bucket_online_on_all_nodes(self.cluster, bucket_name)
+
+        for node in self.cluster.connected_nodes:
+            assert_per_node_eviction_policy_in_memcached(
+                node,
+                bucket_name,
+                "fullEviction",  # Should still be original value
+            )
+
+        # Perform delta recovery on each node
+        for node in self.cluster.connected_nodes:
+            self.cluster.failover_node(node, graceful=False)
+            self.cluster.recover_node(
+                node, recovery_type="delta", do_rebalance=True
+            )
+
+            # Verify overrides are removed and memcached has new eviction policy
+            assert_per_node_eviction_policy_not_present(
+                self.cluster, node, bucket_name
+            )
+            assert_per_node_eviction_policy_in_memcached(
+                node, bucket_name, "valueOnly"
+            )
+
+        self.cluster.delete_bucket(bucket_name)
+
+    def eviction_policy_only_interleaved_test(self):
+        """Test eviction policy change with --no-restart, then immediate change without --no-restart"""
+        bucket_name = "bucket-eviction-immediate-test"
+
+        # Create bucket with magma + valueOnly
+        create_bucket(self.cluster, bucket_name, "magma", 1024, "valueOnly")
+
+        # Change eviction policy with --no-restart
+        update_data_with_no_restart = {
+            "name": bucket_name,
+            "evictionPolicy": "fullEviction",
+            "noRestart": "true",
+        }
+
+        self.cluster.update_bucket(update_data_with_no_restart)
+
+        # Verify eviction policy overrides are added
+        assert_per_node_eviction_policy_keys_added(
+            self.cluster, bucket_name, "valueOnly"
+        )
+
+        # Wait for bucket to be online on all nodes before checking memcached
+        wait_for_bucket_online_on_all_nodes(self.cluster, bucket_name)
+
+        for node in self.cluster.connected_nodes:
+            assert_per_node_eviction_policy_in_memcached(
+                node,
+                bucket_name,
+                "valueOnly",  # Should still be original value
+            )
+
+        # Now change eviction policy WITHOUT --no-restart
+        update_data_without_no_restart = {
+            "name": bucket_name,
+            "evictionPolicy": "fullEviction",
+        }
+
+        self.cluster.update_bucket(update_data_without_no_restart)
+
+        # Verify overrides are gone and memcached immediately reflects the change
+        for node in self.cluster.connected_nodes:
+            assert_per_node_eviction_policy_not_present(
+                self.cluster, node, bucket_name
+            )
+
+            # Poll for eviction policy change in memcached (since bucket restart is async)
+            def check_eviction_policy_changed():
+                eviction_policy = (
+                    testlib.diag_eval(
+                        self.cluster,
+                        f'ns_memcached:get_config_stats("{bucket_name}", <<"ep_item_eviction_policy">>).',
+                    )
+                    .content.decode("ascii")
+                    .strip('<<"')
+                    .strip('">>')
+                )
+                return eviction_policy == "full_eviction"
+
+            testlib.poll_for_condition(
+                check_eviction_policy_changed,
+                sleep_time=0.5,
+                attempts=20,  # 10 seconds total with 1-second check interval
+                timeout=30,
+                msg=f"waiting for eviction policy to change to full_eviction on {node.hostname()}",
+            )
+
+        self.cluster.delete_bucket(bucket_name)
