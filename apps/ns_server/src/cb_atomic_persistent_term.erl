@@ -9,6 +9,10 @@
 %%
 -module(cb_atomic_persistent_term).
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 %% API
 -export([start_link/0, stop/1, set/2, get_or_set_if_invalid/3]).
 
@@ -68,3 +72,59 @@ set(Name, SetFun) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-ifdef(TEST).
+
+test_get_or_set_if_invalid() ->
+    persistent_term:erase(test),
+    ?assertEqual({error, test_error},
+                 get_or_set_if_invalid(
+                   test,
+                   fun (_) -> erlang:error(should_not_be_called) end,
+                   fun (undefined) -> {error, test_error} end)),
+    ?assertError(badarg, persistent_term:get(test)),
+
+    ?assertEqual({ok, 42},
+                 get_or_set_if_invalid(
+                   test,
+                   fun (_) -> erlang:error(should_not_be_called) end,
+                   fun (undefined) -> {ok, 42} end)),
+    ?assertEqual({value, 42}, persistent_term:get(test)),
+
+    ?assertEqual({ok, 42},
+                 get_or_set_if_invalid(
+                   test,
+                   fun (42) -> true end,
+                   fun (_) -> erlang:error(should_not_be_called) end)),
+    ?assertEqual({value, 42}, persistent_term:get(test)),
+
+    ?assertEqual({error, test_error},
+                 get_or_set_if_invalid(
+                   test,
+                   fun (42) -> false end,
+                   fun ({value, 42}) -> {error, test_error} end)),
+    ?assertEqual({value, 42}, persistent_term:get(test)),
+
+    ?assertEqual({ok, 43},
+                 get_or_set_if_invalid(
+                   test,
+                   fun (42) -> false end,
+                   fun ({value, 42}) -> {ok, 43} end)),
+    ?assertEqual({value, 43}, persistent_term:get(test)).
+
+
+all_test_() ->
+    {setup,
+     fun () ->
+             {ok, Pid} = start_link(),
+             Pid
+     end,
+     fun (Pid) ->
+             erlang:unlink(Pid),
+             stop(kill)
+     end,
+     [
+      fun test_get_or_set_if_invalid/0
+     ]}.
+
+-endif.
