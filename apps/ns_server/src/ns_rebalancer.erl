@@ -508,6 +508,22 @@ rebalance_body(#{keep_nodes := KeepNodes,
                  delta_nodes := DeltaNodes,
                  delta_recovery_buckets := DeltaRecoveryBucketNames,
                  services := Services} = Params, DesiredServers) ->
+    %% This is important. We need to pull the snapshot before we do anything
+    %% else to ensure that we are operating on the latest configuration.
+    %% There can be substantial windows in period between attempted acquisition
+    %% of the quorum for the leader activity and the start of the
+    %% leader activity running. The configuration could have be modified
+    %% materially by some other orchestrator during this period. We then need to
+    %% ensure that every check we may have already made still holds true.
+    %%
+    %% Not sync'ing the config here can introduce various races where rebalance
+    %% may take some undesired action, or even do something dangerous that we
+    %% have not tested for. One action that we can quite easily reason about is
+    %% the expected topology checks. If we don't sync the config before checking
+    %% the expected topology then it may differ from the true topology and we
+    %% may take some undesired action.
+    chronicle_compat:pull(),
+
     ClusterMembershipSnap = ns_cluster_membership:get_snapshot(),
     try
         maybe_check_expected_topology(ClusterMembershipSnap, Params)
