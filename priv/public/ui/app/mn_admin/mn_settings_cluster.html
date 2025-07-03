@@ -221,7 +221,7 @@ Enabling this option reserves disk space for recovery operations like performing
              <label class="inline">Reader Thread Settings</label>
             <span
                class="fa-stack icon-info"
-               uib-tooltip-html="'<strong>Default</strong> The number of threads allocated is set to a balanced value which is reasonable for most workloads.<br>
+               uib-tooltip-html="'<strong>Balanced</strong> The number of threads allocated is set to a balanced value which is reasonable for most workloads.<br>
                       <strong>Disk i/o optimized</strong> The number of threads allocated is equal to the number of CPU cores for the node.<br>
                       <strong>Fixed value</strong> The number of threads allocated is equal to the value selected from the pull-down menu.'"
                tooltip-placement="auto top"
@@ -235,9 +235,9 @@ Enabling this option reserves disk space for recovery operations like performing
                id="for-reader-default"
                name="reader_thread_options"
                ng-model="settingsClusterCtl.readerThreads"
-               value="default">
+               value="balanced">
             <label for="for-reader-default">
-              Default
+              Balanced
             </label>
             <br>
             <input
@@ -284,7 +284,7 @@ Enabling this option reserves disk space for recovery operations like performing
             <label class="inline margin-top-half">Writer Thread Settings</label>
             <span
                class="fa-stack icon-info"
-               uib-tooltip-html="'<strong>Default</strong> The number of threads allocated is set to a balanced value which is reasonable for most workloads.<br>
+               uib-tooltip-html="'<strong>Balanced</strong> The number of threads allocated is set to a balanced value which is reasonable for most workloads.<br>
                       <strong>Disk i/o optimized</strong> The number of threads allocated is equal to the number of CPU cores for the node.<br>
                       <strong>Fixed value</strong> The number of threads allocated is equal to the value selected from the pull-down menu.'"
                tooltip-placement="auto top"
@@ -298,9 +298,9 @@ Enabling this option reserves disk space for recovery operations like performing
                id="for-writer-default"
                name="writer_thread_options"
                ng-model="settingsClusterCtl.writerThreads"
-               value="default">
+               value="balanced">
             <label for="for-writer-default">
-              Default
+              Balanced
             </label>
             <br>
             <input

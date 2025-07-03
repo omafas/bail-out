@@ -183,11 +183,11 @@ function mnSettingsClusterController($scope, $q, $uibModal, $ocLazyLoad, mnPoolD
     default: return vm[type + 'Threads'];
     }
   }
-  function unpackThreadValue(value) {
+  function unpackThreadValue(value, defaultValue) {
     switch (typeof value) {
     case "string": return value;
     case "number": return "fixed";
-    default: return "default";
+    default: return defaultValue ? defaultValue : "balanced";
     }
   }
   function unpackThreadsCount(value) {
@@ -307,7 +307,7 @@ function mnSettingsClusterController($scope, $q, $uibModal, $ocLazyLoad, mnPoolD
       mnSettingsClusterService.getMemcachedSettings().then(function (rv) {
         vm.readerThreads = unpackThreadValue(rv.data.num_reader_threads);
         vm.writerThreads = unpackThreadValue(rv.data.num_writer_threads);
-        vm.storageThreads = unpackThreadValue(rv.data.num_storage_threads);
+        vm.storageThreads = unpackThreadValue(rv.data.num_storage_threads, "default");
         vm.readerThreadsFixed = unpackThreadsCount(rv.data.num_reader_threads);
         vm.writerThreadsFixed = unpackThreadsCount(rv.data.num_writer_threads);
         vm.storageThreadsFixed = unpackThreadsCount(rv.data.num_storage_threads);
