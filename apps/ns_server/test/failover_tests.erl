@@ -771,13 +771,11 @@ auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
                                               SetupConfig)),
 
                         setup_node_config(NewNodes),
-                        setup_bucket_config(
-                          maps:get(buckets, SetupConfig)),
-                        %% TODO, remove this when we work out why we sometimes
-                        %% fail over in this test.
-                        ?log_debug("Continuing test with config ~p",
-                                   [fake_chronicle_kv:get_ets_snapshot()]),
-                        ok
+
+                        %% Set our new map ('c' has failed over)
+                        ok = ns_bucket:set_map_and_uploaders("default",
+                                                             [['a', undefined]],
+                                                             undefined)
                 end),
 
     %% For this test we will force the map such that we don't trip over any
