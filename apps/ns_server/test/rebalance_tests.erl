@@ -27,7 +27,9 @@ rebalance_test_() ->
 
     Tests = [
              {"Add node",
-              fun add_node_t/2}
+              fun add_node_t/2},
+             {"Expected topology test",
+              fun expected_topology_t/2}
             ],
 
     %% foreachx here to let us pass parameters to setup.
@@ -97,6 +99,23 @@ rebalance_test_teardown(_, PidMap) ->
 
     config_profile:unload_profile_for_test().
 
+expect_rebalance_success(Params) ->
+    perform_rebalance(Params, rebalance_success).
+
+expect_rebalance_failure(Params) ->
+    perform_rebalance(Params, rebalance_fail).
+
+perform_rebalance(Params, Type) ->
+    CurrentCounter =
+        case mock_helpers:get_counter_value(Type) of
+            V when is_integer(V) -> V;
+            _ -> 0
+        end,
+    erlang:spawn_link(fun() ->
+                              {ok, _} = rebalance:start(Params)
+                      end),
+    ?assert(mock_helpers:poll_for_counter_value(Type, CurrentCounter + 1)).
+
 add_node_t(_SetupConfig, _) ->
     Params = #{known_nodes => ns_node_disco:nodes_wanted(),
                eject_nodes => [],
@@ -105,8 +124,31 @@ add_node_t(_SetupConfig, _) ->
                delta_recovery_buckets => []
               },
 
-    _Pid = erlang:spawn_link(fun() ->
-                                     {ok, _} = rebalance:start(Params)
-                             end),
+    expect_rebalance_success(Params).
 
-    ?assert(mock_helpers:poll_for_counter_value(rebalance_success, 1)).
+expected_topology_t(_SetupConfig, _) ->
+    Params = #{known_nodes => ns_node_disco:nodes_wanted(),
+               eject_nodes => [],
+               services => all,
+               desired_services_nodes => #{},
+               delta_recovery_buckets => []
+              },
+
+    expect_rebalance_failure(
+      Params#{expected_topology => #{active => [node()]}}),
+
+    expect_rebalance_failure(
+      Params#{expected_topology => #{active => [node(), 'b']}}),
+
+    %% And now we have the correct active nodes, but did not specify the other
+    %% fields. The REST API will default these to an empty list if any one
+    %% parameter is set, but we should still test this behaviour.
+    expect_rebalance_failure(
+      Params#{expected_topology => #{active => [node()],
+                                     inactiveAdded => ['b']}}),
+
+    %% And now we have the full topology and this should succeed
+    expect_rebalance_success(
+      Params#{expected_topology => #{active => [node()],
+                                     inactiveAdded => ['b'],
+                                     inactiveFailed => []}}).

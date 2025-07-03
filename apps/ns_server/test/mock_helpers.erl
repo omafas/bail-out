@@ -354,20 +354,29 @@ ns_storage_conf(PidMap) ->
 %%% Misc functions
 %%%===================================================================
 
+-spec get_counter_value(atom()) -> term().
+get_counter_value(Counter) ->
+    case chronicle_compat:get(counters, #{}) of
+        {ok, V} ->
+            case proplists:is_defined(Counter, V) of
+                true ->
+                    {_, CounterValue} =
+                        proplists:get_value(Counter, V),
+                    CounterValue;
+                false ->
+                    counter_not_found
+            end;
+        _ -> counters_not_found
+    end.
+
 -spec poll_for_counter_value(atom(), any()) -> boolean().
 poll_for_counter_value(Counter, Value) ->
     misc:poll_for_condition(
       fun() ->
-              case chronicle_compat:get(counters, #{}) of
-                  {error, not_found} -> false;
-                  {ok, V} ->
-                      case proplists:is_defined(Counter, V) of
-                          true ->
-                              {_, CounterValue} =
-                                  proplists:get_value(Counter, V),
-                              CounterValue =:= Value;
-                          false ->
-                              false
-                      end
+              case get_counter_value(Counter) of
+                  V when is_integer(V) ->
+                      Value =:= V;
+                  _ ->
+                      false
               end
       end, 10000, 100).
