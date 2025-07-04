@@ -276,9 +276,6 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
           rv['kmip-secret'].encryptWithKeyId = (item.data.encryptWithKeyId === null || item.data.encryptWithKeyId === undefined || item.data.encryptWithKeyId < 0) ? null : this.secrets.find(i => i.id === item.data.encryptWithKeyId);
         }
         rv['kmip-secret'].activeKey = item.data.activeKey?.kmipId;
-        if (item.data.keyPassphrase === '******') {
-          rv['kmip-secret'].keyPassphrase = undefined;
-        }
         break;
     }
     return rv;
