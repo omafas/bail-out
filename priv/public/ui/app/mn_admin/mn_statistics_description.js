@@ -1368,7 +1368,7 @@ function get65CompatDesc() {
         },
         "ep_cache_miss_rate": {
           unit: "percent",
-          title: "Cache Miss Ratio",
+          title: "Get Miss Ratio",
           desc: "The ratio between the number of read operations which failed due to the key not being present, and all read operations (kv_ops{op=\"get\", result=\"miss\"} / kv_ops{op=\"get\"})"
         },
         "ep_resident_items_rate": {
