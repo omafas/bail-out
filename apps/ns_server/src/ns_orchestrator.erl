@@ -897,7 +897,12 @@ idle({failover, Nodes, AllowUnsafe}, From, _State)
     idle({failover, Nodes, #{allow_unsafe => AllowUnsafe}}, From, _State);
 idle({failover, Nodes, Options}, From, _State) when is_map(Options) ->
     handle_start_failover(Nodes, From, true, hard_failover, Options);
-idle({start_failover, Nodes, Options}, From, _State) ->
+idle({start_failover, Nodes, AllowUnsafe}, From, _State)
+  when is_boolean(AllowUnsafe) ->
+    %% calls from pre-morpheus nodes
+    handle_start_failover(Nodes, From, false, hard_failover,
+                          #{allow_unsafe => AllowUnsafe});
+idle({start_failover, Nodes, Options}, From, _State) when is_map(Options) ->
     handle_start_failover(Nodes, From, false, hard_failover, Options);
 idle({try_autofailover, Nodes, #{down_nodes := DownNodes} = Options},
      From, _State) ->
