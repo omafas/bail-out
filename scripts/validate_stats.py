@@ -29,6 +29,17 @@ import sys
 class StatsValidator:
 
     def __init__(self, args):
+        # Hook to pass when loading json from a file to detect duplicate
+        # stat names.
+        def detect_dup_stats(pairs):
+            seen = {}
+            for key, value in pairs:
+                if key in seen:
+                    print(f"Error: Duplicate stat name found: {key}")
+                    sys.exit(1)
+                seen[key] = value
+            return seen
+
         self.cluster = args.cluster
         self.user = args.user
         self.password = args.password
@@ -36,7 +47,8 @@ class StatsValidator:
         self.unknown_stats = []
 
         with open(self.descriptors, 'r') as file:
-            self.json_data = json.load(file)
+            self.json_data = json.load(file,
+                                       object_pairs_hook=detect_dup_stats)
 
         if not self.valid_descriptors():
             sys.exit(1)
