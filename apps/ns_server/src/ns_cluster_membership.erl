@@ -571,7 +571,7 @@ supported_services_for_version(ClusterVersion, IsEnterprise) ->
             false ->
                 enterprise_only_services()
         end,
-    FixedServices = config_profile:get_value(fixedServices, undefined),
+    FixedServices = config_profile:get_value(fixed_services, undefined),
     case FixedServices of
         undefined ->
             filter_services_by_version(ClusterVersion,

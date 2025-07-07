@@ -20,7 +20,7 @@
      {numStoragePartitions,
       <<"analytics.settings.num_storage_partitions">>,
       128}]}.
-{fixedServices, [kv, cbas]}.
+{fixed_services, [kv, cbas]}.
 {max_buckets_supported, 0}.
 {extra_roles, [{analytics_admin, [],
      [{name, <<"Enterprise Analytics Admin">>},
