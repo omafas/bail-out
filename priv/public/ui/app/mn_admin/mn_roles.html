@@ -8,7 +8,7 @@ be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 -->
 
-<div ng-if="rbac.cluster.admin.users.write || !poolDefault.compat.atLeast80">
+<div ng-if="rbac.cluster.admin.users.write || !poolDefault.compat.atLeast79">
 <mn-element-cargo depot="actions">
   <div class="header-controls">
     <a ng-show="(rbac.cluster.admin.users.write || rbac.cluster.admin.security.write) && poolDefault.isEnterprise &&

@@ -136,7 +136,7 @@ function mnSettingsClusterController($scope, $q, $uibModal, $ocLazyLoad, mnPoolD
       queries.push(promise9);
     }
 
-    if (mnPoolDefault.export.compat.atLeast80 &&
+    if (mnPoolDefault.export.compat.atLeast79 &&
         $scope.rbac.cluster.settings.write) {
       promise9 = mnPromiseHelper(vm, mnSettingsClusterService
           .postSettingsResource(vm.settingsResource))
@@ -321,7 +321,7 @@ function mnSettingsClusterController($scope, $q, $uibModal, $ocLazyLoad, mnPoolD
       });
     }
 
-    if (mnPoolDefault.export.compat.atLeast80 &&
+    if (mnPoolDefault.export.compat.atLeast79 &&
         $scope.rbac.cluster.settings.read) {
       mnSettingsClusterService.getSettingsResource().then(settings => {
         vm.settingsResource = settings.data;

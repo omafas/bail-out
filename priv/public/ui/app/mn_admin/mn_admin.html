@@ -46,21 +46,21 @@
 
         <h4 ng-if="adminCtl.tasks.tasksRebalance.statusId">
           {{adminCtl.tasks.isSubtypeFailover ? 'Failover' : 'Rebalance'}}
-          <mn-timezone-details-downgrade ng-if="adminCtl.poolDefault.compat.atLeast80" [server-time]="adminCtl.tasks.tasksRebalance.stageInfo.startTimeSubject"></mn-timezone-details-downgrade>
+          <mn-timezone-details-downgrade ng-if="adminCtl.poolDefault.compat.atLeast79" [server-time]="adminCtl.tasks.tasksRebalance.stageInfo.startTimeSubject"></mn-timezone-details-downgrade>
         </h4>
         <div ng-if="adminCtl.tasks.tasksRebalance">
           <p class="desc relative"
              ng-if="adminCtl.tasks.tasksRebalance.statusId">
-            <span class="nowrap" ng-if="adminCtl.tasks.tasksRebalance.stageInfo.startTime && !adminCtl.poolDefault.compat.atLeast80">
+            <span class="nowrap" ng-if="adminCtl.tasks.tasksRebalance.stageInfo.startTime && !adminCtl.poolDefault.compat.atLeast79">
               <strong>start</strong> {{adminCtl.tasks.tasksRebalance.stageInfo.startTime | date:'d MMM HH:mm:ss':'UTC'}}
             </span>
-            <span class="nowrap" ng-if="adminCtl.tasks.tasksRebalance.stageInfo.startTime && adminCtl.poolDefault.compat.atLeast80">
+            <span class="nowrap" ng-if="adminCtl.tasks.tasksRebalance.stageInfo.startTime && adminCtl.poolDefault.compat.atLeast79">
               <strong>start</strong> {{adminCtl.tasks.tasksRebalance.stageInfo.startTime | date:'d MMM HH:mm:ss'}} {{adminCtl.localGMTOffset}}
             </span>
-            <span ng-show="adminCtl.tasks.tasksRebalance.stageInfo.completedTime.status && !adminCtl.poolDefault.compat.atLeast80" class="nowrap margin-left-half">
+            <span ng-show="adminCtl.tasks.tasksRebalance.stageInfo.completedTime.status && !adminCtl.poolDefault.compat.atLeast79" class="nowrap margin-left-half">
               <strong>complete</strong> {{adminCtl.tasks.tasksRebalance.stageInfo.completedTime.time | date:'d MMM HH:mm:ss':'UTC'}}
             </span>
-            <span ng-show="adminCtl.tasks.tasksRebalance.stageInfo.completedTime.status && adminCtl.poolDefault.compat.atLeast80" class="nowrap margin-left-half">
+            <span ng-show="adminCtl.tasks.tasksRebalance.stageInfo.completedTime.status && adminCtl.poolDefault.compat.atLeast79" class="nowrap margin-left-half">
               <strong>complete</strong> {{adminCtl.tasks.tasksRebalance.stageInfo.completedTime.time | date:'d MMM HH:mm:ss'}} {{adminCtl.localGMTOffset}}
             </span>
               <strong>status</strong> {{adminCtl.tasks.tasksRebalance.status == "running" ? "in progress" :

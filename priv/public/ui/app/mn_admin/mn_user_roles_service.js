@@ -490,7 +490,7 @@ function mnUserRolesFactory($q, $http, mnPoolDefault, mnStoreService, mnStatisti
     return "/settings/rbac/lookupLDAPUser/" + encodeURIComponent(user.id);
   }
 
-  function packData(user, roles, groups, isEditingMode, resetPassword, isEnterprise, atLeast80) {
+  function packData(user, roles, groups, isEditingMode, resetPassword, isEnterprise, atLeast79) {
     var data = {
       roles: roles.indexOf("admin") > -1 ? "admin" : roles.join(','),
       name: user.name
@@ -504,7 +504,7 @@ function mnUserRolesFactory($q, $http, mnPoolDefault, mnStoreService, mnStatisti
       data.password = user.password;
     }
 
-    if (isEnterprise && atLeast80) {
+    if (isEnterprise && atLeast79) {
       data.temporaryPassword = !!user.temporary_password;
     }
 
@@ -595,17 +595,17 @@ function mnUserRolesFactory($q, $http, mnPoolDefault, mnStoreService, mnStatisti
     });
   }
 
-  function addUser(user, roles, groups, isEditingMode, resetPassword, isEnterprise, atLeast80) {
+  function addUser(user, roles, groups, isEditingMode, resetPassword, isEnterprise, atLeast79) {
     if (!user || !user.id) {
       return $q.reject({username: "username is required"});
     }
     if (isEditingMode) {
-      return doAddUser(packData(user, roles, groups, isEditingMode, resetPassword, isEnterprise, atLeast80), user);
+      return doAddUser(packData(user, roles, groups, isEditingMode, resetPassword, isEnterprise, atLeast79), user);
     } else {
       return getUser(user).then(function () {
         return $q.reject({username: "username already exists"});
       }, function () {
-        return doAddUser(packData(user, roles, groups, isEditingMode, false, isEnterprise, atLeast80), user);
+        return doAddUser(packData(user, roles, groups, isEditingMode, false, isEnterprise, atLeast79), user);
       });
     }
   }

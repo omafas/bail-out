@@ -88,7 +88,7 @@
       </span>
       <span
         class="cbui-table-cell flex-grow-half"
-        ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast80"
+        ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast79"
       >
         <span
           class="sorter"
@@ -128,7 +128,7 @@
         >
       </span>
       <span class="cbui-table-cell flex-grow-1 resp-hide-sml"
-            ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast80">
+            ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast79">
         <span
            class="sorter"
            ng-click="userRolesCtl.sortByChanged('last_activity_time')"
@@ -156,7 +156,7 @@
         </span>
         <span
           class="cbui-table-cell flex-grow-half wrap"
-          ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast80"
+          ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast79"
         >
           <span
             class="icon margin-right"
@@ -193,14 +193,14 @@
           {{user.domain === "local" ? "Couchbase" : "External"}}
         </span>
         <span
-          ng-if="!poolDefault.compat.atLeast80"
+          ng-if="!poolDefault.compat.atLeast79"
           class="cbui-table-cell flex-grow-half resp-hide-sml"
           title="{{:: user.password_change_date}}"
         >
           {{user.password_change_date | date:"d MMM, y":'UTC'}}
         </span>
         <span
-           ng-if="poolDefault.compat.atLeast80"
+           ng-if="poolDefault.compat.atLeast79"
            class="cbui-table-cell flex-grow-half resp-hide-sml"
            title="{{:: user.password_change_date}}"
         >
@@ -208,7 +208,7 @@
         </span>
         <span
            class="cbui-table-cell flex-grow-1 resp-hide-sml"
-           ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast80"
+           ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast79"
            title="{{:: user.last_activity_time}}"
         >
           {{user.last_activity_time | date:'d MMM, y'}} {{user.last_activity_time | date:'mediumTime'}}
@@ -229,14 +229,14 @@
             Delete
           </button>
           <button
-            ng-if="user.domain === 'local' && !user.locked && poolDefault.isEnterprise && poolDefault.compat.atLeast80"
+            ng-if="user.domain === 'local' && !user.locked && poolDefault.isEnterprise && poolDefault.compat.atLeast79"
             class="outline"
             ng-click="userRolesCtl.lockUser(user)"
           >
             Lock
           </button>
           <button
-            ng-if="user.domain === 'local' && user.locked && poolDefault.isEnterprise && poolDefault.compat.atLeast80"
+            ng-if="user.domain === 'local' && user.locked && poolDefault.isEnterprise && poolDefault.compat.atLeast79"
             class="outline"
             ng-click="userRolesCtl.unlockUser(user)"
           >
