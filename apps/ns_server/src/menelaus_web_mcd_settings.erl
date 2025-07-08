@@ -61,7 +61,9 @@ supported_setting_names() ->
      {tcp_keepalive_probes, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {tcp_user_timeout, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {free_connection_pool_size, {int, 0, ?MAX_32BIT_SIGNED_INT}},
-     {max_client_connection_details, {int, 0, ?MAX_32BIT_SIGNED_INT}}]
+     {max_client_connection_details, {int, 0, ?MAX_32BIT_SIGNED_INT}},
+     {fusion_migration_rate_limit, {int, 0, ?MAX_32BIT_SIGNED_INT}},
+     {fusion_sync_rate_limit, {int, 0, ?MAX_32BIT_SIGNED_INT}}]
         ++
         %% KV stopped supporting this is 7.6, they just ignore it, but we
         %% should probably support it in mixed mode. Even though we "support" it

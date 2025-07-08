@@ -245,7 +245,9 @@ default(Vsn) ->
        {tcp_keepalive_probes, 3},
        {tcp_user_timeout, 30},
        {free_connection_pool_size, 0},
-       {max_client_connection_details, 0}]},
+       {max_client_connection_details, 0},
+       {fusion_migration_rate_limit, 1024 * 1024 * 75},
+       {fusion_sync_rate_limit, 1024 * 1024 * 75}]},
 
      %% Memcached config
      {{node, node(), memcached},
@@ -331,7 +333,9 @@ default(Vsn) ->
         {tcp_keepalive_probes, tcp_keepalive_probes},
         {tcp_user_timeout, tcp_user_timeout},
         {free_connection_pool_size, free_connection_pool_size},
-        {max_client_connection_details, max_client_connection_details}
+        {max_client_connection_details, max_client_connection_details},
+        {fusion_migration_rate_limit, fusion_migration_rate_limit},
+        {fusion_sync_rate_limit, fusion_sync_rate_limit}
        ]}},
 
      {memory_quota, KvQuota},
