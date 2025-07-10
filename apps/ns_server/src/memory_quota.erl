@@ -374,7 +374,11 @@ remaining_default_quota(eventing, Memory, NumServices) ->
     Memory div NumServices.
 
 calculate_remaining_default_quota(Service, Memory, Vsn) ->
-    remaining_default_quota(Service, Memory, number_services(Vsn)).
+    case config_profile:get_value({Service, fixed_default_quota}, undefined) of
+        undefined ->
+            remaining_default_quota(Service, Memory, number_services(Vsn));
+        Value -> Value
+    end.
 
 default_quotas(Services, Vsn) ->
     %% this is actually bogus, because nodes can be heterogeneous; but that's
@@ -430,7 +434,7 @@ calculate_remaining_default_quotas(Memory, MemoryMax,
 
 
 -ifdef(TEST).
-default_quotas_test() ->
+default_quotas_test__() ->
     MemSupData = {9822564352, undefined, undefined},
     Services = services_ranking(?LATEST_VERSION_NUM),
     Quotas = default_quotas(Services, MemSupData, ?LATEST_VERSION_NUM),
@@ -438,7 +442,7 @@ default_quotas_test() ->
     ?assertEqual(true, allowed_memory_usage_max(MemSupData) >= TotalQuota).
 
 %% Ensure our calculations are equal on 7.2, 7.6, and LATEST_VERSION_NUM.
-default_quotas_by_version_test() ->
+default_quotas_by_version_test__() ->
     MemSupData = {9822564352, undefined, undefined},
     Pre76Services = [kv, cbas, index, fts, eventing],
     %% 7.2 quotas (pre-n1ql introduction)
@@ -469,5 +473,17 @@ default_quotas_by_version_test() ->
     ?assertEqual(true,
                  allowed_memory_usage_max(MemSupData) >= TotalQuotaLatestVsn),
     ?assertEqual(TotalQuota76, TotalQuotaLatestVsn).
+
+default_quotas_test_() ->
+    [
+     {setup,
+      fun config_profile:load_default_profile_for_test/0,
+      fun config_profile:unload_profile_for_test/1,
+      fun default_quotas_test__/0},
+     {setup,
+      fun config_profile:load_default_profile_for_test/0,
+      fun config_profile:unload_profile_for_test/1,
+      fun default_quotas_by_version_test__/0}
+    ].
 
 -endif.
