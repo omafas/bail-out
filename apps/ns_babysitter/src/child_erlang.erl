@@ -9,6 +9,9 @@
 -module(child_erlang).
 
 -include("ns_common.hrl").
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
 -export([handle_arguments/1,
          child_start/1,
@@ -166,11 +169,6 @@ child_loop(Port, BootModule) ->
             (catch ?log_debug("--------------~n!!! Message from parent: ~s~n------------~n~n", [Msg])),
             BootModule:stop(),
             misc:halt(0);
-        {'EXIT', OtherPort, normal} when is_port(OtherPort),
-                                         OtherPort =/= Port ->
-            %% this message arrives for a port that is started for cookie
-            %% reading, this is expected
-            child_loop(Port, BootModule);
         Unexpected ->
             io:format("Got unexpected message: ~p~n", [Unexpected]),
             (catch ?log_debug("Got unexpected message: ~p~n", [Unexpected])),
@@ -179,34 +177,119 @@ child_loop(Port, BootModule) ->
     end.
 
 read_boot_params() ->
-    Port = erlang:open_port({fd, 0, 1}, [in, stream, binary, eof]),
-    try
-        read_boot_params(Port)
+    misc:executing_on_new_process(
+      fun () ->
+          Port = erlang:open_port({fd, 0, 1}, [in, {line, 1024}, binary, eof]),
+          try
+              case read_boot_params(Port, 60000) of
+                  {ok, {Cookie, LogDeks}} ->
+                      {Cookie, LogDeks};
+                  {error, Reason} ->
+                      io:format("~s. Exiting~n", [Reason]),
+                      (catch ?log_debug("~s. Exiting~n", [Reason])),
+                      timer:sleep(3000),
+                      misc:halt(1)
+              end
+          after
+              erlang:port_close(Port)
+          end
+      end).
+
+read_full_line(Port, Timeout) ->
+    read_full_line(Port, Timeout, <<>>).
+
+read_full_line(Port, Timeout, Acc) ->
+    receive
+        {Port, {data, {eol, Line}}} ->
+            {ok, <<Acc/binary, Line/binary>>};
+        {Port, {data, {noeol, Data}}} ->
+            read_full_line(Port, Timeout, <<Acc/binary, Data/binary>>);
+        Unexpected ->
+            {error, {unexpected_port_message, Unexpected}}
     after
-        erlang:port_close(Port)
+        Timeout ->
+            {error, timeout}
     end.
 
-read_boot_params(Port) ->
-    receive
-        {Port, {data, <<"COOKIE:", CookieBin:?COOKIE_HEX_LEN/binary, "\n",
-                        "LOGDEKS:", Rest/binary>>}} ->
-            LogDeksSize = byte_size(Rest) - 1,
-            <<LogDeksBase64:LogDeksSize/binary, "\n">> = Rest,
-            {binary_to_atom(CookieBin),
-             binary_to_term(base64:decode(LogDeksBase64))};
-        Unexpected ->
-            io:format("Waiting for cookie, got unexpected message: ~p~n",
-                      [Unexpected]),
-            (catch ?log_debug("Waiting for cookie, got unexpected message:"
-                              " ~p~n", [Unexpected])),
-            timer:sleep(3000),
-            misc:halt(1)
-    after
-        60000 ->
-            io:format("Cookie read timeout. Exiting~n"),
-            (catch ?log_debug("Cookie read timeout. Exiting~n")),
-            misc:halt(1)
+read_boot_params(Port, Timeout) ->
+    maybe
+        {ok, <<"COOKIE:", CookieBin:?COOKIE_HEX_LEN/binary>>} ?=
+            read_full_line(Port, Timeout),
+        {ok, <<"LOGDEKS:", LogDeksBase64/binary>>} ?=
+            read_full_line(Port, Timeout),
+        {ok, {binary_to_atom(CookieBin),
+              binary_to_term(base64:decode(LogDeksBase64))}}
+    else
+        {ok, UnexpectedData} ->
+            Error = io_lib:format("Received unexpected data from stdin: ~p",
+                                  [UnexpectedData]),
+            {error, lists:flatten(Error)};
+        {error, timeout} ->
+            {error, "Boot params read timeout"};
+        {error, {unexpected_port_message, Unexpected}} ->
+            Error = io_lib:format("Waiting for boot params, got unexpected "
+                                  "message: ~p~n", [Unexpected]),
+            {error, lists:flatten(Error)}
     end.
+
+-ifdef(TEST).
+
+read_boot_params_test() ->
+    misc:executing_on_new_process(
+      fun () ->
+          Port = erlang:make_ref(),
+          Self = self(),
+          Cookie = misc:generate_cookie(),
+          CookieBin = atom_to_binary(Cookie),
+          LogDeks = rand:bytes(1024),
+          LogDeksBase64 = base64:encode(term_to_binary(LogDeks)),
+          Self ! {Port, {data, {eol, <<"COOKIE:", CookieBin/binary>>}}},
+          Self ! {Port, {data, {eol, <<"LOGDEKS:", LogDeksBase64/binary>>}}},
+          ?assertEqual({ok, {Cookie, LogDeks}}, read_boot_params(Port, 0)),
+
+          CookieBin1 = binary:part(CookieBin, 0, 10),
+          CookieBin2 = binary:part(CookieBin, 10, ?COOKIE_HEX_LEN - 10),
+          Self ! {Port, {data, {noeol, <<"COOK">>}}},
+          Self ! {Port, {data, {noeol, <<"IE:", CookieBin1/binary>>}}},
+          Self ! {Port, {data, {eol, CookieBin2}}},
+
+          LogDeksBase64p1 = binary:part(LogDeksBase64, 0, 50),
+          LogDeksBase64p2 = binary:part(LogDeksBase64, 50,
+                                        byte_size(LogDeksBase64) - 50),
+          Self ! {Port, {data, {noeol, <<"LOGDEKS:">>}}},
+          Self ! {Port, {data, {noeol, LogDeksBase64p1}}},
+          Self ! {Port, {data, {eol, LogDeksBase64p2}}},
+
+          %% Random data after deks should be ignored
+          Self ! {Port, {data, {eol, rand:bytes(1024)}}},
+
+          ?assertEqual({ok, {Cookie, LogDeks}}, read_boot_params(Port, 0)),
+          ?flush({Port, _}),
+
+          %% Bad cookie len
+          Self ! {Port, {data, {eol, <<"COOKIE:1234567890">>}}},
+          ?assertMatch({error,
+                        "Received unexpected data from stdin: " ++ _},
+                       read_boot_params(Port, 0)),
+          ?flush({Port, _}),
+
+          Self ! {Port, {data, {eol, <<"COOKIE:", CookieBin/binary>>}}},
+          Self ! {Port, unexpected_message},
+          ?assertMatch({error,
+                        "Waiting for boot params, got unexpected message: "
+                        ++ _},
+                       read_boot_params(Port, 0)),
+          ?flush({Port, _}),
+
+          %% No \n in the end, so we should get a timeout
+          Self ! {Port, {data, {eol, <<"COOKIE:", CookieBin/binary>>}}},
+          Self ! {Port, {data, {noeol, <<"LOGDEKS:", LogDeksBase64/binary>>}}},
+          ?assertMatch({error, "Boot params read timeout"},
+                       read_boot_params(Port, 0)),
+          ?flush({Port, _})
+      end).
+
+-endif.
 
 handle_arguments(Arguments) ->
     lists:foldr(
