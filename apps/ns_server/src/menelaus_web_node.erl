@@ -676,6 +676,7 @@ build_node_info(Config, Snapshot, WantENode, InfoNode, LocalAddr) ->
           {nodeUUID, NodeUUID},
           {clusterCompatibility,
            cluster_compat_mode:effective_cluster_compat_version()},
+          {prod, list_to_binary(cluster_compat_mode:prod())},
           {prodName, list_to_binary(cluster_compat_mode:prod_name())},
           {version, list_to_binary(Version)},
           {os, list_to_binary(OS)},

@@ -7,7 +7,7 @@
 %% will be governed by the Apache License, Version 2.0, included in the file
 %% licenses/APL2.txt.
 
--module(enterprise_analytics_prod_compat).
+-module(analytics_prod_compat).
 
 -include_lib("ns_common/include/cut.hrl").
 -include("ns_common.hrl").
@@ -68,7 +68,7 @@ supported_prod_compat_version() ->
                    end).
 
 -spec parse_ionic_version(Version :: binary()) ->
-    {string(), binary()} | {undefined, undefined}.
+          {string(), string(), binary()} | {undefined, undefined, undefined}.
 parse_ionic_version(Version) ->
     %% Handle ionic upgrade -- assumes that the prodCompatVersion of the
     %% joining ionic node matches its version. Since we control all ionic
@@ -77,9 +77,11 @@ parse_ionic_version(Version) ->
     case lists:suffix("-columnar", VersionStr) of
         true ->
             [Vsn | _] = string:tokens(VersionStr, "-"),
-            {config_profile:search(prod_name), list_to_binary(Vsn)};
+            {config_profile:search(prod),
+             config_profile:search(prod_name),
+             list_to_binary(Vsn)};
         false ->
-            {undefined, undefined}
+            {undefined, undefined, undefined}
     end.
 
 get_product_pretend_version() ->
@@ -106,13 +108,14 @@ parse_ionic_version_test() ->
                     fun () ->
                             [
                              {name, ?ANALYTICS_PROFILE_STR},
+                             {prod, ?ANALYTICS_PROD},
                              {prod_name, ?ANALYTICS_PROD_NAME}
                             ]
                     end),
         ?assertEqual(
-           {?ANALYTICS_PROD_NAME, <<"1.0.5">>},
+           {?ANALYTICS_PROD, ?ANALYTICS_PROD_NAME, <<"1.0.5">>},
            parse_ionic_version(<<"1.0.5-1234-columnar">>)),
-        ?assertEqual({undefined, undefined},
+        ?assertEqual({undefined, undefined, undefined},
                      parse_ionic_version(<<"7.6.0-1234-enterprise">>))
     after
         meck:unload(config_profile)
@@ -126,18 +129,19 @@ is_compatible_product_test() ->
                             ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
                     end),
         false =
-            cluster_compat_mode:is_compatible_product(?ANALYTICS_PROD_NAME),
+            cluster_compat_mode:is_compatible_product(?ANALYTICS_PROD),
         meck:expect(config_profile, get,
                     fun () ->
                             [
                              {name, ?ANALYTICS_PROFILE_STR},
+                             {prod, ?ANALYTICS_PROD},
                              {prod_name, ?ANALYTICS_PROD_NAME}
                             ]
                     end),
         false = cluster_compat_mode:is_compatible_product("Wombat"),
         false = cluster_compat_mode:is_compatible_product(undefined),
-        false = cluster_compat_mode:is_compatible_product(?DEFAULT_PROD_NAME),
-        true = cluster_compat_mode:is_compatible_product(?ANALYTICS_PROD_NAME)
+        false = cluster_compat_mode:is_compatible_product(?DEFAULT_PROD),
+        true = cluster_compat_mode:is_compatible_product(?ANALYTICS_PROD)
     after
         meck:unload(config_profile)
     end.
