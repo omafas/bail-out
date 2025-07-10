@@ -63,7 +63,11 @@ supported_setting_names() ->
      {free_connection_pool_size, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {max_client_connection_details, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {fusion_migration_rate_limit, {int, 0, ?MAX_32BIT_SIGNED_INT}},
-     {fusion_sync_rate_limit, {int, 0, ?MAX_32BIT_SIGNED_INT}}]
+     {fusion_sync_rate_limit, {int, 0, ?MAX_32BIT_SIGNED_INT}},
+     {dcp_consumer_max_marker_version,
+      fun validate_dcp_consumer_max_marker_version/1},
+     {dcp_snapshot_marker_hps_enabled, bool},
+     {dcp_snapshot_marker_purge_seqno_enabled, bool}]
         ++
         %% KV stopped supporting this is 7.6, they just ignore it, but we
         %% should probably support it in mixed mode. Even though we "support" it
@@ -233,6 +237,13 @@ validate_num_threads(Value) -> validate_param(Value, {int, 1, 64}).
 
 validate_num_storage_auxio_nonio_threads("default") -> {ok, <<"default">>};
 validate_num_storage_auxio_nonio_threads(Value) -> validate_param(Value, {int, 1, 64}).
+
+validate_dcp_consumer_max_marker_version("2.0") ->
+    {ok, <<"2.0">>};
+validate_dcp_consumer_max_marker_version("2.2") ->
+    {ok, <<"2.2">>};
+validate_dcp_consumer_max_marker_version(_) ->
+    <<"must be either 2.0 or 2.2">>.
 
 continue_handle_post(Req, Params, SettingsKey, ExtraConfigKey) ->
     ParsedParams =
