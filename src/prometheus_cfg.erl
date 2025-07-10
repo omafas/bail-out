@@ -1340,37 +1340,36 @@ sysproc_cpu_utilization_promql(Settings) ->
 %%    sys_cpu_host_utilization_rate if couchbase was not part of a cgroup
 %%
 %% sys_cpu_utilization_rate was replaced by sys_cgroup_cpu_rate and we
-%% know if couchbase is part of a cgroup it's cpu rate must be higher
-%% than sys_cpu_host_utilization_rate as the cgroup is just a portion of
-%% the overall host cpu usage.
+%% will use the cgroup rate if it exists otherwise the host rate.
 sys_cpu_utilization_rate_promql(Settings) ->
     SysCpuHostUtilizationRate = sys_cpu_rate_promql(total, Settings),
     SysCpuCgroupUsageRate = cgroup_cpu_rate_promql(usage, Settings),
-    lists:flatten(io_lib:format("max(~s or ~s) without(mode, name)",
-                                [SysCpuHostUtilizationRate,
-                                 SysCpuCgroupUsageRate])).
+    lists:flatten(io_lib:format("~s or ~s",
+                                [SysCpuCgroupUsageRate,
+                                 SysCpuHostUtilizationRate
+                                ])).
 
 sys_cpu_user_rate_promql(Settings) ->
     SysCpuHostUserRate = sys_cpu_rate_promql(user, Settings),
     SysCpuCgroupUserRate = cgroup_cpu_rate_promql(user, Settings),
-    lists:flatten(io_lib:format("max(~s or ~s) without(mode, name)",
-                                [SysCpuHostUserRate, SysCpuCgroupUserRate])).
+    lists:flatten(io_lib:format("~s or ~s",
+                                [SysCpuCgroupUserRate, SysCpuHostUserRate])).
 
 sys_cpu_sys_rate_promql(Settings) ->
     SysCpuHostSysRate = sys_cpu_rate_promql(sys, Settings),
     SysCpuCgroupSysRate = cgroup_cpu_rate_promql(sys, Settings),
-    lists:flatten(io_lib:format("max(~s or ~s) without(mode, name)",
-                                [SysCpuHostSysRate, SysCpuCgroupSysRate])).
+    lists:flatten(io_lib:format("~s or ~s",
+                                [SysCpuCgroupSysRate, SysCpuHostSysRate])).
 
 prom_query(total, RateInterval) ->
-    Q = "100 - "
+    Q = "(100 - "
         "(irate(sys_cpu_host_seconds_total{mode=`idle`}[~bs]) / "
-        "ignoring(name,mode) sys_cpu_host_cores_available * 100)",
+        "ignoring(name,mode) sys_cpu_host_cores_available * 100))",
 
     io_lib:format(Q, [RateInterval]);
 prom_query(Mode, RateInterval) ->
-    Q = "irate(sys_cpu_host_seconds_total{mode=`~p`}[~bs]) / "
-        "ignoring(name,mode) sys_cpu_host_cores_available * 100",
+    Q = "(irate(sys_cpu_host_seconds_total{mode=`~p`}[~bs]) / "
+        "ignoring(name,mode) sys_cpu_host_cores_available * 100)",
 
     io_lib:format(Q, [Mode, RateInterval]).
 
@@ -1384,16 +1383,16 @@ cgroup_cpu_rate_promql(usage, Settings) ->
     Interval = derived_metrics_interval(Settings),
     RateInterval = 3 * Interval,
 
-    Q = "irate(sys_cpu_cgroup_usage_seconds_total[~bs]) / "
-        "ignoring(name,mode) sys_cpu_cores_available * 100",
+    Q = "(irate(sys_cpu_cgroup_usage_seconds_total[~bs]) / "
+        "ignoring(name,mode) sys_cpu_cores_available * 100)",
 
     lists:flatten(io_lib:format(Q, [RateInterval]));
 cgroup_cpu_rate_promql(Mode, Settings) ->
     Interval = derived_metrics_interval(Settings),
     RateInterval = 3 * Interval,
 
-    Q = "irate(sys_cpu_cgroup_seconds_total{mode=`~p`}[~bs]) / "
-        "ignoring(name,mode) sys_cpu_cores_available * 100",
+    Q = "(irate(sys_cpu_cgroup_seconds_total{mode=`~p`}[~bs]) / "
+        "ignoring(name,mode) sys_cpu_cores_available * 100)",
 
     lists:flatten(io_lib:format(Q, [Mode, RateInterval])).
 
