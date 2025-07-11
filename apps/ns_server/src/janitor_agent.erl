@@ -513,7 +513,7 @@ bulk_set_vbucket_state(Bucket, RebalancerPid, VBucket, StateMutation) ->
 
 set_vbucket_state(Bucket, Node, RebalancerPid, VBucket, VBucketState,
                   VBucketRebalanceState, ReplicateFrom, Options) ->
-    SubCall = case cluster_compat_mode:is_cluster_morpheus() of
+    SubCall = case cluster_compat_mode:is_cluster_79() of
                   true ->
                       {update_vbucket_state, VBucket, VBucketState,
                        VBucketRebalanceState, ReplicateFrom, Options};
@@ -1217,10 +1217,10 @@ handle_apply_vbucket_state({update_vbucket_state, VBucket, NormalState,
             [El | _] when is_tuple(El) ->
                 OptionsOrTopology;
             undefined ->
-                %% pre-Morpheus cluster
+                %% pre-7.9 cluster
                 [];
             _ ->
-                %% pre-Morpheus cluster
+                %% pre-7.9 cluster
                 [{topology, OptionsOrTopology}]
         end,
     %% TODO: consider infinite timeout. It's local memcached after all

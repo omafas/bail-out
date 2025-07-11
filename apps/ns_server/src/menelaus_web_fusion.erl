@@ -31,7 +31,7 @@ settings() ->
 
 handle_get_settings(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_morpheus(),
+    menelaus_util:assert_is_79(),
     case fusion_uploaders:get_config() of
         not_found ->
             menelaus_util:reply_not_found(Req);
@@ -42,7 +42,7 @@ handle_get_settings(Req) ->
 
 handle_post_settings(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_morpheus(),
+    menelaus_util:assert_is_79(),
     menelaus_web_settings2:handle_post(
       fun ([], Req1) ->
               validator:report_errors_for_one(
@@ -62,7 +62,7 @@ handle_post_settings(Req) ->
 
 handle_get_status(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_morpheus(),
+    menelaus_util:assert_is_79(),
     menelaus_util:reply_json(Req, {fusion_uploaders:get_status()}, 200).
 
 -define(JANITOR_TIMEOUT, ?get_timeout(sync_log_store_janitor, 5000)).
@@ -78,7 +78,7 @@ reply_other(Req, What, Other) ->
 
 handle_prepare_rebalance(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_morpheus(),
+    menelaus_util:assert_is_79(),
     NodeValidator =
         fun (String) ->
                 try {value, list_to_existing_atom(String)}
@@ -116,7 +116,7 @@ validate_guest_volumes(Name, State) ->
 
 handle_upload_mounted_volumes(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_morpheus(),
+    menelaus_util:assert_is_79(),
     validator:handle(
       fun (Params) ->
               PlanUUID = proplists:get_value(planUUID, Params),
@@ -162,7 +162,7 @@ handle_upload_mounted_volumes(Req) ->
 
 handle_get_active_guest_volumes(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_morpheus(),
+    menelaus_util:assert_is_79(),
     {ok, List} =
         functools:sequence(
           [?cut(janitor_agent:get_active_guest_volumes(Bucket, BucketConfig))
@@ -177,7 +177,7 @@ handle_get_active_guest_volumes(Req) ->
 
 handle_sync_log_store(Req) ->
     menelaus_util:assert_is_enterprise(),
-    menelaus_util:assert_is_morpheus(),
+    menelaus_util:assert_is_79(),
 
     %% quorum read the latest bucket info. This doesn't guarantee
     %% that the api won't break if the buckets are changed during

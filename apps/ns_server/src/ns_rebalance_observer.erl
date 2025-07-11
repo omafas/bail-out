@@ -1200,7 +1200,7 @@ setup_test_ns_rebalance_observer() ->
     meck:new(cluster_compat_mode, [passthrough]),
     meck:expect(cluster_compat_mode, is_enterprise,
                 fun () -> true end),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus,
+    meck:expect(cluster_compat_mode, is_cluster_79,
                 fun () -> true end),
 
     meck:new(ns_bucket, [passthrough]),

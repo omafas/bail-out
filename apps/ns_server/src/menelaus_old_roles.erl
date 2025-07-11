@@ -15,7 +15,7 @@
 -include("ns_common.hrl").
 
 -export([roles_pre_76/0,
-         roles_pre_morpheus/0]).
+         roles_pre_79/0]).
 
 -spec roles_pre_76() -> [rbac_role_def(), ...].
 roles_pre_76() ->
@@ -577,8 +577,8 @@ roles_pre_76() ->
        {[ui], [read]},
        {[pools], [read]}]}].
 
--spec roles_pre_morpheus() -> [rbac_role_def(), ...].
-roles_pre_morpheus() ->
+-spec roles_pre_79() -> [rbac_role_def(), ...].
+roles_pre_79() ->
     [{admin, [],
       [{name, <<"Full Admin">>},
        {folder, admin},

@@ -23,7 +23,7 @@
          handle_node_post/2,
          handle_node_setting_get/3,
          handle_node_setting_delete/3,
-         config_upgrade_to_morpheus/1]).
+         config_upgrade_to_79/1]).
 
 -import(menelaus_util,
         [reply_json/2,
@@ -69,7 +69,7 @@ supported_setting_names() ->
         %% should probably support it in mixed mode. Even though we "support" it
         %% in the API, we will not actually set it in the memcached config on
         %% this node, just the other older nodes.
-        case cluster_compat_mode:is_cluster_morpheus() of
+        case cluster_compat_mode:is_cluster_79() of
             true -> [];
             false ->
                 [{connection_limit_mode, {one_of, ["disconnect", "recycle"]}}]
@@ -408,11 +408,11 @@ do_delete_txn(Key, Setting) ->
             ok
     end.
 
-config_upgrade_to_morpheus(Config) ->
-    config_upgrade_to_morpheus_global_memcached_cfg(Config) ++
-    config_upgrade_to_morpheus_node_memcached_cfg(Config).
+config_upgrade_to_79(Config) ->
+    config_upgrade_to_79_global_memcached_cfg(Config) ++
+    config_upgrade_to_79_node_memcached_cfg(Config).
 
-config_upgrade_to_morpheus_global_memcached_cfg(Config) ->
+config_upgrade_to_79_global_memcached_cfg(Config) ->
     case ns_config:search(Config, memcached) of
         false -> [];
         {value, Value} ->
@@ -425,7 +425,7 @@ config_upgrade_to_morpheus_global_memcached_cfg(Config) ->
 
     end.
 
-config_upgrade_to_morpheus_node_memcached_cfg(Config) ->
+config_upgrade_to_79_node_memcached_cfg(Config) ->
     lists:foldl(
         fun(Node, Acc) ->
             NodeMcdCfg = ns_config:search(Config, {node, Node, memcached}, []),
@@ -443,7 +443,7 @@ config_upgrade_to_morpheus_node_memcached_cfg(Config) ->
         end, [], supported_nodes()).
 
 -ifdef(TEST).
-upgrade_config_from_76_to_morpheus_test_setup() ->
+upgrade_config_from_76_to_79_test_setup() ->
     ns_config_default:ns_config_default_mock_setup(),
 
     %% We upgrade node keys so we need to mock the method we use to get the
@@ -452,14 +452,14 @@ upgrade_config_from_76_to_morpheus_test_setup() ->
     meck:expect(ns_node_disco, nodes_wanted,
                 fun () -> [node()] end).
 
-upgrade_config_from_76_to_morpheus_test_teardown(R) ->
+upgrade_config_from_76_to_79_test_teardown(R) ->
     ns_config_default:ns_config_default_mock_teardown(R),
     meck:unload(ns_node_disco).
 
-upgrade_config_from_76_to_morpheus_t() ->
+upgrade_config_from_76_to_79_t() ->
     %% We'll use a default config to test, but add some of the older verrsion
     %% values that are relevant to the upgrade.
-    Default = ns_config_default:default(?VERSION_MORPHEUS),
+    Default = ns_config_default:default(?VERSION_79),
 
     %% Firstly lets add the connection_limit_mode to the global memcached config
     GlobalMcdCfgKey = memcached,
@@ -479,7 +479,7 @@ upgrade_config_from_76_to_morpheus_t() ->
     TestCfg1 = lists:keyreplace(NodeMcdCfgKey, 1, TestCfg0,
                                 {NodeMcdCfgKey, NewNodeMcdCfg}),
 
-    Txns = config_upgrade_to_morpheus([TestCfg1]),
+    Txns = config_upgrade_to_79([TestCfg1]),
 
     {set, GlobalMcdCfgKey, UpgradedGlobalMcdCfg} =
         lists:keyfind(GlobalMcdCfgKey, 2, Txns),
@@ -492,8 +492,8 @@ upgrade_config_from_76_to_morpheus_t() ->
     ?assertEqual(false,
                  lists:keyfind(connection_limit_mode, 1, UpgradedNodeMcdCfg)).
 
-upgrade_config_from_76_to_morpheus_test_() ->
-    {setup, fun upgrade_config_from_76_to_morpheus_test_setup/0,
-            fun upgrade_config_from_76_to_morpheus_test_teardown/1,
-            fun upgrade_config_from_76_to_morpheus_t/0}.
+upgrade_config_from_76_to_79_test_() ->
+    {setup, fun upgrade_config_from_76_to_79_test_setup/0,
+            fun upgrade_config_from_76_to_79_test_teardown/1,
+            fun upgrade_config_from_76_to_79_t/0}.
 -endif.

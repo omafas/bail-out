@@ -16,8 +16,8 @@ licenses/APL2.txt.
      class="panel-content"
      mn-spinner="poorMansCtl.viewLoading">
     <span ng-repeat="alert in poorMansCtl.alerts">
-      <span ng-if="!poorMansCtl.atLeast80"><strong>[{{alert.serverTime | date:'d MMM, y, h:mm:ss a':'UTC'}}]</strong> - {{alert.msg}} <br></span>
-      <span ng-if="poorMansCtl.atLeast80"><strong>[{{alert.serverTime | date:'d MMM, y, h:mm:ss a'}}</strong>
+      <span ng-if="!poorMansCtl.atLeast79"><strong>[{{alert.serverTime | date:'d MMM, y, h:mm:ss a':'UTC'}}]</strong> - {{alert.msg}} <br></span>
+      <span ng-if="poorMansCtl.atLeast79"><strong>[{{alert.serverTime | date:'d MMM, y, h:mm:ss a'}}</strong>
         <span class="text-smaller">{{alert.localGMTOffset}}
           <mn-timezone-details-downgrade [server-time]="alert.serverTimeSubject"></mn-timezone-details-downgrade>
         </span>

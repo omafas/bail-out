@@ -274,9 +274,9 @@ start_resume_bucket(Args, Metadata) ->
 stop_resume_bucket(Bucket) ->
     call({{bucket_hibernation_op, {stop, resume_bucket}}, [Bucket]}).
 
-%% The second argument can be a boolean or a map. Pre-Morpheus compat this will
-%% be a boolean. Post-Morpheus compat this will be a map. This can be update
-%% once we move the minimum compat version beyond Morpheus.
+%% The second argument can be a boolean or a map. Pre-7.9 compat this will
+%% be a boolean. Post-7.9 compat this will be a map. This can be update
+%% once we move the minimum compat version beyond 7.9.
 -spec failover([node()], boolean() | map()) ->
           ok |
           rebalance_running |
@@ -293,14 +293,14 @@ stop_resume_bucket(Bucket) ->
           {incompatible_with_previous, [atom()]} |
           expected_topology_mismatch.
 failover(Nodes, AllowUnsafe) when is_boolean(AllowUnsafe) ->
-    %% Pre-Morpheus compat function clause.
+    %% Pre-7.9 compat function clause.
     call({failover, Nodes, AllowUnsafe}, infinity);
 failover(Nodes, Options) when is_map(Options) ->
     call({failover, Nodes, Options}, infinity).
 
-%% The second argument can be a boolean or a map. Pre-Morpheus compat this will
-%% be a boolean. Post-Morpheus compat this will be a map. This can be update
-%% once we move the minimum compat version beyond Morpheus.
+%% The second argument can be a boolean or a map. Pre-7.9 compat this will
+%% be a boolean. Post-7.9 compat this will be a map. This can be update
+%% once we move the minimum compat version beyond 7.9.
 -spec start_failover([node()], boolean() | map()) ->
           ok |
           rebalance_running |
@@ -313,7 +313,7 @@ failover(Nodes, Options) when is_map(Options) ->
           {incompatible_with_previous, [atom()]} |
           expected_topology_mismatch.
 start_failover(Nodes, AllowUnsafe) when is_boolean(AllowUnsafe) ->
-    %% Pre-Morpheus compat function clause.
+    %% Pre-7.9 compat function clause.
     call({start_failover, Nodes, AllowUnsafe});
 start_failover(Nodes, Options) when is_map(Options) ->
     call({start_failover, Nodes, Options}).
@@ -493,7 +493,7 @@ retry_rebalance(graceful_failover, Params, Id, Chk) ->
           proplists:get_value(nodes, Params),
           proplists:get_value(opts, Params), Id, Chk}).
 
-%% Pre-Morpheus compat function. start_graceful_failover/2 is the new function.
+%% Pre-7.9 compat function. start_graceful_failover/2 is the new function.
 -spec start_graceful_failover([node()]) ->
           ok |
           in_progress |
@@ -893,7 +893,7 @@ idle({failover, Node}, From, _State) ->
      [{next_event, {call, From}, {failover, [Node], false}}]};
 idle({failover, Nodes, AllowUnsafe}, From, _State)
   when is_boolean(AllowUnsafe) ->
-    %% calls from pre-morpheus nodes
+    %% calls from pre-7.9 nodes
     idle({failover, Nodes, #{allow_unsafe => AllowUnsafe}}, From, _State);
 idle({failover, Nodes, Options}, From, _State) when is_map(Options) ->
     handle_start_failover(Nodes, From, true, hard_failover, Options);
@@ -930,7 +930,7 @@ idle({try_autofailover, Nodes, #{down_nodes := DownNodes} = Options},
                                   Options#{allow_unsafe => false})
     end;
 idle({start_graceful_failover, Nodes}, From, _State) ->
-    %% calls from pre-morpheus nodes
+    %% calls from pre-7.9 nodes
     idle({start_graceful_failover, Nodes, #{}}, From, _State);
 idle({start_graceful_failover, Nodes, Opts}, From, _State) ->
     auto_rebalance:cancel_any_pending_retry_async("graceful failover"),

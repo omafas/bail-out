@@ -1693,7 +1693,7 @@ map_to_vbuckets_dict_test() ->
 
 get_buckets_to_delta_recovery_test() ->
     meck:new(cluster_compat_mode, [passthrough]),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus,
+    meck:expect(cluster_compat_mode, is_cluster_79,
                 fun () -> true end),
     meck:expect(cluster_compat_mode, is_enterprise,
                 fun () -> true end),

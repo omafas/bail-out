@@ -36,7 +36,7 @@ function mnPoorMansAlertsController(mnPromiseHelper, mnPoorMansAlertsService, mn
     return alert;
   });
   vm.onClose = onClose;
-  vm.atLeast80 = poolDefault.compat.atLeast80;
+  vm.atLeast79 = poolDefault.compat.atLeast79;
 
   function onClose() {
     mnPromiseHelper(vm, mnPoorMansAlertsService.postAlertsSilenceURL(alertsSilenceURL), $uibModalInstance)

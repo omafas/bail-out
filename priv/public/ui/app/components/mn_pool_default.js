@@ -45,7 +45,7 @@ function mnPoolDefaultFactory(mnPools, mnHelper, $http, $q, $window, $location, 
   var version75 = encodeCompatVersion(7, 5);
   var version76 = encodeCompatVersion(7, 6);
   var version764 = encodeCompatVersion(7, 6, 4);
-  var version80 = encodeCompatVersion(8, 0);
+  var version79 = encodeCompatVersion(7, 9);
   var cache;
   var request;
 
@@ -106,7 +106,7 @@ function mnPoolDefaultFactory(mnPools, mnHelper, $http, $q, $window, $location, 
         atLeast75: poolDefault.thisNode.clusterCompatibility >= version75,
         atLeast76: poolDefault.thisNode.clusterCompatibility >= version76,
         atLeast764: poolDefault.thisNode.clusterCompatibility >= version764,
-        atLeast80: poolDefault.thisNode.clusterCompatibility >= version80,
+        atLeast79: poolDefault.thisNode.clusterCompatibility >= version79,
       };
       poolDefault.versions = {
         "50": version50,
@@ -120,7 +120,7 @@ function mnPoolDefaultFactory(mnPools, mnHelper, $http, $q, $window, $location, 
         "75": version75,
         "76": version76,
         "764": version764,
-        "80": version80,
+        "79": version79,
       };
       poolDefault.capiBase = $window.location.protocol === "https:" ? poolDefault.thisNode.couchApiBaseHTTPS : poolDefault.thisNode.couchApiBase;
 

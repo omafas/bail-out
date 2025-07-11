@@ -26,7 +26,7 @@
          get_stats/0,
          config_upgrade_to_72/1,
          config_upgrade_to_76/1,
-         config_upgrade_to_morpheus/1]).
+         config_upgrade_to_79/1]).
 
 -import(menelaus_util,
         [reply/2,
@@ -105,10 +105,10 @@ default_config(?MIN_SUPPORTED_VERSION, IsEnterprise) ->
 max_events_allowed() ->
     100.
 
-%% The upgrades are complicated by using, first in morpheus, the
+%% The upgrades are complicated by using, first in 7.9, the
 %% profile file to specify the default auto_failover settings. For a new
 %% install these settings from the profile are already in the config. For
-%% an upgrade from a pre-morpheus release the profile must be checked to
+%% an upgrade from a pre-7.9 release the profile must be checked to
 %% see if there's values specified that are new for the release. If so they
 %% are added.
 
@@ -142,7 +142,7 @@ config_upgrade_to_76(Config) ->
 
     [{set, auto_failover_cfg, Settings}].
 
-config_upgrade_to_morpheus(Config) ->
+config_upgrade_to_79(Config) ->
     ConfigAFOSettings = auto_failover:get_cfg(Config),
     ProfileAFOSettings = get_profile_auto_failover_settings(),
     %% Existing cfg has precedence over possibly new keys. This is needed
@@ -353,7 +353,7 @@ preserve_durability_majority_validators() ->
     end.
 
 failover_ephemeral_no_replicas_validators() ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_79() of
         false -> [];
         true ->
             [validator:boolean(allowFailoverEphemeralNoReplicas, _)]
@@ -419,7 +419,7 @@ process_extras(Props, Config) ->
                 [process_boolean_extra(Props, Name, ConfigKey, _) ||
                     {Name, ConfigKey} <- BoolParams]] ++
                [process_failover_on_disk_non_responsiveness(Props, Config, _)
-                   || cluster_compat_mode:is_cluster_morpheus()]),
+                   || cluster_compat_mode:is_cluster_79()]),
     proplists:get_value(extras, Extras).
 
 disable_failover_on_disk_issues(TP) ->
@@ -469,12 +469,12 @@ get_extra_settings(Config) ->
                  {[{enabled, DNREnabled}, {timePeriod, DNRTimePeriod}]}} ||
                 {DNREnabled, DNRTimePeriod} <-
                     [get_failover_on_disk_non_responsiveness(Config)],
-                   cluster_compat_mode:is_cluster_morpheus()],
+                   cluster_compat_mode:is_cluster_79()],
                [{allowFailoverEphemeralNoReplicas,
                  proplists:get_value(
                    ?ALLOW_FAILOVER_EPHEMERAL_NO_REPLICAS_CONFIG_KEY,
                    Config)}
-                || cluster_compat_mode:is_cluster_morpheus()]]);
+                || cluster_compat_mode:is_cluster_79()]]);
         false ->
             []
     end.
@@ -484,7 +484,7 @@ disable_disk_failover(Config) ->
         true ->
             {_, IssuesTP} = get_failover_on_disk_issues(Config),
             disable_failover_on_disk_issues(IssuesTP) ++
-                case cluster_compat_mode:is_cluster_morpheus() of
+                case cluster_compat_mode:is_cluster_79() of
                     false -> [];
                     true ->
                         {_, NonRespTP} =
@@ -502,9 +502,9 @@ config_upgrade_to_72(Config) ->
             ?FAILOVER_PRESERVE_DURABILITY_MAJORITY_DEFAULT}]}].
 
 -ifdef(TEST).
-config_upgrade_to_morpheus_test() ->
+config_upgrade_to_79_test() ->
     meck:new(cluster_compat_mode),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus, fun() -> true end),
+    meck:expect(cluster_compat_mode, is_cluster_79, fun() -> true end),
 
     meck:new(ns_config, [passthrough]),
     meck:expect(ns_config, search_node_with_default,
@@ -521,7 +521,7 @@ config_upgrade_to_morpheus_test() ->
 
     BaseConfig = default_config(true),
     [{set, auto_failover_cfg, DefaultUpgradedCfg}] =
-        config_upgrade_to_morpheus([BaseConfig]),
+        config_upgrade_to_79([BaseConfig]),
     ?assertEqual([{enabled, false}, {timePeriod, 120}],
                  proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
                                      DefaultUpgradedCfg)),
@@ -531,7 +531,7 @@ config_upgrade_to_morpheus_test() ->
                              [{?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
                                [{enabled, true}, {timePeriod, 5}]}]),
     [{set, auto_failover_cfg, IgnoreExistingDiskNonRespCfg}] =
-        config_upgrade_to_morpheus([[{?ROOT_CONFIG_KEY, ExistingCfg}]]),
+        config_upgrade_to_79([[{?ROOT_CONFIG_KEY, ExistingCfg}]]),
     ?assertEqual([{enabled, true}, {timePeriod, 5}],
                  proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
                                      IgnoreExistingDiskNonRespCfg)),
@@ -543,7 +543,7 @@ config_upgrade_to_morpheus_test() ->
     config_profile:load_profile_for_test(?PROVISIONED_PROFILE_STR),
 
     [{set, auto_failover_cfg, UpgradedWithProfile}] =
-        config_upgrade_to_morpheus([BaseConfig]),
+        config_upgrade_to_79([BaseConfig]),
 
     %% Profile values differ from base but must not change base values
     %% as a result of upgrade

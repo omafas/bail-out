@@ -93,7 +93,7 @@ setup_storage_paths() ->
 %% Move data from old bucket directory (bucket name) to new bucket directory
 %% (bucket uuid). Can be removed after support for 7.* is dropped.
 ensure_bucket_is_in_correct_dir(BucketName, BucketUUID) ->
-    OldBucketDir = pre_morpheus_bucket_dbdir(BucketName),
+    OldBucketDir = pre_79_bucket_dbdir(BucketName),
     NewBucketDir = this_node_bucket_dbdir(BucketUUID),
     maybe
         {_, true} ?= {old_dir_exists, filelib:is_file(OldBucketDir)},
@@ -178,7 +178,7 @@ this_node_bucket_dbdir(UUID) ->
     {ok, DBDir} = this_node_dbdir(),
     filename:join(DBDir, binary_to_list(UUID)).
 
-pre_morpheus_bucket_dbdir(BucketName) ->
+pre_79_bucket_dbdir(BucketName) ->
     {ok, DBDir} = this_node_dbdir(),
     filename:join(DBDir, BucketName).
 
@@ -705,7 +705,7 @@ delete_unused_buckets_db_files() ->
     ?log_debug("Deleting unused bucket db files"),
     {BucketsInCfg, UUIDsInCfg} = lists:unzip(buckets_in_use()),
     DirsOnDisk = bucket_dirs_from_disk(),
-    %% Starting from Morpheus bucket directory should be bucket uuid,
+    %% Starting from 7.9 bucket directory should be bucket uuid,
     %% but in previous releases it was bucket name, so we need to support
     %% both cases in case if that dir hasn't been migrated yet.
     DirsToDelete = [D || D <- DirsOnDisk,
@@ -793,7 +793,7 @@ delete_unused_db_files(Dir) when is_list(Dir) ->
                     %% uuid is a valid bucket name
                 Path = this_node_bucket_dbdir(MaybeBucketUUID),
                 MetadataFile = ns_memcached:bucket_metadata_file(Path),
-                %% The metadata file is present only in Morpheus
+                %% The metadata file is present only in 7.9
                 %% so if it exists Dir has to be a bucket uuid
                 filelib:is_file(MetadataFile);
             false -> %% Dir has to be a bucket name, not a bucket uuid

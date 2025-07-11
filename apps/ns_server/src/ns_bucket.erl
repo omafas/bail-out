@@ -175,7 +175,7 @@
          deactivate_bucket_data_on_this_node/1,
          chronicle_upgrade_to_72/1,
          chronicle_upgrade_to_76/1,
-         chronicle_upgrade_to_morpheus/1,
+         chronicle_upgrade_to_79/1,
          extract_bucket_props/1,
          build_bucket_props_json/1,
          build_compaction_settings_json/1,
@@ -283,11 +283,11 @@ all_keys(Names, SubKeys) ->
     [sub_key(B, SubKey) || B <- Names, SubKey <- SubKeys].
 
 all_keys_by_uuid(BucketUUIDs, SubKeys, Txn) ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_79() of
         true ->
             lists:flatmap(
                 fun (BucketUUID) ->
-                    all_bucket_keys_by_uuid_morpheus(BucketUUID, SubKeys, Txn)
+                    all_bucket_keys_by_uuid_79(BucketUUID, SubKeys, Txn)
                 end, BucketUUIDs);
         false ->
             {ok, {Names, _}} = chronicle_compat:txn_get(root(), Txn),
@@ -295,13 +295,13 @@ all_keys_by_uuid(BucketUUIDs, SubKeys, Txn) ->
                              [root() | all_keys(Names, [uuid])], Txn),
             lists:flatmap(
                 fun (BucketUUID) ->
-                        all_bucket_keys_by_uuid_pre_morpheus(BucketUUID,
+                        all_bucket_keys_by_uuid_pre_79(BucketUUID,
                                                              SubKeys,
                                                              UUIDSnapshot)
                 end, BucketUUIDs)
     end.
 
-all_bucket_keys_by_uuid_morpheus(BucketUUID, SubKeys, Txn) ->
+all_bucket_keys_by_uuid_79(BucketUUID, SubKeys, Txn) ->
     case chronicle_compat:txn_get(uuid2bucket_key(BucketUUID), Txn) of
         {ok, {Bucket, _}} ->
             [uuid2bucket_key(BucketUUID) | all_keys([Bucket], SubKeys)];
@@ -309,7 +309,7 @@ all_bucket_keys_by_uuid_morpheus(BucketUUID, SubKeys, Txn) ->
             []
     end.
 
-all_bucket_keys_by_uuid_pre_morpheus(BucketUUID, SubKeys, Snapshot) ->
+all_bucket_keys_by_uuid_pre_79(BucketUUID, SubKeys, Snapshot) ->
     case uuid2bucket(BucketUUID, Snapshot) of
         {ok, Bucket} ->
             [uuid2bucket_key(BucketUUID) | all_keys([Bucket], SubKeys)];
@@ -566,7 +566,7 @@ node_storage_mode(Node, BucketConfig) ->
 default_storage_mode(memcached) ->
     undefined;
 default_storage_mode(membase) ->
-    case cluster_compat_mode:is_cluster_morpheus() andalso
+    case cluster_compat_mode:is_cluster_79() andalso
          cluster_compat_mode:is_enterprise() of
         true ->
             magma;
@@ -1054,8 +1054,8 @@ num_replicas(Bucket, Default) ->
     proplists:get_value(num_replicas, Bucket, Default).
 
 %% ns_server type (membase vs memcached)
-%% Once morpheus is the oldest supported release all vestiges of 'memcached'
-%% can be removed. Until then it's possible for a morpheus node to see a
+%% Once 7.9 is the oldest supported release all vestiges of 'memcached'
+%% can be removed. Until then it's possible for a 7.9 node to see a
 %% memcached bucket and thus must be able to return info about such bucket.
 bucket_type(Bucket) ->
     proplists:get_value(type, Bucket).
@@ -1256,9 +1256,9 @@ get_min_replicas() ->
 get_default_num_vbuckets(couchstore) ->
     get_default_num_vbuckets_helper(?DEFAULT_VBUCKETS_COUCHSTORE);
 get_default_num_vbuckets(magma) ->
-    Default = case cluster_compat_mode:is_cluster_morpheus() of
+    Default = case cluster_compat_mode:is_cluster_79() of
                   true -> ?DEFAULT_VBUCKETS_MAGMA;
-                  false -> ?DEFAULT_VBUCKETS_MAGMA_PRE_MORPHEUS
+                  false -> ?DEFAULT_VBUCKETS_MAGMA_PRE_79
               end,
     get_default_num_vbuckets_helper(Default);
 get_default_num_vbuckets(ephemeral) ->
@@ -2507,7 +2507,7 @@ uuids(Snapshot) ->
     [{Name, uuid(Name, Snapshot)} || Name <- get_bucket_names(Snapshot)].
 
 uuid2bucket(UUID) ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_79() of
         true ->
             uuid2bucket(UUID, direct);
         false ->
@@ -2515,7 +2515,7 @@ uuid2bucket(UUID) ->
     end.
 
 uuid2bucket(UUID, Snapshot) ->
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_79() of
         true ->
             chronicle_compat:get(Snapshot, uuid2bucket_key(UUID), #{});
         false ->
@@ -2600,14 +2600,14 @@ chronicle_upgrade_bucket(Func, BucketNames, ChronicleTxn) ->
 removed_bucket_settings() ->
     [pitr_enabled, pitr_granularity, pitr_max_history_age].
 
-chronicle_add_uuid2bucket_mapping_upgrade_to_morpheus(BucketName, Txn) ->
+chronicle_add_uuid2bucket_mapping_upgrade_to_79(BucketName, Txn) ->
     %% Add mapping from UUID to bucket name.
     UUIDKey = uuid_key(BucketName),
     {ok, UUID} = chronicle_upgrade:get_key(UUIDKey, Txn),
     NewKey = uuid2bucket_key(UUID),
     chronicle_upgrade:set_key(NewKey, BucketName, Txn).
 
-chronicle_upgrade_bucket_props_to_morpheus(BucketName, ChronicleTxn) ->
+chronicle_upgrade_bucket_props_to_79(BucketName, ChronicleTxn) ->
     PropsKey = sub_key(BucketName, props),
     {ok, BucketConfig0} = chronicle_upgrade:get_key(PropsKey, ChronicleTxn),
     BucketConfig =
@@ -2667,14 +2667,14 @@ chronicle_upgrade_bucket_props_to_morpheus(BucketName, ChronicleTxn) ->
                                       ChronicleTxn)
     end.
 
-chronicle_upgrade_to_morpheus(ChronicleTxn) ->
+chronicle_upgrade_to_79(ChronicleTxn) ->
     {ok, BucketNames} = chronicle_upgrade:get_key(root(), ChronicleTxn),
     chronicle_upgrade_bucket(
         fun (Name, Txn) ->
             functools:chain(
               Txn,
-              [chronicle_upgrade_bucket_props_to_morpheus(Name, _),
-               chronicle_add_uuid2bucket_mapping_upgrade_to_morpheus(Name, _)])
+              [chronicle_upgrade_bucket_props_to_79(Name, _),
+               chronicle_add_uuid2bucket_mapping_upgrade_to_79(Name, _)])
         end, BucketNames, ChronicleTxn).
 
 default_76_enterprise_props(true = _IsEnterprise) ->
@@ -3123,7 +3123,7 @@ update_bucket_props_allowed_test() ->
 
 add_override_props_test() ->
     meck:new(cluster_compat_mode, [passthrough]),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus,
+    meck:expect(cluster_compat_mode, is_cluster_79,
                 fun () -> true end),
     meck:expect(cluster_compat_mode, is_enterprise,
                 fun () -> true end),
@@ -3330,8 +3330,8 @@ uuid2bucket_key_test() ->
         fake_chronicle_kv:update_snapshot(CollectionsKey1, collections1),
         fake_chronicle_kv:update_snapshot(CollectionsKey2, collections2),
 
-        %% PRE-MORPHEUS behavior:
-        meck:expect(cluster_compat_mode, is_cluster_morpheus,
+        %% PRE-7.9 behavior:
+        meck:expect(cluster_compat_mode, is_cluster_79,
                     fun () -> false end),
 
         %% Testing get_snapshot
@@ -3387,8 +3387,8 @@ uuid2bucket_key_test() ->
         ?assertEqual({error, not_found}, uuid2bucket(<<"Unknown">>,
                                                      Snapshot1)),
 
-        %% MORPHEUS behavior:
-        meck:expect(cluster_compat_mode, is_cluster_morpheus,
+        %% 7.9 behavior:
+        meck:expect(cluster_compat_mode, is_cluster_79,
                     fun () -> true end),
 
         fake_chronicle_kv:update_snapshot(UUID2BucketKey2, Bucket2),

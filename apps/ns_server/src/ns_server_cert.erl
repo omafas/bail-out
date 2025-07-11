@@ -55,7 +55,7 @@
          verify_cert_hostname_strict/2,
          decode_and_validate_chain/2,
          encrypt_pkey/2,
-         chronicle_upgrade_to_morpheus/1]).
+         chronicle_upgrade_to_79/1]).
 
 inbox_ca_path() ->
     filename:join(path_config:component_path(data, "inbox"), "CA").
@@ -1519,17 +1519,17 @@ prepare_reference_ids(Node) ->
             [{dns_id, Host}]
     end.
 
-chronicle_upgrade_to_morpheus(ChronicleTxn) ->
+chronicle_upgrade_to_79(ChronicleTxn) ->
     maybe
         {ok, OldCerts} ?= chronicle_upgrade:get_key(ca_certificates,
                                                     ChronicleTxn),
-        {true, NewCerts} ?= chronicle_upgrade_certs_to_morpheus(OldCerts),
+        {true, NewCerts} ?= chronicle_upgrade_certs_to_79(OldCerts),
         chronicle_upgrade:set_key(ca_certificates, NewCerts, ChronicleTxn)
     else _ -> ChronicleTxn
     end.
 
-chronicle_upgrade_certs_to_morpheus(OldCerts) ->
-    NewCerts = lists:map(fun chronicle_upgrade_cert_to_morpheus/1, OldCerts),
+chronicle_upgrade_certs_to_79(OldCerts) ->
+    NewCerts = lists:map(fun chronicle_upgrade_cert_to_79/1, OldCerts),
     case NewCerts of
         OldCerts ->
             false;
@@ -1537,7 +1537,7 @@ chronicle_upgrade_certs_to_morpheus(OldCerts) ->
             {true, NewCerts}
     end.
 
-chronicle_upgrade_cert_to_morpheus(Cert) ->
+chronicle_upgrade_cert_to_79(Cert) ->
     maybe
         Pem = proplists:get_value(pem, Cert, <<>>),
         {ok, DerCert} ?= decode_single_certificate(Pem),
@@ -1545,7 +1545,7 @@ chronicle_upgrade_cert_to_morpheus(Cert) ->
         lists:keystore(subject, 1, Cert, {subject, iolist_to_binary(Subject)})
     else
         {error, Reason} ->
-            ?log_error("Couldn't upgrade cert to Morpheus (error ~w), keeping "
+            ?log_error("Couldn't upgrade cert to 7.9 (error ~w), keeping "
                        "existing:~n~p", [Reason, Cert]),
             Cert
     end.
@@ -1594,7 +1594,7 @@ chronicle_upgrade_cert_to_morpheus(Cert) ->
           "Qvlx+xG9le4klA5R0kI5LYlCQ1nL4rmrOqBxbvhnG6rH+Q==\n"
           "-----END CERTIFICATE-----">>).
 
-chronicle_upgrade_cert_to_morpheus_test() ->
+chronicle_upgrade_cert_to_79_test() ->
     CertWithoutPEM = [{subject, <<"CN=Couchbase Server 3f4b2bb0">>}],
     CertWithoutOU = [{pem, ?PEM_DEFAULT},
                      {subject, <<"CN=Couchbase Server 3f4b2bb0">>}],
@@ -1607,13 +1607,13 @@ chronicle_upgrade_cert_to_morpheus_test() ->
     CertWithoutSubject = [{pem, ?PEM_DEFAULT}],
 
     %% Don't make changes if they're not necessary
-    false = chronicle_upgrade_certs_to_morpheus(
+    false = chronicle_upgrade_certs_to_79(
               [CertWithoutPEM,
                CertWithoutOU,
                CertWithCorrectOU]),
 
     %% Update the chronicle key if any cert needs updating
-    {true, NewCerts} = chronicle_upgrade_certs_to_morpheus(
+    {true, NewCerts} = chronicle_upgrade_certs_to_79(
                          [CertWithoutPEM,
                           CertWithoutOU,
                           CertWithCorrectOU,

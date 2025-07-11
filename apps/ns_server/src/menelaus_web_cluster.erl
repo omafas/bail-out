@@ -1002,11 +1002,11 @@ parse_hard_failover_args(Req) ->
 %% These parameters are used to determine if the state of the clsuter is the
 %% same as the caller expects it to be before we perform some topology changing
 %% operation.
-parse_expected_topology_params_from_req(Req, IsMorpheus) ->
+parse_expected_topology_params_from_req(Req, Is79) ->
     Params = mochiweb_request:parse_post(Req),
-    parse_expected_topology_params(Params, IsMorpheus).
+    parse_expected_topology_params(Params, Is79).
 
-parse_expected_topology_params(Params, IsMorpheus) ->
+parse_expected_topology_params(Params, Is79) ->
     ActiveNodes =
         parse_list_param("activeNodes", Params, undefined),
     InactiveFailedNodes =
@@ -1019,10 +1019,10 @@ parse_expected_topology_params(Params, IsMorpheus) ->
         InactiveAddedNodes =:= undefined of
         true -> #{};
         false ->
-            case IsMorpheus of
+            case Is79 of
                 false ->
                     {error,
-                     "Cannot use expected topology in pre-Morpheus cluster"};
+                     "Cannot use expected topology in pre-7.9 cluster"};
                 true ->
                     validate_expected_topology_nodes(ActiveNodes,
                                                      InactiveFailedNodes,
@@ -1158,19 +1158,19 @@ handle_start_hard_failover(false, Req) ->
 do_handle_start_hard_failover(Req, FailoverBody) ->
     case parse_hard_failover_args(Req) of
         {ok, Nodes, AllowUnsafe} ->
-            IsMorpheus = cluster_compat_mode:is_cluster_morpheus(),
-            case parse_expected_topology_params_from_req(Req, IsMorpheus) of
+            Is79 = cluster_compat_mode:is_cluster_79(),
+            case parse_expected_topology_params_from_req(Req, Is79) of
                 {error, Error} ->
                     reply_text(Req, Error, 400);
                 Opts ->
-                    case IsMorpheus of
+                    case Is79 of
                         false ->
                             failover_audit_and_reply(
                               FailoverBody(Nodes, AllowUnsafe),
                               Req, Nodes, hard);
                         true ->
                             %% We will always use the new orchestrator API
-                            %% post-Morpheus such that we can eventually remove
+                            %% post-7.9 such that we can eventually remove
                             %% the old non-map API.
                             failover_audit_and_reply(
                               FailoverBody(Nodes, Opts#{allow_unsafe =>
@@ -1185,19 +1185,19 @@ do_handle_start_hard_failover(Req, FailoverBody) ->
 handle_start_graceful_failover(Req) ->
     case parse_graceful_failover_args(Req) of
         {ok, Nodes} ->
-            IsMorpheus = cluster_compat_mode:is_cluster_morpheus(),
-            case parse_expected_topology_params_from_req(Req, IsMorpheus) of
+            Is79 = cluster_compat_mode:is_cluster_79(),
+            case parse_expected_topology_params_from_req(Req, Is79) of
                 {error, Error} ->
                     reply_text(Req, Error, 400);
                 Opts ->
-                    case IsMorpheus of
+                    case Is79 of
                         false ->
                             failover_audit_and_reply(
                               ns_orchestrator:start_graceful_failover(Nodes),
                               Req, Nodes, graceful);
                         true ->
                             %% We will always use the new orchestrator
-                            %% API post-Morpheus such that we can
+                            %% API post-7.9 such that we can
                             %% eventually remove the old non-map API.
                             failover_audit_and_reply(
                               ns_orchestrator:start_graceful_failover(Nodes,
@@ -1273,7 +1273,7 @@ parse_rebalance_params(Params) ->
                end,
 
     ServiceNodesMap =
-        case cluster_compat_mode:is_cluster_morpheus() andalso
+        case cluster_compat_mode:is_cluster_79() andalso
             cluster_compat_mode:is_enterprise() of
             true ->
                 parse_topology_params(Params, Services,
@@ -1288,12 +1288,12 @@ parse_rebalance_params(Params) ->
             ok;
         _ ->
             menelaus_util:assert_is_enterprise("planUUID"),
-            menelaus_util:assert_is_morpheus()
+            menelaus_util:assert_is_79()
     end,
 
-    IsMorpheus = cluster_compat_mode:is_cluster_morpheus(),
+    Is79 = cluster_compat_mode:is_cluster_79(),
     BaseMap =
-        case parse_expected_topology_params(Params, IsMorpheus) of
+        case parse_expected_topology_params(Params, Is79) of
             {error, TopologyError} ->
                 throw(TopologyError);
             TopologyArgs ->

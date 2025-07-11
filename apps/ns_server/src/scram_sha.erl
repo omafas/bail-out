@@ -608,7 +608,7 @@ setup_t() ->
     meck:expect(menelaus_users, get_auth_info, fun(_) -> false end),
     meck:new(cluster_compat_mode, [passthrough]),
     meck:expect(cluster_compat_mode, is_cluster_76, fun () -> true end),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus, fun () -> true end),
+    meck:expect(cluster_compat_mode, is_cluster_79, fun () -> true end),
 
     ns_config:test_setup([]),
     {ok, Pid} = start_link(),
@@ -638,7 +638,7 @@ maybe_update_hashes_setup(Settings) ->
     meck_ns_config_read_key_fast(Settings),
     meck:expect(cluster_compat_mode, is_cluster_76,
                 fun () -> true end),
-    meck:expect(cluster_compat_mode, is_cluster_morpheus,
+    meck:expect(cluster_compat_mode, is_cluster_79,
                 fun () -> true end).
 
 meck_ns_config_read_key_fast(Settings) ->

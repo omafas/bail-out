@@ -257,6 +257,7 @@
 -define(VERSION_71, [7, 1]).
 -define(VERSION_72, [7, 2]).
 -define(VERSION_76, [7, 6]).
+-define(VERSION_79, [7, 9]).
 -define(VERSION_MORPHEUS, [8, 0]).
 
 -define(MIN_SUPPORTED_VERSION, ?VERSION_71).

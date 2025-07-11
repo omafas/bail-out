@@ -22,7 +22,7 @@
 -define(JWT_EL_CURVE, 'Ed25519').
 -define(JWT_SIGNING_ALG, 'EdDSA').
 
--export([chronicle_upgrade_to_morpheus/1,
+-export([chronicle_upgrade_to_79/1,
          name/0,
          issue/3,
          settings/0]).
@@ -35,8 +35,8 @@ generate_keys() ->
     {_, Map} = jose_jwk:to_map(jose_jwk:generate_key({okp, ?JWT_EL_CURVE})),
     Map.
 
--spec chronicle_upgrade_to_morpheus(term()) -> term().
-chronicle_upgrade_to_morpheus(ChronicleTxn) ->
+-spec chronicle_upgrade_to_79(term()) -> term().
+chronicle_upgrade_to_79(ChronicleTxn) ->
     chronicle_upgrade:set_key(?JWT_SIGNING_KEYS_KEY, generate_keys(),
                               ChronicleTxn).
 

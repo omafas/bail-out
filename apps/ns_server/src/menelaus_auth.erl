@@ -1001,7 +1001,7 @@ allow_fallback_auth() ->
     %% set. This is a temporary measure to allow users to authenticate with
     %% their legacy credentials until duplicate credentials are resolved.
     %% Note that memcached doesn't support this.
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_79() of
         true ->
             ns_config:read_key_fast(enable_legacy_fallback_auth, false);
         false ->

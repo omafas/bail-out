@@ -21,7 +21,7 @@
 -export([default_for_ns_config/0,
          default_for_metakv/0,
          config_upgrade_to_76/1,
-         config_upgrade_to_morpheus/1,
+         config_upgrade_to_79/1,
          build_json_for_audit/1]).
 
 %% ------------------------------------------------------------------
@@ -30,7 +30,7 @@
 
 handle_get(Path, Req) ->
     menelaus_util:assert_is_76(),
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_79() of
         false -> menelaus_util:assert_config_profile_flag({resource_management,
                                                            enabled});
         true -> ok
@@ -41,7 +41,7 @@ handle_get(Path, Req) ->
 
 handle_post(Path, Req) ->
     menelaus_util:assert_is_76(),
-    case cluster_compat_mode:is_cluster_morpheus() of
+    case cluster_compat_mode:is_cluster_79() of
         false -> menelaus_util:assert_config_profile_flag({resource_management,
                                                            enabled});
         true -> ok
@@ -286,7 +286,7 @@ set_services_configs(OldConfigAll, NewConfigAll) ->
 config_upgrade_to_76(_Config) ->
     [{set, resource_management, default_for_ns_config()}].
 
-config_upgrade_to_morpheus(Config) ->
+config_upgrade_to_79(Config) ->
     Current = ns_config:search(Config, resource_management, []),
     Default = default_for_ns_config(),
     Changes = update_disk_usage_maximum_to_new_default(Default, Current) ++
@@ -583,14 +583,14 @@ build_json_test() ->
 
     ok.
 
-config_upgrade_to_morpheus_test__() ->
+config_upgrade_to_79_test__() ->
     %% Self-managed profile
     meck:expect(config_profile, get_value,
                 fun (resource_management, []) ->
                         []
                 end),
     %% Empty config gets populated
-    [{set, resource_management, Cfg0}] = config_upgrade_to_morpheus([]),
+    [{set, resource_management, Cfg0}] = config_upgrade_to_79([]),
     ?assertProplistsEqualRecursively(
        [{disk_usage,
          [{enabled, false},
@@ -601,7 +601,7 @@ config_upgrade_to_morpheus_test__() ->
        Cfg0),
     %% Old max disk_usage gets updated
     [{set, resource_management, Cfg1}] =
-        config_upgrade_to_morpheus(
+        config_upgrade_to_79(
           [[{resource_management,
              [{disk_usage,
                [{maximum, 96}]}]}]]),
@@ -615,7 +615,7 @@ config_upgrade_to_morpheus_test__() ->
        Cfg1),
     %% Custom max disk_usage retained
     [{set, resource_management, Cfg3}] =
-        config_upgrade_to_morpheus(
+        config_upgrade_to_79(
           [[{resource_management,
              [{disk_usage,
                [{maximum, 90}]}]}]]),
@@ -628,7 +628,7 @@ config_upgrade_to_morpheus_test__() ->
        Cfg3),
     %% Old min cores_per_bucket updated
     [{set, resource_management, Cfg4}] =
-        config_upgrade_to_morpheus(
+        config_upgrade_to_79(
           [[{resource_management,
              [{cores_per_bucket,
                [{minimum, 0.4}]}]}]]),
@@ -641,7 +641,7 @@ config_upgrade_to_morpheus_test__() ->
        Cfg4),
     %% Custom min cores_per_bucket retained
     [{set, resource_management, Cfg5}] =
-        config_upgrade_to_morpheus(
+        config_upgrade_to_79(
           [[{resource_management,
              [{cores_per_bucket,
                [{minimum, 0.3}]}]}]]),
@@ -654,7 +654,7 @@ config_upgrade_to_morpheus_test__() ->
        Cfg5),
     %% New min cores_per_bucket not modified
     [{set, resource_management, Cfg6}] =
-        config_upgrade_to_morpheus(
+        config_upgrade_to_79(
           [[{resource_management,
              [{cores_per_bucket,
                [{minimum, 0.2}]}]}]]),
@@ -674,7 +674,7 @@ config_upgrade_to_morpheus_test__() ->
     %% Old max disk_usage gets retained, as the default isn't changed for
     %% provisioned profile
     [{set, resource_management, Cfg7}] =
-        config_upgrade_to_morpheus(
+        config_upgrade_to_79(
           [[{resource_management,
              [{disk_usage,
                [{maximum, 96}]}]}]]),
@@ -688,7 +688,7 @@ config_upgrade_to_morpheus_test__() ->
        Cfg7),
     %% Custom max disk_usage also gets retained for provisioned profile
     [{set, resource_management, Cfg8}] =
-        config_upgrade_to_morpheus(
+        config_upgrade_to_79(
           [[{resource_management,
              [{disk_usage,
                [{maximum, 90}]}]}]]),
@@ -704,7 +704,7 @@ config_upgrade_test_() ->
     {setup,
      fun () -> ok end,
      fun (_) -> meck:unload() end,
-     {"config_upgrade_to_morpheus",
-      fun config_upgrade_to_morpheus_test__/0}}.
+     {"config_upgrade_to_79",
+      fun config_upgrade_to_79_test__/0}}.
 
 -endif.

@@ -152,7 +152,7 @@ handle_settings_get_enterprise_analytics(Req) ->
         path_config:component_path(bin, "cbas"),
         ["columnarSettings", "--get"], Env, [{stderr_to_stdout, false}]) of
         {0, StdErr, StdOut} ->
-            ?log_debug("handle_settings_get success stderr: ~p", [StdErr]),
+            ?log_debug("handle_settings_get success stderr: ~s", [StdErr]),
             menelaus_util:reply_ok(Req, "application/json", StdOut);
         {Code, StdErr, StdOut} ->
             ?log_debug("handle_settings_get fail ~p stderr: ~p",
@@ -184,13 +184,13 @@ handle_settings_post_enterprise_analytics(Req) ->
         path_config:component_path(bin, "cbas"), Args, Env,
         [{write_data, JsonObject}, {stderr_to_stdout, false}]) of
         {0, StdErr, StdOut} ->
-            ?log_debug("handle_settings_post success stderr: ~p", [StdErr]),
+            ?log_debug("handle_settings_post success stderr: ~s", [StdErr]),
             menelaus_util:reply_ok(Req, "application/json", StdOut);
         {Code, StdErr, StdOut} ->
-            ?log_debug("handle_settings_post fail ~p stderr: ~p",
-                [Code, StdErr]),
+            ?log_debug("handle_settings_post fail ~p stderr: ~s",
+                       [Code, StdErr]),
             menelaus_util:reply(Req, StdOut, 400,
-                [{"Content-Type", "application/json"}])
+                                [{"Content-Type", "application/json"}])
     end.
 
 convert_for_json_encoding(Value) ->

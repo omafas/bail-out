@@ -25,7 +25,7 @@
          update_txn/1,
          config_default/0,
          config_upgrade_to_76/1,
-         config_upgrade_to_morpheus/1]).
+         config_upgrade_to_79/1]).
 
 -export([cfg_key/0,
          is_enabled/0,
@@ -80,11 +80,11 @@ config_default() ->
                           known_settings(?MIN_SUPPORTED_VERSION))}.
 
 
-config_upgrade_to_morpheus(Config) ->
+config_upgrade_to_79(Config) ->
     config_upgrade_settings(?MODULE, Config,
                             general_settings_defaults(?VERSION_76),
-                            general_settings_defaults(?VERSION_MORPHEUS),
-                            known_settings(?VERSION_MORPHEUS)).
+                            general_settings_defaults(?VERSION_79),
+                            known_settings(?VERSION_79)).
 
 config_upgrade_to_76(Config) ->
     config_upgrade_settings(?MODULE, Config,
@@ -168,7 +168,7 @@ general_settings(Ver) ->
                false ->
                    []
            end
-        ++ case cluster_compat_mode:is_version_morpheus(Ver) of
+        ++ case cluster_compat_mode:is_version_79(Ver) of
                true ->
                    [{queryCompletedStreamSize,
                      "completed-stream-size", 0}];
@@ -236,7 +236,7 @@ config_upgrade_test() ->
                         false
                 end),
 
-    CmdList2 = config_upgrade_to_morpheus([]),
+    CmdList2 = config_upgrade_to_79([]),
     [{set, {metakv, Meta2}, Data2}] = CmdList2,
     ?assertEqual(<<"/query/settings/config">>, Meta2),
     ?assertEqual(<<"{\"completed-stream-size\":0}">>,

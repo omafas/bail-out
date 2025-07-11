@@ -27,6 +27,8 @@
          is_version_72/1,
          is_cluster_76/0,
          is_version_76/1,
+         is_cluster_79/0,
+         is_version_79/1,
          is_cluster_morpheus/0,
          is_version_morpheus/1,
          is_enterprise/0,
@@ -140,6 +142,12 @@ is_version_76(ClusterVersion) ->
 is_cluster_76() ->
     is_enabled(?VERSION_76).
 
+is_version_79(ClusterVersion) ->
+    is_enabled_at(ClusterVersion, ?VERSION_79).
+
+is_cluster_79() ->
+    is_enabled(?VERSION_79).
+
 is_version_morpheus(ClusterVersion) ->
     is_enabled_at(ClusterVersion, ?VERSION_MORPHEUS).
 
@@ -213,8 +221,8 @@ consider_switching_compat_mode() ->
 
 upgrades() ->
     [{?VERSION_76, rbac, menelaus_users, upgrade},
-     {?VERSION_MORPHEUS, rbac, menelaus_users, upgrade},
-     {?VERSION_MORPHEUS, metakv, chronicle_metakv, upgrade_to_morpheus}] ++
+     {?VERSION_79, rbac, menelaus_users, upgrade},
+     {?VERSION_79, metakv, chronicle_metakv, upgrade_to_79}] ++
     config_profile:get_value(upgrades, []).
 
 do_upgrades(undefined, _, _, _) ->
