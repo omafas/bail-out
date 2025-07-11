@@ -159,7 +159,9 @@ generate_cluster_CA(ForceRegenerateCA, DropUploadedCerts) ->
 generate_cert_and_pkey() ->
     StartTS = os:timestamp(),
     Sha1 = ns_config:read_key_fast({cert, use_sha1}, false),
-    RV = generate_certs(#{use_sha1 => Sha1}),
+    RV = generate_certs(#{use_sha1 => Sha1,
+                          common_name_prefix =>
+                              cluster_compat_mode:prod_name()}),
     EndTS = os:timestamp(),
 
     Diff = timer:now_diff(EndTS, StartTS),
@@ -188,15 +190,20 @@ generate_certs(node_cert, Host, CACerts) ->
                         Host -> Host;
                         Shortened -> Shortened ++ "..."
                     end,
+    CommonName = lists:flatten(io_lib:format("~s Node (~s)",
+                                             [cluster_compat_mode:prod_name(),
+                                              HostShortened])),
     generate_certs(
       #{client => false,
-        common_name => "Couchbase Server Node (" ++ HostShortened ++ ")",
+        common_name => CommonName,
+        common_name_prefix => cluster_compat_mode:prod_name(),
         generate_leaf => CACerts,
         SanArg => [Host]});
 generate_certs(client_cert, "@" ++ Name, CACerts) ->
     N = integer_to_list(erlang:phash2(erlang:system_time())),
     Opts0 = #{client => true,
               common_name => "Couchbase Internal Client (" ++ N ++ ")",
+              common_name_prefix => cluster_compat_mode:prod_name(),
               generate_leaf => CACerts,
               san_emails => [Name ++ "@"?INTERNAL_CERT_EMAIL_DOMAIN]},
     Opts1 =
@@ -212,6 +219,8 @@ generate_certs(Cert) when is_map(Cert) ->
         maps:fold(
           fun (common_name, CN, {A, E}) ->
                   {["--common-name=" ++ CN | A], E};
+              (common_name_prefix, CNP, {A, E}) ->
+                  {["--common-name-prefix=" ++ CNP | A], E};
               (client, true, {A, E}) ->
                   {["--client" | A], E};
               (client, false, {A, E}) ->

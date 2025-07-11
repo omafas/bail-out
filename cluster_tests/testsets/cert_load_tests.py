@@ -10,8 +10,11 @@ import testlib
 import os
 import ipaddress
 import subprocess
-import sys
 import time
+from datetime import datetime
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.x509.oid import NameOID
 
 
 class CertLoadTests(testlib.BaseTestSet):
@@ -94,6 +97,20 @@ class CertLoadTests(testlib.BaseTestSet):
     def client_pkcs12_with_encrypted_ec_key_test(self):
         self.generate_and_load_pkcs12_cert('ec', is_client=True,
                                            passphrase=testlib.random_str(8))
+
+    def generate_cert_with_cn_prefix_test(self):
+        cert, _ = generate_node_certs(self.node_addr, self.ca_pem,
+                                      self.ca_key, key_type='rsa',
+                                      generate_leaf=False)
+        c = x509.load_pem_x509_certificate(cert.encode('utf-8'),
+                                           default_backend())
+        common_names = c.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+        common_name = None
+        for common_name in common_names:
+            common_name = common_name.value
+        assert c.not_valid_after > datetime.now()
+        assert c.not_valid_before < datetime.now()
+        assert common_name and common_name.startswith("Couchbase Server")
 
     def generate_and_load_cert(self, key_type, is_client=False,
                                pkcs8=False, passphrase=None):
@@ -367,16 +384,19 @@ def generate_client_cert(CA, CAKey, cn="TEST CLIENT CERT",
     return run_generate_cert(args, {'CACERT': CA, 'CAPKEY': CAKey})
 
 
-def generate_node_certs(node_addr, CA, CAKey, key_type='rsa'):
+def generate_node_certs(node_addr, CA, CAKey, key_type='rsa',
+                        cn_prefix="Couchbase Server", generate_leaf=True):
     try:
         ipaddress.ip_address(node_addr)
         is_raw = True
     except ValueError:
         is_raw = False
 
-    args = ['--generate-leaf', '--common-name', 'TEST Server Node',
-            '--san-ip-addrs' if is_raw else '--san-dns-names', node_addr,
-            '--pkey-type', key_type]
+    args = ['--generate-leaf'] if generate_leaf else []
+    args.extend(['--common-name', 'TEST Server Node',
+                 '--common-name-prefix', cn_prefix,
+                 '--san-ip-addrs' if is_raw else '--san-dns-names', node_addr,
+                 '--pkey-type', key_type])
 
     return run_generate_cert(args, {'CACERT': CA, 'CAPKEY': CAKey})
 

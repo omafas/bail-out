@@ -77,6 +77,7 @@ func main() {
 	var genereateLeaf bool
 	var isClient bool
 	var commonName string
+	var commonNamePrefix string
 	var sanIPAddrsArg string
 	var sanDNSNamesArg string
 	var sanEmailsArg string
@@ -85,6 +86,7 @@ func main() {
 	var notAfterDuration int
 
 	flag.StringVar(&commonName, "common-name", "*", "common name field of certificate (hostname)")
+	flag.StringVar(&commonNamePrefix, "common-name-prefix", "Couchbase Server", "common name prefix")
 	flag.StringVar(&sanIPAddrsArg, "san-ip-addrs", "", "Subject Alternative Name IP addresses (comma separated)")
 	flag.StringVar(&sanDNSNamesArg, "san-dns-names", "", "Subject Alternative Name DNS names (comma separated)")
 	flag.StringVar(&sanEmailsArg, "san-emails", "", "Subject Alternative Name Emails (comma separated)")
@@ -182,7 +184,7 @@ func main() {
 		pkey, err := rsa.GenerateKey(rand.Reader, keyLength)
 		mustNoErr(err)
 
-		commonName = fmt.Sprintf("Couchbase Server %08x", crc32.ChecksumIEEE(pkey.N.Bytes()))
+		commonName = fmt.Sprintf("%s %08x", commonNamePrefix, crc32.ChecksumIEEE(pkey.N.Bytes()))
 
 		template := x509.Certificate{
 			SerialNumber: big.NewInt(time.Now().UnixNano()),

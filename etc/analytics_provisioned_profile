@@ -56,3 +56,4 @@
        {[ui], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]}]}.
+{{kv, fixed_default_quota}, 0}.
