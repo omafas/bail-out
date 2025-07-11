@@ -46,7 +46,7 @@ class MnXDCRAddRefComponent extends MnLifeCycleHooksToStream {
     super();
 
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
-    this.compatVersion80 = mnAdminService.stream.compatVersion80;
+    this.compatVersion79 = mnAdminService.stream.compatVersion79;
     this.majorMinorVersion = mnAdminService.stream.majorMinorVersion;
     this.postRemoteClusters = mnXDCRService.stream.postRemoteClusters;
     this.postXdcr = mnXDCRService.stream.postRemoteClusters;

@@ -52,7 +52,7 @@ class MnXDCRAddRepComponent extends MnLifeCycleHooksToStream {
 
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
     this.compatVersion70 = mnAdminService.stream.compatVersion70;
-    this.compatVersion80 = mnAdminService.stream.compatVersion80;
+    this.compatVersion79 = mnAdminService.stream.compatVersion79;
     this.bucketsMembaseEphemeral = mnBucketsService.stream.bucketsMembaseEphemeral.pipe(map((buckets)=> buckets.map((bucket) => bucket.name)));
     this.getSettingsReplications = mnXDCRService.stream.getSettingsReplications;
     this.remoteClusters = mnXDCRService.stream.getRemoteClustersFiltered.pipe(map((clusters)=> clusters.map((cluster) => cluster.name)));
@@ -102,7 +102,7 @@ class MnXDCRAddRepComponent extends MnLifeCycleHooksToStream {
     this.form
       .setPackPipe(pipe(withLatestFrom(this.isEnterprise,
                                        mnAdminService.stream.compatVersion55,
-                                       mnAdminService.stream.compatVersion80,
+                                       mnAdminService.stream.compatVersion79,
                                        this.filterFormHelper.group.valueChanges,
                                        this.isSaveButtonDisabled),
                         filter(([, , , , , isDisabled]) => !isDisabled),

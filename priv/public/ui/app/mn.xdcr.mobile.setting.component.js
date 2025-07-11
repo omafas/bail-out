@@ -53,7 +53,7 @@ class MnXDCRMobileSettingComponent extends MnLifeCycleHooksToStream {
     super();
 
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
-    this.compatVersion80 = mnAdminService.stream.compatVersion80;
+    this.compatVersion79 = mnAdminService.stream.compatVersion79;
 
     this.bucketsService = mnBucketsService;
     this.enableCrossClusterVersioningBuckets = this.bucketsService.stream.bucketsCrossClusterVersioningEnabled;

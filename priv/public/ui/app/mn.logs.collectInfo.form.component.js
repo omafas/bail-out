@@ -96,7 +96,7 @@ class MnLogsCollectInfoFormComponent extends MnLifeCycleHooksToStream {
     this.groups = mnLogsCollectInfoService.stream.groups;
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
     this.compatVersion55 = mnAdminService.stream.compatVersion55;
-    this.compatVersion80 = mnAdminService.stream.compatVersion80;
+    this.compatVersion79 = mnAdminService.stream.compatVersion79;
     this.clickGetClusterInfo = new Subject();
     this.clickGetClusterInfo
       .pipe(takeUntil(this.mnOnDestroy))

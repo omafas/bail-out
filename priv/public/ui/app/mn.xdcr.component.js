@@ -59,7 +59,7 @@ class MnXDCRComponent extends MnLifeCycleHooksToStream {
 
     this.tasksXDCR = mnTasksService.stream.tasksXDCR;
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
-    this.compatVersion80 = mnAdminService.stream.compatVersion80;
+    this.compatVersion79 = mnAdminService.stream.compatVersion79;
     this.permissions = mnPermissions.stream;
     this.getRemoteClustersFiltered = mnXDCRService.stream.getRemoteClustersFiltered;
     this.getRemoteClustersSorted = this.getRemoteClustersFiltered

@@ -49,7 +49,7 @@ class MnSecurityAuditComponent extends MnLifeCycleHooksToStream {
     this.IEC = mnHelperService.IEC;
 
     this.compatVersion55 = mnAdminService.stream.compatVersion55;
-    this.compatVersion80 = mnAdminService.stream.compatVersion80;
+    this.compatVersion79 = mnAdminService.stream.compatVersion79;
     this.isEnterprise = mnPoolsService.stream.isEnterprise;
     this.getAuditDescriptors = mnSecurityService.stream.getAuditDescriptors;
     this.getAudit = mnSecurityService.stream.getAudit;
@@ -64,9 +64,9 @@ class MnSecurityAuditComponent extends MnLifeCycleHooksToStream {
     this.securityWrite = mnPermissions.stream
       .pipe(map(permissions => permissions.cluster.admin.security.write));
 
-    this.getAuditInfo = combineLatest(this.compatVersion80, this.isEnterprise)
-      .pipe(switchMap(([compat80, isEnterprise]) =>
-             (compat80 && isEnterprise) ? combineLatest(this.getAudit, this.getUserActivity, this.getUIUserRoles, this.getUIUserGroups) : this.getAudit),
+    this.getAuditInfo = combineLatest(this.compatVersion79, this.isEnterprise)
+      .pipe(switchMap(([compat79, isEnterprise]) =>
+             (compat79 && isEnterprise) ? combineLatest(this.getAudit, this.getUserActivity, this.getUIUserRoles, this.getUIUserGroups) : this.getAudit),
             shareReplay({refCount: true, bufferSize: 1}));
 
     this.form = mnFormService.create(this);
