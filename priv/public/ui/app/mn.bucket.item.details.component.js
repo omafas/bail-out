@@ -205,7 +205,7 @@ class MnBucketItemDetailsComponent extends MnLifeCycleHooksToStream {
     this.clickEdit
       .pipe(map(this.stopEvent.bind(this)),
             withLatestFrom(this.compatVersion79, this.isEnterprise),
-            switchMap(([,iscompatVersion79, isEnterprise]) => iscompatVersion79 && isEnterprise ? this.mnSecuritySecretsService.getSecrets() : of(null)),
+            switchMap(([,isCompatVersion79, isEnterprise]) => isCompatVersion79 && isEnterprise ? this.mnSecuritySecretsService.getSecrets() : of(null)),
             takeUntil(this.mnOnDestroy))
       .subscribe((secrets) => {
         let ref = this.modalService.open(MnBucketDialogComponent);
