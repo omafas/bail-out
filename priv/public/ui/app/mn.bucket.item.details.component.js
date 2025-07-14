@@ -59,7 +59,7 @@ class MnBucketItemDetailsComponent extends MnLifeCycleHooksToStream {
   constructor(mnBucketsService, mnPoolsService, mnAdminService, mnTasksService, mnPermissions, mnSecuritySecretsService, modalService) {
     super();
 
-    this.compatVersion80 = mnAdminService.stream.compatVersion80;
+    this.compatVersion79 = mnAdminService.stream.compatVersion79;
     this.permissions = mnPermissions.stream;
     this.mnTasksService = mnTasksService;
     this.mnBucketsService = mnBucketsService;
@@ -204,8 +204,8 @@ class MnBucketItemDetailsComponent extends MnLifeCycleHooksToStream {
     this.clickEdit = new Subject();
     this.clickEdit
       .pipe(map(this.stopEvent.bind(this)),
-            withLatestFrom(this.compatVersion80, this.isEnterprise),
-            switchMap(([,isCompatVersion80, isEnterprise]) => isCompatVersion80 && isEnterprise ? this.mnSecuritySecretsService.getSecrets() : of(null)),
+            withLatestFrom(this.compatVersion79, this.isEnterprise),
+            switchMap(([,iscompatVersion79, isEnterprise]) => iscompatVersion79 && isEnterprise ? this.mnSecuritySecretsService.getSecrets() : of(null)),
             takeUntil(this.mnOnDestroy))
       .subscribe((secrets) => {
         let ref = this.modalService.open(MnBucketDialogComponent);

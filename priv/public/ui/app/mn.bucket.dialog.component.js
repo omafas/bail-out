@@ -87,7 +87,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
     this.uiRouter = uiRouter;
     this.isEnterprise = this.mnPoolsService.stream.isEnterprise;
     this.compatVersion55 = this.mnAdminService.stream.compatVersion55;
-    this.compatVersion80 = this.mnAdminService.stream.compatVersion80;
+    this.compatVersion79 = this.mnAdminService.stream.compatVersion79;
     this.preventMinus = mnSecuritySecretsService.preventMinus;
   }
 
@@ -159,7 +159,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
         enableCrossClusterVersioning: false,
       }))
       .setSource(formData)
-      .setPackPipe(pipe(withLatestFrom(this.compatVersion55, this.compatVersion80, this.isEnterprise),
+      .setPackPipe(pipe(withLatestFrom(this.compatVersion55, this.compatVersion79, this.isEnterprise),
                    map(this.packData.bind(this))))
       .setPostRequest(postRequest)
       .setValidation(postValidation, undefined, undefined, true)
@@ -399,7 +399,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
     return this.mnUserRolesService.getUniqueUsers(usersByPermission, whoAmI);
   }
 
-  packData([, compat55, compat80, isEnterprise]) {
+  packData([, compat55, compat79, isEnterprise]) {
     let formData = this.form.group.getRawValue();
     let saveData = {};
 
@@ -422,7 +422,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
 
     if (isEnterprise && isMembase) {
       copyProperty('storageBackend');
-      if (compat80) {
+      if (compat79) {
         copyProperty('numVBuckets');
       }
     }
@@ -475,7 +475,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
       }
     }
 
-    if (isEnterprise && compat80 && isMembase) {
+    if (isEnterprise && compat79 && isMembase) {
       saveData.encryptionAtRestKeyId = formData.enableEncryptionAtRest ? formData.encryptionAtRestKeyId?.id ?? -1 : -1;
       if (saveData.encryptionAtRestKeyId !== -1) {
         saveData.encryptionAtRestDekRotationInterval = formData.encryptionAtRestDekRotationEnabled ? Math.round(formData.encryptionAtRestDekRotationInterval * 86_400) : 0;

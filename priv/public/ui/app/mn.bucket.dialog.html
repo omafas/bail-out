@@ -112,7 +112,7 @@ licenses/APL2.txt.
         </div>
         <div
           class="margin-left-1-5 margin-top-half"
-          *ngIf="compatVersion80 | async"
+          *ngIf="compatVersion79 | async"
           [hidden]="(storageBackend | async) === 'couchstore'"
         >
           <label
@@ -780,7 +780,7 @@ licenses/APL2.txt.
           </div>
         </div>
 
-        <div [hidden]="!(isEnterprise | async) || !bucket" *ngIf="compatVersion80 | async">
+        <div [hidden]="!(isEnterprise | async) || !bucket" *ngIf="compatVersion79 | async">
           <label class="inline">Enable Cross Cluster Versioning</label>
           <ng-template #crossClusterVersioningTooltip>
             <p>The Cross Cluster Versioning setting cannot be disabled after it is enabled.</p>

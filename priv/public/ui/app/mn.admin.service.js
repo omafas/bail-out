@@ -182,8 +182,8 @@ class MnAdminService {
     this.stream.compatVersion70 =
       this.stream.clusterCompatibility.pipe(map(R.flip(R.gte)(encodeCompatVersion(7, 0))));
 
-    this.stream.compatVersion80 =
-      this.stream.clusterCompatibility.pipe(map(R.flip(R.gte)(encodeCompatVersion(8, 0))));
+    this.stream.compatVersion79 =
+      this.stream.clusterCompatibility.pipe(map(R.flip(R.gte)(encodeCompatVersion(7, 9))));
 
     this.stream.isNotCompatMode =
       combineLatest(this.stream.compatVersion51, this.stream.compatVersion55)

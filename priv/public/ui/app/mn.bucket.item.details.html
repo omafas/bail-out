@@ -70,7 +70,7 @@ licenses/APL2.txt.
       </div>
       <div
         class="nowrap"
-        *ngIf="(compatVersion80 | async) && (isEnterprise | async)"
+        *ngIf="(compatVersion79 | async) && (isEnterprise | async)"
       >
         <strong>Encryption At Rest:</strong>
         <mn-encryption-status
@@ -79,7 +79,7 @@ licenses/APL2.txt.
         </mn-encryption-status>
       </div>
       <div
-         *ngIf="(compatVersion80 | async) && (isEnterprise | async)"
+         *ngIf="(compatVersion79 | async) && (isEnterprise | async)"
          class="nowrap">
         <strong>Cross Cluster Versioning:</strong>
         {{bucket.enableCrossClusterVersioning ? 'Enabled' : 'Disabled'}}
@@ -122,7 +122,7 @@ licenses/APL2.txt.
   <div class="row flex-right">
     <span>
       <button
-        *ngIf="(compatVersion80 | async) && (isEnterprise | async) && bucket.encryptionAtRestKeyId !== -1"
+        *ngIf="(compatVersion79 | async) && (isEnterprise | async) && bucket.encryptionAtRestKeyId !== -1"
         class="outline"
         [disabled]="isRebalancing | async"
         [hidden]="!(permissions | async)?.cluster.bucket[bucket.name].settings.write"

@@ -497,6 +497,7 @@ build_cluster_capabilities() ->
      {clusterCapabilities, {Caps}},
      {clusterUUID, menelaus_web:get_uuid()},
      {clusterName, list_to_binary(menelaus_web_pools:get_cluster_name())},
+     {prod, list_to_binary(cluster_compat_mode:prod())},
      {prodName, list_to_binary(cluster_compat_mode:prod_name())}].
 
 do_build_node_services() ->

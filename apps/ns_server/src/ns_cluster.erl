@@ -1297,11 +1297,12 @@ check_can_add_node(NodeKVList) ->
     MyCompatVersion = cluster_compat_mode:effective_cluster_compat_version(),
     case JoineeClusterCompatVersion =:= MyCompatVersion of
         true ->
-            ProdName = proplists:get_value(<<"prodName">>, NodeKVList),
-            case cluster_compat_mode:is_compatible_product(ProdName) of
+            Prod = proplists:get_value(<<"prod">>, NodeKVList),
+            case cluster_compat_mode:is_compatible_product(Prod) of
                 true ->
                     ok;
                 false ->
+                    ProdName = proplists:get_value(<<"prodName">>, NodeKVList),
                     {error, incompatible_cluster_version,
                      ns_error_messages:incompatible_product_add_node_error(
                        ProdName, cluster_compat_mode:prod_name())}
@@ -1499,8 +1500,13 @@ enforce_topology_limitation(Services) ->
     end.
 
 check_product_compatibility(Node, Version, NodeKVList) ->
-    {LegacyProdName, LegacyCompat} =
+    {LegacyProd, LegacyProdName, LegacyCompat} =
         cluster_compat_mode:prod_spec_from_legacy_version(Version),
+
+    Prod = case lists:keyfind(<<"prod">>, 1, NodeKVList) of
+               {_, ProdBin} -> ProdBin;
+               false -> LegacyProd
+           end,
 
     PName = case lists:keyfind(<<"prodName">>, 1, NodeKVList) of
                 {_, ProdNameBin} -> ProdNameBin;
@@ -1524,7 +1530,7 @@ check_product_compatibility(Node, Version, NodeKVList) ->
     maybe
         %% Check if cluster is running the same product
         {_, true} ?=
-            {prod_name, cluster_compat_mode:is_compatible_product(PName)},
+            {prod, cluster_compat_mode:is_compatible_product(Prod)},
 
         %% Check if local node has any prodCompatVersion value set
         %% If not, we don't need to check it
@@ -1556,7 +1562,7 @@ check_product_compatibility(Node, Version, NodeKVList) ->
     else
         {need_check, false} ->
             ok;
-        {prod_name, false} ->
+        {prod, false} ->
             {error, incompatible_product,
              ns_error_messages:incompatible_product_add_node_error(
                PName, cluster_compat_mode:prod_name())};
@@ -2168,6 +2174,7 @@ check_enterprise_analytics_product_compatibility_test() ->
           fun () ->
                   [
                    {name, ?ANALYTICS_PROFILE_STR},
+                   {prod, ?ANALYTICS_PROD},
                    {prod_name, ?ANALYTICS_PROD_NAME},
                    {prod_compat_version, ?ANALYTICS_COMPAT_VERSION},
                    {prod_min_supported_version,
@@ -2178,21 +2185,24 @@ check_enterprise_analytics_product_compatibility_test() ->
            check_product_compatibility(
              "node",
              <<"1.5.9-1234-columnar">>,
-             [{<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
+             [{<<"prod">>, <<?ANALYTICS_PROD>>},
+              {<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
               {<<"prodCompatVersion">>, <<?ANALYTICS_COMPAT_VERSION>>}]),
            ok),
         ?assertEqual(
            check_product_compatibility(
              "node",
              <<"1.2.3-1234-columnar">>,
-             [{<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
+             [{<<"prod">>, <<?ANALYTICS_PROD>>},
+              {<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
               {<<"prodCompatVersion">>, <<?ANALYTICS_MIN_COMPAT_VERSION>>}]),
            ok),
         ?assertEqual(
            check_product_compatibility(
              "cb_node",
              <<"8.0.0-1234-enterprise">>,
-             [{<<"prodName">>, <<?DEFAULT_PROD_NAME>>}]),
+             [{<<"prod">>, <<?DEFAULT_PROD>>},
+              {<<"prodName">>, <<?DEFAULT_PROD_NAME>>}]),
            {error,incompatible_product,
             <<?DEFAULT_PROD_NAME, " nodes are not compatible with ",
               ?ANALYTICS_PROD_NAME, " nodes">>}),
@@ -2200,7 +2210,8 @@ check_enterprise_analytics_product_compatibility_test() ->
            check_product_compatibility(
              "old_node",
              <<"0.0.5-1234-columnar">>,
-             [{<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
+             [{<<"prod">>, <<?ANALYTICS_PROD>>},
+              {<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
               {<<"prodCompatVersion">>, <<"0.0.5">>}]),
            {error,incompatible_cluster_version,
             <<"Joining 0.0.5 ", ?ANALYTICS_PROD_NAME, " node old_node is not"
@@ -2210,7 +2221,8 @@ check_enterprise_analytics_product_compatibility_test() ->
            check_product_compatibility(
              "new_node",
              <<"9.9.9-1234-columnar">>,
-             [{<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
+             [{<<"prod">>, <<?ANALYTICS_PROD>>},
+              {<<"prodName">>, <<?ANALYTICS_PROD_NAME>>},
               {<<"prodCompatVersion">>, <<"9.0.0">>}]),
            {error,incompatible_cluster_version,
             <<"Joining 9.0.0 ", ?ANALYTICS_PROD_NAME, " node new_node is not"

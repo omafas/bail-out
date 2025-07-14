@@ -46,7 +46,7 @@
     </span>
     <span class="cbui-table-cell flex-grow-1-5">
       <span
-         *ngIf="!(compatVersion80 | async)"
+         *ngIf="!(compatVersion79 | async)"
          class="sorter"
          [ngClass]="{
             'dynamic-active': (sorter.state | async)[0] == 'tstamp',
@@ -56,7 +56,7 @@
         time
       </span>
       <span
-         *ngIf="(compatVersion80 | async)"
+         *ngIf="(compatVersion79 | async)"
          class="sorter"
          [ngClass]="{
             'dynamic-active': (sorter.state | async)[0] == 'tstamp',
@@ -91,14 +91,14 @@
         </span>
       </span>
       <span class="cbui-table-cell flex-grow-1-5 wrap resp-sml">
-        <span *ngIf="!(compatVersion80 | async)" class="semi-bold nowrap margin-right-half">
+        <span *ngIf="!(compatVersion79 | async)" class="semi-bold nowrap margin-right-half">
           {{log.serverTime | date:'mediumTime':'UTC'}}
         </span>
-        <span *ngIf="(compatVersion80 | async)" class="semi-bold nowrap margin-right-half">
+        <span *ngIf="(compatVersion79 | async)" class="semi-bold nowrap margin-right-half">
           {{log.serverTime | date:'mediumTime'}}
         </span>
-        <span *ngIf="!(compatVersion80 | async)" class="nowrap">{{log.serverTime | date:'d MMM, y':'UTC'}}</span>
-        <span *ngIf="(compatVersion80 | async)" class="nowrap">{{log.serverTime | date:'d MMM, y'}}</span>
+        <span *ngIf="!(compatVersion79 | async)" class="nowrap">{{log.serverTime | date:'d MMM, y':'UTC'}}</span>
+        <span *ngIf="(compatVersion79 | async)" class="nowrap">{{log.serverTime | date:'d MMM, y'}}</span>
       </span>
     </div>
   </section>

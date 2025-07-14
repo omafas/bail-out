@@ -41,7 +41,7 @@ class MnLogsListComponent extends MnLifeCycleHooksToStream {
   constructor(mnLogsService, mnHelperService, mnTimezoneDetailsService, datePipe, mnAdminService) {
     super();
 
-    this.compatVersion80 = mnAdminService.stream.compatVersion80;
+    this.compatVersion79 = mnAdminService.stream.compatVersion79;
     this.mnTimezoneDetailsService = mnTimezoneDetailsService;
     this.datePipe = datePipe;
     this.textLimit = 1000;
@@ -53,7 +53,7 @@ class MnLogsListComponent extends MnLifeCycleHooksToStream {
     this.logs = mnLogsService.stream.logs
       .pipe(pluck('list'),
             filter(logs => !!logs),
-            withLatestFrom(this.compatVersion80),
+            withLatestFrom(this.compatVersion79),
             map(this.addPrettyTime.bind(this)),
             this.filter.pipe,
             this.sorter.pipe,
@@ -72,9 +72,9 @@ class MnLogsListComponent extends MnLifeCycleHooksToStream {
            log.type;
   }
 
-  addPrettyTime([logs, isCompat80]) {
+  addPrettyTime([logs, isCompat79]) {
     logs.forEach(log => {
-      if (isCompat80) {
+      if (isCompat79) {
         log.prettyTime =
           this.datePipe.transform(log.serverTime, 'mediumTime') + " " +
           this.datePipe.transform(log.serverTime, 'd MMM, y');

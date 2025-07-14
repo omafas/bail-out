@@ -42,6 +42,7 @@
          min_supported_prod_compat_version/0,
          effective_cluster_compat_version/0,
          effective_cluster_compat_version_for/1,
+         prod/0,
          prod_name/0,
          is_compatible_product/1,
          is_developer_preview/0,
@@ -354,16 +355,25 @@ effective_cluster_compat_version_for([VersionMaj, VersionMin] =
 effective_cluster_compat_version() ->
     effective_cluster_compat_version_for(get_compat_version()).
 
+%% We use prod() during compatibility checks when validating joining nodes.
+-spec prod() -> string().
+prod() ->
+    config_profile:search(prod, ?DEFAULT_PROD).
+
+%% In the event of error messages or other uses where a proper product name is
+%% desired, prod_name() is used. It is desired to avoid comparing prod_name()
+%% in compatibility checks themselves, to allow product name changes to not
+%% affect mixed-mode/upgrade.
+-spec prod_name() -> string().
 prod_name() ->
     config_profile:search(prod_name, ?DEFAULT_PROD_NAME).
 
 apply_prod_compat_module(Fun, Args, Default) ->
-    case prod_name() of
-        ?DEFAULT_PROD_NAME ->
+    case prod() of
+        ?DEFAULT_PROD ->
             Default;
         Prod ->
-            Prod2 = string:replace(string:lowercase(Prod), " ", "_", all),
-            Module = list_to_atom(lists:flatten(Prod2) ++ "_prod_compat"),
+            Module = list_to_atom(lists:flatten(Prod) ++ "_prod_compat"),
             apply(Module, Fun, Args)
     end.
 
@@ -373,10 +383,11 @@ apply_prod_compat_module(Fun, Args, Default) ->
 %% prodName and prodCompatVersion for the legacy Columnar, if the version is
 %% applicable.
 -spec prod_spec_from_legacy_version(Version :: binary()) ->
-    {string(), binary()} | {undefined, undefined}.
+          {string(), string(), binary()} | {undefined, undefined, undefined}.
 prod_spec_from_legacy_version(Version) ->
     apply_prod_compat_module(
-      prod_spec_from_legacy_version, [Version], {undefined, undefined}).
+      prod_spec_from_legacy_version, [Version],
+      {undefined, undefined, undefined}).
 
 %% For cases when non-couchbase-server is running, returns the desired product
 %% compatibility version for this server, otherwise undefined. E.g. when
@@ -416,15 +427,15 @@ compare_prod_compat_version(A, B) ->
     apply_prod_compat_module(compare_prod_compat_version, [A, B], undefined).
 
 -spec is_compatible_product(ProdName :: binary() | string() | undefined)
-        -> boolean().
+                           -> boolean().
 is_compatible_product(undefined) ->
-    is_compatible_product(?DEFAULT_PROD_NAME);
+    is_compatible_product(?DEFAULT_PROD);
 
-is_compatible_product(ProdName) when is_binary(ProdName) ->
-    is_compatible_product(binary_to_list(ProdName));
+is_compatible_product(Prod) when is_binary(Prod) ->
+    is_compatible_product(binary_to_list(Prod));
 
-is_compatible_product(ProdName) ->
-    prod_name() =:= ProdName.
+is_compatible_product(Prod) ->
+    prod() =:= Prod.
 
 get_pretend_version(Key) ->
     case application:get_env(ns_server, Key) of
@@ -458,6 +469,7 @@ is_goxdcr_enabled() ->
 mb_master_advertised_version_test() ->
     true = mb_master_advertised_version() >= ?LATEST_VERSION_NUM ++ [0].
 
+-define(WOMBAT_PROD, "wombat").
 -define(WOMBAT_PROD_NAME, "Wombat").
 
 is_compatible_product_test() ->
@@ -466,19 +478,20 @@ is_compatible_product_test() ->
                         ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
                 end),
     true = is_compatible_product(undefined),
-    true = is_compatible_product(?DEFAULT_PROD_NAME),
-    true = is_compatible_product(<<?DEFAULT_PROD_NAME>>),
-    false = is_compatible_product(?WOMBAT_PROD_NAME),
+    true = is_compatible_product(?DEFAULT_PROD),
+    true = is_compatible_product(<<?DEFAULT_PROD>>),
+    false = is_compatible_product(?WOMBAT_PROD),
     meck:expect(config_profile, get,
                 fun () ->
                         [
                          {name, "wombat"},
+                         {prod, ?WOMBAT_PROD},
                          {prod_name, ?WOMBAT_PROD_NAME}
                         ]
                 end),
     false = is_compatible_product(undefined),
-    false = is_compatible_product(?DEFAULT_PROD_NAME),
-    true = is_compatible_product(?WOMBAT_PROD_NAME).
+    false = is_compatible_product(?DEFAULT_PROD),
+    true = is_compatible_product(?WOMBAT_PROD).
 -endif.
 
 preserve_durable_mutations() ->

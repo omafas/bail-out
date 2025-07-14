@@ -272,8 +272,15 @@
 -define(LATEST_VERSION_NUM, ?VERSION_MORPHEUS).
 -define(MASTER_ADVERTISED_VERSION, [8, 0, 0]).
 
+%% We use 'prod' and 'prod_name' during compatibility checks when validating
+%% joining nodes. 'prod' is a short string that is used to identify the
+%% product, whereas 'prod_name' is a longer "pretty" string that is used where
+%% we want to display the full name of the product, including error messages &
+%% certificate generation. See cluster_compat_mode:get_prod[_name]/0
+-define(DEFAULT_PROD, "server").
 -define(DEFAULT_PROD_NAME, "Couchbase Server").
-%% This needs to be kept in sync with 'prodName' in the analytics profiles
+%% These need to be kept in sync with 'prod[_name]' in the analytics profiles
+-define(ANALYTICS_PROD, "analytics").
 -define(ANALYTICS_PROD_NAME, "Enterprise Analytics").
 
 -define(MIN_OF_MAX_MOVES_PER_NODE, 1).

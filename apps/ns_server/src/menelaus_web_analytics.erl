@@ -18,16 +18,16 @@
 -endif.
 
 handle_settings_get(Req) ->
-    case cluster_compat_mode:prod_name() of
-        ?ANALYTICS_PROD_NAME ->
+    case cluster_compat_mode:prod() of
+        ?ANALYTICS_PROD ->
             handle_settings_get_enterprise_analytics(Req);
         _ ->
             handle_settings_get_legacy(Req)
     end.
 
 handle_settings_post(Req) ->
-    case cluster_compat_mode:prod_name() of
-        ?ANALYTICS_PROD_NAME ->
+    case cluster_compat_mode:prod() of
+        ?ANALYTICS_PROD ->
             handle_settings_post_enterprise_analytics(Req);
         _ ->
             handle_settings_post_legacy(Req)

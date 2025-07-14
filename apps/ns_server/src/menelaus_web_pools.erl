@@ -59,6 +59,7 @@ handle_pools(Req) ->
     RV1 = [{isAdminCreds, true},
            {isROAdminCreds, false},
            {isEnterprise, Enterprise},
+           {prod, list_to_binary(cluster_compat_mode:prod())},
            {prodName, list_to_binary(cluster_compat_mode:prod_name())},
            {configProfile, list_to_binary(config_profile:name())},
            {allowedServices, AllowedServices},
