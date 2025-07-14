@@ -61,7 +61,8 @@ supported_extra_setting_names() ->
      {reqs_per_event_low_priority, {int, 0, ?MC_MAXINT}},
      {threads, {int, 0, ?MC_MAXINT}},
      {dcp_disconnect_when_stuck_timeout_seconds, {int, 0, ?MC_MAXINT}},
-     {dcp_disconnect_when_stuck_name_regex, string}].
+     {dcp_disconnect_when_stuck_name_regex, string},
+     {magma_blind_write_optimisation_enabled, bool}].
 
 parse_validate_node("self") ->
     parse_validate_node(atom_to_list(node()));
