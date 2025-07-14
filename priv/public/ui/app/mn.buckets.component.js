@@ -71,9 +71,9 @@ class MnBucketsComponent extends MnLifeCycleHooksToStream {
     this.onAddBucketClick
       .pipe(withLatestFrom(mnAdminService.stream.compatVersion79,
                            mnPoolsService.stream.isEnterprise),
-            switchMap(([ ,iscompatVersion79, isEnterprise]) => forkJoin({
+            switchMap(([ ,isCompatVersion79, isEnterprise]) => forkJoin({
               resp: mnAdminService.getPoolsDefault(),
-              secrets: iscompatVersion79 && isEnterprise ? mnSecuritySecretsService.getSecrets() : of(null)
+              secrets: isCompatVersion79 && isEnterprise ? mnSecuritySecretsService.getSecrets() : of(null)
             })),
             takeUntil(this.mnOnDestroy))
       .subscribe(({resp, secrets}) => {
