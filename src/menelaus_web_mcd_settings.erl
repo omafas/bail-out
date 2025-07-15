@@ -71,10 +71,11 @@ supported_extra_setting_names() ->
      {reqs_per_event_low_priority, {int, 0, ?MAX_32BIT_UNSIGNED_INT}},
      {threads, {int, 0, ?MAX_32BIT_UNSIGNED_INT}},
      {dcp_disconnect_when_stuck_timeout_seconds,
-        {int, 0, ?MAX_32BIT_UNSIGNED_INT}},
+      {int, 0, ?MAX_32BIT_UNSIGNED_INT}},
      {dcp_disconnect_when_stuck_name_regex, string},
      {not_locked_returns_tmpfail, bool},
-     {clustermap_push_notifications_enabled, bool}].
+     {clustermap_push_notifications_enabled, bool},
+     {magma_blind_write_optimisation_enabled, bool}].
 
 parse_validate_node("self") ->
     parse_validate_node(atom_to_list(node()));
