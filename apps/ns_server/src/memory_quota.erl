@@ -401,11 +401,7 @@ remaining_default_quota(eventing, Memory, NumServices) ->
     Memory div NumServices.
 
 calculate_remaining_default_quota(Service, Memory, Vsn) ->
-    case config_profile:get_value({Service, fixed_default_quota}, undefined) of
-        undefined ->
-            remaining_default_quota(Service, Memory, number_services(Vsn));
-        Value -> Value
-    end.
+    remaining_default_quota(Service, Memory, number_services(Vsn)).
 
 default_quotas(Services, Vsn) ->
     %% this is actually bogus, because nodes can be heterogeneous; but that's
