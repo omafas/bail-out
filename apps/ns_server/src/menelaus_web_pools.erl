@@ -528,6 +528,12 @@ quota_error_msg({service_quota_too_low, Service, Quota, MinAllowed}) ->
     Msg = io_lib:format("The ~s service quota (~bMB) "
                         "cannot be less than ~bMB~s.",
                         [ServiceStr, Quota, MinAllowed, Details]),
+    {memory_quota:service_to_json_name(Service), Msg};
+quota_error_msg({service_quota_too_high, Service, Quota, MaxAllowed}) ->
+    ServiceStr = ns_cluster_membership:user_friendly_service_name(Service),
+    Msg = io_lib:format("The ~s service quota (~bMB) "
+                        "cannot be greater than ~bMB.",
+                        [ServiceStr, Quota, MaxAllowed]),
     {memory_quota:service_to_json_name(Service), Msg}.
 
 handle_pool_settings_post(Req) ->

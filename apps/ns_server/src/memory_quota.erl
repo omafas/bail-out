@@ -125,7 +125,9 @@ allowed_memory_usage_max(MemSupData) ->
                                  MaxAllowed :: pos_integer()}.
 -type quota_error() :: quota_too_high_error() |
                        {service_quota_too_low, service(), Value :: integer(),
-                        MinRequired :: pos_integer()}.
+                        MinRequired :: pos_integer()} |
+                       {service_quota_too_high, service(), Value :: integer(),
+                        MaxAllowed :: pos_integer()}.
 -type quotas() :: [{service(), integer()}].
 
 -spec check_quotas([NodeInfo], ns_config(), map(), quotas()) ->
@@ -234,30 +236,55 @@ check_service_quotas([{Service, Quota} | Rest], Snapshot) ->
 
 -define(MAX_DEFAULT_FTS_QUOTA, 512).
 
-min_quota(kv) ->
+default_min_quota(kv) ->
     256;
-min_quota(index) ->
+default_min_quota(index) ->
     256;
-min_quota(fts) ->
+default_min_quota(fts) ->
     256;
-min_quota(cbas) ->
+default_min_quota(cbas) ->
     1024;
-min_quota(n1ql) ->
+default_min_quota(n1ql) ->
     0;
-min_quota(eventing) ->
+default_min_quota(eventing) ->
     256.
+
+-spec min_quota(service()) -> pos_integer().
+min_quota(Service) ->
+    config_profile:get_value({Service, min_quota}, default_min_quota(Service)).
+
+-spec max_quota(service()) -> pos_integer() | infinity.
+max_quota(Service) ->
+    config_profile:get_value({Service, max_quota}, infinity).
 
 check_service_quota(kv, Quota, Snapshot) ->
     BucketsQuota = get_max_node_ram_quota(Snapshot) div ?MIB,
     MinMemoryMB = erlang:max(min_quota(kv), BucketsQuota),
-    check_min_quota(kv, MinMemoryMB, Quota);
+    maybe
+        ok ?= check_min_quota(kv, MinMemoryMB, Quota),
+        ok ?= check_max_quota(kv, Quota)
+    end;
 check_service_quota(Service, Quota, _) ->
-    check_min_quota(Service, min_quota(Service), Quota).
+    maybe
+        ok ?= check_min_quota(Service, Quota),
+        ok ?= check_max_quota(Service, Quota)
+    end.
 
+check_min_quota(_Service, Quota) ->
+    check_min_quota(_Service, min_quota(_Service), Quota).
 check_min_quota(_Service, MinQuota, Quota) when Quota >= MinQuota ->
     ok;
 check_min_quota(Service, MinQuota, Quota) ->
     {error, {service_quota_too_low, Service, Quota, MinQuota}}.
+
+check_max_quota(_Service, Quota) ->
+    check_max_quota(_Service, max_quota(_Service), Quota).
+check_max_quota(_Service, infinity, _Quota) ->
+    ok;
+check_max_quota(Service, MaxQuota, Quota) when Quota > MaxQuota ->
+    {error, {service_quota_too_high, Service, Quota, MaxQuota}};
+check_max_quota(_Service, _MaxQuota, _Quota) ->
+    ok.
 
 %% check that the node has enough memory for the quotas; note that we do not
 %% validate service quota values because we expect them to be validated by the
@@ -473,6 +500,27 @@ default_quotas_by_version_test__() ->
     ?assertEqual(true,
                  allowed_memory_usage_max(MemSupData) >= TotalQuotaLatestVsn),
     ?assertEqual(TotalQuota76, TotalQuotaLatestVsn).
+
+quota_override_test() ->
+    try
+        meck:new(config_profile, [passthrough]),
+        meck:expect(
+          config_profile, get,
+          fun () ->
+                  [
+                   {{kv, min_quota}, 100},
+                   {{kv, max_quota}, 100},
+                   {{fts, max_quota}, 100}
+                  ]
+          end),
+        ?assertEqual(100, max_quota(kv)),
+        ?assertEqual(100, min_quota(kv)),
+        ?assertEqual(infinity, max_quota(cbas)),
+        ?assertEqual({error,{service_quota_too_high, fts, 256, 100}},
+                     check_service_quota(fts, 256, undefined))
+    after
+        meck:unload(config_profile)
+    end.
 
 default_quotas_test_() ->
     [

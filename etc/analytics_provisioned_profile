@@ -58,3 +58,5 @@
        {[pools], [read]},
        {[app_telemetry], [write]}]}]}.
 {{kv, fixed_default_quota}, 0}.
+{{kv, min_quota}, 100}.
+{{kv, max_quota}, 100}.
