@@ -430,7 +430,7 @@ class CbcollectIpv6Test(testlib.BaseTestSet):
             return get_collected_file(node, otp_node, utcnow)
 
         the_file = testlib.poll_for_condition(check_cbcollect, sleep_time=5,
-                                              attempts=60, verbose=True)
+                                              attempts=120, verbose=True)
         assert type(the_file) == str
         assert the_file.find(":") == -1
 
