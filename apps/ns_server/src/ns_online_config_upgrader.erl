@@ -99,5 +99,6 @@ upgrade(?VERSION_76, Config) ->
          index_settings_manager:config_upgrade_to_79(Config) ++
          menelaus_web_mcd_settings:config_upgrade_to_79(Config)};
 
-upgrade(?VERSION_79, _Config) ->
-    {?VERSION_MORPHEUS, []}.
+upgrade(?VERSION_79, Config) ->
+    {?VERSION_MORPHEUS,
+     menelaus_web_mcd_settings:config_upgrade_to_morpheus(Config)}.

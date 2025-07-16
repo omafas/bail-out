@@ -23,7 +23,8 @@
          handle_node_post/2,
          handle_node_setting_get/3,
          handle_node_setting_delete/3,
-         config_upgrade_to_79/1]).
+         config_upgrade_to_79/1,
+         config_upgrade_to_morpheus/1]).
 
 -import(menelaus_util,
         [reply_json/2,
@@ -446,19 +447,42 @@ config_upgrade_to_79_node_memcached_cfg(Config) ->
             end
         end, [], supported_nodes()).
 
+config_upgrade_to_morpheus(Config) ->
+    %% We want to enable the magma blind write optimisation by default for all
+    %% 8.0 clusters. We have a get_param though such that we can turn this off
+    %% prior to the upgrade just in case.
+    EnableMagmaBlindWriteOptimisation =
+        [{magma_blind_write_optimisation_enabled,
+          ?get_param(magma_blind_write_optimisation_enabled, true)}],
+    case ns_config:search(Config, memcached) of
+        false ->
+            %% This key really should exist...
+            [{set, memcached, EnableMagmaBlindWriteOptimisation}];
+        {value, Value} ->
+            %% Merge the new setting into the existing memcached config...
+            [{set, memcached,
+              misc:update_proplist(Value, EnableMagmaBlindWriteOptimisation)}]
+    end.
+
 -ifdef(TEST).
-upgrade_config_from_76_to_79_test_setup() ->
+upgrade_config_test_setup() ->
     ns_config_default:ns_config_default_mock_setup(),
 
     %% We upgrade node keys so we need to mock the method we use to get the
     %% nodes list.
     meck:new(ns_node_disco),
     meck:expect(ns_node_disco, nodes_wanted,
-                fun () -> [node()] end).
+                fun () -> [node()] end),
 
-upgrade_config_from_76_to_79_test_teardown(R) ->
+    meck:new(ns_config, [passthrough]),
+    meck:expect(ns_config, search_node_with_default,
+                fun(_, Default) ->
+                        Default
+                end).
+
+upgrade_config_test_teardown(R) ->
     ns_config_default:ns_config_default_mock_teardown(R),
-    meck:unload(ns_node_disco).
+    meck:unload().
 
 upgrade_config_from_76_to_79_t() ->
     %% We'll use a default config to test, but add some of the older verrsion
@@ -496,8 +520,36 @@ upgrade_config_from_76_to_79_t() ->
     ?assertEqual(false,
                  lists:keyfind(connection_limit_mode, 1, UpgradedNodeMcdCfg)).
 
-upgrade_config_from_76_to_79_test_() ->
-    {setup, fun upgrade_config_from_76_to_79_test_setup/0,
-            fun upgrade_config_from_76_to_79_test_teardown/1,
-            fun upgrade_config_from_76_to_79_t/0}.
+upgrade_config_to_morpheus_t() ->
+    Default = ns_config_default:default(?VERSION_MORPHEUS),
+
+    Txns0 = config_upgrade_to_morpheus([Default]),
+    ?assertEqual(
+       [{set, memcached,
+         [{magma_blind_write_optimisation_enabled, true}]}],
+       Txns0),
+
+    DefaultWithoutMcd = proplists:delete(memcached, Default),
+    Txns1 = config_upgrade_to_morpheus([DefaultWithoutMcd]),
+    ?assertEqual(
+       [{set, memcached,
+         [{magma_blind_write_optimisation_enabled, true}]}], Txns1),
+
+    meck:expect(ns_config, search_node_with_default,
+                fun({_,magma_blind_write_optimisation_enabled}, _) ->
+                        false
+                end),
+
+    Txns2 = config_upgrade_to_morpheus([DefaultWithoutMcd]),
+    ?assertEqual(
+       [{set, memcached,
+         [{magma_blind_write_optimisation_enabled, false}]}], Txns2).
+
+
+upgrade_config_test_() ->
+    {setup, fun upgrade_config_test_setup/0,
+            fun upgrade_config_test_teardown/1,
+            [fun upgrade_config_from_76_to_79_t/0,
+             fun upgrade_config_to_morpheus_t/0]}.
+
 -endif.
