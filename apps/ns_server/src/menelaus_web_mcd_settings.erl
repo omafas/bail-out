@@ -90,7 +90,8 @@ supported_extra_setting_names() ->
      {dcp_disconnect_when_stuck_name_regex, string},
      {external_auth_request_timeout, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {not_locked_returns_tmpfail, bool},
-     {clustermap_push_notifications_enabled, bool}].
+     {clustermap_push_notifications_enabled, bool},
+     {magma_blind_write_optimisation_enabled, bool}].
 
 supported_nodes() ->
     ns_node_disco:nodes_wanted().
