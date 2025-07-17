@@ -157,7 +157,10 @@ init_logging() ->
 init_log_encryption() ->
     {ok, {ActiveDek, Deks}} = application:get_env(ns_server, initial_log_deks),
     LogDS = cb_crypto:create_deks_snapshot(ActiveDek, Deks, undefined),
-    ale:init_log_encryption_ds(LogDS).
+    Res = ale:init_log_encryption_ds(LogDS),
+    %% No need to keep the initial log deks in initial_log_deks anymore
+    (Res == ok) andalso application:unset_env(ns_server, initial_log_deks),
+    Res.
 
 do_init_logging() ->
     StdLoggers = [?ALE_LOGGER, ?ERROR_LOGGER, ?TRACE_LOGGER],
