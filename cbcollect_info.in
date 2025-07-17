@@ -1364,7 +1364,7 @@ def read_local_token(path, gosecrets_cfg_path, master_pass):
             f'code: {r.stderr}')
         return ""
 
-    return r.stdout.rstrip()
+    return r.stdout.strip()
 
 
 def get_localtoken_creds_fun(guts, master_pass):
