@@ -149,8 +149,9 @@ handle_settings_get_enterprise_analytics(Req) ->
     Env = ns_ports_setup:build_cbauth_env_vars(
         ns_config:latest(), "cbas_settings"),
     case misc:run_external_tool(
-        path_config:component_path(bin, "cbas"),
-        ["columnarSettings", "--get"], Env, [{stderr_to_stdout, false}]) of
+           path_config:component_path(bin, "cbas"),
+           ["columnarSettings", "--get"] ++ common_settings_args(),
+           Env, [{stderr_to_stdout, false}]) of
         {0, StdErr, StdOut} ->
             ?log_debug("handle_settings_get success stderr: ~s", [StdErr]),
             menelaus_util:reply_ok(Req, "application/json", StdOut);
@@ -176,9 +177,10 @@ handle_settings_post_enterprise_analytics(Req) ->
     SkipValidation = config_profile:search(
         {cbas, skip_blob_storage_validation}, false),
 
-    Args = ["columnarSettings", "--set"]
-        ++ ["-maxStoragePartitions=" ++ integer_to_list(MaxStoragePartitions)]
-        ++ ["-skipValidation=" ++ atom_to_list(SkipValidation)],
+    Args = ["columnarSettings", "--set",
+            "-maxStoragePartitions=" ++ integer_to_list(MaxStoragePartitions),
+            "-skipValidation=" ++ atom_to_list(SkipValidation)]
+        ++ common_settings_args(),
 
     case misc:run_external_tool(
         path_config:component_path(bin, "cbas"), Args, Env,
@@ -215,9 +217,9 @@ convert_for_json_encoding(Value) ->
 cluster_init_validators() ->
     [validator:post_validate_all(
         fun (_Props) ->
-            Env = ns_ports_setup:build_cbauth_env_vars(ns_config:latest(),
-                "cbas_settings"),
-            Args = ["columnarSettings", "--validate"],
+                Env = ns_ports_setup:build_cbauth_env_vars(ns_config:latest(),
+                                                           "cbas_settings"),
+            Args = ["columnarSettings", "--validate"] ++ common_settings_args(),
             case misc:run_external_tool(
                 path_config:component_path(bin, "cbas"), Args, Env,
                 [{stderr_to_stdout, false}]) of
@@ -296,3 +298,8 @@ cluster_init_validators_test() ->
         meck:unload(meck_modules())
     end.
 -endif.
+
+common_settings_args() ->
+    Columnar = config_profile:search({cbas, columnar}, false),
+    ["-deploymentModel=" ++ config_profile:name(),
+    "-columnar=" ++ atom_to_list(Columnar)].
