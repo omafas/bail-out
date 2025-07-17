@@ -74,12 +74,12 @@ encr_dek_lifetime(Param, RotIntervalName, EncrType) ->
                         {error, "dekLifetime can't be set to 0 if "
                                 "dekRotationInterval is not currently 0"};
                     (_LifeTime, 0 = _RotIntrvl) ->
-                        {error,  "dekLifetime must be set to 0, if "
+                        {error,  "dekLifetime must be set to 0 if "
                                  "dekRotationInterval is currently 0"};
                     (LifeTime, RotIntrvl)
                       when LifeTime <
                            RotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
-                        Err = io_lib:format("dekLifetime must be a least ~p "
+                        Err = io_lib:format("dekLifetime must be at least ~p "
                                             "seconds more than the current "
                                             "dekRotationInterval value of ~p",
                                             [?DEK_LIFETIME_ROTATION_MARGIN_SEC,
@@ -123,7 +123,7 @@ encr_dek_rotate_intrvl(Param, LifetimeName, EncrType) ->
                     (RotIntrvl, LifeTime)
                       when LifeTime <
                            RotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
-                        Err = io_lib:format("dekRotationInterval must be a "
+                        Err = io_lib:format("dekRotationInterval must be at "
                                             "least ~p seconds less than the "
                                             "current dekLifetime value of ~p",
                                             [?DEK_LIFETIME_ROTATION_MARGIN_SEC,
@@ -666,7 +666,7 @@ dek_interval_error(MinInSec) ->
     Minutes = (MinInSec rem (60 * 60)) div 60,
     Seconds = MinInSec rem 60,
     list_to_binary(
-      io_lib:format("must be greater or equal to ~s",
+      io_lib:format("must be greater than or equal to ~s",
                     [misc:interval_to_string(Days, Hours, Minutes, Seconds)])).
 
 get_dek_kinds_by_type(Type) ->

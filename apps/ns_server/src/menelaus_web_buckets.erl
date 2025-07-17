@@ -1506,12 +1506,12 @@ validate_lifetime_with_rotation_intrvl(0 = _ParamLifeTime, _CurrRotIntrvl,
 validate_lifetime_with_rotation_intrvl(_ParamLifeTime, 0 = _CurrRotIntrvl,
                                        _MaxDeks) ->
     [{encryptionAtRestDekLifetime,
-      <<"DEK lifetime must be set to 0, if DEK rotation interval is "
+      <<"DEK lifetime must be set to 0 if DEK rotation interval is "
         "currently 0">>}];
 validate_lifetime_with_rotation_intrvl(ParamLifeTime, CurrRotIntrvl, _MaxDeks)
   when ParamLifeTime < CurrRotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->
     Err =
-        io_lib:format("DEK lifetime must be a least ~p seconds more than the "
+        io_lib:format("DEK lifetime must be at least ~p seconds more than the "
                       "current DEK rotation interval value of ~p",
                       [?DEK_LIFETIME_ROTATION_MARGIN_SEC, CurrRotIntrvl]),
     [{encryptionAtRestDekLifetime, list_to_binary(Err)}];

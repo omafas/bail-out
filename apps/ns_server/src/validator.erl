@@ -646,7 +646,7 @@ greater_or_equal(Name1, Name2, State) ->
      validator:validate_relative(
        fun (Value1, Value2) when Value1 < Value2 ->
                {error,
-                io_lib:format("should be greater or equal than ~p", [Name2])};
+                io_lib:format("should be greater than or equal to ~p", [Name2])};
            (_, _) ->
                ok
        end, Name1, Name2, State).

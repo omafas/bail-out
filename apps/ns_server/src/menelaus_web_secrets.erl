@@ -197,7 +197,7 @@ secret_validators(CurProps, Snapshot) ->
     [validator:trimmed_string(name, _),
      validator:required(name, _),
      validator:validate(
-       fun ("") -> {error, "Must not not be empty"};
+       fun ("") -> {error, "Must not be empty"};
            (Str) ->
                Id = maps:get(id, CurProps, ?SECRET_ID_NOT_SET),
                case cb_cluster_secrets:is_name_unique(Id, Str, Snapshot) of
@@ -219,7 +219,7 @@ secret_validators(CurProps, Snapshot) ->
 
 enforce_static_field_validator(Name, CurValue, State) ->
     validator:validate(fun (NewValue) when NewValue == CurValue -> ok;
-                            (_) -> {error, "the field can't be changed"}
+                            (_) -> {error, "The field can't be changed"}
                        end, Name, State).
 
 handle_delete_secret(IdStr, Req) ->
