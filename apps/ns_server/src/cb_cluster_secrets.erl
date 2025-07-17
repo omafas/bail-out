@@ -83,7 +83,8 @@
          reencrypt_deks/0,
          node_supports_encryption_at_rest/1,
          max_dek_num/1,
-         fetch_snapshot_in_txn/1]).
+         fetch_snapshot_in_txn/1,
+         recalculate_deks_info/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -696,6 +697,11 @@ get_node_deks_info() ->
                     dummy_deks_info(unencrypted, [])
             end
     end.
+
+-spec recalculate_deks_info() -> ok.
+recalculate_deks_info() ->
+    ?MODULE ! calculate_dek_info,
+    ok.
 
 -spec new_key_id() -> key_id().
 new_key_id() ->

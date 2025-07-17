@@ -1706,7 +1706,8 @@ do_ensure_bucket(Sock, Bucket, BConf, false, JWT, BucketUUID) ->
                                                      ConfigString, Timeout),
                 ?log_info("Created bucket ~p with config string ~s",
                           [Bucket, ConfigStringForLogging]),
-                ok = mc_client_binary:select_bucket(Sock, Bucket)
+                ok = mc_client_binary:select_bucket(Sock, Bucket),
+                cb_cluster_secrets:recalculate_deks_info()
             else
                 {error, E} ->
                     {error, {bucket_create_error, E}};
