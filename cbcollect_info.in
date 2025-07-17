@@ -3233,7 +3233,7 @@ def main():
 
 
 def exec_name(name):
-    if os.name == 'nt':
+    if sys.platform == 'win32' or sys.platform == 'cygwin':
         name += ".exe"
     return name
 
