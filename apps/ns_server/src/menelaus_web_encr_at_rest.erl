@@ -68,8 +68,11 @@ encr_dek_lifetime(Param, RotIntervalName, EncrType) ->
             true ->
                 fun (_LifeTime, _RotIntrvl) -> ok end;
             _ ->
-                fun (0 = _LifeTime, _RotIntrvl) ->
+                fun (0, 0) ->
                         ok;
+                    (0 = _LifeTime, _RotIntrvl) ->
+                        {error, "dekLifetime can't be set to 0 if "
+                                "dekRotationInterval is not currently 0"};
                     (_LifeTime, 0 = _RotIntrvl) ->
                         {error,  "dekLifetime must be set to 0, if "
                                  "dekRotationInterval is currently 0"};
@@ -109,11 +112,14 @@ encr_dek_rotate_intrvl(Param, LifetimeName, EncrType) ->
             true ->
                 fun (_RotIntrvl, _LifeTime) -> ok end;
             _ ->
-                fun (_RotIntrvl, 0 = _LifeTime) ->
+                fun (0, 0) ->
                         ok;
                     (0 = _RotIntrvl, _LifeTime) ->
                         {error, "dekRotationInterval can't be set to 0 "
                                 "if dekLifetime is not currently 0"};
+                    (_RotIntrvl, 0 = _LifeTime) ->
+                        {error, "dekRotationInterval must be set to 0 if "
+                                "dekLifetime is currently 0"};
                     (RotIntrvl, LifeTime)
                       when LifeTime <
                            RotIntrvl + ?DEK_LIFETIME_ROTATION_MARGIN_SEC ->

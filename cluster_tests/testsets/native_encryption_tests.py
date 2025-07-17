@@ -1748,7 +1748,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                  True),
                 (0, min_dek_lifetime + 1, False),
                 (0, 0, True),
-                (min_dek_rotation + 1, 0, True),
+                (min_dek_rotation + 1, 0, False),
                ]
 
     def bucket_dek_bad_settings_validation_test(self):
