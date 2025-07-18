@@ -62,7 +62,7 @@ def parse_args():
     arg_parser = ArgumentParser(prog='./dump-bucket-deks')
     arg_parser.add_argument('--config', '-c', type=str,
                             metavar='<gosecrets_config_path>',
-                            help='path to gosecrets config', required=True)
+                            help='path to gosecrets config', required=False)
     group = arg_parser.add_mutually_exclusive_group()
     group.add_argument('--key-dir', '-w', type=str,
                        metavar='<directory_with_keys>',

@@ -2124,12 +2124,9 @@ def run_dump_bucket_deks(node, *args, **kwargs):
 def run_dump_key_utility(node, name, args, expected_return_code=0):
     data_dir = node.data_path()
     gosecrets_cfg_path = os.path.join(data_dir, 'config', 'gosecrets.cfg')
-    gosecrets_path = os.path.join(testlib.get_ns_server_dir(),
-                                  'build', 'deps', 'gocode', 'gosecrets')
     utility_path = os.path.join(testlib.get_scripts_dir(), name)
     pylib_path = testlib.get_pylib_dir()
-    all_args = ['--config', gosecrets_cfg_path,
-                '--gosecrets', gosecrets_path] + args
+    all_args = ['--config', gosecrets_cfg_path] + args
     env = {'PYTHONPATH': pylib_path, "PATH": os.environ['PATH']}
     print(f'running {utility_path} with {all_args}')
     r = subprocess.run([utility_path] + all_args, capture_output=True, env=env)
