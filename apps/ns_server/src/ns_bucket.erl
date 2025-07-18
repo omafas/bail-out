@@ -1626,65 +1626,139 @@ wait_for_bucket_shutdown(BucketName, Nodes0, Timeout) ->
         Other -> Other
     end.
 
+override_keys_fetch_funs() ->
+    [{storage_mode, fun storage_mode/1},
+     {autocompaction, fun autocompaction_settings/1}].
+
+%% These settings are mutable after a storage mode migration is started (i.e.
+%% when storage_mode_migration_in_progress is true).
+live_migration_mutable_keys() ->
+    [ram_quota, storage_mode].
+
 override_keys() ->
-    [storage_mode, autocompaction].
+    [K || {K, _F} <- override_keys_fetch_funs()].
+
+override_keys_to_restore() ->
+    override_keys() -- live_migration_mutable_keys().
 
 -spec remove_override_props([{_, _}], [node()]) -> [{_, _}].
 remove_override_props(Props, Nodes) ->
     lists:filter(fun ({{node, Node, SubKey}, _Value}) ->
                          not lists:member(Node, Nodes)
-                           andalso lists:member(SubKey, override_keys());
+                             andalso lists:member(SubKey, override_keys());
                      (_) ->
                          true
                  end, Props).
 
 -spec remove_override_props_many([node()], [{bucket_name(), [{_, _}]}]) ->
-    [{bucket_name(), [{_, _}]}].
+          [{bucket_name(), [{_, _}]}].
 remove_override_props_many(Nodes, BucketConfigs) ->
     lists:map(fun ({BN, BC}) ->
                       {BN, remove_override_props(BC, Nodes)}
               end, BucketConfigs).
 
-get_override_keys(BucketConfig, SubKey) ->
+%% During a storage mode migration that is reverted, we look for old auto-
+%% compaction settings in the overrides from the original migration and restore
+%% them when present. Note that autocompaction cannot be explicitly set during
+%% a live storage migration (i.e. one that has already been initiated). If we
+%% are migrating from couchstore -> magma and stop it midway, we restore
+%% couchstore autocompaction settings from old overrides.
+maybe_restore_from_overrides(BucketConfig, autocompaction) ->
+    %% Note at the moment we check for any keys with autocompaction override.
+    %% Invariants:
+    %% - This is only called during an in flight storage mode migration.
+    %% - Currently we support only couchstore > magma or magma > couchstore so
+    %% we know that when this is called, it must necessarily be toggling to the
+    %% storage mode present in the override. That is, if couchstore > magma is
+    %% reverted, couchstore overrides are present and this migration must be
+    %% setting storage_mode back to couchstore (or vice versa). If we ever
+    %% support migration to more than 2, this will need to change to also
+    %% compare the target storage mode.
+    case keys_with_override(BucketConfig, autocompaction) of
+        [X | _] ->
+            case proplists:get_value(X, BucketConfig) of
+                undefined -> {false, undefined};
+                Value -> {true, Value}
+            end;
+        _ ->
+            {false, undefined}
+    end.
+
+get_new_value(Props, BucketConfig, Key, FetchFun) ->
+    case storage_mode_migration_in_progress(BucketConfig) andalso
+        lists:member(Key, override_keys_to_restore()) of
+        true ->
+            maybe_restore_from_overrides(BucketConfig, Key);
+        false ->
+            NewBucketConfig = misc:update_proplist(BucketConfig, Props),
+            {false, FetchFun(NewBucketConfig)}
+    end.
+
+nodes_with_override(BucketConfig, SubKey) ->
+    [N || {{node, N, SK}, _V} <- BucketConfig, SK =:= SubKey].
+
+keys_with_override(BucketConfig, SubKey) ->
     [K || {{node, _Node, SK} = K, _V} <- BucketConfig, SK =:= SubKey].
 
-do_add_override_props(Props, BucketConfig, Key, FetchFun) ->
-    Nodes = get_servers(BucketConfig),
+matching_override_keys(BucketConfig, SubKey, Val) ->
+    [K || {{node, _Node, SK} = K, V} <- BucketConfig, SK =:= SubKey, V =:= Val].
 
-    OldValue = FetchFun(BucketConfig),
-    OldOverrideKeys = get_override_keys(BucketConfig, Key),
-    OldOverrideKeyNodes = [N || {node, N, _SK} <- OldOverrideKeys],
-    OldOverrideValue =
-        case OldOverrideKeys of
-            [] ->
-                undefined;
-            _ ->
-                proplists:get_value(hd(OldOverrideKeys), BucketConfig)
-        end,
+%% When the bucket-level setting for Key changes (NewValue =/= OldValue),
+%% add per-node overrides for nodes that don’t already have one.
+%%
+%% This ensures those nodes keep using the OldValue (via override), instead
+%% of using the new bucket-level setting.
+%%
+%% Only nodes without an override are affected — this implies they were
+%% previously inheriting the bucket-level setting, which is now changing.
+%%
+%% The per-node overrides are temporary. A swap rebalance or graceful failover
+%% followed by full recovery removes them, allowing the node to adopt the new
+%% bucket-level setting.
+%%
+%% NewValue may be 'undefined' — we still treat it as the new bucket-level
+%% value. In that case, overrides are added to preserve OldValue on nodes that
+%% would otherwise silently switch to undefined.
+maybe_add_new_overrides(NewValue, OldValue, BucketConfig, Key, Nodes)
+  when NewValue =/= OldValue ->
+    MissingNodes = Nodes -- nodes_with_override(BucketConfig, Key),
+    [{{node, N, Key}, OldValue} || N <- MissingNodes];
+maybe_add_new_overrides(_, _, _, _, _) ->
+    [].
 
-    OverrideProps = [{{node, N, Key}, OldValue}
-                     || N <- Nodes -- OldOverrideKeyNodes],
+update_override_props(Props, BucketConfig) ->
+    update_override_props(Props, BucketConfig, []).
 
-    NewProps =
-        case OldOverrideValue of
-                undefined ->
-                    Props;
-                _ ->
-                    lists:keystore(Key, 1, Props, {Key, OldOverrideValue})
-        end,
-
-    {NewProps ++ OverrideProps, OldOverrideKeys}.
-
-add_override_props(Props, BucketConfig) ->
+update_override_props(Props, BucketConfig, ExistingDeleteKeys) ->
     lists:foldl(
       fun ({Key, FetchFun}, {NewProps, DeleteKeys}) ->
               {P, D} =
-                  do_add_override_props(NewProps, BucketConfig, Key, FetchFun),
+                  do_update_override_props(NewProps, BucketConfig, Key,
+                                           FetchFun),
               {P, DeleteKeys ++ D}
+      end, {Props, ExistingDeleteKeys}, override_keys_fetch_funs()).
 
-      end, {Props, []},
-      [{storage_mode, fun storage_mode/1},
-       {autocompaction, fun autocompaction_settings/1}]).
+do_update_override_props(Props, BucketConfig, Key, FetchFun) ->
+    Nodes = get_servers(BucketConfig),
+
+    {Restored, NewValue} = get_new_value(Props, BucketConfig, Key, FetchFun),
+    Props1 =
+        case Restored of
+            false -> Props;
+            true -> [{Key, NewValue} | Props]
+        end,
+
+    %% Identify node-level overrides that are now redundant —
+    %% i.e., where the node override matches the new bucket-level value (even if
+    %% it's undefined). These overrides are no longer needed, since the node
+    %% would behave the same without them. We return them for deletion.
+    OldValue = FetchFun(BucketConfig),
+    StaleOverrideKeys = matching_override_keys(BucketConfig, Key, NewValue),
+
+    NewOverrideKeys =
+        maybe_add_new_overrides(NewValue, OldValue, BucketConfig, Key, Nodes),
+
+    {Props1 ++ NewOverrideKeys, StaleOverrideKeys}.
 
 %% Updates properties of bucket of given name and type.  Check of type
 %% protects us from type change races in certain cases.
@@ -1779,7 +1853,7 @@ update_bucket_props_inner(Type, OldStorageMode, BucketName, Props) ->
                            {storage_mode_migration, janitor_not_run}}),
 
                 {NewProps, DeleteKeys} =
-                    add_override_props(Props1, BucketConfig),
+                    update_override_props(Props1, BucketConfig),
 
                 %% Collections can be updated concurrently while a
                 %% bucket is being updated - make sure history is not
@@ -1904,7 +1978,7 @@ update_bucket_props_allowed_inner(NewProps, BucketConfig) ->
             FilteredProps =
                 lists:filter(
                   fun ({K, _V}) ->
-                          not lists:member(K, [ram_quota, storage_mode])
+                          not lists:member(K, live_migration_mutable_keys())
                   end, NewProps),
             case FilteredProps of
                 [] ->
@@ -3121,7 +3195,7 @@ update_bucket_props_allowed_test() ->
     ?assertEqual({false, {storage_mode_migration, in_progress}},
                  update_bucket_props_allowed(NewProps3, BucketConfig1)).
 
-add_override_props_test() ->
+update_override_props_test() ->
     meck:new(cluster_compat_mode, [passthrough]),
     meck:expect(cluster_compat_mode, is_cluster_79,
                 fun () -> true end),
@@ -3150,7 +3224,7 @@ add_override_props_test() ->
                    {{node, N, autocompaction}, CouchstoreACSettings} | Acc]
           end, [], Servers),
 
-    {NewProps, DK} = add_override_props(Props, BucketConfig),
+    {NewProps, DK} = update_override_props(Props, BucketConfig),
 
     ?assertEqual(lists:sort(ExpectedProps), lists:sort(NewProps)),
     ?assertEqual(DK, []),
@@ -3172,7 +3246,7 @@ add_override_props_test() ->
     DeleteKeys = [{node, n0, storage_mode},
                   {node, n0, autocompaction}],
     {NewProps1, DK1} =
-        add_override_props(Props1, BucketConfig1),
+        update_override_props(Props1, BucketConfig1),
 
     ?assertListsEqual(NewProps1, ExpectedProps1),
     ?assertListsEqual(DK1, DeleteKeys),
