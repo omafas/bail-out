@@ -303,15 +303,16 @@ couchbase-server is a script to start/stop Couchbase Server.
 Usage: $0 [--start|--status|--stop|--help|--version|-s|-k|-h|-v] [options]
 
   Recognized options:
-     --start        Start Couchbase Server
+     --start        Start Couchbase Server in background mode
      --status, -s   Determine if Couchbase Server is running
      --stop, -k     Stop Couchbase Server
      --help, -h     Print this help text
      --version, -v  Print software Version
 
-If none of the recognized options are specifed, --start is implied.  In
-this case, any trailing options and arguments will be passed to Couchbase
-Server; they should NOT be used unless you know what you're doing.
+If none of the recognized options are specifed, the server is started in
+foreground mode.  In this case, any trailing options and arguments will be
+passed to Couchbase Server; they should NOT be used unless you know what you're
+doing.
 
 EOF
 }
