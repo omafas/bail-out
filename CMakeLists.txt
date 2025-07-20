@@ -165,8 +165,10 @@ ADD_CUSTOM_TARGET (ns_dataclean
 
 IF (BUILD_COLUMNAR)
   SET (DEFAULT_PROFILE "analytics")
+  SET (PACKAGE_NAME "enterprise-analytics")
 ELSE (BUILD_COLUMNAR)
   SET (DEFAULT_PROFILE "default")
+  SET (PACKAGE_NAME "couchbase-server")
 ENDIF (BUILD_COLUMNAR)
 
 SET (ns_server_app_src "${PROJECT_SOURCE_DIR}/apps/ns_server/src/ns_server.app.src")
