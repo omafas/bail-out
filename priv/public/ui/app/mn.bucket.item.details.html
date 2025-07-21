@@ -18,6 +18,10 @@ licenses/APL2.txt.
         <strong>Type: </strong>
         <span>{{bucket.bucketType | mnBucketsType}}</span>
       </div>
+      <div class="nowrap" *ngIf="bucket.uuid">
+        <strong>UUID: </strong>
+        <span>{{bucket.uuid}}</span>
+      </div>
       <div class="nowrap">
         <strong>Bucket RAM Quota: </strong>
         {{bucket.quota.ram | mnFormatQuantity}}
