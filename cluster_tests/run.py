@@ -35,6 +35,7 @@ sys.path.append(testlib.get_pylib_dir())
 import cluster_run_lib
 from testlib import UnmetRequirementsError, TestError
 from testlib.cluster import InconsistentClusterError
+from testlib import test_tag_decorator
 
 from testsets import \
     authn_tests, \
@@ -105,6 +106,14 @@ Usage: {{program_name}}
     [--tests | -t <test_spec>[, <test_spec> ...]]
         <test_spec> := <test_class>[.test_name]
         Start only specified tests
+    [--with-tags <tag>[, <tag> ...]
+        Run only tests with at least one of the specified tags
+    [--without-tags <tag>[, <tag> ...]
+        Run only tests with none of the specified tags
+    [--ignore-unknown-tags]
+        Don't give an error if tags are specified that aren't recognised.
+        Used for commit-validation jobs across multiple branches which may have
+        different known tags.
     [--keep-tmp-dirs | -k]
         Keep any test_cluster_data dirs after tests finish, even if they pass
     [--dont-intercept-output | -o]
@@ -181,7 +190,10 @@ def main():
         optlist, args = getopt.gnu_getopt(sys.argv[1:], "hkovc:u:p:n:t:s:",
                                           ["help", "keep-tmp-dirs", "cluster=",
                                            "user=", "password=", "num-nodes=",
-                                           "tests=", "dont-intercept-output",
+                                           "tests=", 'with-tags=',
+                                           'without-tags=',
+                                           "dont-intercept-output",
+                                           'ignore-unknown-tags'
                                            "seed=", "colors=", "verbose",
                                            "dry-run", 'dont-reuse-clusters',
                                            'randomize-clusters',
@@ -204,6 +216,9 @@ def main():
     address = '127.0.0.1'
     start_port = cluster_run_lib.base_api_port
     tests = None
+    with_tags = None
+    without_tags = None
+    ignore_unknown_tags = False
     keep_tmp_dirs = False
     seed = testlib.random_str(16)
     reuse_clusters = True
@@ -243,6 +258,13 @@ def main():
                     tests.append((tokens[0], '*'))
                 elif len(tokens) == 2:
                     tests.append((tokens[0], tokens[1]))
+        elif o == '--with-tags':
+            with_tags = list(map(test_tag_decorator.tag_from_str, a.split(",")))
+        elif o == '--without-tags':
+            without_tags = list(map(test_tag_decorator.tag_from_str,
+                                    a.split(",")))
+        elif o == '--ignore-unknown-tags':
+            ignore_unknown_tags = True
         elif o in ('--keep-tmp-dirs', '-k'):
             keep_tmp_dirs = True
         elif o in ('--dont-intercept-output', '-o'):
@@ -283,6 +305,24 @@ def main():
         else:
             assert False, f"unhandled options: {o}"
 
+    if ignore_unknown_tags:
+        # Remove any unparsed tags
+        if with_tags is not None:
+            with_tags = [tag for tag in with_tags
+                         if isinstance(tag, test_tag_decorator.Tag)]
+        if without_tags is not None:
+            without_tags = [tag for tag in without_tags
+                            if isinstance(tag, test_tag_decorator.Tag)]
+    else:
+        if with_tags is not None:
+            for tag in with_tags:
+                if not isinstance(tag, test_tag_decorator.Tag):
+                    raise ValueError(f"{tag} is not a valid Tag")
+        if without_tags is not None:
+            for tag in without_tags:
+                if not isinstance(tag, test_tag_decorator.Tag):
+                    raise ValueError(f"{tag} is not a valid Tag")
+
     override_print()
 
     random.seed(seed)
@@ -313,10 +353,10 @@ def main():
     testsets_str = ", ".join([c for c, _, _, _ in discovered_tests])
     testlib.maybe_print(f"Discovered testsets: {testsets_str}")
 
-    if tests is None:
-        testsets_to_run = discovered_tests
-    else:
-        testsets_to_run = find_tests(tests, discovered_tests)
+    testsets_to_run = find_tests(tests, discovered_tests, with_tags,
+                                 without_tags)
+    if not testsets_to_run:
+        warning_exit("No tests matched the specified test/tag filters")
 
     total_num, testsets_grouped = \
         group_testsets(testsets_to_run, reuse_clusters,
@@ -514,7 +554,16 @@ def group_testsets(testsets, reuse_clusters, randomize_clusters,
     return (tests_count, sorted_testsets_grouped)
 
 
-def find_tests(test_names, discovered_list):
+def find_tests(test_names, discovered_list, with_tags, without_tags):
+    if test_names is not None:
+        discovered_list = get_testsets_by_names(test_names, discovered_list)
+    if with_tags or without_tags:
+        discovered_list = get_testsets_by_tags(discovered_list, with_tags,
+                                               without_tags)
+    return discovered_list
+
+
+def get_testsets_by_names(test_names, discovered_list):
     results = {}
     discovered_dict = {n: (cl, t, cf) for n, cl, t, cf in discovered_list}
     test_list = list(discovered_dict.keys())
@@ -540,6 +589,26 @@ def find_tests(test_names, discovered_list):
                 results[class_name] = (testset, [test_name], configurations)
 
     return [(k, results[k][0], results[k][1], results[k][2]) for k in results]
+
+
+def get_testsets_by_tags(testset_list, with_tags, without_tags):
+    def test_matches_tags(cl):
+        def f(test):
+            test_func = getattr(cl, test)
+            if test_func is not None:
+                tags = test_tag_decorator.get_tags(test_func)
+                return ((with_tags is None or any(tag in with_tags
+                                                  for tag in tags)) and
+                        (without_tags is None or all(tag not in without_tags
+                                                     for tag in tags)))
+            return False
+        return f
+    testsets_filtered = []
+    for (n, cl, tests, cf) in testset_list:
+        new_tests = list(filter(test_matches_tags(cl), tests))
+        if len(new_tests) > 0:
+            testsets_filtered.append((n, cl, new_tests, cf))
+    return testsets_filtered
 
 
 def discover_testsets():
