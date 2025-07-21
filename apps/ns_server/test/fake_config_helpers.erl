@@ -13,7 +13,7 @@
 
 -include("ns_common.hrl").
 
--export([setup_node_config/1,
+-export([setup_cluster_config/1,
          setup_bucket_config/1]).
 
 -spec add_service_map_to_snapshot(atom(), list(), map()) -> map().
@@ -34,8 +34,8 @@ add_service_map_to_snapshot(Node, Services, Snapshot) ->
     Acc.
 
 %% Map should be of the form Key => {State, Services (list)}.
--spec setup_node_config(map()) -> true.
-setup_node_config(NodesMap) ->
+-spec setup_cluster_config(map()) -> true.
+setup_cluster_config(NodesMap) ->
     ClusterSnapshot =
         maps:fold(
           fun(Node, {State, Services}, Snapshot) ->

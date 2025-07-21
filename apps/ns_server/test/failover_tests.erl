@@ -50,7 +50,7 @@ manual_failover_test_setup(SetupConfig) ->
     fake_ns_config:setup_cluster_compat_version(?LATEST_VERSION_NUM),
     fake_chronicle_kv:setup_cluster_compat_version(?LATEST_VERSION_NUM),
 
-    fake_config_helpers:setup_node_config(maps:get(nodes, SetupConfig)),
+    fake_config_helpers:setup_cluster_config(maps:get(nodes, SetupConfig)),
     fake_config_helpers:setup_bucket_config(maps:get(buckets, SetupConfig)),
 
     meck:new(chronicle),
@@ -171,7 +171,7 @@ manual_failover_post_network_partition_stale_config(SetupConfig, _R) ->
                         NewNodes = maps:put('c', {inactiveFailed, [kv]},
                                             OldNodes),
 
-                        fake_config_helpers:setup_node_config(NewNodes),
+                        fake_config_helpers:setup_cluster_config(NewNodes),
                         fake_config_helpers:setup_bucket_config(
                           maps:get(buckets, SetupConfig)),
                         ok
@@ -559,7 +559,7 @@ auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
                                      maps:get(partition_without_quorum,
                                               SetupConfig)),
 
-                        fake_config_helpers:setup_node_config(NewNodes),
+                        fake_config_helpers:setup_cluster_config(NewNodes),
 
                         %% Set our new map ('c' has failed over)
                         ok = ns_bucket:set_map_and_uploaders("default",
@@ -773,7 +773,7 @@ graceful_failover_post_network_partition_stale_config(SetupConfig, _R) ->
                         NewNodes = maps:put('c', {inactiveFailed, [kv]},
                                             OldNodes),
 
-                        fake_config_helpers:setup_node_config(NewNodes),
+                        fake_config_helpers:setup_cluster_config(NewNodes),
 
                         %% Reflect the change in server config in our new bucket
                         %% map too.
