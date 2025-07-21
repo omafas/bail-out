@@ -8,7 +8,7 @@ be governed by the Apache License, Version 2.0, included in the file
 licenses/APL2.txt.
 -->
 
-<div ng-if="rbac.cluster.admin.security.write">
+<div ng-if="rbac.cluster.admin.security.read">
    <h3>LDAP</h3>
    <p style="width: 476px">
       Couchbase Server can be configured to authenticate users by means of LDAP; and to map the LDAP groups of which a user is a member to roles defined on Couchbase Server.
@@ -37,6 +37,7 @@ licenses/APL2.txt.
                    ng-model="mnLDAPCtl.config.connect.hosts"
                    placeholder="ldap1.example.com, ldap2.example.com"
                    mn-focus="true"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-focus="sectFocus = 'LDAP'">
                 <div
                    class="error"
@@ -53,6 +54,7 @@ licenses/APL2.txt.
                    autocapitalize="off"
                    mn-autocomplete-off="enforce"
                    id="ldap_port"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-model="mnLDAPCtl.config.connect.port">
                 <div
                    class="error"
@@ -67,7 +69,8 @@ licenses/APL2.txt.
                 <mn-select
                    id="ldap_encryption"
                    values="['None', 'TLS', 'StartTLSExtension']"
-                   ng-model="mnLDAPCtl.config.connect.encryption">
+                   ng-model="mnLDAPCtl.config.connect.encryption"
+                   mn-disabled="!rbac.cluster.admin.security.write">
                 </mn-select>
                 <div
                   class="error"
@@ -97,7 +100,7 @@ licenses/APL2.txt.
                      ng-model="mnLDAPCtl.config.connect.serverCertValidation"
                      name="certValidation"
                      value="false"
-                     ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+                     ng-disabled="!rbac.cluster.admin.security.write || mnLDAPCtl.config.connect.encryption == 'None'">
                   <label
                      for="ldap-cert-none"
                      ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
@@ -109,7 +112,7 @@ licenses/APL2.txt.
                      ng-model="mnLDAPCtl.config.connect.serverCertValidation"
                      name="certValidation"
                      value="true"
-                     ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+                     ng-disabled="!rbac.cluster.admin.security.write || mnLDAPCtl.config.connect.encryption == 'None'">
                   <label
                      for="ldap-cert-server"
                      ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'"
@@ -124,7 +127,7 @@ licenses/APL2.txt.
                      ng-model="mnLDAPCtl.config.connect.serverCertValidation"
                      name="certValidation"
                      value="pasteCert"
-                     ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+                     ng-disabled="!rbac.cluster.admin.security.write || mnLDAPCtl.config.connect.encryption == 'None'">
                   <label
                      for="ldap-cert-add"
                      ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
@@ -152,7 +155,7 @@ licenses/APL2.txt.
                  autocompleterg="off"
                  spellcheck="false"
                  ng-model="mnLDAPCtl.config.connect.cacert"
-                 ng-disabled="mnLDAPCtl.config.connect.encryption == 'None'">
+                 ng-disabled="!rbac.cluster.admin.security.write || mnLDAPCtl.config.connect.encryption == 'None'">
               </textarea>
               <div
                  class="error"
@@ -174,25 +177,27 @@ licenses/APL2.txt.
                    id="anonymous-access"
                    name="authType"
                    value="anon"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-model="mnLDAPCtl.config.authType">
-                <label for="anonymous-access">Anonymously</label>
+                <label for="anonymous-access" ng-disabled="!rbac.cluster.admin.security.write">Anonymously</label>
                 <input
                    type="radio"
                    id="auth-using-usr-pwd"
                    name="authType"
                    value="creds"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-model="mnLDAPCtl.config.authType">
-                <label for="auth-using-usr-pwd">Credentials</label>
+                <label for="auth-using-usr-pwd" ng-disabled="!rbac.cluster.admin.security.write">Credentials</label>
                 <input
                    type="radio"
                    id="auth-using-client-cert"
                    name="authType"
-                   ng-disabled="mnLDAPCtl.maybeDisableClientCert()"
+                   ng-disabled="!rbac.cluster.admin.security.write || mnLDAPCtl.maybeDisableClientCert()"
                    ng-model="mnLDAPCtl.config.authType"
                    value="cert">
                 <label
                    for="auth-using-client-cert"
-                   ng-disabled="mnLDAPCtl.maybeDisableClientCert()">Client Certificate</label>
+                   ng-disabled="!rbac.cluster.admin.security.write || mnLDAPCtl.maybeDisableClientCert()">Client Certificate</label>
               </div>
             </div>
             <div
@@ -210,6 +215,7 @@ licenses/APL2.txt.
                    mn-autocomplete-off="enforce"
                    id="bindDN"
                    ng-model="mnLDAPCtl.config.connect.bindDN"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    placeholder="uid=admin,ou=users,dc=example,dc=com">
                 <div
                    class="error"
@@ -228,6 +234,7 @@ licenses/APL2.txt.
                    autocapitalize="off"
                    mn-autocomplete-off="enforce"
                    id="bindPass"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-model="mnLDAPCtl.config.connect.bindPass">
                 <div
                    class="error"
@@ -243,13 +250,13 @@ licenses/APL2.txt.
               <div class="width-6 margin-right-half">
                 <label
                    for="client-tls-cert"
-                   ng-disabled="mnLDAPCtl.maybeDisableClientCert()">
+                   ng-disabled="!rbac.cluster.admin.security.write || mnLDAPCtl.maybeDisableClientCert()">
                   Client Certificate
                 </label>
                 <div
                    mn-file-reader
                    classes="['fix-width-3-5']"
-                   disable="mnLDAPCtl.maybeDisableClientCert()"
+                   disable="!rbac.cluster.admin.security.write || mnLDAPCtl.maybeDisableClientCert()"
                    result="mnLDAPCtl.config.connect.clientTLSCert">
                 </div>
                 <div
@@ -261,13 +268,13 @@ licenses/APL2.txt.
               <div class="width-6">
                 <label
                    for="client-tls-key"
-                   ng-disabled="mnLDAPCtl.maybeDisableClientCert()">
+                   ng-disabled="!rbac.cluster.admin.security.write || mnLDAPCtl.maybeDisableClientCert()">
                   Client Key
                 </label>
                 <div
                    mn-file-reader
                    classes="['fix-width-3-5']"
-                   disable="mnLDAPCtl.maybeDisableClientCert()"
+                   disable="!rbac.cluster.admin.security.write || mnLDAPCtl.maybeDisableClientCert()"
                    result="mnLDAPCtl.config.connect.clientTLSKey">
                 </div>
                 <div
@@ -280,6 +287,7 @@ licenses/APL2.txt.
             <button
                type="button"
                class="outline"
+               ng-disabled="!rbac.cluster.admin.security.write"
                ng-click="mnLDAPCtl.checkConnectivity()">
               Check Network Settings
             </button>
@@ -301,6 +309,7 @@ licenses/APL2.txt.
                 <input
                    type="checkbox"
                    id="for-enable-ldap-user-auth"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-model="mnLDAPCtl.config.authentication.authenticationEnabled">
                 <span class="toggle-control-body"></span>
               </label>
@@ -315,6 +324,7 @@ licenses/APL2.txt.
                      id="user-dn-mapping-flag-tempate"
                      ng-model="mnLDAPCtl.config.userDnMapping"
                      name="userDnMapping"
+                     ng-disabled="!rbac.cluster.admin.security.write"
                      value="template">
                   <label for="user-dn-mapping-flag-tempate">Template</label>
                   <input
@@ -322,6 +332,7 @@ licenses/APL2.txt.
                      id="user-dn-mapping-flag-query"
                      ng-model="mnLDAPCtl.config.userDnMapping"
                      name="userDnMapping"
+                     ng-disabled="!rbac.cluster.admin.security.write"
                      value="query">
                   <label for="user-dn-mapping-flag-query">LDAP Search</label>
                   <input
@@ -329,6 +340,7 @@ licenses/APL2.txt.
                      type="radio"
                      id="user-dn-mapping-flag-advanced"
                      ng-model="mnLDAPCtl.config.userDnMapping"
+                     ng-disabled="!rbac.cluster.admin.security.write"
                      name="userDnMapping"
                      value="advanced">
                   <label ng-if="mnLDAPCtl.isEnterprise && mnLDAPCtl.mnPoolDefault.export.compat.atLeast76" for="user-dn-mapping-flag-advanced">Advanced Query</label>
@@ -345,6 +357,7 @@ licenses/APL2.txt.
                      autocapitalize="off"
                      mn-autocomplete-off="enforce"
                      id="user-dn-mapping-template"
+                     ng-disabled="!rbac.cluster.admin.security.write"
                      ng-model="mnLDAPCtl.config.authentication.userDNMapping.template">
                 </div>
                 <div class="row formrow items-top" ng-if="mnLDAPCtl.config.userDnMapping == 'query'">
@@ -366,6 +379,7 @@ licenses/APL2.txt.
                        mn-autocomplete-off="enforce"
                        id="user-dn-mapping-base"
                        ng-model="mnLDAPCtl.config.authentication.userDNMapping.base"
+                       ng-disabled="!rbac.cluster.admin.security.write"
                        placeholder="ou=users,dc=example,dc=com">
                   </span>
                   <span class="width-6">
@@ -385,6 +399,7 @@ licenses/APL2.txt.
                        autocapitalize="off"
                        mn-autocomplete-off="enforce"
                        id="user-dn-mapping-filter"
+                       ng-disabled="!rbac.cluster.admin.security.write"
                        ng-model="mnLDAPCtl.config.authentication.userDNMapping.filter"
                        placeholder="(uid=%u)">
                   </span>
@@ -395,7 +410,8 @@ licenses/APL2.txt.
                       id="user-dn-mapping-scope"
                       ng-model="mnLDAPCtl.config.authentication.userDNMapping.scope"
                       values="['base', 'one', 'sub']"
-                      labels="['base object', 'one-level', 'subtree']">
+                      labels="['base object', 'one-level', 'subtree']"
+                      mn-disabled="!rbac.cluster.admin.security.write">
                   </mn-select>
                 </div>
                 <div ng-if="mnLDAPCtl.isEnterprise && mnLDAPCtl.mnPoolDefault.export.compat.atLeast76 && mnLDAPCtl.config.userDnMapping == 'advanced'">
@@ -408,6 +424,7 @@ licenses/APL2.txt.
                      mn-autocomplete-off="enforce"
                      id="user-dn-mapping-advanced-template"
                      rows="11"
+                     ng-disabled="!rbac.cluster.admin.security.write"
                      ng-model="mnLDAPCtl.config.authentication.userDNMapping.advanced"></textarea>
                 </div>
                 <div
@@ -433,6 +450,7 @@ licenses/APL2.txt.
                        autocapitalize="off"
                        mn-autocomplete-off="enforce"
                        id="authUser"
+                       ng-disabled="!rbac.cluster.admin.security.write"
                        ng-model="mnLDAPCtl.config.cred.authUser">
                     <div
                        class="error"
@@ -449,6 +467,7 @@ licenses/APL2.txt.
                        autocapitalize="off"
                        mn-autocomplete-off="enforce"
                        id="authPass"
+                       ng-disabled="!rbac.cluster.admin.security.write"
                        ng-model="mnLDAPCtl.config.cred.authPass">
                     <div
                        class="error"
@@ -460,6 +479,7 @@ licenses/APL2.txt.
                 <button
                    type="button"
                    class="outline"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-click="mnLDAPCtl.checkAuthentication()">
                   Test User Authentication
                 </button>
@@ -489,6 +509,7 @@ licenses/APL2.txt.
                 <input
                    type="checkbox"
                    id="for-enable-ldap-group"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-model="mnLDAPCtl.config.group.authorizationEnabled">
                 <span class="toggle-control-body"></span>
               </label>
@@ -504,6 +525,7 @@ licenses/APL2.txt.
                      ng-change="mnLDAPCtl.removeGroupsQueryErrors()"
                      ng-model="mnLDAPCtl.config.queryForGroups"
                      name="queryForGroups"
+                     ng-disabled="!rbac.cluster.admin.security.write"
                      value="users_attrs">
                   <label for="for-query-groups-attrs" class="margin-right-0">User's attributes</label>
                   <span
@@ -519,6 +541,7 @@ licenses/APL2.txt.
                      id="for-query-groups-builder"
                      ng-change="mnLDAPCtl.removeGroupsQueryErrors()"
                      ng-model="mnLDAPCtl.config.queryForGroups"
+                     ng-disabled="!rbac.cluster.admin.security.write"
                      name="queryForGroups"
                      value="query">
                   <label for="for-query-groups-builder" class="margin-right-0">LDAP Search</label>
@@ -542,6 +565,7 @@ licenses/APL2.txt.
                    mn-autocomplete-off="enforce"
                    id="for-groups-user-attributes"
                    ng-model="mnLDAPCtl.config.group.groupsQuery.attributes"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    placeholder="memberOf">
               </div>
               <div class="row formrow items-top" ng-if="mnLDAPCtl.config.queryForGroups == 'query'">
@@ -563,6 +587,7 @@ licenses/APL2.txt.
                      mn-autocomplete-off="enforce"
                      id="for-groups-query"
                      ng-model="mnLDAPCtl.config.group.groupsQuery.base"
+                     ng-disabled="!rbac.cluster.admin.security.write"
                      placeholder="ou=groups,dc=example,dc=com">
                 </span>
                 <span class="width-6">
@@ -583,6 +608,7 @@ licenses/APL2.txt.
                      mn-autocomplete-off="enforce"
                      id="for-groups-query-filter"
                      ng-model="mnLDAPCtl.config.group.groupsQuery.filter"
+                     ng-disabled="!rbac.cluster.admin.security.write"
                      placeholder="(member=%D)">
                 </span>
               </div>
@@ -592,7 +618,8 @@ licenses/APL2.txt.
                    id="for-groups-query-scope"
                    ng-model="mnLDAPCtl.config.group.groupsQuery.scope"
                    values="['base', 'one', 'sub']"
-                   labels="['base object', 'one-level', 'subtree']">
+                   labels="['base object', 'one-level', 'subtree']"
+                   mn-disabled="!rbac.cluster.admin.security.write">
                 </mn-select>
               </div>
               <div
@@ -604,6 +631,7 @@ licenses/APL2.txt.
                 <input
                    type="checkbox"
                    id="for-nested-groups-enabled"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-model="mnLDAPCtl.config.group.nestedGroupsEnabled">
                 <label for="for-nested-groups-enabled">Traverse nested groups</label>
               </div>
@@ -623,6 +651,7 @@ licenses/APL2.txt.
                      autocapitalize="off"
                      mn-autocomplete-off="enforce"
                      id="for-groups-query-user"
+                     ng-disabled="!rbac.cluster.admin.security.write"
                      ng-model="mnLDAPCtl.config.groupsQueryUser">
                   <div
                      class="error"
@@ -633,6 +662,7 @@ licenses/APL2.txt.
                 <button
                    type="button"
                    class="outline"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-click="mnLDAPCtl.checkGroupsQuery()">
                   Test Groups Query
                 </button>
@@ -671,6 +701,7 @@ licenses/APL2.txt.
                  autocapitalize="off"
                  mn-autocomplete-off="enforce"
                  id="for-request-timeout"
+                 ng-disabled="!rbac.cluster.admin.security.write"
                  ng-model="mnLDAPCtl.config.advanced.requestTimeout">
               <div
                  class="error"
@@ -687,6 +718,7 @@ licenses/APL2.txt.
                  autocapitalize="off"
                  mn-autocomplete-off="enforce"
                  id="for-max-parallel"
+                 ng-disabled="!rbac.cluster.admin.security.write"
                  ng-model="mnLDAPCtl.config.advanced.maxParallelConnections">
               <div
                  class="error"
@@ -703,6 +735,7 @@ licenses/APL2.txt.
                  autocapitalize="off"
                  mn-autocomplete-off="enforce"
                  id="for-max-cache-size"
+                 ng-disabled="!rbac.cluster.admin.security.write"
                  ng-model="mnLDAPCtl.config.advanced.maxCacheSize">
               <div
                  class="error"
@@ -719,6 +752,7 @@ licenses/APL2.txt.
                  autocapitalize="off"
                  mn-autocomplete-off="enforce"
                  id="for-cache-lifetime"
+                 ng-disabled="!rbac.cluster.admin.security.write"
                  ng-model="mnLDAPCtl.config.advanced.cacheValueLifetime">
               <div
                  class="error"
@@ -735,6 +769,7 @@ licenses/APL2.txt.
                  autocapitalize="off"
                  mn-autocomplete-off="enforce"
                  id="for-group-max-nesting"
+                 ng-disabled="!rbac.cluster.admin.security.write"
                  ng-model="mnLDAPCtl.config.advanced.nestedGroupsMaxDepth">
               <div
                  class="error"
@@ -755,6 +790,7 @@ licenses/APL2.txt.
                    type="checkbox"
                    id="for-middlebox-comp-mode"
                    name="middleboxCompMode"
+                   ng-disabled="!rbac.cluster.admin.security.write"
                    ng-model="mnLDAPCtl.config.advanced.middleboxCompMode">
                 <label
                    for="for-middlebox-comp-mode"
@@ -852,6 +888,7 @@ licenses/APL2.txt.
         <button
            type="button"
            class="outline"
+           ng-disabled="!rbac.cluster.admin.security.write"
            ng-click="mnLDAPCtl.clearLdapCache();">
           Clear Cache
         </button>
@@ -863,7 +900,7 @@ licenses/APL2.txt.
       </span>
       <span class="row margin-left-3">
         <a class="margin-right-2 text-medium" ng-click="mnLDAPCtl.reloadState()">Cancel</a>
-        <button type="submit">Save LDAP Configuration</button>
+        <button type="submit" ng-disabled="!rbac.cluster.admin.security.write">Save LDAP Configuration</button>
       </span>
     </footer>
   </form>
