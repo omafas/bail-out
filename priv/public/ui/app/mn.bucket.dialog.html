@@ -525,44 +525,6 @@ licenses/APL2.txt.
           </div>
         </div>
 
-        <div>
-          <label class="inline">Bucket Priority</label>
-
-          <ng-template #bucketPriorityTooltip>
-            This allows tasks to be handled based on priority. The effect is
-            relative between buckets: if all buckets are set to "high", then no
-            bucket will have priority over another.
-          </ng-template>
-          <span
-            [ngbTooltip]="bucketPriorityTooltip"
-            triggers="click"
-            class="fa-stack icon-info"
-            placement="right"
-          >
-            <span class="icon fa-circle-thin fa-stack-2x"></span>
-            <span class="icon fa-info fa-stack-1x"></span>
-          </span>
-          <div class="formrow checkbox-list">
-            <input
-              type="radio"
-              formControlName="threadsNumber"
-              value="3"
-              id="for-low-threads"
-            />
-            <label for="for-low-threads">Default</label>
-            <input
-              type="radio"
-              formControlName="threadsNumber"
-              value="8"
-              id="for-high-threads"
-            />
-            <label for="for-high-threads">High</label>
-          </div>
-          <div class="error" [hidden]="!(threadsNumberWarning | async)">
-            {{(threadsNumberWarning | async)}}
-          </div>
-        </div>
-
         <div class="formrow">
           <div>
             <label class="inline">Minimum Durability Level</label>
@@ -687,7 +649,7 @@ licenses/APL2.txt.
                 {{(httpError | async)?.errors['encryptionAtRestKeyId']}}
               </div>
               <div class="error error-form" [hidden]="form.group.get('encryptionAtRestKeyId').value">
-                To enable encryption, an encryption key is required. 
+                To enable encryption, an encryption key is required.
               </div>
             </div>
 

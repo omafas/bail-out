@@ -121,7 +121,6 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
         compressionMode: null,
         conflictResolutionType: null,
         flushEnabled: null,
-        threadsNumber: null,
         storageBackend: null,
         numVBuckets: null,
         durabilityMinLevel: null,
@@ -278,7 +277,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
         .forEach(field =>
                  this.maybeDisableField(field, false));
 
-      (['threadsNumber','evictionPolicy']).forEach(this.threadsEvictionWarning.bind(this));
+      (['evictionPolicy']).forEach(this.threadsEvictionWarning.bind(this));
     }
 
     if ((this.bucket && this.bucket.enableCrossClusterVersioning) || !this.bucket) {
@@ -436,7 +435,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
     }
 
     if (isMembase || isEphemeral) {
-      copyProperties(['threadsNumber', 'replicaNumber', 'durabilityMinLevel']);
+      copyProperties(['replicaNumber', 'durabilityMinLevel']);
       if (isEnterprise && compat55) {
         copyProperty('compressionMode');
         if (!formData.maxTTLEnabled) {
