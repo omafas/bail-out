@@ -977,22 +977,23 @@ do_bucket_create(Req, Name, ParsedProps) ->
                               [Name, DisplayBucketType, BucketProps]),
             ok;
         {error, {already_exists, _}} ->
-            {errors, [{name, <<"Bucket with given name already exists">>}]};
+            {errors, 400,
+             [{name, <<"Bucket with given name already exists">>}]};
         {error, {still_exists, _}} ->
-            {errors_500, [{'_', <<"Bucket with given name still exists">>}]};
+            {errors, 500, [{'_', <<"Bucket with given name still exists">>}]};
         {error, {need_more_space, Zones}} ->
-            {errors, [{'_', need_more_space_error(Zones)}]};
+            {errors, 400, [{'_', need_more_space_error(Zones)}]};
         {error, {incorrect_parameters, Error}} ->
-            {errors, [{'_', list_to_binary(Error)}]};
+            {errors, 400, [{'_', list_to_binary(Error)}]};
         {error, {kek_not_found, _}} ->
-            {errors, [{encryptionAtRestKeyId,
-                       <<"Encryption key does not exist">>}]};
+            {errors, 400, [{encryptionAtRestKeyId,
+                            <<"Encryption key does not exist">>}]};
         {error, secret_not_found} ->
-            {errors, [{encryptionAtRestKeyId,
-                       <<"Encryption key does not exist">>}]};
+            {errors, 400, [{encryptionAtRestKeyId,
+                            <<"Encryption key does not exist">>}]};
         {error, secret_not_allowed} ->
-            {errors, [{encryptionAtRestKeyId,
-                       <<"Encryption key can't encrypt this bucket">>}]};
+            {errors, 400, [{encryptionAtRestKeyId,
+                            <<"Encryption key can't encrypt this bucket">>}]};
         Other ->
             case menelaus_web_cluster:busy_reply("create bucket", Other) of
                 {Code, Msg} ->
