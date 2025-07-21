@@ -1407,9 +1407,9 @@ do_create_bucket(BucketName, Config, BucketUUID, Manifest) ->
                         name_conflict(BucketName, ShutdownBucketNames),
                         EncryptionSecretOk} of
                       {true, _, _} ->
-                          {abort, already_exists};
+                          {abort, {error, {already_exists, BucketName}}};
                       {_, true, _} ->
-                          {abort, still_exists};
+                          {abort, {error, {still_exists, BucketName}}};
                       {_, _, {error, Reason}} ->
                           {abort, {error, Reason}};
                       {false, false, ok} ->
