@@ -473,11 +473,11 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {no_check, fun goxdcr_rest:proxy/1};
                 ["settings", "saslauthdAuth"] ->
                     {when_79({[admin, security], read},
-                                   {[admin, security, external], read}),
+                             {[admin, security, external], read}),
                      fun menelaus_web_rbac:handle_saslauthd_auth_settings/1};
                 ["settings", "ldap"] ->
                     {when_79({[admin, security], read},
-                                   {[admin, security, external], read}),
+                             {[admin, security, external], read}),
                      fun menelaus_web_ldap:handle_ldap_settings/1};
                 ["settings", "clientCertAuth"] ->
                     {{[admin, security], read},
@@ -497,47 +497,47 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                      fun menelaus_web_rbac:handle_get/1};
                 ["settings", "rbac", "roles"] ->
                     {when_79({[admin, users], read},
-                                   {[admin, security], read}),
+                             {[admin, security], read}),
                      fun menelaus_web_rbac:handle_get_roles/1};
                 ["settings", "rbac", "users"] ->
                     {when_79({[admin, users], read},
-                                   {[admin, security], read}),
+                             {[admin, security], read}),
                      fun menelaus_web_rbac:handle_get_users/2, [Path]};
                 ["settings", "rbac", "users", Domain] ->
                     {when_79({[admin, users], read},
-                                   {[admin, security], read}),
+                             {[admin, security], read}),
                      fun menelaus_web_rbac:handle_get_users/3, [Path, Domain]};
                 ["settings", "rbac", "users", Domain, UserId] ->
                     {when_79({[admin, users], read},
-                                   {[admin, security], read}),
+                             {[admin, security], read}),
                      fun menelaus_web_rbac:handle_get_user/3, [Domain, UserId]};
                 ["settings", "rbac", "groups"] ->
                     {when_79({[admin, users], read},
-                                   {[admin, security], read}),
+                             {[admin, security], read}),
                      fun menelaus_web_rbac:handle_get_groups/2, [Path]};
                 ["settings", "rbac", "groups", GroupId] ->
                     {when_79({[admin, users], read},
-                                   {[admin, security], read}),
+                             {[admin, security], read}),
                      fun menelaus_web_rbac:handle_get_group/2, [GroupId]};
                 ["settings", "rbac", "profiles"] ->
                     {when_79({[admin, users], read},
-                                   {[admin, security], read}),
+                             {[admin, security], read}),
                      fun menelaus_web_rbac:handle_get_profiles/1};
                 ["settings", "rbac", "profiles", "@self"] ->
                     {no_check,
                      fun menelaus_web_rbac:handle_get_profile/2, [self]};
                 ["settings", "rbac", "profiles", Domain, UserId] ->
                     {when_79({[admin, users], read},
-                                   {[admin, security], read}),
+                             {[admin, security], read}),
                      fun menelaus_web_rbac:handle_get_profile/2,
                      [{UserId, Domain}]};
                 ["settings", "rbac", "lookupLDAPUser", Name] ->
                     {when_79({[admin, security_info], read},
-                                   {[admin, security, external], read}),
+                             {[admin, security, external], read}),
                      fun menelaus_web_rbac:handle_lookup_ldap_user/2, [Name]};
                 ["settings", "rbac", "backup"] ->
                     {when_79({[admin, users], read},
-                                   {[admin, security], read}),
+                             {[admin, security], read}),
                      fun menelaus_web_rbac:handle_backup/1};
                 ["settings", "passwordPolicy"] ->
                     {{[admin, security], read},
@@ -556,7 +556,7 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                      fun menelaus_web_license:handle_settings_get/1};
                 ["settings", "saml" | PathRest] ->
                     {when_79({[admin, security], read},
-                                   {[admin, security, external], read}),
+                             {[admin, security, external], read}),
                      fun menelaus_web_saml:handle_get_settings/2, [PathRest]};
                 ["settings", "jwt"] ->
                     {{[admin, security], read},
@@ -861,20 +861,20 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {no_check, fun goxdcr_rest:proxy/1};
                 ["settings", "saslauthdAuth"] ->
                     {when_79({[admin, security], write},
-                                   {[admin, security, external], write}),
+                             {[admin, security, external], write}),
                      fun menelaus_web_rbac:handle_saslauthd_auth_settings_post/1};
                 ["settings", "ldap"] ->
                     {when_79({[admin, security], write},
-                                   {[admin, security, external], write}),
+                             {[admin, security, external], write}),
                      fun menelaus_web_ldap:handle_ldap_settings_post/1};
                 ["settings", "ldap", "validate", Type] ->
                     {when_79({[admin, security], write},
-                                   {[admin, security, external], write}),
+                             {[admin, security, external], write}),
                      fun menelaus_web_ldap:handle_ldap_settings_validate_post/2,
                      [Type]};
                 ["settings", "invalidateLDAPCache"] ->
                     {when_79({[admin, security_info], write},
-                                   {[admin, security, external], write}),
+                             {[admin, security, external], write}),
                      fun menelaus_web_ldap:handle_invalidate_ldap_cache/1};
                 ["settings", "clientCertAuth"] ->
                     {{[admin, security], write},
@@ -905,7 +905,7 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                      fun menelaus_web_license:handle_settings_validate_post/1};
                 ["settings", "saml"] ->
                     {when_79({[admin, security], write},
-                                   {[admin, security, external], write}),
+                             {[admin, security, external], write}),
                      fun menelaus_web_saml:handle_post_settings/1};
                 ["settings", "dataService"] ->
                     {{[admin, settings], write},
@@ -1266,22 +1266,22 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                      fun menelaus_web_mcd_settings:handle_node_setting_delete/3, [Node, Name]};
                 ["settings", "rbac", "users", UserId] ->
                     {when_79({[admin, users], write},
-                                   {[admin, security], write}),
+                             {[admin, security], write}),
                      fun menelaus_web_rbac:handle_delete_user/3, ["external", UserId]};
                 ["settings", "rbac", "users", Domain, UserId] ->
                     {when_79({[admin, users], write},
-                                   {[admin, security], write}),
+                             {[admin, security], write}),
                      fun menelaus_web_rbac:handle_delete_user/3, [Domain, UserId]};
                 ["settings", "rbac", "groups", GroupId] ->
                     {when_79({[admin, users], write},
-                                   {[admin, security], write}),
+                             {[admin, security], write}),
                      fun menelaus_web_rbac:handle_delete_group/2, [GroupId]};
                 ["settings", "rbac", "profiles", "@self"] ->
                     {no_check,
                      fun menelaus_web_rbac:handle_delete_profile/2, [self]};
                 ["settings", "rbac", "profiles", Domain, UserId] ->
                     {when_79({[admin, users], write},
-                                   {[admin, security], write}),
+                             {[admin, security], write}),
                      fun menelaus_web_rbac:handle_delete_profile/2,
                      [{UserId, Domain}]};
                 ["settings", "security" | Keys] ->
@@ -1290,7 +1290,7 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                      [security, Keys]};
                 ["settings", "saml"] ->
                     {when_79({[admin, security], write},
-                                   {[admin, security, external], write}),
+                             {[admin, security, external], write}),
                      fun menelaus_web_saml:handle_delete_settings/1};
                 ["settings", "cgroups", ServiceName] ->
                     {{[settings], write},
@@ -1365,27 +1365,27 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                      fun menelaus_web_groups:handle_server_group_update/2, [GroupUUID]};
                 ["settings", "rbac", "users", UserId] ->
                     {when_79({[admin, users], write},
-                                   {[admin, security], write}),
+                             {[admin, security], write}),
                      fun menelaus_web_rbac:handle_put_user/3, ["external", UserId]};
                 ["settings", "rbac", "users", Domain, UserId] ->
                     {when_79({[admin, users], write},
-                                   {[admin, security], write}),
+                             {[admin, security], write}),
                      fun menelaus_web_rbac:handle_put_user/3, [Domain, UserId]};
                 ["settings", "rbac", "groups", GroupId] ->
                     {when_79({[admin, users], write},
-                                   {[admin, security], write}),
+                             {[admin, security], write}),
                      fun menelaus_web_rbac:handle_put_group/2, [GroupId]};
                 ["settings", "rbac", "profiles", "@self"] ->
                     {no_check,
                      fun menelaus_web_rbac:handle_put_profile/2, [self]};
                 ["settings", "rbac", "profiles", Domain, UserId] ->
                     {when_79({[admin, users], write},
-                                   {[admin, security], write}),
+                             {[admin, security], write}),
                      fun menelaus_web_rbac:handle_put_profile/2,
                      [{UserId, Domain}]};
                 ["settings", "rbac", "backup"] ->
                     {when_79({[admin, users], write},
-                                   {[admin, security], write}),
+                             {[admin, security], write}),
                      fun menelaus_web_rbac:handle_backup_restore/1};
                 ["settings", "encryptionKeys", SecretId] ->
                     {no_check_disallow_anonymous,
@@ -1448,7 +1448,7 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
             case PathTokens of
                 ["settings", "rbac", "users", "local", UserId] ->
                     {when_79({[admin, users], write},
-                                   {[admin, security], write}),
+                             {[admin, security], write}),
                      fun menelaus_web_rbac:handle_patch_user/2,
                      [UserId]};
                 ["pools", "default", "buckets", Id, "scopes", Scope,
