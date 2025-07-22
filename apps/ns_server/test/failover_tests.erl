@@ -578,8 +578,11 @@ auto_failover_post_network_partition_stale_config(SetupConfig, PidMap) ->
 
     %% We should have failed to fail over, and, we should now have the reported
     %% error (autofailover_unsafe) stored in the auto_failover state.
-    ?assertEqual([autofailover_unsafe],
-                 get_auto_failover_reported_errors(AutoFailoverPid)).
+    misc:poll_for_condition(
+      fun() ->
+              [autofailover_unsafe] =:=
+                  get_auto_failover_reported_errors(AutoFailoverPid)
+      end, 5000, 100).
 
 enable_auto_failover_test(_SetupConfig, PidMap) ->
     #{auto_failover := AutoFailoverPid} = PidMap,
