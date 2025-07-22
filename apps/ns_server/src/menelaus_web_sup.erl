@@ -36,17 +36,18 @@ start_link() ->
     case Result of
         {ok, _Pid} ->
             ?user_log(?START_OK,
-                      "Couchbase Server has started on web port ~p on node ~p. Version: ~p.",
-                      [Port, node(), ns_info:version(ns_server)]);
+                      "~s has started on web port ~p on node ~p. Version: ~p.",
+                      [cluster_compat_mode:prod_name(), Port, node(),
+                       ns_info:version(ns_server)]);
         _Err ->
             %% The exact error message is not logged here since this
             %% is a supervisor start, but a more helpful message
             %% should've been logged before.
             ?user_log(?START_FAIL,
-                      "Couchbase Server has failed to start on web port ~p on node ~p. " ++
+                      "~s has failed to start on web port ~p on node ~p. " ++
                           "Perhaps another process has taken port ~p already? " ++
                           "If so, please stop that process first before trying again.",
-                      [Port, node(), Port])
+                      [cluster_compat_mode:prod_name(), Port, node(), Port])
     end,
     Result.
 
