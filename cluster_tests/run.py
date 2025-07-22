@@ -193,7 +193,7 @@ def main():
                                            "tests=", 'with-tags=',
                                            'without-tags=',
                                            "dont-intercept-output",
-                                           'ignore-unknown-tags'
+                                           'ignore-unknown-tags',
                                            "seed=", "colors=", "verbose",
                                            "dry-run", 'dont-reuse-clusters',
                                            'randomize-clusters',
