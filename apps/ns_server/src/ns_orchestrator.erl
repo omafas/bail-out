@@ -94,6 +94,8 @@
          request_janitor_run/1,
          get_state/1,
          prepare_fusion_rebalance/1,
+         build_rebalance_params/2,
+         rebalance_safety_checks/2,
          fusion_upload_mounted_volumes/2]).
 
 -define(SERVER, {via, leader_registry, ?MODULE}).
@@ -703,7 +705,11 @@ handle_event({call, From}, {maybe_start_rebalance, Params},
                  #{read_consistency => quorum}),
 
     try
-
+        %% Safety checks here are inherently unsafe. Whilst we are building
+        %% our parameters using a consistent snapshot, the snapshot may change
+        %% by the time we start the rebalance as we are not yet in a leader
+        %% activity. We will run these checks again inside the leader activity
+        %% before we start the rebalance for safety.
         NewParams0 = build_rebalance_params(ParamsWithId, Snapshot),
         rebalance_safety_checks(NewParams0, Snapshot),
 

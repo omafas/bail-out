@@ -502,12 +502,7 @@ rebalance(Params, DesiredServers) ->
            ?cut(rebalance_body(Params, DesiredServers))),
     ok = check_test_condition(rebalance_complete).
 
-rebalance_body(#{keep_nodes := KeepNodes,
-                 eject_nodes := EjectNodesAll,
-                 failed_nodes := FailedNodesAll,
-                 delta_nodes := DeltaNodes,
-                 delta_recovery_buckets := DeltaRecoveryBucketNames,
-                 services := Services} = Params, DesiredServers) ->
+rebalance_body(PotentiallyStaleParams, DesiredServers) ->
     %% This is important. We need to pull the snapshot before we do anything
     %% else to ensure that we are operating on the latest configuration.
     %% There can be substantial windows in period between attempted acquisition
@@ -524,9 +519,29 @@ rebalance_body(#{keep_nodes := KeepNodes,
     %% may take some undesired action.
     chronicle_compat:pull(),
 
+    %% Passed params were made with the old, potentially stale, config, we need
+    %% to refresh the contents before use.
+    %% We are in the leader activity, and we have just pulled the snapshot
+    %% so we can use it here without any read consistency as we are up to date
+    %% and no other material changes can be made by another node.
+    Snapshot = chronicle_compat:get_snapshot(
+                 [ns_bucket:fetch_snapshot(all, _, [uuid, props]),
+                  ns_cluster_membership:fetch_snapshot(_),
+                  chronicle_master:fetch_snapshot(_)]),
+    Params = ns_orchestrator:build_rebalance_params(PotentiallyStaleParams,
+                                                    Snapshot),
+
+    #{keep_nodes := KeepNodes,
+      eject_nodes := EjectNodesAll,
+      failed_nodes := FailedNodesAll,
+      delta_nodes := DeltaNodes,
+      delta_recovery_buckets := DeltaRecoveryBucketNames,
+      services := Services} = Params,
+
     ClusterMembershipSnap = ns_cluster_membership:get_snapshot(),
     try
-        maybe_check_expected_topology(ClusterMembershipSnap, Params)
+        maybe_check_expected_topology(ClusterMembershipSnap, Params),
+        ns_orchestrator:rebalance_safety_checks(Params, Snapshot)
     catch
         throw:Err ->
             erlang:exit(Err)
