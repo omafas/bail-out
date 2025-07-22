@@ -578,6 +578,60 @@ stop_recovery(Bucket, UUID) ->
 is_recovery_running() ->
     recovery_server:is_recovery_running().
 
+-spec build_rebalance_params(map(), map()) -> map().
+build_rebalance_params(#{known_nodes := KnownNodes,
+                         eject_nodes := EjectedNodes} = Params, Snapshot) ->
+    MaybeKeepNodes = KnownNodes -- EjectedNodes,
+    FailedNodes = get_failed_nodes(Snapshot, KnownNodes),
+    KeepNodes = MaybeKeepNodes -- FailedNodes,
+    DeltaNodes = get_delta_recovery_nodes(Snapshot, KeepNodes),
+
+    EjectedLiveNodes = EjectedNodes -- FailedNodes,
+    Params#{keep_nodes => KeepNodes,
+            eject_nodes => EjectedLiveNodes,
+            failed_nodes => FailedNodes,
+            delta_nodes => DeltaNodes}.
+
+-spec rebalance_safety_checks(map(), map()) -> ok.
+rebalance_safety_checks(#{known_nodes := KnownNodes,
+                          keep_nodes := KeepNodes,
+                          delta_nodes := DeltaNodes,
+                          eject_nodes := EjectedNodes,
+                          failed_nodes := FailedNodes,
+                          services := Services} = Params, Snapshot) ->
+    case {EjectedNodes -- KnownNodes,
+          lists:sort(ns_cluster_membership:nodes_wanted(Snapshot)),
+          lists:sort(KnownNodes)} of
+        {[], X, X} ->
+            ok;
+        _ ->
+            throw(nodes_mismatch)
+    end,
+
+    KeepNodes =/= [] orelse throw(no_active_nodes_left),
+    case rebalance_allowed(Snapshot) of
+        ok -> ok;
+        {error, Msg} ->
+            set_rebalance_status(rebalance, {none, Msg}, undefined),
+            throw({rebalance_not_allowed, Msg})
+    end,
+
+    case state_change_check(Snapshot, FailedNodes, Params) of
+        false ->
+            throw(retry_check_failed);
+        Other ->
+            Other
+    end,
+
+    ServiceNodesMap = ns_rebalancer:get_desired_services_nodes(Params),
+
+    validate_services_nodes(ServiceNodesMap, KeepNodes, DeltaNodes,
+                            FailedNodes),
+    validate_services(Services, EjectedNodes, DeltaNodes, Snapshot,
+                      ServiceNodesMap),
+    validate_quotas(ServiceNodesMap, Params, Snapshot),
+    ok.
+
 %%
 %% gen_statem callbacks
 %%
@@ -605,9 +659,9 @@ handle_event({call, From}, recovery_status, StateName, State) ->
     end;
 
 handle_event({call, From}, Msg, StateName, State)
-    when element(1, Msg) =:= recovery_map;
-         element(1, Msg) =:= commit_vbucket;
-         element(1, Msg) =:= stop_recovery ->
+  when element(1, Msg) =:= recovery_map;
+       element(1, Msg) =:= commit_vbucket;
+       element(1, Msg) =:= stop_recovery ->
     case StateName of
         recovery ->
             ?MODULE:recovery(Msg, From, State);
@@ -630,12 +684,9 @@ handle_event({call, From},
           delta_recovery_buckets => DeltaRecoveryBuckets,
           services => all}}}]};
 
-handle_event({call, From}, {maybe_start_rebalance,
-                            Params = #{known_nodes := KnownNodes,
-                                       eject_nodes := EjectedNodes,
-                                       services := Services}},
+handle_event({call, From}, {maybe_start_rebalance, Params},
              _StateName, _State) ->
-    NewParams =
+    ParamsWithId =
         case maps:is_key(id, Params) of
             false ->
                 auto_rebalance:cancel_any_pending_retry_async(
@@ -652,44 +703,25 @@ handle_event({call, From}, {maybe_start_rebalance,
                  #{read_consistency => quorum}),
 
     try
-        case {EjectedNodes -- KnownNodes,
-              lists:sort(ns_cluster_membership:nodes_wanted(Snapshot)),
-              lists:sort(KnownNodes)} of
-            {[], X, X} ->
-                ok;
-            _ ->
-                throw(nodes_mismatch)
-        end,
-        MaybeKeepNodes = KnownNodes -- EjectedNodes,
-        FailedNodes = get_failed_nodes(Snapshot, KnownNodes),
-        KeepNodes = MaybeKeepNodes -- FailedNodes,
-        DeltaNodes = get_delta_recovery_nodes(Snapshot, KeepNodes),
 
-        KeepNodes =/= [] orelse throw(no_active_nodes_left),
-        case rebalance_allowed(Snapshot) of
-            ok -> ok;
-            {error, Msg} ->
-                set_rebalance_status(rebalance, {none, Msg}, undefined),
-                throw({rebalance_not_allowed, Msg})
-        end,
-        NewChk = case retry_ok(Snapshot, FailedNodes, NewParams) of
-                     false ->
-                         throw(retry_check_failed);
-                     Other ->
-                         Other
+        NewParams0 = build_rebalance_params(ParamsWithId, Snapshot),
+        rebalance_safety_checks(NewParams0, Snapshot),
+
+        %% We validate and handle the fusion rebalance plan entirely separately
+        %% from the other build/safety check functions - it is complicated and
+        %% the checks are only really valid in this context (first building of
+        %% the params via the REST API or a retried rebalance).
+        NewParams1 = validate_rebalance_plan(NewParams0, Snapshot),
+
+        %% We will add the chk to the params here as we need the state without
+        %% it when we make our initial safety checks if this is not a retried
+        %% rebalance.
+        FailedNodes = maps:get(failed_nodes, NewParams1),
+        NewChk = case maps:find(chk, NewParams1) of
+                     {ok, Chk} -> Chk;
+                     _ -> get_state_change_check(Snapshot, FailedNodes)
                  end,
-        EjectedLiveNodes = EjectedNodes -- FailedNodes,
-
-        ServiceNodesMap = ns_rebalancer:get_desired_services_nodes(Params),
-        validate_services_nodes(ServiceNodesMap, KeepNodes, DeltaNodes,
-                                FailedNodes),
-
-        validate_services(Services, EjectedLiveNodes, DeltaNodes, Snapshot,
-                          ServiceNodesMap),
-
-        validate_quotas(ServiceNodesMap, Params, Snapshot),
-
-        NewParams1 = validate_rebalance_plan(NewParams, KeepNodes, Snapshot),
+        NewParamsWithChk = NewParams1#{chk => NewChk},
 
         %% with both possible outcomes (success or failure)
         %% the plan becomes invalid so we just delete it here after it is
@@ -702,13 +734,8 @@ handle_event({call, From}, {maybe_start_rebalance,
                 erlang:erase(?FUSION_REBALANCE_PLAN)
         end,
 
-        NewParams2 = NewParams1#{keep_nodes => KeepNodes,
-                                 eject_nodes => EjectedLiveNodes,
-                                 failed_nodes => FailedNodes,
-                                 delta_nodes => DeltaNodes,
-                                 chk => NewChk},
         {keep_state_and_data,
-         [{next_event, {call, From}, {start_rebalance, NewParams2}}]}
+         [{next_event, {call, From}, {start_rebalance, NewParamsWithChk}}]}
     catch
         throw:Error -> {keep_state_and_data, [{reply, From, Error}]}
     end;
@@ -716,7 +743,7 @@ handle_event({call, From}, {maybe_start_rebalance,
 handle_event({call, From},
              {maybe_retry_graceful_failover, Nodes, Opts, Id, Chk},
              _StateName, _State) ->
-    case graceful_failover_retry_ok(Chk) of
+    case graceful_failover_state_change_check(Chk) of
         false ->
             {keep_state_and_data, [{reply, From, retry_check_failed}]};
         Chk ->
@@ -937,7 +964,7 @@ idle({start_graceful_failover, Nodes, Opts}, From, _State) ->
     {keep_state_and_data,
      [{next_event, {call, From},
        {start_graceful_failover, Nodes, Opts, couch_uuids:random(),
-        get_graceful_fo_chk()}}]};
+        get_graceful_fo_state_change_check()}}]};
 idle({start_graceful_failover, Nodes, Opts, Id, RetryChk}, From, _State) ->
     ActiveNodes = ns_cluster_membership:active_nodes(),
     NodesInfo = [{active_nodes, ActiveNodes},
@@ -1747,20 +1774,21 @@ retry_rebalance(_, _) ->
 %% Fail the retry if there are newly failed over nodes,
 %% server group configuration has changed or buckets have been added
 %% or deleted or their replica count changed.
-retry_ok(Snapshot, FailedNodes, #{chk := RetryChk}) ->
-    retry_ok(RetryChk, get_retry_check(Snapshot, FailedNodes));
-retry_ok(Snapshot, FailedNodes, _) ->
-    get_retry_check(Snapshot, FailedNodes).
+state_change_check(Snapshot, FailedNodes, #{chk := RetryChk}) ->
+    state_change_check(RetryChk,
+                       get_state_change_check(Snapshot, FailedNodes));
+state_change_check(_, _, _) ->
+    ok.
 
-retry_ok(Chk, Chk) ->
+state_change_check(Chk, Chk) ->
     Chk;
-retry_ok(RetryChk, NewChk) ->
+state_change_check(RetryChk, NewChk) ->
     ?log_debug("Retry check failed. (RetryChk -- NewChk): ~p~n"
                "(NewChk -- RetryChk): ~p",
                [RetryChk -- NewChk, NewChk -- RetryChk]),
     false.
 
-get_retry_check(Snapshot, FailedNodes) ->
+get_state_change_check(Snapshot, FailedNodes) ->
     SGs = ns_cluster_membership:server_groups(Snapshot),
     [{failed_nodes, lists:sort(FailedNodes)},
      {server_groups, groups_chk(SGs, fun (Nodes) -> Nodes end)},
@@ -1801,10 +1829,10 @@ get_failed_nodes(Snapshot, KnownNodes) ->
           ns_cluster_membership:get_cluster_membership(N, Snapshot)
               =:= inactiveFailed].
 
-graceful_failover_retry_ok(Chk) ->
-    retry_ok(Chk, get_graceful_fo_chk()).
+graceful_failover_state_change_check(Chk) ->
+    state_change_check(Chk, get_graceful_fo_state_change_check()).
 
-get_graceful_fo_chk() ->
+get_graceful_fo_state_change_check() ->
     Cfg = ns_config:get(),
     Snapshot = chronicle_compat:get_snapshot(
                  [ns_bucket:fetch_snapshot(all, _, [uuid, props]),
@@ -1814,7 +1842,8 @@ get_graceful_fo_chk() ->
     UUIDDict = ns_config:get_node_uuid_map(Cfg),
     KnownNodes = ns_cluster_membership:attach_node_uuids(KnownNodes0, UUIDDict),
     FailedNodes = get_failed_nodes(Snapshot, KnownNodes0),
-    [{known_nodes, KnownNodes}] ++ get_retry_check(Snapshot, FailedNodes).
+    [{known_nodes, KnownNodes}] ++
+        get_state_change_check(Snapshot, FailedNodes).
 
 maybe_eject_myself(Reason, State) ->
     case need_eject_myself(Reason, State) of
@@ -2042,7 +2071,7 @@ validate_services(Services, NodesToEject, [], Snapshot, ServiceNodesMap) ->
             throw({must_rebalance_services, lists:usort(NeededServices)})
     end.
 
-validate_rebalance_plan(Params, KeepNodes, Snapshot) ->
+validate_rebalance_plan(#{keep_nodes := KeepNodes} = Params, Snapshot) ->
     RebalancePlan = erlang:get(?FUSION_REBALANCE_PLAN),
     Err =
         fun (Message) ->
