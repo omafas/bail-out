@@ -2204,6 +2204,7 @@ handle_put_profile(RawIdentity, Req) ->
     end.
 
 handle_get_uiroles(Req) ->
+    cluster_compat_mode:is_cluster_79() andalso
     menelaus_util:require_permission(Req, {[admin, users], read}),
 
     Snapshot = ns_bucket:get_snapshot(all, [collections, uuid]),
