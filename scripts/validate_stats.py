@@ -64,7 +64,7 @@ class StatsValidator:
                     case 'type':
                         t = self.json_data[item][k]
                         if t not in ['counter', 'gauge', 'histogram',
-                                     'summary', 'info']:
+                                     'summary']:
                             print(f"Error: {item} contains invalid type: {t}")
                             valid = False
                     case 'stability':
