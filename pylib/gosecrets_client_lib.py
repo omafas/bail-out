@@ -28,6 +28,9 @@ def read_keys(key_specs, config_path, gosecrets_path=None,
               password="", all_must_succeed=False):
     if gosecrets_path is None:
         gosecrets_path = find_binary("gosecrets")
+    else:
+        if not os.path.exists(gosecrets_path):
+            raise BadArg(f'gosecrets binary not found at {gosecrets_path}')
 
     if gosecrets_path is None:
         gosecrets_path = try_dev_gosecrets()
