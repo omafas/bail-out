@@ -309,3 +309,60 @@ class SampleBucketTestSet(testlib.BaseTestSet, SampleBucketTasksBase):
         finally:
             # Reset the concurrency to 1
             self.set_concurrency(1)
+
+## This test loads a sample bucket with n2n encryption and mandatory client
+## certs. Prior to the fix for MB-67026 this used to fail.
+class SampleBucketTLSTestSet(testlib.BaseTestSet, SampleBucketTasksBase):
+
+    def __init__(self, cluster):
+        super().__init__(cluster)
+        SampleBucketTasksBase.__init__(self)
+
+    @staticmethod
+    def requirements():
+        return [testlib.ClusterRequirements(edition="Enterprise",
+                                            min_num_nodes=1,
+                                            min_memsize=600,
+                                            buckets=[],
+                                            encryption=True,
+                                            num_vbuckets=16)]
+
+    def setup(self):
+        # Disable auto-failover
+        testlib.post_succ(self.cluster, '/settings/autoFailover',
+                          data={'enabled': 'false'})
+
+        # Save current cluster encryption level to restore on teardown
+        settings = testlib.get_succ(self.cluster, '/settings/security').json()
+        self.prev_encryption_level = settings['clusterEncryptionLevel']
+
+        # cluster encryption level strict
+        testlib.post_succ(self.cluster, '/settings/security',
+                          data={'clusterEncryptionLevel': 'strict'})
+
+        # Wait for the web service to restart
+        self.cluster.wait_for_web_service()
+
+        # client cert auth state mandatory
+        testlib.toggle_client_cert_auth(self.cluster, enabled=True,
+                                        mandatory=True)
+
+    def teardown(self):
+        pass
+
+    def test_teardown(self):
+        testlib.toggle_client_cert_auth(self.cluster, enabled=False)
+        data = {'clusterEncryptionLevel': f'{self.prev_encryption_level}'}
+        testlib.post_succ(self.cluster, '/settings/security', data=data)
+        self.cluster.wait_for_web_service()
+
+        # Kill any remaining sample loads
+        testlib.post_succ(self.cluster, "/diag/eval",
+                          data="gen_server:stop(samples_loader_tasks).")
+        # Deleting any remaining buckets
+        testlib.delete_all_buckets(self.cluster)
+
+    # Test that we can load into a new bucket, which will have the same name as
+    # the specified sample
+    def post_without_existing_bucket_test(self):
+        self.load_and_assert_sample_bucket(self.cluster, "travel-sample")

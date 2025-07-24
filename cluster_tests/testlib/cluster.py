@@ -700,6 +700,25 @@ class Cluster:
 
         raise RuntimeError("orchestrator node not found")
 
+    def wait_for_web_service(self):
+        """
+        Helper function to wait until the web service is able to respond
+        to a /pools request
+        """
+        def is_web_server_up():
+            try:
+                r = testlib.get_succ(self, '/pools')
+                return True
+            except Exception:
+                return False
+
+        testlib.poll_for_condition(
+                is_web_server_up,
+                sleep_time=1,
+                attempts=30,
+                timeout=60,
+                msg="waiting for web service to restart")
+
     def toggle_n2n_encryption(self, enable=True):
         """
         Helper function to enable/disable node to node encryption for all nodes
