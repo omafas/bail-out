@@ -211,6 +211,7 @@
          all_keys/2,
          all_keys_by_uuid/3,
          get_encryption/3,
+         any_bucket_encryption_enabled/1,
          get_dek_lifetime/2,
          get_dek_rotation_interval/2,
          get_drop_keys_timestamp/2,
@@ -3164,6 +3165,13 @@ get_encryption(BucketUUID, Scope, Snapshot) when Scope == cluster;
         {error, R} ->
             {error, R}
     end.
+
+any_bucket_encryption_enabled(Snapshot) ->
+    lists:any(
+      fun({_, BucketConfig}) ->
+              proplists:get_value(encryption_secret_id, BucketConfig,
+                                  ?SECRET_ID_NOT_SET) =/= ?SECRET_ID_NOT_SET
+      end, get_buckets(Snapshot)).
 
 get_dek_lifetime(BucketUUID, Snapshot) ->
     get_dek_interval(BucketUUID, Snapshot, encryption_dek_lifetime,

@@ -297,7 +297,7 @@ default(Vsn) ->
         {connection_idle_time, connection_idle_time},
 
         {breakpad,
-         {[{enabled, breakpad_enabled},
+         {[{enabled, {memcached_config_mgr, get_breakpad_enabled, []}},
            {minidump_dir, {memcached_config_mgr, get_minidump_dir, []}}]}},
 
         {deployment_model, {memcached_config_mgr, get_config_profile, []}},

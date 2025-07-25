@@ -611,6 +611,7 @@ conf(security) ->
       ?INT_CREDS_ROTATION_INT_DEFAULT,
       fun parse_int_creds_rotation_int/1},
      {automatically_encrypt_pkeys, autoEncryptPKeys, true, fun get_bool/1},
+     {force_crash_dumps, forceCrashDumps, false, fun get_bool/1},
      {validate_node_cert_san, validateNodeCertSan, true, fun get_bool/1}] ++
         [{{security_settings, S}, ns_cluster_membership:json_service_name(S),
           [{cipher_suites, cipherSuites, undefined, fun get_cipher_suites/1},

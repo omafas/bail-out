@@ -12,6 +12,7 @@
 -behaviour(gen_server).
 
 -include("ns_common.hrl").
+-include("cb_cluster_secrets.hrl").
 -include_lib("ns_common/include/cut.hrl").
 
 %% API
@@ -23,7 +24,8 @@
          supported_tls_versions/0]).
 
 %% referenced from ns_config_default
--export([get_minidump_dir/2, get_interfaces/2,
+-export([get_breakpad_enabled/2,
+         get_minidump_dir/2, get_interfaces/2,
          client_cert_auth/2, is_snappy_enabled/2,
          is_snappy_enabled/0, get_fallback_salt/2,
          get_scram_fallback_iter_count/2,
@@ -131,8 +133,17 @@ init([]) ->
                                      []
                              end),
     chronicle_compat_events:subscribe(
-      fun (jwt_settings) -> Self ! do_check;
-          (_) -> ok
+      fun (jwt_settings) ->
+              Self ! do_check;
+          (?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY) ->
+              Self ! do_check;
+          (Key) ->
+              case ns_bucket:sub_key_match(Key) of
+                  {true, _Bucket, props} ->
+                      Self ! do_check;
+                  false ->
+                      ok
+              end
       end),
 
     Self ! do_check,
@@ -243,6 +254,7 @@ is_notable_config_key(scram_sha1_enabled) -> true;
 is_notable_config_key(scram_sha256_enabled) -> true;
 is_notable_config_key(scram_sha512_enabled) -> true;
 is_notable_config_key(oauthbearer_enabled) -> true;
+is_notable_config_key(force_crash_dumps) -> true;
 is_notable_config_key(_) ->
     false.
 
@@ -631,6 +643,24 @@ expand_memcached_config(Param, Params)
     Value;
 expand_memcached_config(Verbatim, _Params) ->
     Verbatim.
+
+get_breakpad_enabled([], Params) ->
+    ForceCrashDumps =
+        ns_config:search(ns_config:latest(), force_crash_dumps, false),
+    {breakpad_enabled, CurrBreakpadEn} =
+        lists:keyfind(breakpad_enabled, 1, Params),
+
+    Snapshot = chronicle_compat:get_snapshot(
+                 [cb_cluster_secrets:fetch_snapshot_in_txn(_)], #{}),
+    BucketEncrEnabled = ns_bucket:any_bucket_encryption_enabled(Snapshot),
+    {ok, LogEncrMethod} = cb_crypto:get_encryption_method(
+                            log_encryption, cluster, Snapshot),
+    LogEncrEnabled = LogEncrMethod =/= disabled,
+
+    %% Breakpad is forced to false if log/data encryption is enabled, unless
+    %% crash dumps are being forced
+    EncrEnabled = LogEncrEnabled or BucketEncrEnabled,
+    ForceCrashDumps or (CurrBreakpadEn and not EncrEnabled).
 
 get_minidump_dir([], Params) ->
     list_to_binary(proplists:get_value(breakpad_minidump_dir_path, Params,
