@@ -89,6 +89,9 @@ class MnSecuritySecretsEncryptionDialogComponent extends MnLifeCycleHooksToStrea
   }
 
   doPack({encryptionMethod, encryptionKeyId, dekLifetime, dekRotationInterval, dekLifetimeEnabled, dekRotationIntervalEnabled}) {
+    if (encryptionMethod === 'disabled') {
+      return { encryptionMethod };
+    }
     return {
       encryptionMethod,
       encryptionKeyId: encryptionMethod === 'encryptionKey' ? encryptionKeyId?.id ?? -1 : -1,
