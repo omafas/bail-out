@@ -111,6 +111,7 @@
          magma_seq_tree_data_blocksize/1,
          update_maps/3,
          update_buckets_for_delta_recovery/2,
+         update_bucket_overrides_for_delta_recovery/2,
          multi_prop_update/2,
          set_bucket_config/2,
          update_servers_and_map_commits/3,
@@ -126,6 +127,7 @@
          clear_hibernation_state/1,
          update_bucket_props/2,
          update_bucket_props/4,
+         update_bucket_props/5,
          storage_mode_migration_in_progress/1,
          node_bucket_names/1,
          node_bucket_names/2,
@@ -196,6 +198,9 @@
          node_storage_mode/2,
          node_storage_mode_override/2,
          node_autocompaction_settings/1,
+         node_eviction_policy/1,
+         node_eviction_policy/2,
+         node_eviction_policy_override/2,
          node_magma_fragmentation_percentage/1,
          remove_override_props/2,
          remove_override_props_many/2,
@@ -534,6 +539,27 @@ history_retention_collection_default(BucketConfig) ->
                         ?HISTORY_RETENTION_COLLECTION_DEFAULT_DEFAULT)
     andalso is_magma(BucketConfig)
     andalso cluster_compat_mode:is_cluster_72().
+
+-spec node_eviction_policy_override(node(), proplists:proplist()) -> atom().
+node_eviction_policy_override(Node, BucketConfig) ->
+    proplists:get_value({node, Node, eviction_policy}, BucketConfig).
+
+-spec node_eviction_policy(proplists:proplist()) -> atom().
+node_eviction_policy(BucketConfig) ->
+    node_eviction_policy(node(), BucketConfig).
+
+-spec node_eviction_policy(node(), proplists:proplist()) -> atom().
+node_eviction_policy(Node, BucketConfig) ->
+    case ns_config:read_key_fast(allow_online_eviction_policy_change,
+                                 false) of
+        false ->
+            eviction_policy(BucketConfig);
+        true ->
+            case node_eviction_policy_override(Node, BucketConfig) of
+                undefined -> eviction_policy(BucketConfig);
+                NodeEvictionPolicy -> NodeEvictionPolicy
+            end
+    end.
 
 eviction_policy(BucketConfig) ->
     Default = case storage_mode(BucketConfig) of
@@ -1628,12 +1654,26 @@ wait_for_bucket_shutdown(BucketName, Nodes0, Timeout) ->
 
 override_keys_fetch_funs() ->
     [{storage_mode, fun storage_mode/1},
-     {autocompaction, fun autocompaction_settings/1}].
+     {autocompaction, fun autocompaction_settings/1}] ++
+        case ns_config:read_key_fast(allow_online_eviction_policy_change,
+                                     false) of
+            true ->
+                [{eviction_policy, fun eviction_policy/1}];
+            false ->
+                []
+        end.
 
 %% These settings are mutable after a storage mode migration is started (i.e.
 %% when storage_mode_migration_in_progress is true).
 live_migration_mutable_keys() ->
-    [ram_quota, storage_mode].
+    [ram_quota, storage_mode] ++
+        case ns_config:read_key_fast(allow_online_eviction_policy_change,
+                                     false) of
+            true ->
+                [eviction_policy];
+            false ->
+                []
+        end.
 
 override_keys() ->
     [K || {K, _F} <- override_keys_fetch_funs()].
@@ -1641,6 +1681,7 @@ override_keys() ->
 override_keys_to_restore() ->
     override_keys() -- live_migration_mutable_keys().
 
+%% Remove all override keys during a swap rebalance or full recovery.
 -spec remove_override_props([{_, _}], [node()]) -> [{_, _}].
 remove_override_props(Props, Nodes) ->
     lists:filter(fun ({{node, Node, SubKey}, _Value}) ->
@@ -1656,6 +1697,33 @@ remove_override_props_many(Nodes, BucketConfigs) ->
     lists:map(fun ({BN, BC}) ->
                       {BN, remove_override_props(BC, Nodes)}
               end, BucketConfigs).
+
+-spec remove_override_props_delta_recovery_many([node()],
+                                                [{bucket_name(), [{_, _}]}]) ->
+          [{bucket_name(), [{_, _}]}].
+remove_override_props_delta_recovery_many(Nodes, BucketConfigs) ->
+    lists:map(fun ({BN, BC}) ->
+                      {BN, remove_override_props_delta_recovery(BC, Nodes)}
+              end, BucketConfigs).
+
+%% During delta recovery, remove only eviction_policy overrides.
+%% Skip removal if the node is scheduled for storage mode migration —
+%% it should keep its current eviction_policy until the new storage mode
+%% applies, which won't happen during delta recovery.
+-spec remove_override_props_delta_recovery([{_, _}], [node()]) -> [{_, _}].
+remove_override_props_delta_recovery(Props, Nodes) ->
+    lists:filter(fun ({{node, Node, eviction_policy}, _Value}) ->
+                         case lists:member(Node, Nodes) andalso
+                             not lists:keymember({node, Node, storage_mode},
+                                                 1, Props) of
+                             true ->
+                                 false;
+                             false ->
+                                 true
+                         end;
+                     (_) ->
+                         true
+                 end, Props).
 
 %% During a storage mode migration that is reverted, we look for old auto-
 %% compaction settings in the overrides from the original migration and restore
@@ -1726,17 +1794,17 @@ maybe_add_new_overrides(NewValue, OldValue, BucketConfig, Key, Nodes)
 maybe_add_new_overrides(_, _, _, _, _) ->
     [].
 
-update_override_props(Props, BucketConfig) ->
-    update_override_props(Props, BucketConfig, []).
-
-update_override_props(Props, BucketConfig, ExistingDeleteKeys) ->
+update_override_props_for_keys(Props, BucketConfig, ExistingDeleteKeys,
+                               Keys) ->
+    AllKeyFunPairs = override_keys_fetch_funs(),
+    FilteredPairs = [{K, F} || {K, F} <- AllKeyFunPairs, lists:member(K, Keys)],
     lists:foldl(
       fun ({Key, FetchFun}, {NewProps, DeleteKeys}) ->
               {P, D} =
                   do_update_override_props(NewProps, BucketConfig, Key,
                                            FetchFun),
               {P, DeleteKeys ++ D}
-      end, {Props, ExistingDeleteKeys}, override_keys_fetch_funs()).
+      end, {Props, ExistingDeleteKeys}, FilteredPairs).
 
 do_update_override_props(Props, BucketConfig, Key, FetchFun) ->
     Nodes = get_servers(BucketConfig),
@@ -1765,12 +1833,15 @@ do_update_override_props(Props, BucketConfig, Key, FetchFun) ->
 %% If bucket with given name exists, but with different type, we
 %% should return {exit, {not_found, _}, _}
 update_bucket_props(Type, OldStorageMode, BucketName, Props) ->
+    update_bucket_props(Type, OldStorageMode, BucketName, Props, []).
+
+update_bucket_props(Type, OldStorageMode, BucketName, Props, Options) ->
     case lists:member(BucketName,
                       get_bucket_names_of_type({Type, OldStorageMode})) of
         true ->
             try
                 update_bucket_props_inner(
-                  Type, OldStorageMode, BucketName, Props)
+                  Type, OldStorageMode, BucketName, Props, Options)
             catch
                 throw:Error ->
                     Error
@@ -1803,12 +1874,12 @@ maybe_delete_cas_props_inner(false = _CcvEn, Props) ->
 maybe_delete_cas_props_inner(true = _CcvEn, Props) ->
     {Props, []}.
 
-update_bucket_props_inner(Type, OldStorageMode, BucketName, Props) ->
+update_bucket_props_inner(Type, OldStorageMode, BucketName, Props, Options) ->
     {ok, BucketConfig} = get_bucket(BucketName),
     PrevProps = extract_bucket_props(BucketConfig),
     DisplayBucketType = display_type(Type, OldStorageMode),
 
-    case update_bucket_props_allowed(Props, BucketConfig) of
+    case update_bucket_props_allowed(Props, BucketConfig, Options) of
         true ->
             ok;
         {false, Error} ->
@@ -1832,6 +1903,10 @@ update_bucket_props_inner(Type, OldStorageMode, BucketName, Props) ->
                 fun (_) -> ok end
         end,
 
+    {Props2, DeleteKeys1} =
+        maybe_update_eviction_policy_overrides(Props1, BucketConfig,
+                                               MaybeDeleteCasKey, Options),
+
     NewStorageMode = proplists:get_value(storage_mode, Props),
     IsStorageModeMigration = OldStorageMode =/= NewStorageMode,
 
@@ -1839,7 +1914,7 @@ update_bucket_props_inner(Type, OldStorageMode, BucketName, Props) ->
         case IsStorageModeMigration of
             false ->
                 update_bucket_props_with_predicate(
-                    BucketName, Props1, MaybeDeleteCasKey,
+                    BucketName, Props2, DeleteKeys1,
                     SecretIdCheckPredicate, [], #{});
             true ->
                 %% Reject storage migration if servers haven't been
@@ -1852,8 +1927,10 @@ update_bucket_props_inner(Type, OldStorageMode, BucketName, Props) ->
                     throw({error,
                            {storage_mode_migration, janitor_not_run}}),
 
-                {NewProps, DeleteKeys} =
-                    update_override_props(Props1, BucketConfig),
+                OverrideKeys = override_keys() -- [eviction_policy],
+                {NewProps, DeleteKeys2} =
+                    update_override_props_for_keys(Props2, BucketConfig,
+                                                   DeleteKeys1, OverrideKeys),
 
                 %% Collections can be updated concurrently while a
                 %% bucket is being updated - make sure history is not
@@ -1880,7 +1957,7 @@ update_bucket_props_inner(Type, OldStorageMode, BucketName, Props) ->
                     end,
 
                 update_bucket_props_with_predicate(
-                  BucketName, NewProps, DeleteKeys ++ MaybeDeleteCasKey,
+                  BucketName, NewProps, DeleteKeys2,
                   Predicate, [collections], #{read_consistency => quorum})
         end,
 
@@ -1907,14 +1984,14 @@ update_bucket_props_inner(Type, OldStorageMode, BucketName, Props) ->
             RV
     end.
 
--spec update_bucket_props_allowed(proplists:proplist(), proplists:proplist()) ->
-          true | {false, Error::term()}.
-update_bucket_props_allowed(NewProps, BucketConfig) ->
+-spec update_bucket_props_allowed(proplists:proplist(), proplists:proplist(),
+                                  [atom()]) -> true | {false, Error::term()}.
+update_bucket_props_allowed(NewProps, BucketConfig, Options) ->
     Res = functools:sequence_(
             [?cut(is_storage_mode_update_allowed(
                     NewProps, BucketConfig)),
              ?cut(update_bucket_props_allowed_inner(
-                    NewProps, BucketConfig))]),
+                    NewProps, BucketConfig, Options))]),
     case Res of
         ok ->
             true;
@@ -1969,39 +2046,96 @@ is_storage_mode_update_allowed(NewProps, BucketConfig) ->
             ok
     end.
 
-update_bucket_props_allowed_inner(NewProps, BucketConfig) ->
+eviction_policy_changed(NewProps, BucketConfig) ->
+    NewEvictionPolicy = proplists:get_value(eviction_policy, NewProps),
+    NewEvictionPolicy =/= undefined andalso
+        NewEvictionPolicy =/= eviction_policy(BucketConfig).
+
+maybe_update_eviction_policy_overrides(NewProps, BucketConfig,
+                                       ExistingDeleteKeys, Options) ->
+    case lists:member(no_restart, Options) of
+        true ->
+            case eviction_policy_changed(NewProps, BucketConfig) of
+                true ->
+                    %% Reject eviction policy change with --no-restart if
+                    %% servers haven't been populated yet (This is extremely
+                    %% unlikely to happen, since we invoke a janitor run right
+                    %% after a bucket is created in chronicle - but there is
+                    %% still a non-zero probability that it could happen,
+                    %% therefore the below check).
+                    get_servers(BucketConfig) =/= [] orelse
+                        throw({error,
+                               {eviction_policy_change, janitor_not_run}}),
+                    update_override_props_for_keys(NewProps, BucketConfig,
+                                                   ExistingDeleteKeys,
+                                                   [eviction_policy]);
+                false ->
+                    {NewProps, ExistingDeleteKeys}
+            end;
+        false ->
+            case proplists:get_value(eviction_policy, NewProps) =/= undefined of
+                true ->
+                    %% By default, eviction policy changes force a bucket
+                    %% restart. Delete any existing eviction policy overrides.
+                    {NewProps,
+                     ExistingDeleteKeys ++
+                         keys_with_override(BucketConfig, eviction_policy)};
+                false ->
+                    {NewProps, ExistingDeleteKeys}
+            end
+    end.
+
+maybe_verify_eviction_policy_change(NewProps, BucketConfig, Options) ->
+    case eviction_policy_changed(NewProps, BucketConfig) of
+        false ->
+            ok;
+        true ->
+            case lists:member(no_restart, Options) of
+                true -> ok;
+                false ->
+                    {storage_mode_migration,
+                     eviction_policy_no_restart_required}
+            end
+    end.
+
+update_bucket_props_allowed_inner(NewProps, BucketConfig, Options) ->
     case storage_mode_migration_in_progress(BucketConfig) of
         true ->
-            %% We allow only ram_quota and storage_mode settings to be changed
-            %% during the bucket storage_mode migration - disallow updating any
-            %% other keys.
-            FilteredProps =
-                lists:filter(
-                  fun ({K, _V}) ->
-                          not lists:member(K, live_migration_mutable_keys())
-                  end, NewProps),
-            case FilteredProps of
-                [] ->
-                    ok;
-                _ ->
-                    %% Check if any of the other props have changed or a new
-                    %% Prop is being added.
-                    PropsChanged =
-                        lists:any(
-                          fun ({K, V}) ->
-                                  case proplists:get_value(K, BucketConfig) of
-                                      undefined ->
-                                          true;
-                                      CurrentValue ->
-                                          V =/= CurrentValue
-                                  end
-                          end, FilteredProps),
-                    case PropsChanged of
-                        false ->
+            case maybe_verify_eviction_policy_change(NewProps, BucketConfig,
+                                                     Options) of
+                ok ->
+                    %% We allow only ram_quota, storage_mode and eviction_policy
+                    %% settings to be changed during the bucket storage_mode
+                    %% migration - disallow updating any other keys.
+                    FilteredProps =
+                        lists:filter(
+                          fun ({K, _V}) ->
+                                  not lists:member(
+                                        K, live_migration_mutable_keys())
+                          end, NewProps),
+                    case FilteredProps of
+                        [] ->
                             ok;
-                        true ->
-                            {storage_mode_migration, in_progress}
-                    end
+                        _ ->
+                            %% Check if any of the other props have changed or a
+                            %% new Prop is being added.
+                            PropsChanged =
+                                lists:any(
+                                  fun ({K, V}) ->
+                                          case proplists:get_value(
+                                                 K, BucketConfig) of
+                                              undefined -> true;
+                                              CurrentValue ->
+                                                  V =/= CurrentValue
+                                          end
+                                  end, FilteredProps),
+                            case PropsChanged of
+                                false -> ok;
+                                true -> {storage_mode_migration, in_progress}
+                            end
+                    end;
+                X ->
+                    X
             end;
         false ->
             ok
@@ -2384,6 +2518,31 @@ update_buckets_for_delta_recovery(ModifiedBuckets, DeltaNodes) ->
             ok;
         Error ->
             Error
+    end.
+
+%% Remove eviction policy overrides for delta nodes during delta recovery.
+%% This ensures that transient buckets are started with the correct eviction
+%% policy (without overrides) when they are recreated during delta recovery.
+update_bucket_overrides_for_delta_recovery(BucketConfigs, DeltaNodes) ->
+    case ns_config:read_key_fast(allow_online_eviction_policy_change, false) of
+        true ->
+            UpdatedBucketConfigs =
+                remove_override_props_delta_recovery_many(DeltaNodes,
+                                                          BucketConfigs),
+            RV = chronicle_kv:transaction(
+                   kv, [],
+                   fun (_Snapshot) ->
+                           {commit, [{set, sub_key(BN, props), UBC} ||
+                                        {BN, UBC} <- UpdatedBucketConfigs]}
+                   end, #{}),
+            case RV of
+                {ok, _} ->
+                    {ok, UpdatedBucketConfigs};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        false ->
+            {ok, BucketConfigs}
     end.
 
 is_named_bucket_persistent(BucketName) ->
@@ -3162,6 +3321,14 @@ drift_thresholds_test() ->
     ?assertEqual({1, 2}, drift_thresholds(BucketConfig4)).
 
 update_bucket_props_allowed_test() ->
+    meck:new(ns_config, [passthrough]),
+    meck:expect(ns_config, read_key_fast,
+                fun (allow_online_eviction_policy_change, _) ->
+                        true;
+                    (Key, Default) ->
+                        meck:passthrough([Key, Default])
+                end),
+
     %% No per-node override keys set in the BucketConfig.
     %% Expectation: Bucket updates allowed.
     NewProps = [{storage_mode, magma},
@@ -3170,37 +3337,46 @@ update_bucket_props_allowed_test() ->
                     {type, membase},
                     {ram_quota, 1024},
                     {foo, blah}],
-    ?assert(update_bucket_props_allowed(NewProps, BucketConfig)),
+    ?assert(update_bucket_props_allowed(NewProps, BucketConfig, [])),
 
     %% per-node override keys set in the BucketConfig.
     %% Expectation: storage_mode update allowed.
     BucketConfig1 = BucketConfig ++ [{{node, n1, storage_mode}, magma}],
-    ?assert(update_bucket_props_allowed(NewProps, BucketConfig1)),
+    ?assert(update_bucket_props_allowed(NewProps, BucketConfig1, [])),
 
     %% per-node override keys set in the BucketConfig.
     %% Expectation: ram_quota update allowed.
     NewProps1 = [{ram_quota, 2048}],
-    ?assert(update_bucket_props_allowed(NewProps1, BucketConfig1)),
+    ?assert(update_bucket_props_allowed(NewProps1, BucketConfig1, [])),
 
     NewProps2 = [{foo, not_blah}],
 
     %% per-node override keys set in the BucketConfig.
     %% Expectation: can not change any bucket props.
     ?assertEqual({false, {storage_mode_migration, in_progress}},
-                 update_bucket_props_allowed(NewProps2, BucketConfig1)),
+                 update_bucket_props_allowed(NewProps2, BucketConfig1, [])),
 
     %% per-node override keys set in the BucketConfig.
     %% Expectation: can not add any new bucket props.
     NewProps3 = [{bar, blah}],
     ?assertEqual({false, {storage_mode_migration, in_progress}},
-                 update_bucket_props_allowed(NewProps3, BucketConfig1)).
+                 update_bucket_props_allowed(NewProps3, BucketConfig1, [])),
+
+    meck:unload(ns_config).
 
 update_override_props_test() ->
     meck:new(cluster_compat_mode, [passthrough]),
+    meck:new(ns_config, [passthrough]),
     meck:expect(cluster_compat_mode, is_cluster_phoenix,
                 fun () -> true end),
     meck:expect(cluster_compat_mode, is_enterprise,
                 fun () -> true end),
+    meck:expect(ns_config, read_key_fast,
+                fun (allow_online_eviction_policy_change, _) ->
+                        true;
+                    (Key, Default) ->
+                        meck:passthrough([Key, Default])
+                end),
 
     Servers = [n0, n1],
 
@@ -3211,9 +3387,11 @@ update_override_props_test() ->
                           {view_fragmentation_threshold,{30,undefined}}],
     BucketConfig = [{type, membase},
                     {storage_mode, couchstore},
+                    {eviction_policy, value_only},
                     {servers, Servers},
                     {autocompaction, CouchstoreACSettings}],
 
+    %% Retain original eviction policy.
     Props = [{storage_mode, magma},
              {autocompaction, false}],
     ExpectedProps =
@@ -3224,15 +3402,17 @@ update_override_props_test() ->
                    {{node, N, autocompaction}, CouchstoreACSettings} | Acc]
           end, [], Servers),
 
-    {NewProps, DK} = update_override_props(Props, BucketConfig),
+    {NewProps, DK} = update_override_props_for_keys(Props, BucketConfig, [],
+                                                    override_keys()),
 
     ?assertEqual(lists:sort(ExpectedProps), lists:sort(NewProps)),
     ?assertEqual(DK, []),
 
     %% node n1 has been migrated to magma, now revert the storage_mode back to
-    %% couchstore.
+    %% couchstore, no change to eviction policy.
     BucketConfig1 = [{type, membase},
                      {storage_mode, magma},
+                     {eviction_policy, value_only},
                      {autocompaction, MagmaACSettings},
                      {servers, Servers},
                      {{node, n0, storage_mode}, couchstore},
@@ -3246,14 +3426,87 @@ update_override_props_test() ->
     DeleteKeys = [{node, n0, storage_mode},
                   {node, n0, autocompaction}],
     {NewProps1, DK1} =
-        update_override_props(Props1, BucketConfig1),
+        update_override_props_for_keys(Props1, BucketConfig1, [],
+                                       override_keys()),
 
     ?assertListsEqual(NewProps1, ExpectedProps1),
     ?assertListsEqual(DK1, DeleteKeys),
 
+    %% Change storage_mode to magma and eviction_policy to full_eviction.
+    Props2 = [{storage_mode, magma},
+              {autocompaction, false},
+              {eviction_policy, full_eviction}],
+    ExpectedProps2 =
+        Props2 ++
+        lists:foldl(
+          fun (N, Acc) ->
+                  [{{node, N, storage_mode}, couchstore},
+                   {{node, N, autocompaction}, CouchstoreACSettings},
+                   {{node, N, eviction_policy}, value_only} | Acc]
+          end, [], Servers),
+
+    {NewProps2, DK2} = update_override_props_for_keys(Props2, BucketConfig, [],
+                                                      override_keys()),
+
+    ?assertEqual(lists:sort(ExpectedProps2), lists:sort(NewProps2)),
+    ?assertEqual(DK2, []),
+
+    %% node n1 has been migrated to magma, now revert the storage_mode back to
+    %% couchstore (but don't change eviction policy).
+    BucketConfig3 = [{type, membase},
+                     {storage_mode, magma},
+                     {eviction_policy, full_eviction},
+                     {autocompaction, MagmaACSettings},
+                     {servers, Servers},
+                     {{node, n0, storage_mode}, couchstore},
+                     {{node, n0, autocompaction}, CouchstoreACSettings},
+                     {{node, n0, eviction_policy}, value_only}],
+
+    Props3 = [{storage_mode, couchstore}],
+
+    ExpectedProps3 = [{storage_mode, couchstore},
+                      {autocompaction, CouchstoreACSettings},
+                      {{node, n1, storage_mode}, magma},
+                      {{node, n1, autocompaction}, MagmaACSettings}],
+    DeleteKeys3 = [{node, n0, storage_mode},
+                   {node, n0, autocompaction}],
+    {NewProps3, DK3} =
+        update_override_props_for_keys(Props3, BucketConfig3, [],
+                                       override_keys()),
+
+    ?assertListsEqual(NewProps3, ExpectedProps3),
+    ?assertListsEqual(DK3, DeleteKeys3),
+
+    %% Repeat revert of storage_mode to couchstore, but this time with
+    %% eviction policy change.
+    Props4 = [{storage_mode, couchstore},
+              {eviction_policy, value_only}],
+    ExpectedProps4 = [{storage_mode, couchstore},
+                      {autocompaction, CouchstoreACSettings},
+                      {eviction_policy, value_only},
+                      {{node, n1, storage_mode}, magma},
+                      {{node, n1, autocompaction}, MagmaACSettings},
+                      {{node, n1, eviction_policy}, full_eviction}],
+    DeleteKeys4 = [{node, n0, storage_mode},
+                   {node, n0, autocompaction},
+                   {node, n0, eviction_policy}],
+    {NewProps4, DK4} = update_override_props_for_keys(Props4, BucketConfig3,
+                                                      [], override_keys()),
+    ?assertListsEqual(NewProps4, ExpectedProps4),
+    ?assertListsEqual(DK4, DeleteKeys4),
+
+    meck:unload(ns_config),
     meck:unload(cluster_compat_mode).
 
 remove_override_props_test() ->
+    meck:new(ns_config, [passthrough]),
+    meck:expect(ns_config, read_key_fast,
+                fun (allow_online_eviction_policy_change, _) ->
+                        true;
+                    (Key, Default) ->
+                        meck:passthrough([Key, Default])
+                end),
+
     Props = [{type, membase},
              {storage_mode, magma},
              {autocompaction, magma_compaction_settings},
@@ -3267,7 +3520,9 @@ remove_override_props_test() ->
         Props -- [{{node, n1, storage_mode}, couchstore},
                   {{node, n1, autocompaction}, couchstore_compaction_settings}],
     ?assertEqual(ExpectedProps,
-                 remove_override_props(Props, RemoveNodes)).
+                 remove_override_props(Props, RemoveNodes)),
+
+    meck:unload(ns_config).
 
 node_autocompaction_settings_test() ->
     ?assertEqual([],

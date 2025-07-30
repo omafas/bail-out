@@ -569,7 +569,7 @@ auto_failover_test_setup(SetupConfig) ->
 
     %% May be required if the test tries to send an email alert (and wants to
     %% see that this has happened).
-    meck:new(ns_email_alert, [passthrough]),
+    meck:new(menelaus_web_alerts_srv, [passthrough]),
 
     meck:new(cb_atomic_persistent_term, [passthrough]),
     meck:expect(cb_atomic_persistent_term, get_or_set_if_undefined,
@@ -594,7 +594,7 @@ auto_failover_test_teardown(Config, PidMap) ->
     meck:unload(ns_janitor_server),
     meck:unload(node_status_analyzer),
     meck:unload(ns_doctor),
-    meck:unload(ns_email_alert),
+    meck:unload(menelaus_web_alerts_srv),
     meck:unload(cb_atomic_persistent_term),
 
     manual_failover_test_teardown(Config, PidMap).
@@ -831,8 +831,9 @@ auto_failover_index_safety_check_failure_t(_SetupConfig, PidMap) ->
                           get_auto_failover_reported_errors(AutoFailoverPid)
               end, 5000, 100)),
 
-    %% We should have sent an email alert (i.e. called log_unsafe_node).
-    ?assert(meck:called(ns_email_alert, alert, [auto_failover_node, '_', '_'])).
+    %% We should have fired an alert
+    ?assert(meck:called(menelaus_web_alerts_srv, global_alert,
+                        [auto_failover_node , '_'])).
 
 graceful_failover_test_setup(SetupConfig) ->
     Pids = auto_failover_test_setup(SetupConfig),
