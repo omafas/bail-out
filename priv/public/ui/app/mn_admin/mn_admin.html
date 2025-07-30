@@ -524,7 +524,7 @@
       XDCR
     </a>
     <a
-       ng-show="rbac.cluster.admin.security.read || rbac.cluster.admin.users.read"
+       ng-show="rbac.cluster.admin.security.read || rbac.cluster.admin.users.write"
        mn-tab="security"
        ng-class="{currentnav: ('app.admin.security' | includedByState)}"
        ui-sref="{{rbac.cluster.admin.users.read ? 'app.admin.security.roles.user' : 'app.admin.security.certificate'}}">
