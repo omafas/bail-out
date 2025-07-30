@@ -212,9 +212,10 @@ cast(Call) ->
     misc:wait_for_global_name(?MODULE),
     gen_server:cast(?SERVER, Call).
 
--define(log_info_and_email(Alert, Fmt, Args),
-        ale:info(?USER_LOGGER, Fmt, Args),
-        ns_email_alert:alert(Alert, Fmt, Args)).
+-define(log_and_alert(Alert, Fmt, Args),
+        Message = list_to_binary(lists:flatten(io_lib:format(Fmt, Args))),
+        %% The alert server sends emails, raises pop ups, etc as needed.
+        menelaus_web_alerts_srv:global_alert(Alert, Message)).
 
 %% @doc Returns a list of all alerts that might send out an email notification.
 -spec alert_keys() -> [atom()].
@@ -550,7 +551,7 @@ trim_nodes_for_failover(Nodes, S) ->
 
 process_action({mail_too_small, Service, SvcNodes, {Node, _UUID}},
                S, _, _, _) ->
-    ?log_info_and_email(
+    ?log_and_alert(
        auto_failover_cluster_too_small,
        "Could not auto-failover node (~p). "
        "Number of remaining nodes that are running ~s service is ~p. "
@@ -561,28 +562,28 @@ process_action({mail_too_small, Service, SvcNodes, {Node, _UUID}},
         auto_failover_logic:service_failover_min_node_count()]),
     S;
 process_action({mail_down_warning, {Node, _UUID}}, S, _, _, _) ->
-    ?log_info_and_email(
+    ?log_and_alert(
        auto_failover_other_nodes_down,
        "Could not auto-failover node (~p). "
        "There was at least another node down.",
        [Node]),
     S;
 process_action({mail_down_warning_multi_node, {Node, _UUID}}, S, _, _, _) ->
-    ?log_info_and_email(
+    ?log_and_alert(
        auto_failover_other_nodes_down,
        "Could not auto-failover node (~p). "
        "The list of nodes being down has changed.",
        [Node]),
     S;
 process_action({mail_auto_failover_disabled, Service, {Node, _}}, S, _, _, _) ->
-    ?log_info_and_email(
+    ?log_and_alert(
        auto_failover_disabled,
        "Could not auto-failover node (~p). "
        "Auto-failover for ~s service is disabled.",
        [Node, ns_cluster_membership:user_friendly_service_name(Service)]),
     S;
 process_action({mail_kv_not_fully_failed_over, {Node, _}}, S, _, _, _) ->
-    ?log_info_and_email(
+    ?log_and_alert(
        auto_failover_other_nodes_down,
        "Could not auto-failover service node (~p). "
        "One of the data service nodes cannot be automatically failed over.",
@@ -644,12 +645,12 @@ maybe_report_max_node_reached(AllNodes, NotFailedOver, ErrMsg, S) ->
         true ->
             case AllNodes -- NotFailedOver of
                 [] ->
-                    ?log_info_and_email(
+                    ?log_and_alert(
                        auto_failover_maximum_reached,
                        "Could not auto-failover more nodes (~p). ~s",
                        [NotFailedOver, ErrMsg]);
                 RemainingNodes ->
-                    ?log_info_and_email(
+                    ?log_and_alert(
                        auto_failover_maximum_reached,
                        "Could not auto-failover nodes (~p). ~s Continuing to "
                        "auto-failover nodes ~p",
@@ -685,12 +686,12 @@ log_failover_success(Node, DownNodes, NodeStatuses) ->
     case failover_reason(Node, DownNodes, NodeStatuses) of
         {Reason, MA} ->
             master_activity_events:note_autofailover_done(Node, MA),
-            ?log_info_and_email(
+            ?log_and_alert(
                auto_failover_node,
                "Node (~p) was automatically failed over. Reason: ~s",
                [Node, Reason]);
         Reason ->
-            ?log_info_and_email(
+            ?log_and_alert(
                auto_failover_node,
                "Node (~p) was automatically failed over.~n~p", [Node, Reason])
 
@@ -717,7 +718,7 @@ log_unsafe_node({Node, {Service, Error}}, State) ->
     Flag = {Node, Service, Error},
     case should_report(Flag, State) of
         true ->
-            ?log_info_and_email(
+            ?log_and_alert(
                auto_failover_node,
                "Could not automatically fail over node (~p) due to operation "
                "being unsafe for service ~p. ~s",
@@ -777,7 +778,7 @@ process_failover_error(last_node, Nodes, S) ->
 report_failover_error(Flag, ErrMsg, Nodes, State) ->
     case should_report(Flag, State) of
         true ->
-            ?log_info_and_email(
+            ?log_and_alert(
                auto_failover_node,
                "Could not automatically fail over nodes (~p). ~s",
                [Nodes, ErrMsg]),

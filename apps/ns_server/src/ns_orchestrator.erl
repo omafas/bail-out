@@ -64,7 +64,7 @@
 
 %% API
 -export([create_bucket/3,
-         update_bucket/4,
+         update_bucket/5,
          delete_bucket/1,
          flush_bucket/1,
          start_pause_bucket/1,
@@ -188,21 +188,24 @@ create_bucket(BucketType, BucketName, NewConfig) ->
     call({create_bucket, BucketType, BucketName, NewConfig}, infinity).
 
 -spec update_bucket(memcached|membase, undefined|couchstore|magma|ephemeral,
-                    nonempty_string(), list()) ->
+                    nonempty_string(), list(), [atom()]) ->
           ok | {exit, {not_found, nonempty_string()}, []} |
           {error, {need_more_space, list()}} |
           {error, {storage_mode_migration, in_progress}} |
           {error, cc_versioning_already_enabled} |
           {error, {storage_mode_migration, janitor_not_run}} |
+          {error, {eviction_policy_change, janitor_not_run}} |
           {error, {storage_mode_migration,
                    history_retention_enabled_on_bucket}} |
           {error, {storage_mode_migration,
                    history_retention_enabled_on_collections}} |
           {error, secret_not_found} |
-          {error, secret_not_allowed} | busy().
-update_bucket(BucketType, StorageMode, BucketName, UpdatedProps) ->
-    call({update_bucket, BucketType, StorageMode, BucketName, UpdatedProps},
-         infinity).
+          {error, secret_not_allowed} | busy() |
+          {error, {storage_mode_migration,
+                   eviction_policy_no_restart_required}}.
+update_bucket(BucketType, StorageMode, BucketName, UpdatedProps, Options) ->
+    call({update_bucket, BucketType, StorageMode, BucketName, UpdatedProps,
+          Options}, infinity).
 
 %% Deletes bucket. Makes sure that once it returns it's already dead.
 %% In implementation we make sure config deletion is propagated to
@@ -889,24 +892,27 @@ idle({flush_bucket, BucketName}, From, _State) ->
     {keep_state_and_data, [{reply, From, RV}]};
 idle({delete_bucket, BucketName}, From, _State) ->
     handle_delete_bucket(BucketName, From, idle, []);
-%% In the mixed mode, depending upon the node from which the update bucket
+%% In mixed mode cluster, depending upon the node from which the update bucket
 %% request is being sent, the length of the message could vary. In order to
-%% be backward compatible we need to field both types of messages.
-idle({update_bucket, memcached, BucketName, UpdatedProps}, From, _State) ->
-    {keep_state_and_data,
-     [{next_event, {call, From},
-       {update_bucket, memcached, undefined, BucketName, UpdatedProps}}]};
-idle({update_bucket, membase, BucketName, UpdatedProps}, From, _State) ->
-    {keep_state_and_data,
-     [{next_event, {call, From},
-       {update_bucket, membase, couchstore, BucketName, UpdatedProps}}]};
+%% be backwards compatible we need to field both types of messages. We can
+%% remove the 4-parameter version once min_supported_version >= morpheus.
+%% This was introduced in 7.6.7 without a cluster_compat_mode check and will be
+%% publicly available in morpheus.
 idle({update_bucket,
       BucketType, StorageMode, BucketName, UpdatedProps}, From, _State) ->
+    {keep_state_and_data,
+     [{next_event, {call, From},
+       {update_bucket, BucketType, StorageMode, BucketName, UpdatedProps,
+        []}}]};
+idle({update_bucket,
+      BucketType, StorageMode, BucketName, UpdatedProps, Options}, From,
+     _State) ->
     Reply =
         case bucket_placer:place_bucket(BucketName, UpdatedProps) of
             {ok, NewUpdatedProps} ->
                 ns_bucket:update_bucket_props(
-                  BucketType, StorageMode, BucketName, NewUpdatedProps);
+                  BucketType, StorageMode, BucketName, NewUpdatedProps,
+                  Options);
             {error, BadZones} ->
                 {error, {need_more_space, BadZones}}
         end,
