@@ -399,7 +399,7 @@ auto_failover_test_setup(SetupConfig) ->
 
     %% May be required if the test tries to send an email alert (and wants to
     %% see that this has happened).
-    meck:new(ns_email_alert, [passthrough]),
+    meck:new(menelaus_web_alerts_srv, [passthrough]),
 
     mock_helpers:setup_mocks([compat_mode_manager,
                               ns_orchestrator,
@@ -621,8 +621,9 @@ auto_failover_index_safety_check_failure_t(_SetupConfig, PidMap) ->
                           get_auto_failover_reported_errors(AutoFailoverPid)
               end, 5000, 100)),
 
-    %% We should have sent an email alert (i.e. called log_unsafe_node).
-    ?assert(meck:called(ns_email_alert, alert, [auto_failover_node, '_', '_'])).
+    %% We should have fired an alert
+    ?assert(meck:called(menelaus_web_alerts_srv, global_alert,
+                        [auto_failover_node , '_'])).
 
 graceful_failover_test_setup(SetupConfig) ->
     Pids = auto_failover_test_setup(SetupConfig),

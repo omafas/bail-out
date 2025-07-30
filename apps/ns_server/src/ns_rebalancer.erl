@@ -1243,10 +1243,23 @@ handle_one_delta_recovery_bucket(Config, AllNodes, DeltaNodes,
 apply_delta_recovery_buckets([], _DeltaNodes, _CurrentBuckets) ->
     ok;
 apply_delta_recovery_buckets(DeltaRecoveryBuckets, DeltaNodes, CurrentBuckets) ->
+    DeltaRecoveryBucketNames = [Bucket || {Bucket, _} <- DeltaRecoveryBuckets],
+    RelevantBuckets = [{BN, BC} || {BN, BC} <- CurrentBuckets,
+                                   lists:member(BN, DeltaRecoveryBucketNames)],
+    {ok, UpdatedRelevantBuckets} =
+        ns_bucket:update_bucket_overrides_for_delta_recovery(RelevantBuckets,
+                                                             DeltaNodes),
+    config_push(DeltaNodes),
+
+    UpdatedCurrentBuckets = lists:foldl(
+                              fun({BN, UBC}, Acc) ->
+                                      lists:keyreplace(BN, 1, Acc, {BN, UBC})
+                              end, CurrentBuckets, UpdatedRelevantBuckets),
+
     prepare_delta_recovery(DeltaNodes, DeltaRecoveryBuckets),
     TransitionalBuckets = prepare_delta_recovery_buckets(DeltaRecoveryBuckets,
                                                          DeltaNodes,
-                                                         CurrentBuckets),
+                                                         UpdatedCurrentBuckets),
 
     ok = ns_bucket:update_buckets_for_delta_recovery(TransitionalBuckets,
                                                      DeltaNodes),
