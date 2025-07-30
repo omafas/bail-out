@@ -54,6 +54,8 @@
 %% --------------------
 setup() ->
     ets:new(?TABLE_NAME, [public, named_table]),
+    ets:insert(?TABLE_NAME, {snapshot, #{seqno => 0}}),
+
     meck_setup(),
 
     fake_ns_config:setup_ns_config_events(),
@@ -132,21 +134,28 @@ meck_setup_chronicle_kv_getters() ->
               %% should be using lookup functions to get specific keys
               %% anyways so this should just work, and we don't care about
               %% perf here.
-              get_ets_snapshot()
+              Snapshot = get_ets_snapshot(),
+              maps:remove(seqno, Snapshot)
       end),
 
 
     meck:expect(chronicle_kv, ro_txn,
                 fun(_Name, Fun) ->
+                        Snapshot = get_ets_snapshot(),
+                        Seqno = get_snapshot_seqno(Snapshot),
+                        SnapshotWithoutSeqno = maps:remove(seqno, Snapshot),
                         {ok,
-                         {Fun(get_ets_snapshot()),
-                          make_rev(get_snapshot_seqno())}}
+                         {Fun(SnapshotWithoutSeqno),
+                          make_rev(Seqno)}}
                 end),
     meck:expect(chronicle_kv, ro_txn,
                 fun(_Name, Fun, _Opts) ->
+                        Snapshot = get_ets_snapshot(),
+                        Seqno = get_snapshot_seqno(Snapshot),
+                        SnapshotWithoutSeqno = maps:remove(seqno, Snapshot),
                         {ok,
-                         {Fun(get_ets_snapshot()),
-                          make_rev(get_snapshot_seqno())}}
+                         {Fun(SnapshotWithoutSeqno),
+                          make_rev(Seqno)}}
                 end),
 
 
@@ -172,8 +181,11 @@ meck_setup_chronicle_kv_getters() ->
 
     meck:expect(chronicle_kv, get_full_snapshot,
                 fun(_Name) ->
+                        Snapshot = get_ets_snapshot(),
+                        Seqno = get_snapshot_seqno(Snapshot),
+                        SnapshotWithoutSeqno = maps:remove(seqno, Snapshot),
                         {ok,
-                         {get_ets_snapshot(), make_rev(get_snapshot_seqno())}}
+                         {SnapshotWithoutSeqno, make_rev(Seqno)}}
                 end),
 
     meck:expect(chronicle_kv, event_manager,
@@ -212,26 +224,27 @@ meck_setup_chronicle_kv_setters() ->
 %% Internal - getter/setter functions
 %% ----------------------------------
 get_ets_snapshot() ->
-    case ets:lookup(?TABLE_NAME, snapshot) of
-        [{snapshot, Snapshot}] -> Snapshot;
-        [] -> maps:new()
-    end.
+    [{snapshot, Snapshot}] = ets:lookup(?TABLE_NAME, snapshot),
+    Snapshot.
 
 get_snapshot_seqno() ->
-    case ets:lookup(?TABLE_NAME, snapshot_seqno) of
-        [{snapshot_seqno, Value}] -> Value;
-        [] -> 0
-    end.
+    Snapshot = get_ets_snapshot(),
+    get_snapshot_seqno(Snapshot).
+
+get_snapshot_seqno(Snapshot) ->
+    maps:get(seqno, Snapshot).
 
 store_ets_snapshot(Snapshot) ->
     Seqno = maps:fold(
               fun(_Key, {_Value, {_, Seqno}}, Acc) ->
-                      max(Seqno, Acc)
+                      max(Seqno, Acc);
+                 (seqno, _, Acc) ->
+                      Acc
               end, 0, Snapshot),
     store_ets_snapshot(Snapshot, Seqno).
+
 store_ets_snapshot(Snapshot, Seqno) ->
-    ets:insert(?TABLE_NAME, {snapshot, Snapshot}),
-    ets:insert(?TABLE_NAME, {snapshot_seqno, Seqno}).
+    ets:insert(?TABLE_NAME, {snapshot, Snapshot#{seqno => Seqno}}).
 
 add_rev_to_value(Value, Seqno) ->
     {Value, make_rev(Seqno)}.
