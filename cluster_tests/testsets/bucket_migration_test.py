@@ -545,16 +545,9 @@ class BucketMigrationTest(testlib.BaseTestSet):
 
     def setup(self):
         testlib.delete_all_buckets(self.cluster)
-        testlib.diag_eval(
-            self.cluster,
-            "ns_config:set(allow_online_eviction_policy_change, true).",
-        )
 
     def teardown(self):
-        testlib.diag_eval(
-            self.cluster,
-            "ns_config:delete(allow_online_eviction_policy_change).",
-        )
+        pass
 
     def test_teardown(self):
         testlib.delete_all_buckets(self.cluster)

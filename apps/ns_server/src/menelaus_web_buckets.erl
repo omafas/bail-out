@@ -3759,8 +3759,11 @@ parse_validate_no_restart(Params) ->
         undefined ->
             ignore;
         Value ->
-            case ns_config:read_key_fast(allow_online_eviction_policy_change,
-                                         false) of
+            %% TODO: Remove allow_online_eviction_policy_change when min
+            %% supported version is morpheus.
+            case cluster_compat_mode:is_cluster_morpheus() orelse
+                ns_config:read_key_fast(allow_online_eviction_policy_change,
+                                        false) of
                 true ->
                     case menelaus_util:parse_validate_boolean(Value) of
                         {ok, BoolValue} ->

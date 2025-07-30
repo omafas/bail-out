@@ -178,6 +178,7 @@
          chronicle_upgrade_to_72/1,
          chronicle_upgrade_to_76/1,
          chronicle_upgrade_to_79/1,
+         config_upgrade_to_morpheus/1,
          extract_bucket_props/1,
          build_bucket_props_json/1,
          build_compaction_settings_json/1,
@@ -541,6 +542,13 @@ history_retention_collection_default(BucketConfig) ->
     andalso is_magma(BucketConfig)
     andalso cluster_compat_mode:is_cluster_72().
 
+config_upgrade_to_morpheus(_Config) ->
+    %% Remove the hidden setting allow_online_eviction_policy_change as it's now
+    %% redundant - the feature is available by default in morpheus.
+    %% We can remove all occurrences of allow_online_eviction_policy_change when
+    %% min_supported_version is morpheus.
+    [{delete, allow_online_eviction_policy_change}].
+
 -spec node_eviction_policy_override(node(), proplists:proplist()) -> atom().
 node_eviction_policy_override(Node, BucketConfig) ->
     proplists:get_value({node, Node, eviction_policy}, BucketConfig).
@@ -551,8 +559,8 @@ node_eviction_policy(BucketConfig) ->
 
 -spec node_eviction_policy(node(), proplists:proplist()) -> atom().
 node_eviction_policy(Node, BucketConfig) ->
-    case ns_config:read_key_fast(allow_online_eviction_policy_change,
-                                 false) of
+    case cluster_compat_mode:is_cluster_morpheus() orelse
+        ns_config:read_key_fast(allow_online_eviction_policy_change, false) of
         false ->
             eviction_policy(BucketConfig);
         true ->
@@ -1656,8 +1664,9 @@ wait_for_bucket_shutdown(BucketName, Nodes0, Timeout) ->
 override_keys_fetch_funs() ->
     [{storage_mode, fun storage_mode/1},
      {autocompaction, fun autocompaction_settings/1}] ++
-        case ns_config:read_key_fast(allow_online_eviction_policy_change,
-                                     false) of
+        case cluster_compat_mode:is_cluster_morpheus() orelse
+            ns_config:read_key_fast(allow_online_eviction_policy_change,
+                                    false) of
             true ->
                 [{eviction_policy, fun eviction_policy/1}];
             false ->
@@ -1668,8 +1677,9 @@ override_keys_fetch_funs() ->
 %% when storage_mode_migration_in_progress is true).
 live_migration_mutable_keys() ->
     [ram_quota, storage_mode] ++
-        case ns_config:read_key_fast(allow_online_eviction_policy_change,
-                                     false) of
+        case cluster_compat_mode:is_cluster_morpheus() orelse
+            ns_config:read_key_fast(allow_online_eviction_policy_change,
+                                    false) of
             true ->
                 [eviction_policy];
             false ->
@@ -2525,7 +2535,8 @@ update_buckets_for_delta_recovery(ModifiedBuckets, DeltaNodes) ->
 %% This ensures that transient buckets are started with the correct eviction
 %% policy (without overrides) when they are recreated during delta recovery.
 update_bucket_overrides_for_delta_recovery(BucketConfigs, DeltaNodes) ->
-    case ns_config:read_key_fast(allow_online_eviction_policy_change, false) of
+    case cluster_compat_mode:is_cluster_morpheus() orelse
+         ns_config:read_key_fast(allow_online_eviction_policy_change, false) of
         true ->
             UpdatedBucketConfigs =
                 remove_override_props_delta_recovery_many(DeltaNodes,
@@ -3329,13 +3340,9 @@ drift_thresholds_test() ->
     ?assertEqual({1, 2}, drift_thresholds(BucketConfig4)).
 
 update_bucket_props_allowed_test() ->
-    meck:new(ns_config, [passthrough]),
-    meck:expect(ns_config, read_key_fast,
-                fun (allow_online_eviction_policy_change, _) ->
-                        true;
-                    (Key, Default) ->
-                        meck:passthrough([Key, Default])
-                end),
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:expect(cluster_compat_mode, is_cluster_morpheus,
+                fun () -> true end),
 
     %% No per-node override keys set in the BucketConfig.
     %% Expectation: Bucket updates allowed.
@@ -3370,21 +3377,16 @@ update_bucket_props_allowed_test() ->
     ?assertEqual({false, {storage_mode_migration, in_progress}},
                  update_bucket_props_allowed(NewProps3, BucketConfig1, [])),
 
-    meck:unload(ns_config).
+    meck:unload(cluster_compat_mode).
 
 update_override_props_test() ->
     meck:new(cluster_compat_mode, [passthrough]),
-    meck:new(ns_config, [passthrough]),
     meck:expect(cluster_compat_mode, is_cluster_79,
+                fun () -> true end),
+    meck:expect(cluster_compat_mode, is_cluster_morpheus,
                 fun () -> true end),
     meck:expect(cluster_compat_mode, is_enterprise,
                 fun () -> true end),
-    meck:expect(ns_config, read_key_fast,
-                fun (allow_online_eviction_policy_change, _) ->
-                        true;
-                    (Key, Default) ->
-                        meck:passthrough([Key, Default])
-                end),
 
     Servers = [n0, n1],
 
@@ -3503,17 +3505,12 @@ update_override_props_test() ->
     ?assertListsEqual(NewProps4, ExpectedProps4),
     ?assertListsEqual(DK4, DeleteKeys4),
 
-    meck:unload(ns_config),
     meck:unload(cluster_compat_mode).
 
 remove_override_props_test() ->
-    meck:new(ns_config, [passthrough]),
-    meck:expect(ns_config, read_key_fast,
-                fun (allow_online_eviction_policy_change, _) ->
-                        true;
-                    (Key, Default) ->
-                        meck:passthrough([Key, Default])
-                end),
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:expect(cluster_compat_mode, is_cluster_morpheus,
+                fun () -> true end),
 
     Props = [{type, membase},
              {storage_mode, magma},
@@ -3530,7 +3527,7 @@ remove_override_props_test() ->
     ?assertEqual(ExpectedProps,
                  remove_override_props(Props, RemoveNodes)),
 
-    meck:unload(ns_config).
+    meck:unload(cluster_compat_mode).
 
 node_autocompaction_settings_test() ->
     ?assertEqual([],

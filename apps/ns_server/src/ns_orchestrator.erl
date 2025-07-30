@@ -896,8 +896,7 @@ idle({delete_bucket, BucketName}, From, _State) ->
 %% request is being sent, the length of the message could vary. In order to
 %% be backwards compatible we need to field both types of messages. We can
 %% remove the 4-parameter version once min_supported_version >= morpheus.
-%% This was introduced in 7.6.7 without a cluster_compat_mode check and will be
-%% publicly available in morpheus.
+%% This was introduced in 7.6.8.
 idle({update_bucket,
       BucketType, StorageMode, BucketName, UpdatedProps}, From, _State) ->
     {keep_state_and_data,

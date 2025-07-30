@@ -521,7 +521,10 @@ build_storage_backend(Node, BucketConfig) ->
         end.
 
 build_eviction_policy(Node, BucketConfig) ->
-    case ns_config:read_key_fast(allow_online_eviction_policy_change, false) of
+    %% TODO: Remove allow_online_eviction_policy_change when
+    %% min_supported_version >= morpheus.
+    case cluster_compat_mode:is_cluster_morpheus() orelse
+        ns_config:read_key_fast(allow_online_eviction_policy_change, false) of
         true ->
             NodeEvictionPolicy = ns_bucket:node_eviction_policy_override(
                                    Node, BucketConfig),
