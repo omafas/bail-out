@@ -700,14 +700,16 @@ class Cluster:
 
         raise RuntimeError("orchestrator node not found")
 
-    def wait_for_web_service(self):
+    def wait_for_web_service(self, node=None):
         """
         Helper function to wait until the web service is able to respond
         to a /pools request
         """
+        if node is None:
+            node = self.connected_nodes[0]
         def is_web_server_up():
             try:
-                r = testlib.get_succ(self, '/pools')
+                r = testlib.get_succ(node, '/pools')
                 return True
             except Exception:
                 return False
