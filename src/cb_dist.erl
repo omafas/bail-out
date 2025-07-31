@@ -143,12 +143,18 @@ accept_connection(_, {ConRef, HandshakeProcPid, Module, ConnectionSocket},
 
 -spec select(Node :: atom()) -> true | false.
 select(Node) ->
-    try get_preferred_dist(Node) of
-        Module -> Module:select(Node)
-    catch
-        _:Error ->
-            error_msg("Select for ~p failed. Couldn't find preferred proto: ~p",
-                      [Node, Error]),
+    case dist_util:split_node(Node) of
+        {node, _Name, _Host} ->
+            %% Not proxying select() to preferred proto to avoid blocking
+            %% net_kernel (select() is called by net_kernel).
+            %% Select in inet_tcp_dist (and other protocols) can block
+            %% because it resolves the hostname.
+            %% It seems like the name resolution is not really needed here
+            %% as we already know the protocol (afamily and encryption) that
+            %% we want to use.
+            true;
+        _ ->
+            error_msg("Select failed. Invalid node name: ~p", [Node]),
             false
     end.
 
