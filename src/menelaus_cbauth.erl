@@ -771,6 +771,49 @@ cbauth_stats_t() ->
                 end),
     [] = stats().
 
+cbauth_many_notify_t() ->
+    %% Wait for initial notify to be handled
+    meck:wait(1, menelaus_cbauth_worker, notify, ['_', '_'],
+              ?LONG_TIMEOUT),
+    meck:wait(1, json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.UpdateDB", '_', '_'], ?LONG_TIMEOUT),
+    %% Ensure that the next perform_call doesn't immediately return
+    meck:expect(json_rpc_connection, perform_call,
+                fun (_, "AuthCacheSvc.UpdateDB", _, _) ->
+                        receive return_from_call -> {ok, true}
+                        after ?LONG_TIMEOUT -> error(timeout) end;
+                    (_Label, _Call, _EJsonArg, _Opts) ->
+                        {ok, true}
+                end),
+    %% Send three updates, ensuring three notify calls with different values:
+    %% - The first is to get the worker stuck in the above meck:expect
+    %% - The second is to provide a value, which we want to become stale
+    %% - The third will be the new value, which should get used, instead of the
+    %%   stale value, after the first update is processed
+    lists:foreach(
+      fun (N) ->
+              fake_ns_config:update_snapshot(rest, [{port, N}]),
+              meck:wait(N, menelaus_cbauth_worker, notify, ['_', '_'],
+                        ?LONG_TIMEOUT)
+      end, [2, 3, 4]),
+    %% Extract value from next update
+    meck:expect(json_rpc_connection, perform_call,
+                fun (_, "AuthCacheSvc.UpdateDB", {Info}, _) ->
+                        [{Node}] = proplists:get_value(nodes, Info, []),
+                        [undefined, Port] = proplists:get_value(ports, Node),
+                        %% Expect the last value, not the stale value
+                        ?assertEqual(4, Port),
+                        {ok, true};
+                    (_Label, _Call, _EJsonArg, _Opts) ->
+                        {ok, true}
+                end),
+    %% Release worker
+    WorkerPid = whereis(list_to_atom("menelaus_cbauth_worker-" ++ ?LABEL)),
+    WorkerPid ! return_from_call,
+    %% Wait for both the stuck and final call to return
+    meck:wait(3, json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.UpdateDB", '_', '_'], ?LONG_TIMEOUT).
+
 trigger_notification(ns_node_disco_events) ->
     %% To avoid needing to trick ns_node_disco into recognising fake nodes, just
     %% make the node list different by removing the only node.
@@ -823,6 +866,7 @@ cbauth_test_() ->
     {foreach, fun setup_t/0, fun teardown_t/1,
      [{"cbauth init test", fun cbauth_init_t/0},
       {"cbauth sync test", fun cbauth_sync_t/0},
-      {"cbauth stats test", fun cbauth_stats_t/0}
+      {"cbauth stats test", fun cbauth_stats_t/0},
+      {"cbauth many notify test", fun cbauth_many_notify_t/0}
      | cbauth_notify_tests()]}.
 -endif.

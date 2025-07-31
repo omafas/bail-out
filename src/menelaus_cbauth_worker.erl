@@ -82,17 +82,18 @@ handle_info(heartbeat, State = #state{label = Label, connection = Pid,
         ok ->
             {noreply, State}
     end;
-handle_info({notify, InfoHidden}, State = #state{label = Label,
-                                                 connection = Pid,
-                                                 version = Version}) ->
-    Info = ?UNHIDE(InfoHidden),
+handle_info({notify, PotentiallyStaleInfo},
+            State = #state{label = Label, connection = Pid,
+                           version = Version}) ->
+    LatestInfoHidden = receive_latest_notify(PotentiallyStaleInfo),
+    LatestInfo = ?UNHIDE(LatestInfoHidden),
     Method = case Version of
                  internal ->
                      "AuthCacheSvc.UpdateDB";
                  _ ->
                      "AuthCacheSvc.UpdateDBExt"
              end,
-    case invoke_no_return_method(Label, Method, Pid, Info) of
+    case invoke_no_return_method(Label, Method, Pid, LatestInfo) of
         error ->
             terminate_jsonrpc_connection(Label, Pid),
             misc:wait_for_process(Pid, infinity),
@@ -134,6 +135,23 @@ send_heartbeat(Label, Pid) ->
             invoke_no_return_method(Label, "AuthCacheSvc.Heartbeat", Pid, []);
         true ->
             ?log_debug("Skip heartbeat for label ~p", [Label])
+    end.
+
+receive_latest_notify(Info) ->
+    receive_latest_notify(Info, 0).
+
+receive_latest_notify(Info, N) ->
+    %% Handle any remaining notify messages, to ensure that the mailbox is
+    %% cleared of redundant messages
+    receive
+        {notify, NewInfo} -> receive_latest_notify(NewInfo, N + 1)
+    after
+        0 ->
+            case N of
+                0 -> ok;
+                _ -> ?log_debug("Skipped ~p old notify entries", [N])
+            end,
+            Info
     end.
 
 invoke_no_return_method(Label, Method, Pid, Info) ->
