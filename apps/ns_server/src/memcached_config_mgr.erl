@@ -141,7 +141,7 @@ init([]) ->
               case ns_bucket:sub_key_match(Key) of
                   {true, _Bucket, props} ->
                       Self ! do_check;
-                  false ->
+                  _ ->
                       ok
               end
       end),
