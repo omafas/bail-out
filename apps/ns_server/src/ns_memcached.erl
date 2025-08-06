@@ -1707,7 +1707,12 @@ do_ensure_bucket(Sock, Bucket, BConf, false, JWT, BucketUUID) ->
                 ?log_info("Created bucket ~p with config string ~s",
                           [Bucket, ConfigStringForLogging]),
                 ok = mc_client_binary:select_bucket(Sock, Bucket),
-                cb_cluster_secrets:recalculate_deks_info()
+                case cluster_compat_mode:is_enterprise() of
+                   true ->
+                       cb_cluster_secrets:recalculate_deks_info();
+                    false ->
+                        ok
+                end
             else
                 {error, E} ->
                     {error, {bucket_create_error, E}};
