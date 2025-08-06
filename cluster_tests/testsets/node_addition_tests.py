@@ -299,7 +299,23 @@ class NodeAdditionWithCertsBase:
 
     # The node addition will fail as the node being added has disabled
     # client cert authentication
-    def add_trusted_node_to_trusted_cluster_client_cert_disabled_test_notyet(self):
+    def add_trusted_node_to_trusted_cluster_client_cert_disabled_test(self):
+        # We "ping" the web server to see if it is alive after setting
+        # mandatory client certs. However we don't know when the actual
+        # start/end of the restart occurs so it's possible the node addition
+        # will hit the window where it's occuring (and receive a connection
+        # closed error).
+        def try_node_add_with_bad_user(node):
+            self.cluster.wait_for_web_service(node)
+            r = self.cluster.add_node(node, use_client_cert_auth=False,
+                                      auth=("BadUser", "password"),
+                                      expected_code=400).json()
+            msg = "Error connection_closed happened during REST call"
+            if msg in r[0]:
+                return False
+            self.assert_cluster_requires_per_node_cert(r)
+            return True
+
         self.provision_cluster_node()
         self.provision_new_node()
         load_ca(self.cluster_node(), self.new_node_ca)
@@ -331,11 +347,11 @@ class NodeAdditionWithCertsBase:
         # Change the new node so it uses mandatory client certs
         testlib.toggle_client_cert_auth(self.new_node(),
                                         enabled=True, mandatory=True)
-        # Try using an invalid username/password
-        r = self.cluster.add_node(self.new_node(), use_client_cert_auth=False,
-                                  auth=("BadUser", "password"),
-                                  expected_code=400).json()
-        self.assert_cluster_requires_per_node_cert(r)
+
+        testlib.poll_for_condition(
+                lambda: try_node_add_with_bad_user(self.new_node()),
+                sleep_time=1, attempts=10,
+                msg='wait for add node failure')
 
         # Need to clean up the node that was /clusterInit'd so subsequent
         # tests don't get residual errors.
@@ -564,6 +580,23 @@ class NodeAdditionWithCertsBase:
     # appropriate error is returned. Also ensure an appropriate error if
     # clientCertAuth=false but an invalid username/password is specified.
     def client_cert_auth_ootb_client_certs_disabled_on_cluster_join_test(self):
+        # We "ping" the web server to see if it is alive after setting
+        # mandatory client certs. However we don't know when the actual
+        # start/end of the restart occurs so it's possible the node join
+        # will hit the window where it's occuring (and receive a connection
+        # closed error).
+        def try_join_cluster_with_bad_user(cluster_node, joining_node):
+            self.cluster.wait_for_web_service(cluster_node)
+            r = self.cluster.do_join_cluster(joining_node,
+                                             use_client_cert_auth=False,
+                                             auth=("baduser", "password"),
+                                             expected_code=400).json()
+            msg = "Error connection_closed happened during REST call"
+            if msg in r[0]:
+                return False
+            self.assert_added_node_must_use_client_cert(r)
+            return True
+
         self.provision_cluster_node(should_load_client_cert=False)
         self.provision_new_node(should_load_client_cert=False)
         testlib.toggle_client_cert_auth(self.cluster_node(),
@@ -582,16 +615,15 @@ class NodeAdditionWithCertsBase:
                                          expected_code=400).json()
         self.assert_cannot_use_invalid_username_password(r)
 
-        # XXX: disabled until it can be triaged
         # Change the cluster node so it uses mandatory client certs
-        #testlib.toggle_client_cert_auth(self.cluster_node(),
-        #                                enabled=True, mandatory=True)
-        # Try using a bad username/password
-        #r = self.cluster.do_join_cluster(self.new_node(),
-        #                                 use_client_cert_auth=False,
-        #                                 auth=("baduser", "password"),
-        #                                 expected_code=400).json()
-        #self.assert_added_node_must_use_client_cert(r)
+        testlib.toggle_client_cert_auth(self.cluster_node(),
+                                        enabled=True, mandatory=True)
+
+        testlib.poll_for_condition(
+                lambda: try_join_cluster_with_bad_user(
+                    self.cluster_node(), self.new_node()),
+                sleep_time=1, attempts=10,
+                msg='wait for cluster join failure')
 
     def provision_cluster_node(self, should_load_client_cert=False):
         cluster_node = self.cluster_node()
