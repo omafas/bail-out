@@ -12,7 +12,7 @@
 
 -behaviour(gen_server).
 
--export([start_monitor/4, notify/2, collect_stats/1, sync/1,
+-export([start_monitor/4, notify/2, collect_stats/1, sync/2,
          strip_cbauth_suffix/1]).
 
 -export([init/1, handle_call/3, handle_cast/2,
@@ -50,8 +50,8 @@ notify(Pid, Info) ->
 collect_stats(Pid) ->
     gen_server:call(Pid, collect_stats).
 
-sync(Pid) ->
-    gen_server:call(Pid, sync).
+sync(Pid, Timeout) ->
+    gen_server:call(Pid, sync, Timeout).
 
 init([Label, Version, Pid, Params]) ->
     MRef = erlang:monitor(process, Pid),

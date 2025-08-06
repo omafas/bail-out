@@ -137,12 +137,18 @@ meck_setup() ->
     meck_setup_getters(),
     meck_setup_setters(),
 
-    %% This function is slightly interesting. It uses some "fold" function in
-    %% ns_config that requires the snapshot to be in a specific format.
+    %% These functions are slightly interesting - they require the snapshot to
+    %% be in a specific format.
     %% The snapshot format is trivial to map to, so rather than re-implement
     %% (simple as the logic is) just map the snapshot to the expected format
     %% and pass it through to the base function, which should stop this from
     %% ever getting out of sync.
+    meck:expect(ns_config, fold,
+                fun(Fun, Acc, ?NS_CONFIG_LATEST_MARKER) ->
+                        meck:passthrough([Fun, Acc, [get_ets_snapshot()]]);
+                   (Fun, Acc, Snapshot) ->
+                        meck:passthrough([Fun, Acc, [Snapshot]])
+                end),
     meck:expect(ns_config, get_node_uuid_map,
                 fun(?NS_CONFIG_LATEST_MARKER) ->
                         meck:passthrough([[get_ets_snapshot()]]);
@@ -197,13 +203,20 @@ meck_setup_getters() ->
                         end
                 end),
 
-
+    meck:expect(ns_config, search_node,
+                fun(Snapshot, Key) ->
+                        fetch_node(node(), Snapshot, Key)
+                end),
     meck:expect(ns_config, search_node,
                 fun(Node, Snapshot, Key) ->
                         fetch_node(Node, Snapshot, Key)
                 end),
 
 
+    meck:expect(ns_config, search_prop,
+                fun (Snapshot, Key, SubKey) ->
+                        fetch_prop(Snapshot, Key, SubKey, undefined)
+                end),
     meck:expect(ns_config, search_prop,
                 fun(Snapshot, Key, SubKey, DefaultSubVal) ->
                         fetch_prop(Snapshot, Key, SubKey, DefaultSubVal)
@@ -230,6 +243,10 @@ meck_setup_getters() ->
     meck:expect(ns_config, search_node_with_default,
                 fun(Key, Default) ->
                         fetch_with_default_from_latest_snapshot(Key, Default)
+                end),
+    meck:expect(ns_config, search_node_with_default,
+                fun(Node, Snapshot, Key, Default) ->
+                        fetch_node_with_default(Node, Snapshot, Key, Default)
                 end).
 
 meck_setup_setters() ->
@@ -301,10 +318,18 @@ fetch_node_prop(Node, Snapshot, Key, SubKey, Default) ->
         false -> Default
     end.
 
+fetch_node(Node, ?NS_CONFIG_LATEST_MARKER, Key) ->
+    fetch_node(Node, get_ets_snapshot(), Key);
 fetch_node(Node, Snapshot, Key) ->
     case fetch_from_snapshot(Snapshot, {node, Node, Key}) of
         {value, _} = V -> V;
         false -> fetch_from_snapshot(Snapshot, Key)
+    end.
+
+fetch_node_with_default(Node, Snapshot, Key, Default) ->
+    case fetch_from_snapshot(Snapshot, {node, Node, Key}) of
+        {value, V} -> V;
+        false -> fetch_with_default(Snapshot, Key, Default)
     end.
 
 fetch_prop(?NS_CONFIG_LATEST_MARKER, Key, SubKey, DefaultSubVal) ->
