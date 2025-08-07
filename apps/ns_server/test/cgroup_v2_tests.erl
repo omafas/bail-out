@@ -223,6 +223,8 @@ run_with_cgroups_supported(Fun) ->
                         ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
                 end),
     meck:expect(config_profile, is_provisioned, fun() -> true end),
+    meck:expect(config_profile, get_bool,
+                fun (cgroup_feature_enabled) -> true end),
 
     %% since we have trouble testing/mocking the same module, we can just place
     %% this value into the persistent_term store and it should work largely the

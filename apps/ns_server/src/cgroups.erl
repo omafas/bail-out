@@ -77,7 +77,8 @@
 -spec(supported() -> boolean()).
 supported() ->
     cgroups:os_type() =:= {unix, linux} andalso
-        config_profile:is_provisioned() andalso system_checks().
+        config_profile:get_bool(cgroup_feature_enabled) andalso
+        system_checks().
 
 -spec(supported_and_79() -> boolean()).
 supported_and_79() ->

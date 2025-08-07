@@ -16,6 +16,10 @@
 {allow_hash_migration_during_auth, true}.
 {{memcached, mirror_ssl_port}, 11300}.
 
+%% cgroup support is disabled until all platforms (AWS, GCP, Azure) support
+%% it.
+{cgroup_feature_enabled, false}.
+
 %% The base path where services will be placed (by their name).
 %% Ex: 'kv'   -> ./services/kv
 %%     'cbas' -> ./services/cbas
