@@ -1,25 +1,19 @@
+SET(GET_PIP_PY_FILE ${CMAKE_CURRENT_BINARY_DIR}/get-pip.py)
 
-# Fetch WORKSPACE from ENV for Jenkins
-SET(WORKSPACE ${CMAKE_CURRENT_BINARY_DIR})
-IF ($ENV{WORKSPACE})
-  SET(WORKSPACE $ENV{WORKSPACE})
-ENDIF ($ENV{WORKSPACE})
-# Fetch WORKSPACE from ENV for Jenkins
-SET(VIRTUALENV_NAME ns_server_cluster_tests})
-IF ($ENV{VIRTUALENV_NAME})
-  SET(VIRTUALENV_NAME $ENV{VIRTUALENV_NAME})
-ENDIF ($ENV{VIRTUALENV_NAME})
+# We call this with a cmake call so that we can download the file at build time,
+# rather than configure time, which avoids downloading the file needlessly
+SET (GET_PIP_CMD "${CMAKE_COMMAND}"
+    -D "GET_PIP_PY_FILE=${GET_PIP_PY_FILE}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/get_pip.cmake")
 
 ADD_CUSTOM_TARGET(cluster_tests_python_requirements
-        COMMAND python -m venv ${WORKSPACE}/${VIRTUALENV_NAME}
-        COMMAND source ${WORKSPACE}/${VIRTUALENV_NAME}/bin/activate
-        COMMAND python -m pip install --upgrade pip
-        COMMAND python -m pip
+        COMMAND ${GET_PIP_CMD}
+        COMMAND ${PYTHON_EXE} ${GET_PIP_PY_FILE}
+        COMMAND ${PYTHON_EXE} -m pip
         install -r ${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt)
 SEPARATE_ARGUMENTS(cluster_test_args NATIVE_COMMAND $ENV{CLUSTER_TESTS_ARGS})
 ADD_CUSTOM_TARGET(cluster_tests
-        COMMAND source ${WORKSPACE}/${VIRTUALENV_NAME}/bin/activate
-        COMMAND JAVA_HOME=${Java_JAVA_HOME} python
+        COMMAND JAVA_HOME=${Java_JAVA_HOME} ${PYTHON_EXE}
         ${CMAKE_CURRENT_SOURCE_DIR}/run.py ${cluster_test_args}
         DEPENDS cluster_tests_python_requirements
         COMMAND_EXPAND_LISTS)
