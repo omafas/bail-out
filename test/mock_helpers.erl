@@ -116,13 +116,13 @@ auto_reprovision(PidMap) ->
     PidMap0 = setup_mocks([leader_registry],
                           PidMap),
 
-    {ok, AutoReprovisionPid} = auto_reprovision:start_link(),
+    {ok, AutoReprovisionPid} = ?FUNCTION_NAME:start_link(),
     PidMap0#{?FUNCTION_NAME => AutoReprovisionPid}.
 
 ns_rebalance_report_manager(PidMap) ->
     fake_ns_config:update_snapshot(rest_creds, null),
 
-    {ok, RebalanceReportManagerPid} = ns_rebalance_report_manager:start_link(),
+    {ok, RebalanceReportManagerPid} = ?FUNCTION_NAME:start_link(),
     PidMap#{?FUNCTION_NAME => RebalanceReportManagerPid}.
 
 ns_orchestrator(PidMap) ->
@@ -132,27 +132,27 @@ ns_orchestrator(PidMap) ->
                            testconditions],
                           PidMap),
 
-    {ok, OrchestratorPid} = ns_orchestrator:start_link(),
+    {ok, OrchestratorPid} = ?FUNCTION_NAME:start_link(),
     PidMap0#{?FUNCTION_NAME => OrchestratorPid}.
 
 compat_mode_manager(PidMap) ->
-    {ok, CompatModeManagerPid} = compat_mode_manager:start_link(),
+    {ok, CompatModeManagerPid} = ?FUNCTION_NAME:start_link(),
     PidMap#{?FUNCTION_NAME => CompatModeManagerPid}.
 
 auto_failover(PidMap) ->
     PidMap0 = setup_mocks([compat_mode_events], PidMap),
 
-    {ok, AutoFailoverPid} = auto_failover:start_link(),
+    {ok, AutoFailoverPid} = ?FUNCTION_NAME:start_link(),
     PidMap0#{?FUNCTION_NAME => AutoFailoverPid}.
 
 compat_mode_events(PidMap) ->
     {ok, CompatModeEventsPid} = gen_event:start_link({local,
-                                                      compat_mode_events}),
+                                                      ?FUNCTION_NAME}),
     PidMap#{?FUNCTION_NAME => CompatModeEventsPid}.
 
 ns_node_disco_events(PidMap) ->
     {ok, NSNodeDiscoEventsPid} = gen_event:start_link({local,
-                                                       ns_node_disco_events}),
+                                                       ?FUNCTION_NAME}),
     PidMap#{?FUNCTION_NAME => NSNodeDiscoEventsPid}.
 
 %%%===================================================================
@@ -165,8 +165,8 @@ ns_node_disco_events(PidMap) ->
 
 janitor_agent(PidMap) ->
     %% Janitor_agent mecks required to perform a full failover (with map).
-    meck:new(janitor_agent, [passthrough]),
-    meck:expect(janitor_agent, query_vbuckets,
+    meck:new(?FUNCTION_NAME, [passthrough]),
+    meck:expect(?FUNCTION_NAME, query_vbuckets,
                 fun(_,_,_,_) ->
                         %% We don't need to return anything useful for this
                         %% failover, we are failing over all but one node so
@@ -174,7 +174,7 @@ janitor_agent(PidMap) ->
                         {dict:from_list([{1, []}]), []}
                 end),
 
-    meck:expect(janitor_agent, fetch_vbucket_states,
+    meck:expect(?FUNCTION_NAME, fetch_vbucket_states,
                 fun(VBucket, _) ->
                         %% We need to return some semi-valid vBucket stat map
                         %% from this. We might use a couple of different maps
@@ -191,18 +191,18 @@ janitor_agent(PidMap) ->
                         A ++ R
                 end),
 
-    meck:expect(janitor_agent, find_vbucket_state,
+    meck:expect(?FUNCTION_NAME, find_vbucket_state,
                 fun(Node, States) ->
                         meck:passthrough([Node, States])
                 end),
 
-    meck:expect(janitor_agent, apply_new_bucket_config,
+    meck:expect(?FUNCTION_NAME, apply_new_bucket_config,
                 fun(_,_,_,_) ->
                         %% Just sets stuff in memcached, uninteresting here
                         ok
                 end),
 
-    meck:expect(janitor_agent, mark_bucket_warmed,
+    meck:expect(?FUNCTION_NAME, mark_bucket_warmed,
                 fun(_,_) ->
                         %% Just sets stuff in memcached, uninteresting here
                         ok
@@ -211,10 +211,10 @@ janitor_agent(PidMap) ->
 
 %% auto failover for orchestrator
 ns_janitor_server(PidMap) ->
-    meck:new(ns_janitor_server),
-    meck:expect(ns_janitor_server, start_cleanup,
+    meck:new(?FUNCTION_NAME),
+    meck:expect(?FUNCTION_NAME, start_cleanup,
                 fun(_) -> {ok, self()} end),
-    meck:expect(ns_janitor_server, terminate_cleanup,
+    meck:expect(?FUNCTION_NAME, terminate_cleanup,
                 fun(_) ->
                         CallerPid = self(),
                         CallerPid ! {cleanup_done, foo, bar},
@@ -224,30 +224,30 @@ ns_janitor_server(PidMap) ->
 
 %% from manual failover setup
 leader_activities(PidMap) ->
-    meck:new(leader_activities),
-    meck:expect(leader_activities, run_activity,
+    meck:new(?FUNCTION_NAME),
+    meck:expect(?FUNCTION_NAME, run_activity,
                 fun(_Name, _Quorum, Body) ->
                         Body()
                 end),
-    meck:expect(leader_activities, run_activity,
+    meck:expect(?FUNCTION_NAME, run_activity,
                 fun(_Name, _Quorum, Body, _Opts) ->
                         Body()
                 end),
-    meck:expect(leader_activities, deactivate_quorum_nodes,
+    meck:expect(?FUNCTION_NAME, deactivate_quorum_nodes,
             fun(_) -> ok end),
     PidMap#{?FUNCTION_NAME => mocked}.
 
 ns_doctor(PidMap) ->
-    meck:new(ns_doctor),
-    meck:expect(ns_doctor, get_nodes, fun() -> [] end),
+    meck:new(?FUNCTION_NAME),
+    meck:expect(?FUNCTION_NAME, get_nodes, fun() -> [] end),
     PidMap#{?FUNCTION_NAME => mocked}.
 
 rebalance_quirks(PidMap) ->
-    meck:new(rebalance_quirks, [passthrough]),
-    meck:expect(rebalance_quirks, get_quirks, fun(_,_) -> [] end),
+    meck:new(?FUNCTION_NAME, [passthrough]),
+    meck:expect(?FUNCTION_NAME, get_quirks, fun(_,_) -> [] end),
     PidMap#{?FUNCTION_NAME => mocked}.
 
 testconditions(PidMap) ->
-    meck:new(testconditions, [passthrough]),
-    meck:expect(testconditions, get, fun(_) -> ok end),
+    meck:new(?FUNCTION_NAME, [passthrough]),
+    meck:expect(?FUNCTION_NAME, get, fun(_) -> ok end),
     PidMap#{?FUNCTION_NAME => mocked}.
