@@ -119,7 +119,7 @@ auto_reprovision(PidMap) ->
     {ok, AutoReprovisionPid} = auto_reprovision:start_link(),
     PidMap0#{?FUNCTION_NAME => AutoReprovisionPid}.
 
-rebalance_report_manager(PidMap) ->
+ns_rebalance_report_manager(PidMap) ->
     fake_ns_config:update_snapshot(rest_creds, null),
 
     {ok, RebalanceReportManagerPid} = ns_rebalance_report_manager:start_link(),
@@ -128,7 +128,7 @@ rebalance_report_manager(PidMap) ->
 ns_orchestrator(PidMap) ->
     PidMap0 = setup_mocks([ns_janitor_server,
                            ns_doctor,
-                           rebalance_report_manager,
+                           ns_rebalance_report_manager,
                            testconditions],
                           PidMap),
 
