@@ -761,10 +761,15 @@ tls_config(Params) ->
                        undefined -> [];
                        P -> [{<<"password">>, base64:encode(P)}]
                    end,
+    %% Specify the default security level and allow a backdoor for testing
+    %% other levels.
+    SecurityLevel = ns_config:search(ns_config:latest(),
+                                     open_ssl_security_level, 1),
     {[{<<"private key">>, KeyPath},
       {<<"certificate chain">>, ChainPath},
       {<<"CA file">>, CAPath},
       {<<"minimum version">>, MinVsn},
+      {<<"security level">>, SecurityLevel},
       {<<"cipher list">>, Ciphers},
       {<<"cipher order">>, CipherOrder},
       {<<"client cert auth">>, AuthBinMcd} |
