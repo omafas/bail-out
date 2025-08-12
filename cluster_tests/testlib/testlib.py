@@ -436,6 +436,9 @@ def delete(cluster_or_node, path, **kwargs):
 def delete_succ(cluster_or_node, path, expected_code=200, **kwargs):
     return request('DELETE', cluster_or_node, path, expected_code, **kwargs)
 
+def delete_fail(cluster_or_node, path, expected_code, **kwargs):
+    return request('DELETE', cluster_or_node, path, expected_code, **kwargs)
+
 
 def set_default_auth(cluster_or_node, **kwargs):
     if 'auth' not in kwargs and 'cert' not in kwargs:
@@ -535,11 +538,17 @@ def metakv_get_succ(cluster, key, **kwargs):
 def metakv_get(cluster, key, **kwargs):
     return get(cluster, f"/_metakv{key}", **kwargs)
 
-def metakv_put_succ(cluster, key, value, **kwargs):
-    return put_succ(cluster, f"/_metakv{key}", data={'value': value}, **kwargs)
+def metakv_put_succ(cluster, key, **kwargs):
+    return put_succ(cluster, f"/_metakv{key}", **kwargs)
+
+def metakv_put_fail(cluster, key, expected_code, **kwargs):
+    return put_fail(cluster, f"/_metakv{key}", expected_code, **kwargs)
 
 def metakv_delete_succ(cluster, key, **kwargs):
     return delete_succ(cluster, f"/_metakv{key}", **kwargs)
+
+def metakv_delete_fail(cluster, key, expected_code, **kwargs):
+    return delete_fail(cluster, f"/_metakv{key}", expected_code, **kwargs)
 
 def diag_eval(cluster, code, **kwargs):
     return post_succ(cluster, '/diag/eval', data=code, **kwargs)
