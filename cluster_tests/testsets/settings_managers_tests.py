@@ -172,7 +172,7 @@ class SettingsManagersTests(testlib.BaseTestSet):
     # a ton at the moment but can hopefully be expanded later.
     def enable_shard_affinity_metakv_test(self):
         testlib.metakv_put_succ(self.cluster, SECRET_KEY,
-                                data = {'value': shard_affinty_blob("true")})
+                                shard_affinty_blob("true"))
         result = testlib.metakv_get_succ(self.cluster, SECRET_KEY)
         data = base64.b64decode(result.json()["value"])
         obj = json.loads(data)

@@ -20,8 +20,7 @@
          ns_config_get/2,
          mutate/2, mutate/3,
          iterate_matching/1, iterate_matching/2, iterate_matching/3,
-         check_continuous_allowed/1,
-         convert_vc_to_opaque_hash/1]).
+         check_continuous_allowed/1]).
 
 %% Exported APIs
 
@@ -181,17 +180,12 @@ ns_config_mutation(Key, Value, Params) ->
                   false ->
                       RV = ns_config:run_txn(
                              fun (Cfg, SetFn) ->
-                                     OldData = ns_config:search_with_vclock(Cfg,
-                                                                            K),
+                                     OldData = ns_config:search_with_vclock(Cfg, K),
                                      OldValue = get_old_value(OldData),
                                      NewValue = add_sensitive(Sensitive,
                                                               OldValue, Value),
-                                     OldVCHash =
-                                         case get_old_vclock(OldData) of
-                                             missing -> missing;
-                                             VC -> convert_vc_to_opaque_hash(VC)
-                                         end,
-                                     case Rev =:= OldVCHash of
+                                     OldVC = get_old_vclock(OldData),
+                                     case Rev =:= OldVC of
                                          true ->
                                              {commit, SetFn(K, NewValue, Cfg)};
                                          false ->
@@ -357,9 +351,3 @@ ns_config_matching_kvs(Key, KVList) ->
     %% This will retain the behaviour as it existed
     %% before this code was moved here from menelaus_metakv.erl.
     [{K, V} || {K, V} <- KVList, Filter(K)].
-
-%% Takes in a vector clock, and returns a base64 hash of that clock.
-%% This function converts vector clocks to opaque SHA256 hashes for consistent
-%% revision handling across all metakv operations.
-convert_vc_to_opaque_hash(VC) ->
-    base64:encode(crypto:hash(sha256, erlang:term_to_binary(VC))).

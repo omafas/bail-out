@@ -71,8 +71,7 @@ from testsets import \
     rest_eject_test, \
     node_remap_tests, \
     cbcollect_tests, \
-    config_remap_tests, \
-    metakv_tests
+    config_remap_tests
 
 tmp_cluster_dir = os.path.join(scriptdir, "test_cluster_data")
 
