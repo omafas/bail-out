@@ -1688,7 +1688,30 @@ maybe_update_eviction_policy_overrides(NewProps, BucketConfig,
                     {NewProps, ExistingDeleteKeys}
             end;
         false ->
-            case proplists:get_value(eviction_policy, NewProps) =/= undefined of
+            %% Why not use eviction_policy_changed/2 here?
+            %% Mixed eviction policy changes:
+            %% When a user mixes eviction policy changes that require a restart
+            %% with those that don’t, we delete eviction policy overrides (if
+            %% --noRestart is omitted) and reset to a clean slate. The new
+            %% eviction policy takes effect immediately.
+            %%
+            %% Exception during storage mode migration:
+            %% During a storage mode migration, the only eviction policy changes
+            %% allowed are those with --noRestart.
+            %% The REST API ignores attempts to modify bucket-level properties
+            %% that can’t be changed during migration if the value stays the
+            %% same. If the value changes, it throws an error indicating storage
+            %% migration is in progress.
+            %%
+            %% Behavior we retain:
+            %% If the user sets the eviction policy to the same value it already
+            %% has, we don’t delete overrides or trigger a restart. Any existing
+            %% overrides remain until a swap rebalance or graceful failover and
+            %% full recovery.
+            PolicySpecified =
+                proplists:get_value(eviction_policy, NewProps) =/= undefined,
+            case PolicySpecified andalso not
+                    storage_mode_migration_in_progress(BucketConfig) of
                 true ->
                     %% By default, eviction policy changes force a bucket
                     %% restart. Delete any existing eviction policy overrides.
