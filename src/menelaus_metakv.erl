@@ -52,7 +52,7 @@ handle_normal_get(Req, Key) ->
                 true ->
                     menelaus_util:reply_json(Req, [], 404);
                 false ->
-                    Rev = base64:encode(erlang:term_to_binary(VC)),
+                    Rev = base64:encode(metakv:convert_vc_to_opaque_hash(VC)),
                     Val = base64:encode(Val0),
                     menelaus_util:reply_json(Req, {[{rev, Rev},
                                                     {value, Val}]})
@@ -70,8 +70,7 @@ handle_mutate(Req, Key, Value, Params) ->
                           missing
                   end;
               XRev ->
-                  XRevB = list_to_binary(XRev),
-                  binary_to_term(XRevB)
+                  list_to_binary(XRev)
           end,
     Sensitive = proplists:get_value("sensitive", Params) =:= "true",
     case metakv:mutate(Key, Value,
@@ -142,7 +141,7 @@ handle_iterate(Req, Path, Continuous) ->
 output_kv(HTTPRes, {K, V}) ->
     write_chunk(HTTPRes, null, K, base64:encode(V), false);
 output_kv(HTTPRes, {K, V, VC, Sensitive}) ->
-    Rev0 = base64:encode(erlang:term_to_binary(VC)),
+    Rev0 = base64:encode(metakv:convert_vc_to_opaque_hash(VC)),
     {Rev, Value} = case V of
                        ?DELETED_MARKER ->
                            {null, null};
