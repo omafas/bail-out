@@ -93,15 +93,7 @@ teardown() ->
 %% -------------------------
 -spec update_snapshot(atom(), term()) -> true.
 update_snapshot(Key, Value) ->
-    OldSnapshot = get_ets_snapshot(),
-    NewSnapshot = maps:put(Key, add_rev_to_value(Value), OldSnapshot),
-
-    case store_ets_snapshot(OldSnapshot, NewSnapshot) of
-        ok ->
-            ok;
-        retry ->
-            update_snapshot(Key, Value)
-    end.
+    update_snapshot(#{Key => Value}).
 
 -spec update_snapshot(map()) -> true.
 update_snapshot(Map) when is_map(Map) ->
