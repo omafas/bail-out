@@ -1042,3 +1042,87 @@ class BucketMigrationTest(testlib.BaseTestSet):
             )
 
         self.cluster.delete_bucket(bucket_name)
+
+    def eviction_policy_noop_no_restart_storage_mode_migration_test(
+        self,
+    ):
+        """
+        Start a storage mode migration with an eviction policy change using
+        --noRestart.
+        Then send an evictionPolicy update without --noRestart but with the
+        identical bucket-level eviction policy value, and verify it's treated as
+        a no-op:
+        - No per-node eviction overrides disappear
+        - No per-node storage mode overrides disappear
+        """
+        bucket_name = "bucket-evict-noop-test"
+
+        # Create couchstore + valueOnly
+        create_bucket(
+            self.cluster, bucket_name, "couchstore", 1024, "valueOnly"
+        )
+
+        # Begin migration to magma and change eviction policy with --noRestart
+        # This should add per-node storage_mode=couchstore and
+        # eviction_policy=valueOnly overrides
+        update_data = {
+            "name": bucket_name,
+            "storageBackend": "magma",
+            "evictionPolicy": "fullEviction",
+            "noRestart": "true",
+        }
+        self.cluster.update_bucket(update_data)
+
+        # Capture overrides before the no-op request
+        per_node_storage_mode_before = get_per_node_storage_mode(
+            self.cluster, bucket_name
+        )
+        per_node_eviction_policy_before = get_per_node_eviction_policy(
+            self.cluster, bucket_name
+        )
+
+        # Sanity: overrides were created as expected
+        assert_per_node_storage_mode_keys_added(
+            self.cluster, bucket_name, "couchstore"
+        )
+        assert_per_node_eviction_policy_keys_added(
+            self.cluster, bucket_name, "valueOnly"
+        )
+
+        # Now send evictionPolicy again without noRestart but with identical
+        # value ("fullEviction"). This should be a no-op and must not delete the
+        # per-node eviction overrides
+        noop_update = {
+            "name": bucket_name,
+            "evictionPolicy": "fullEviction",
+            # noRestart intentionally omitted
+        }
+        self.cluster.update_bucket(noop_update)
+
+        # Verify overrides did not disappear
+        per_node_storage_mode_after = get_per_node_storage_mode(
+            self.cluster, bucket_name
+        )
+        per_node_eviction_policy_after = get_per_node_eviction_policy(
+            self.cluster, bucket_name
+        )
+
+        assert (
+            per_node_storage_mode_after == per_node_storage_mode_before
+        ), f"per-node storage mode overrides changed on no-op: "
+        f"{per_node_storage_mode_before} -> {per_node_storage_mode_after}"
+
+        assert (
+            per_node_eviction_policy_after == per_node_eviction_policy_before
+        ), f"per-node eviction overrides changed on no-op: "
+        f"{per_node_eviction_policy_before} -> {per_node_eviction_policy_after}"
+
+        # And that they are still the expected values
+        assert_per_node_storage_mode_keys_added(
+            self.cluster, bucket_name, "couchstore"
+        )
+        assert_per_node_eviction_policy_keys_added(
+            self.cluster, bucket_name, "valueOnly"
+        )
+
+        self.cluster.delete_bucket(bucket_name)
