@@ -661,7 +661,8 @@ durability_impossible_fallback(BucketConfig) ->
         memcached -> undefined;
         membase ->
             proplists:get_value(durability_impossible_fallback, BucketConfig,
-                                disabled)
+                                attribute_default(
+                                  durability_impossible_fallback))
     end.
 
 warmup_behavior(BucketConfig) ->
@@ -669,7 +670,7 @@ warmup_behavior(BucketConfig) ->
         memcached -> undefined;
         membase ->
             proplists:get_value(warmup_behavior, BucketConfig,
-                                background)
+                                attribute_default(warmup_behavior))
     end.
 
 %% The default value of the attribute.
@@ -679,6 +680,9 @@ attribute_default(Name) ->
         expiry_pager_sleep_time -> 600;     % 10 minutes
         memory_low_watermark -> 75;         % percentage
         memory_high_watermark -> 85;        % percentage
+        warmup_behavior -> background;      % background | blocking
+        durability_impossible_fallback ->   % disabled | fallbackToActiveAck
+            disabled;
         cross_cluster_versioning_enabled -> % boolean
             false;
         access_scanner_enabled -> true;     % boolean
@@ -2894,6 +2898,10 @@ chronicle_upgrade_bucket_props_to_79(BucketName, ChronicleTxn) ->
                   attribute_default(memory_low_watermark)},
                  {memory_high_watermark,
                   attribute_default(memory_high_watermark)},
+                 {warmup_behavior,
+                  attribute_default(attribute_default)},
+                 {durability_impossible_fallback,
+                  attribute_default(durability_impossible_fallback)},
                  %% The default value isn't used for existing buckets as it
                  %% may lead to XDCR setups stopping.
                  {invalid_hlc_strategy, ignore},
