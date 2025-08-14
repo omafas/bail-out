@@ -2879,6 +2879,54 @@ chronicle_add_uuid2bucket_mapping_upgrade_to_79(BucketName, Txn) ->
     NewKey = uuid2bucket_key(UUID),
     chronicle_upgrade:set_key(NewKey, BucketName, Txn).
 
+%% Return a list of properties to add to the specified bucket config.
+props_to_add_for_79(BucketConfig) ->
+    case bucket_type(BucketConfig) of
+        memcached ->
+            [];
+        membase ->
+            [{expiry_pager_sleep_time,
+              attribute_default(expiry_pager_sleep_time)},
+             {memory_low_watermark,
+              attribute_default(memory_low_watermark)},
+             {memory_high_watermark,
+              attribute_default(memory_high_watermark)},
+             {warmup_behavior,
+              attribute_default(warmup_behavior)},
+             {durability_impossible_fallback,
+              attribute_default(durability_impossible_fallback)},
+             %% The default value isn't used for existing buckets as it
+             %% may lead to XDCR setups stopping.
+             {invalid_hlc_strategy, ignore},
+             {hlc_max_future_threshold,
+              attribute_default(hlc_max_future_threshold)},
+             {dcp_connections_between_nodes,
+              attribute_default(dcp_connections_between_nodes)},
+             {dcp_backfill_idle_protection_enabled,
+              get_dcp_backfill_idle_protection_default(BucketConfig)},
+             {dcp_backfill_idle_limit_seconds,
+              get_dcp_backfill_idle_limit_seconds(BucketConfig)},
+             {dcp_backfill_idle_disk_threshold,
+              get_dcp_backfill_idle_disk_threshold(BucketConfig)}] ++
+            case is_persistent(BucketConfig) of
+                true ->
+                    [{access_scanner_enabled, true}];
+                false ->
+                    []
+            end ++
+            case ns_bucket:is_magma(BucketConfig) of
+                true ->
+                    [{continuous_backup_enabled,
+                      attribute_default(continuous_backup_enabled)},
+                     {continuous_backup_interval,
+                      attribute_default(continuous_backup_interval)},
+                     {continuous_backup_location,
+                      attribute_default(continuous_backup_location)}];
+                false ->
+                    []
+            end
+    end.
+
 chronicle_upgrade_bucket_props_to_79(BucketName, ChronicleTxn) ->
     PropsKey = sub_key(BucketName, props),
     {ok, BucketConfig0} = chronicle_upgrade:get_key(PropsKey, ChronicleTxn),
@@ -2887,61 +2935,35 @@ chronicle_upgrade_bucket_props_to_79(BucketName, ChronicleTxn) ->
           fun ({Key, _Value}) ->
                   not lists:member(Key, removed_bucket_settings())
           end, BucketConfig0),
-    AddProps =
-        case bucket_type(BucketConfig) of
-            memcached ->
-                [];
-            membase ->
-                [{expiry_pager_sleep_time,
-                  attribute_default(expiry_pager_sleep_time)},
-                 {memory_low_watermark,
-                  attribute_default(memory_low_watermark)},
-                 {memory_high_watermark,
-                  attribute_default(memory_high_watermark)},
-                 {warmup_behavior,
-                  attribute_default(warmup_behavior)},
-                 {durability_impossible_fallback,
-                  attribute_default(durability_impossible_fallback)},
-                 %% The default value isn't used for existing buckets as it
-                 %% may lead to XDCR setups stopping.
-                 {invalid_hlc_strategy, ignore},
-                 {hlc_max_future_threshold,
-                  attribute_default(hlc_max_future_threshold)},
-                 {dcp_connections_between_nodes,
-                  attribute_default(dcp_connections_between_nodes)},
-                 {dcp_backfill_idle_protection_enabled,
-                  get_dcp_backfill_idle_protection_default(BucketConfig)},
-                 {dcp_backfill_idle_limit_seconds,
-                  get_dcp_backfill_idle_limit_seconds(BucketConfig)},
-                 {dcp_backfill_idle_disk_threshold,
-                  get_dcp_backfill_idle_disk_threshold(BucketConfig)}] ++
-                    case is_persistent(BucketConfig) of
-                        true ->
-                            [{access_scanner_enabled, true}];
-                        false ->
-                            []
-                    end ++
-                    case ns_bucket:is_magma(BucketConfig) of
-                        true ->
-                            [{continuous_backup_enabled,
-                              attribute_default(continuous_backup_enabled)},
-                             {continuous_backup_interval,
-                              attribute_default(continuous_backup_interval)},
-                             {continuous_backup_location,
-                              attribute_default(continuous_backup_location)}];
-                        false ->
-                            []
-                    end
-        end,
-    case AddProps of
+    case props_to_add_for_79(BucketConfig) of
         [] ->
             ChronicleTxn;
-        _ ->
-            NewBucketConfig = misc:merge_proplists(fun(_, L, _) -> L end,
-                                                   AddProps, BucketConfig),
+        AddProps ->
+            NewBucketConfig = check_for_preset_bucket_settings(AddProps,
+                                                               BucketConfig),
             chronicle_upgrade:set_key(PropsKey, NewBucketConfig,
                                       ChronicleTxn)
     end.
+
+%% To enable the case where the user, under the guidance from Couchbase
+%% support, has preset "new" settings in the bucket config with values
+%% that normally would be added on upgrade. We want to keep the preset
+%% values rather than default values for the new settings.
+check_for_preset_bucket_settings(AddProps, BucketConfig) ->
+    NewKeys = proplists:get_keys(AddProps),
+    ExistingKeys = proplists:get_keys(BucketConfig),
+    IntersectingKeys = [Key || Key <- NewKeys, lists:member(Key, ExistingKeys)],
+    case IntersectingKeys of
+        [] ->
+            ok;
+        _ ->
+            ?log_debug("Using preset bucket keys: ~p", [IntersectingKeys])
+    end,
+
+    %% Any key already in the bucket config take precedence over newly
+    %% added keys. This preserves the preset settings.
+    misc:merge_proplists(fun(_, _, R) -> R end,
+                         AddProps, BucketConfig).
 
 chronicle_upgrade_to_79(ChronicleTxn) ->
     {ok, BucketNames} = chronicle_upgrade:get_key(root(), ChronicleTxn),
@@ -3812,5 +3834,51 @@ uuid2bucket_key_test() ->
         meck:unload(cluster_compat_mode),
         fake_chronicle_kv:teardown()
     end.
+
+upgrade_to_79_test() ->
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:expect(cluster_compat_mode, is_cluster_79, fun () -> true end),
+    meck:expect(cluster_compat_mode, is_enterprise, fun () -> true end),
+
+    %% Normal upgrade
+    BC1 = [{type, membase},
+           {num_vbuckets, 16},
+           {servers, [node1, node2]},
+           {ram_quota, 100 * ?MIB},
+           {storage_mode, magma}],
+    AddProps1 = props_to_add_for_79(BC1),
+    NewBC1 = check_for_preset_bucket_settings(AddProps1, BC1),
+    ?assertEqual(attribute_default(expiry_pager_sleep_time),
+                 proplists:get_value(expiry_pager_sleep_time, NewBC1)),
+    ?assertEqual(attribute_default(memory_low_watermark),
+                 proplists:get_value(memory_low_watermark, NewBC1)),
+    ?assertEqual(attribute_default(memory_high_watermark),
+                 proplists:get_value(memory_high_watermark, NewBC1)),
+    ?assertEqual(attribute_default(access_scanner_enabled),
+                 proplists:get_value(access_scanner_enabled, NewBC1)),
+    ?assertEqual(attribute_default(warmup_behavior),
+                 proplists:get_value(warmup_behavior, NewBC1)),
+
+    %% Bucket with preset values.
+    BC2 = [{type, membase},
+           {num_vbuckets, 16},
+           {servers, [node1, node2]},
+           {ram_quota, 100 * ?MIB},
+           {storage_mode, magma},
+           %% Preset values
+           {access_scanner_enabled, false},
+           {expiry_pager_sleep_time, 300},
+           {memory_high_watermark, 90},
+           {memory_low_watermark, 89},
+           {warmup_behavior, blocking}],
+    AddProps2 = props_to_add_for_79(BC2),
+    NewBC2 = check_for_preset_bucket_settings(AddProps2, BC2),
+    ?assertEqual(300, proplists:get_value(expiry_pager_sleep_time, NewBC2)),
+    ?assertEqual(89, proplists:get_value(memory_low_watermark, NewBC2)),
+    ?assertEqual(90, proplists:get_value(memory_high_watermark, NewBC2)),
+    ?assertEqual(false, proplists:get_value(access_scanner_enabled, NewBC2)),
+    ?assertEqual(blocking, proplists:get_value(warmup_behavior, NewBC2)),
+
+    meck:unload().
 
 -endif.
