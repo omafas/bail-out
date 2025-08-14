@@ -45,7 +45,7 @@ start_monitor(Label, Version, Pid, Params) ->
                              [Label, Version, Pid, Params], []).
 
 notify(Pid, Info) ->
-    Pid ! {notify, Info}.
+    Pid ! {notify, ?HIDE(Info)}.
 
 collect_stats(Pid) ->
     gen_server:call(Pid, collect_stats).
@@ -82,8 +82,10 @@ handle_info(heartbeat, State = #state{label = Label, connection = Pid,
         ok ->
             {noreply, State}
     end;
-handle_info({notify, Info}, State = #state{label = Label, connection = Pid,
-                                           version = Version}) ->
+handle_info({notify, InfoHidden}, State = #state{label = Label,
+                                                 connection = Pid,
+                                                 version = Version}) ->
+    Info = ?UNHIDE(InfoHidden),
     Method = case Version of
                  internal ->
                      "AuthCacheSvc.UpdateDB";

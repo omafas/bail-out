@@ -276,8 +276,8 @@ rotate_password(Type, ProtectionSleep) ->
         fun () ->
                 ns_config:sync_announcements(),
                 chronicle_compat_events:sync(),
-                ns_config_rep:ensure_config_seen_by_nodes(
-                  ns_node_disco:nodes_actual_other(), infinity),
+                ok = ns_config_rep:ensure_config_seen_by_nodes(
+                       ns_node_disco:nodes_actual_other(), infinity),
                 misc:parallel_map(menelaus_cbauth:sync(_),
                                   ns_node_disco:nodes_actual(), infinity)
         end,
