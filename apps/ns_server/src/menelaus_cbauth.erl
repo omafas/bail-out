@@ -78,8 +78,19 @@ sync() ->
 sync(Node) ->
     InternalConnections =
         gen_server:call({?MODULE, Node}, get_internal_connections, infinity),
-    misc:parallel_map(?cut(catch(menelaus_cbauth_worker:sync(_))),
-                      InternalConnections, infinity).
+    %% If the above call succeeds, but a worker exits before we make the below
+    %% sync call, then we would incorrectly crash the caller of this function.
+    %% However, if we simply ignore all exceptions, then other cases like
+    %% timeouts would incorrectly be ignored. As such, we need to catch any
+    %% noproc errors, but allow all other exeptions to be propogated to the
+    %% caller
+    misc:parallel_map(
+      fun (Pid) ->
+              try menelaus_cbauth_worker:sync(Pid)
+              catch exit:{noproc, _} ->
+                      ?log_error("Process ~p no longer exists", [Pid])
+              end
+      end, InternalConnections, infinity).
 
 stats() ->
     InternalConnections = gen_server:call(?MODULE, get_internal_connections),
