@@ -3653,7 +3653,7 @@ get_max_buckets_test_() ->
              <- Tests]}.
 
 uuid2bucket_key_test() ->
-    fake_chronicle_kv:new(),
+    fake_chronicle_kv:setup(),
     meck:new(cluster_compat_mode, [passthrough]),
     try
         Root = root(),
@@ -3797,7 +3797,7 @@ uuid2bucket_key_test() ->
                                                      Snapshot2))
     after
         meck:unload(cluster_compat_mode),
-        fake_chronicle_kv:unload()
+        fake_chronicle_kv:teardown()
     end.
 
 -endif.

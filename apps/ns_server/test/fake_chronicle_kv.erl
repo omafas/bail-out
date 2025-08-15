@@ -18,31 +18,37 @@
 %% trivial due to the extra features that chronicle has (i.e. writing to
 %% files and replicating config).
 %%
-%% This module exposes a meck like interface to create and unload the
-%% required mocks (i.e. fake_ns_config:new(), fake_ns_config:unload()).
-%%
-%% All config is stored in an ets table as a map (similarly to chronicle).
+%% All config is stored in a single ets table element as a map
+%% (similarly to chronicle).
 %%
 %% This helper is minimal, it was written to solve an issue for a specific
-%% test, so the ns_config interface that has been implemented here is not
-%% complete. Hopefully the simplicity of the snapshot and functions here allows
-%% future users to simply add the additional interface functions required.
+%% test, so the chronicle_kv interface that has been implemented may not be
+%% complete. Hopefully the relative simplicity of the snapshot and functions
+%% here allows future users to simply add the additional interface functions
+%% required.
+%%
+%% The module supports concurrent writers via compare and swap
+%% (ets:select_replace). All operations that modify the snapshot will be retried
+%% til their modification is applied successfully.
 %%
 %% Use should be as follows:
-%%     1) fake_chronicle_kv:new(),
+%%     1) fake_chronicle_kv:setup(),
 %%     2a) Merge a map into the snapshot
 %%         fake_chronicle_kv:update_snapshot(#{}),
 %%     2b) Upsert an individual key value pair to the snapshot
 %%         fake_chronicle_kv:update_snapshot(auto_failover_cfg, []),
 %%     3) Perform test
-%%     4) fake_chronicle_kv:unload(),
+%%     4) fake_chronicle_kv:teardown(),
 -module(fake_chronicle_kv).
 
 -include("ns_test.hrl").
 
+%% Needed for ets:fun2ms/1
+-include_lib("stdlib/include/ms_transform.hrl").
+
 %% API
--export([new/0,
-         unload/0,
+-export([setup/0,
+         teardown/0,
          update_snapshot/1,
          update_snapshot/2,
          get_ets_snapshot/0]).
@@ -56,23 +62,39 @@
 %% --------------------
 %% API - Setup/Teardown
 %% --------------------
-new() ->
-    ets:new(?TABLE_NAME, [public, named_table]),
-    meck_setup().
+setup() ->
+    ets:new(?TABLE_NAME, [set, public, named_table]),
+    ets:insert(?TABLE_NAME, {snapshot, #{seqno => 0}}),
 
-unload() ->
+    meck_setup(),
+
+    fake_ns_config:setup_ns_config_events(),
+
+    {ok, _} = gen_event:start_link({local, chronicle_kv:event_manager(kv)}),
+    {ok, _} = chronicle_compat_events:start_link().
+
+teardown() ->
     ets:delete(?TABLE_NAME),
-    meck:unload(ns_node_disco),
-    meck:unload(chronicle_kv).
+
+    Pid = whereis(chronicle_compat_events),
+    unlink(Pid),
+    misc:terminate_and_wait(Pid, shutdown),
+
+    P1 = whereis(chronicle_kv:event_manager(kv)),
+    unlink(P1),
+    misc:terminate_and_wait(P1, shutdown),
+
+    fake_ns_config:teardown_ns_config_events(),
+
+    ?meckUnload(ns_node_disco),
+    ?meckUnload(chronicle_kv).
 
 %% -------------------------
 %% API - Snapshot Management
 %% -------------------------
 -spec update_snapshot(atom(), term()) -> true.
 update_snapshot(Key, Value) ->
-    OldSnapshot = get_ets_snapshot(),
-    NewSnapshot = maps:put(Key, add_rev_to_value(Value), OldSnapshot),
-    store_ets_snapshot(NewSnapshot).
+    update_snapshot(#{Key => Value}).
 
 -spec update_snapshot(map()) -> true.
 update_snapshot(Map) when is_map(Map) ->
@@ -82,7 +104,13 @@ update_snapshot(Map) when is_map(Map) ->
                end, Map),
     OldSnapshot = get_ets_snapshot(),
     NewSnapshot = maps:merge(OldSnapshot, NewKVs),
-    store_ets_snapshot(NewSnapshot).
+
+    case store_ets_snapshot(OldSnapshot, NewSnapshot) of
+        ok ->
+            ok;
+        retry ->
+            update_snapshot(Map)
+    end.
 
 %% ----------------------
 %% API - Helper Functions
@@ -120,21 +148,28 @@ meck_setup_chronicle_kv_getters() ->
               %% should be using lookup functions to get specific keys
               %% anyways so this should just work, and we don't care about
               %% perf here.
-              get_ets_snapshot()
+              Snapshot = get_ets_snapshot(),
+              maps:remove(seqno, Snapshot)
       end),
 
 
     meck:expect(chronicle_kv, ro_txn,
                 fun(_Name, Fun) ->
+                        Snapshot = get_ets_snapshot(),
+                        Seqno = get_snapshot_seqno(Snapshot),
+                        SnapshotWithoutSeqno = maps:remove(seqno, Snapshot),
                         {ok,
-                            {Fun(get_ets_snapshot()),
-                                make_rev(get_snapshot_seqno())}}
+                         {Fun(SnapshotWithoutSeqno),
+                          make_rev(Seqno)}}
                 end),
     meck:expect(chronicle_kv, ro_txn,
                 fun(_Name, Fun, _Opts) ->
+                        Snapshot = get_ets_snapshot(),
+                        Seqno = get_snapshot_seqno(Snapshot),
+                        SnapshotWithoutSeqno = maps:remove(seqno, Snapshot),
                         {ok,
-                            {Fun(get_ets_snapshot()),
-                                make_rev(get_snapshot_seqno())}}
+                         {Fun(SnapshotWithoutSeqno),
+                          make_rev(Seqno)}}
                 end),
 
 
@@ -160,8 +195,16 @@ meck_setup_chronicle_kv_getters() ->
 
     meck:expect(chronicle_kv, get_full_snapshot,
                 fun(_Name) ->
+                        Snapshot = get_ets_snapshot(),
+                        Seqno = get_snapshot_seqno(Snapshot),
+                        SnapshotWithoutSeqno = maps:remove(seqno, Snapshot),
                         {ok,
-                         {get_ets_snapshot(), make_rev(get_snapshot_seqno())}}
+                         {SnapshotWithoutSeqno, make_rev(Seqno)}}
+                end),
+
+    meck:expect(chronicle_kv, event_manager,
+                fun(Name) ->
+                        list_to_atom(atom_to_list(Name) ++ "-events")
                 end).
 
 meck_setup_chronicle_kv_setters() ->
@@ -195,26 +238,60 @@ meck_setup_chronicle_kv_setters() ->
 %% Internal - getter/setter functions
 %% ----------------------------------
 get_ets_snapshot() ->
-    case ets:lookup(?TABLE_NAME, snapshot) of
-        [{snapshot, Snapshot}] -> Snapshot;
-        [] -> maps:new()
-    end.
+    [{snapshot, Snapshot}] = ets:lookup(?TABLE_NAME, snapshot),
+    Snapshot.
 
 get_snapshot_seqno() ->
-    case ets:lookup(?TABLE_NAME, snapshot_seqno) of
-        [{snapshot_seqno, Value}] -> Value;
-        [] -> 0
-    end.
+    Snapshot = get_ets_snapshot(),
+    get_snapshot_seqno(Snapshot).
 
-store_ets_snapshot(Snapshot) ->
+get_snapshot_seqno(Snapshot) ->
+    maps:get(seqno, Snapshot).
+
+store_ets_snapshot(OldSnapshot, NewSnapshot) ->
     Seqno = maps:fold(
               fun(_Key, {_Value, {_, Seqno}}, Acc) ->
-                      max(Seqno, Acc)
-              end, 0, Snapshot),
-    store_ets_snapshot(Snapshot, Seqno).
-store_ets_snapshot(Snapshot, Seqno) ->
-    ets:insert(?TABLE_NAME, {snapshot, Snapshot}),
-    ets:insert(?TABLE_NAME, {snapshot_seqno, Seqno}).
+                      max(Seqno, Acc);
+                 (seqno, _, Acc) ->
+                      Acc
+              end, 0, NewSnapshot),
+    store_ets_snapshot(OldSnapshot, NewSnapshot, Seqno).
+
+store_ets_snapshot(OldSnapshot, NewSnapshot, Seqno) ->
+    compare_and_swap(OldSnapshot, NewSnapshot#{seqno => Seqno}).
+
+compare_and_swap(OldSnapshot, NewSnapshot) ->
+    %% There is only one value (the snapshot). select_replace (and fun2ms) lets
+    %% us atomically replace the value (if it's the value that we expected, of
+    %% course). This lets us avoid race conditions in which we made changes
+    %% based on a now invalid snapshot - if we have concurrent writers. We will
+    %% return up and the caller should repeat til we can successfully swap the
+    %% value.
+    MS = ets:fun2ms(
+           fun({snapshot, Snapshot}) when Snapshot =:= OldSnapshot ->
+                   {snapshot, NewSnapshot}
+           end),
+    case ets:select_replace(?TABLE_NAME, MS) of
+        1 ->
+            Mgr = chronicle_kv:event_manager(kv),
+            maps:foreach(
+              fun (seqno, _) ->
+                      ok;
+                  (Key, NewValue) ->
+                      case maps:find(Key, OldSnapshot) of
+                          {ok, NewValue} ->
+                              ok;
+                          _ ->
+                              {Value, Rev} = NewValue,
+                              gen_event:notify(Mgr,
+                                               {{key, Key}, Rev,
+                                                {updated, Value}})
+                      end
+              end, NewSnapshot),
+            ok;
+        0 ->
+            retry
+    end.
 
 add_rev_to_value(Value, Seqno) ->
     {Value, make_rev(Seqno)}.
@@ -245,7 +322,7 @@ get_keys_for_txn(Keys, _Snapshot) ->
     %% this for now.
     maps:filter(fun(K, _) -> lists:member(K, Keys) end, get_ets_snapshot()).
 
-do_commits(Commits) ->
+do_commits(TxnSnapshot, Commits) ->
     {NewMap, NewSeqno} = lists:foldl(
         fun({set, Key, Value}, {Snapshot, Seqno}) ->
                 NewSeqno = Seqno + 1,
@@ -253,26 +330,28 @@ do_commits(Commits) ->
            ({delete, Key}, {Snapshot, Seqno}) ->
                NewSeqno = Seqno + 1,
                {maps:remove(Key, Snapshot), NewSeqno}
-        end, {get_ets_snapshot(), get_snapshot_seqno()}, Commits),
+        end, {TxnSnapshot, get_snapshot_seqno(TxnSnapshot)}, Commits),
 
-    store_ets_snapshot(NewMap, NewSeqno).
+    store_ets_snapshot(TxnSnapshot, NewMap, NewSeqno).
 
-transaction(_Name, Keys, Fun, _Opts) ->
+
+transaction(Name, Keys, Fun, Opts) ->
+    TxnSnapshot = get_ets_snapshot(),
     Snapshot = case Keys of
                    all -> get_ets_snapshot();
-                   _ -> get_keys_for_txn(Keys, {txn_slow, get_ets_snapshot()})
+                   _ -> get_keys_for_txn(Keys, {txn_slow, TxnSnapshot})
                end,
-    %% Not correct or safe by any means, but should be acceptable for unit
-    %% testing.
     case Fun(Snapshot) of
-        %% Only handles commits and sets at the moment. Can be
-        %% expanded in the future if necessary
         {commit, Commits} ->
-            do_commits(Commits),
-            {ok, {?FAKE_HISTORY_REV, get_snapshot_seqno()}};
+            case do_commits(TxnSnapshot, Commits) of
+               ok -> {ok, {?FAKE_HISTORY_REV, get_snapshot_seqno()}};
+               retry -> transaction(Name, Keys, Fun, Opts)
+            end;
         {commit, Commits, Results} ->
-            do_commits(Commits),
-            {ok, {?FAKE_HISTORY_REV, get_snapshot_seqno()}, Results};
+            case do_commits(TxnSnapshot, Commits) of
+                ok ->  {ok, {?FAKE_HISTORY_REV, get_snapshot_seqno()}, Results};
+                retry -> transaction(Name, Keys, Fun, Opts)
+            end;
         {abort, Error} ->
             Error
     end.

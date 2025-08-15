@@ -510,10 +510,10 @@ setup() ->
                 fun (_, Body, _) ->
                         ejson:encode(Body)
                 end),
-    fake_chronicle_kv:new().
+    fake_chronicle_kv:setup().
 
 teardown(_) ->
-    fake_chronicle_kv:unload(),
+    fake_chronicle_kv:teardown(),
     meck:unload(menelaus_util),
     meck:unload(cb_util),
     meck:unload(rpc).
