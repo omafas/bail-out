@@ -76,8 +76,7 @@ from testsets import \
     metakv2_tests, \
     app_telemetry_tests, \
     jwt_tests, \
-    bucket_dirs_cleanup_tests, \
-    fusion_tests
+    bucket_dirs_cleanup_tests
 
 tmp_cluster_dir = os.path.join(testlib.get_cluster_test_dir(),
                                "test_cluster_data")
