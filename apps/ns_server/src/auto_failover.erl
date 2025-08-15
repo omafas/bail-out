@@ -628,8 +628,8 @@ process_action({failover, NodesWithUUIDs}, S, DownNodes, NodeStatuses,
 
 trim_needed(_Nodes, #state{disable_max_count = true}) ->
     false;
-trim_needed(Nodes, #state{max_count = Max}) ->
-    length(Nodes) > Max.
+trim_needed(Nodes, #state{count = Count, max_count = Max}) ->
+    Count  + length(Nodes) > Max.
 
 trim_nodes(Nodes, #state{count = Count, max_count = Max}) ->
     lists:sublist(Nodes, Max - Count).
