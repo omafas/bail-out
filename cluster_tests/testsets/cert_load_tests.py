@@ -24,9 +24,14 @@ class CertLoadTests(testlib.BaseTestSet):
 
     @staticmethod
     def requirements():
-        return testlib.ClusterRequirements(edition='Enterprise')
+        return testlib.ClusterRequirements(edition='Enterprise',
+                                           min_num_nodes=2,
+                                           encryption=True)
 
     def setup(self):
+        # Need to remove extras,
+        regenerate_certs_and_remove_unused_generated_cas(self.cluster)
+
         ca_path = os.path.join(certs_path, 'test_CA.pem')
         with open(ca_path, 'r') as f:
             self.ca_pem = f.read()
@@ -101,13 +106,16 @@ class CertLoadTests(testlib.BaseTestSet):
         self.generate_and_load_pkcs12_cert('ec', is_client=True,
                                            passphrase=testlib.random_str(8))
 
-    def generate_and_load_cert(self, key_type, is_client=False,
+    def generate_and_load_cert(self, key_type, node=None, is_client=False,
                                pkcs8=False, passphrase=None):
+        if node is None:
+            node = self.cluster.connected_nodes[0]
+        node_addr = node.addr()
         if is_client:
             cert, key = generate_internal_client_cert(self.ca_pem, self.ca_key,
                                                       'test_name')
         else:
-            cert, key = generate_node_certs(self.node_addr,
+            cert, key = generate_node_certs(node_addr,
                                             self.ca_pem, self.ca_key,
                                             key_type=key_type)
         if pkcs8 == False:
@@ -115,7 +123,7 @@ class CertLoadTests(testlib.BaseTestSet):
                    'encryption is supported only for pkcs8 keys'
         if pkcs8:
             key = to_pkcs8(key, passphrase)
-        return load_cert(self.cluster.connected_nodes[0], cert, key, passphrase,
+        return load_cert(node, cert, key, passphrase,
                          is_client=is_client)
 
     def pkcs12_rsa_key_test(self):
@@ -187,53 +195,321 @@ class CertLoadTests(testlib.BaseTestSet):
             if os.path.exists(pkcs12_path):
                 os.remove(pkcs12_path)
 
-    def regenerate_leaf_certificates_only_test(self):
-        node_cert_before = self.generate_and_load_cert('rsa')
-        client_cert_before = self.generate_and_load_cert('rsa', is_client=True)
-        trusted_cas_before = get_trusted_CAs(self.cluster)
+    def regen_certs_test(self):
+        node_certs_before = self.load_custom_certs()
 
-        # Should not change CAs, only change node certs
-        regenerate_certs(self.cluster, force_reset_ca=False,
-                         drop_uploaded_certs=True)
+        original_trusted_cas = get_trusted_CAs(self.cluster)
+        original_trusted_ca_pems = [ca.get('pem')
+                                    for ca in original_trusted_cas]
+        try:
+            new_ca_pem = regenerate_certs(self.cluster,
+                                          force_reset_ca=False,
+                                          drop_uploaded_certs=False)
+            assert new_ca_pem in original_trusted_ca_pems, \
+                "CA regenerated when force_reset=false "
+            # CA should not be regenerated, and should not become trusted
+            assert_trusted_CAs_unchanged(self.cluster, original_trusted_cas)
+            assert_no_certs_changed(self.cluster, node_certs_before, None)
+        finally:
+            regenerate_certs_and_remove_unused_generated_cas(self.cluster,
+                                                             node_certs_before)
 
-        assert_CA_unchanged(self.cluster, trusted_cas_before)
-        assert_cert_regenerated(self.cluster.connected_nodes[0],
-                                node_cert_before)
-        assert_cert_regenerated(self.cluster.connected_nodes[0],
-                                client_cert_before, is_client=True)
+    def regen_and_drop_certs_test(self):
+        node_certs_before = self.load_custom_certs()
 
-    def regenerate_leaf_certificates_and_CAs_test(self):
-        node_cert_before = self.generate_and_load_cert('rsa')
-        client_cert_before = self.generate_and_load_cert('rsa', is_client=True)
-        trusted_cas_before = get_trusted_CAs(self.cluster)
+        original_trusted_cas = get_trusted_CAs(self.cluster)
+        original_trusted_ca_pems = [ca.get('pem')
+                                    for ca in original_trusted_cas]
+        try:
+            new_ca_pem = regenerate_certs(self.cluster,
+                                          force_reset_ca=False,
+                                          drop_uploaded_certs=True)
+            # Since we're dropping the uploaded certs, but not resetting the ca,
+            # the new_ca_pem won't actually be used by the new node/client certs
+            wait_all_nodes_updated(self.cluster, node_certs_before, None)
+            assert new_ca_pem in original_trusted_ca_pems, \
+                "CA regenerated when force_reset=false "
+            # CA should not be regenerated
+            assert_trusted_CAs_unchanged(self.cluster, original_trusted_cas)
+        finally:
+            regenerate_certs_and_remove_unused_generated_cas(self.cluster,
+                                                             node_certs_before)
 
-        new_ca_pem = regenerate_certs(self.cluster, force_reset_ca=True,
-                                      drop_uploaded_certs=True)
-        assert_CA_regenerated(self.cluster, trusted_cas_before, new_ca_pem)
-        assert_cert_regenerated(self.cluster.connected_nodes[0],
-                                node_cert_before)
-        assert_cert_regenerated(self.cluster.connected_nodes[0],
-                                client_cert_before, is_client=True)
+    def regen_force_reset_certs_test(self):
+        node_certs_before = self.load_custom_certs()
 
-    def regenerate_CA_only_test(self):
-        node_cert_before = self.generate_and_load_cert('rsa')
-        client_cert_before = self.generate_and_load_cert('rsa', is_client=True)
-        trusted_cas_before = get_trusted_CAs(self.cluster)
+        original_trusted_cas = get_trusted_CAs(self.cluster)
+        original_trusted_ca_pems = [ca.get('pem')
+                                    for ca in original_trusted_cas]
+        try:
+            new_ca_pem = regenerate_certs(self.cluster,
+                                          force_reset_ca=True,
+                                          drop_uploaded_certs=False)
+            assert_no_certs_changed(self.cluster, node_certs_before, new_ca_pem)
+            # CA should be regenerated, and newly trusted
+            assert new_ca_pem not in original_trusted_ca_pems, \
+                "CA not regenerated when force_reset=true"
+            assert_CA_newly_trusted(self.cluster, original_trusted_cas,
+                                    new_ca_pem)
+        finally:
+            regenerate_certs_and_remove_unused_generated_cas(self.cluster,
+                                                             node_certs_before)
 
-        new_ca_pem = regenerate_certs(self.cluster, force_reset_ca=True,
-                                      drop_uploaded_certs=False)
+    def regen_force_reset_and_drop_certs_test(self):
+        node_certs_before = self.load_custom_certs()
 
-        assert_CA_regenerated(self.cluster, trusted_cas_before, new_ca_pem)
-        node_cert_after = get_node_cert(self.cluster.connected_nodes[0])
-        client_cert_after = get_node_cert(self.cluster.connected_nodes[0],
-                                          is_client=True)
-        assert node_cert_after == node_cert_before, \
-               'node_cert_after != node_cert_before'
-        assert client_cert_after == client_cert_before, \
-               'client_cert_after != client_cert_before'
+        original_trusted_cas = get_trusted_CAs(self.cluster)
+        original_trusted_ca_pems = [ca.get('pem')
+                                    for ca in original_trusted_cas]
+        try:
+            new_ca_pem = regenerate_certs(self.cluster,
+                                          force_reset_ca=True,
+                                          drop_uploaded_certs=True)
+            wait_all_nodes_updated(self.cluster, node_certs_before, new_ca_pem)
+
+            # CA should be regenerated, and newly trusted
+            assert new_ca_pem not in original_trusted_ca_pems, \
+                "CA not regenerated when force_reset=true"
+            assert_CA_newly_trusted(self.cluster, original_trusted_cas,
+                                    new_ca_pem)
+        finally:
+            regenerate_certs_and_remove_unused_generated_cas(self.cluster,
+                                                             node_certs_before)
+
+    def regen_certs_with_untrusted_ca_test(self):
+        node_certs_before = self.load_custom_certs()
+
+        original_trusted_cas = get_trusted_CAs(self.cluster)
+        original_trusted_ca_pems = [ca.get('pem')
+                                    for ca in original_trusted_cas]
+        original_trusted_generated_cas = [ca for ca in original_trusted_cas
+                                          if ca.get('type') == 'generated']
+        original_trusted_generated_ca_ids = [
+            ca.get('id') for ca in original_trusted_generated_cas]
+        try:
+            # Remove the generated ca, to test re-trusting
+            [ootb_ca] = original_trusted_generated_ca_ids
+            testlib.delete_succ(self.cluster,
+                                f'/pools/default/trustedCAs/{ootb_ca}',
+                                expected_code=204)
+            # Get updated ca lists, for comparison
+            trusted_cas_before = get_trusted_CAs(self.cluster)
+            trusted_generated_ca_pems_before = \
+                [ca.get('pem')
+                 for ca in trusted_cas_before
+                 if ca.get('type') == 'generated']
+
+            new_ca_pem = regenerate_certs(self.cluster,
+                                          force_reset_ca=False,
+                                          drop_uploaded_certs=False)
+            assert_no_certs_changed(self.cluster, node_certs_before, None)
+            # CA should not be regenerated, and shouldn't become trusted (as the
+            # certs weren't force-dropped
+            assert new_ca_pem not in trusted_generated_ca_pems_before, \
+                "CA wasn't re-trusted, instead an already trusted pem was used"
+            assert new_ca_pem in original_trusted_ca_pems, \
+                "CA regenerated when force_reset=false"
+            assert_trusted_CAs_unchanged(self.cluster, trusted_cas_before)
+        finally:
+            regenerate_certs_and_remove_unused_generated_cas(self.cluster,
+                                                             node_certs_before)
+
+    def regen_and_drop_certs_with_untrusted_ca_test(self):
+        node_certs_before = self.load_custom_certs()
+
+        original_trusted_cas = get_trusted_CAs(self.cluster)
+        original_trusted_ca_pems = [ca.get('pem')
+                                    for ca in original_trusted_cas]
+        original_trusted_generated_cas = [ca for ca in original_trusted_cas
+                                          if ca.get('type') == 'generated']
+        original_trusted_generated_ca_ids = [
+            ca.get('id') for ca in original_trusted_generated_cas]
+
+        try:
+            # Remove the generated ca, to test re-trusting
+            ootb_ca = original_trusted_generated_ca_ids[0]
+            testlib.delete_succ(self.cluster,
+                                f'/pools/default/trustedCAs/{ootb_ca}',
+                                expected_code=204)
+
+            # Get updated ca lists, for comparison
+            trusted_cas_before = get_trusted_CAs(self.cluster)
+            trusted_generated_ca_pems_before = \
+                [ca.get('pem')
+                 for ca in trusted_cas_before
+                 if ca.get('type') == 'generated']
+
+            new_ca_pem = regenerate_certs(self.cluster,
+                                          force_reset_ca=False,
+                                          drop_uploaded_certs=True)
+            wait_all_nodes_updated(self.cluster, node_certs_before, new_ca_pem)
+
+            assert new_ca_pem not in trusted_generated_ca_pems_before, \
+                "CA not regenerated when untrusted"
+            assert new_ca_pem in original_trusted_ca_pems, \
+                "CA regenerated when force_reset=false "
+            # CA should not be regenerated, but should become trusted again.
+            # Explicitly check 'pem' instead of 'id', since the id could change
+            # when re-trusting the ca.
+            assert_trusted_CAs_unchanged(self.cluster, original_trusted_cas,
+                                         'pem')
+            assert_CA_newly_trusted(self.cluster, trusted_cas_before,
+                                    new_ca_pem)
+        finally:
+            regenerate_certs_and_remove_unused_generated_cas(self.cluster,
+                                                             node_certs_before)
+
+    def regen_force_reset_certs_with_untrusted_ca_test(self):
+        node_certs_before = self.load_custom_certs()
+
+        original_trusted_cas = get_trusted_CAs(self.cluster)
+        original_trusted_ca_pems = [ca.get('pem')
+                                    for ca in original_trusted_cas]
+        original_trusted_generated_cas = [ca for ca in original_trusted_cas
+                                          if ca.get('type') == 'generated']
+        original_trusted_generated_ca_ids = [
+            ca.get('id') for ca in original_trusted_generated_cas]
+
+        try:
+            # Remove the generated ca, to test re-trusting
+            ootb_ca = original_trusted_generated_ca_ids[0]
+            testlib.delete_succ(self.cluster,
+                                f'/pools/default/trustedCAs/{ootb_ca}',
+                                expected_code=204)
+
+            # Get updated ca lists, for comparison
+            trusted_cas_before = get_trusted_CAs(self.cluster)
+            trusted_generated_ca_pems_before = \
+                [ca.get('pem')
+                 for ca in trusted_cas_before
+                 if ca.get('type') == 'generated']
+
+            new_ca_pem = regenerate_certs(self.cluster,
+                                          force_reset_ca=True,
+                                          drop_uploaded_certs=False)
+            assert_no_certs_changed(self.cluster, node_certs_before, new_ca_pem)
+
+            # CA should be regenerated, and newly trusted
+            assert new_ca_pem not in trusted_generated_ca_pems_before, \
+                "CA not regenerated when force_reset=true"
+            assert new_ca_pem not in original_trusted_ca_pems, \
+                "CA re-trusted and not regenerated when force_reset=true"
+            assert_CA_newly_trusted(self.cluster, original_trusted_cas,
+                                    new_ca_pem)
+            assert_CA_newly_trusted(self.cluster, trusted_cas_before,
+                                    new_ca_pem)
+        finally:
+            regenerate_certs_and_remove_unused_generated_cas(self.cluster,
+                                                             node_certs_before)
+
+    def regen_force_reset_certs_and_drop_with_untrusted_ca_test(self):
+        node_certs_before = self.load_custom_certs()
+
+        original_trusted_cas = get_trusted_CAs(self.cluster)
+        original_trusted_ca_pems = [ca.get('pem')
+                                    for ca in original_trusted_cas]
+        original_trusted_generated_cas = [ca for ca in original_trusted_cas
+                                          if ca.get('type') == 'generated']
+        original_trusted_generated_ca_ids = [
+            ca.get('id') for ca in original_trusted_generated_cas]
+
+        try:
+            # Remove the last generated ca
+            ootb_ca = original_trusted_generated_ca_ids[0]
+            testlib.delete_succ(self.cluster,
+                                f'/pools/default/trustedCAs/{ootb_ca}',
+                                expected_code=204)
+
+            trusted_cas_before = get_trusted_CAs(self.cluster)
+
+            trusted_generated_ca_pems_before = [ca.get('pem')
+                                      for ca in trusted_cas_before
+                                      if ca.get('type') == 'generated']
+
+            new_ca_pem = regenerate_certs(self.cluster,
+                                          force_reset_ca=True,
+                                          drop_uploaded_certs=True)
+            wait_all_nodes_updated(self.cluster, node_certs_before, new_ca_pem)
+            # CA should be regenerated, and newly trusted
+            assert new_ca_pem not in trusted_generated_ca_pems_before, \
+                "CA not regenerated when force_reset=true"
+            assert new_ca_pem not in original_trusted_ca_pems, \
+                "CA re-trusted and not regenerated when force_reset=true"
+            assert_CA_newly_trusted(self.cluster, original_trusted_cas,
+                                    new_ca_pem)
+            assert_CA_newly_trusted(self.cluster, trusted_cas_before,
+                                    new_ca_pem)
+        finally:
+            regenerate_certs_and_remove_unused_generated_cas(self.cluster,
+                                                             node_certs_before)
+
+    def load_custom_certs(self):
+        node_certs = []
+        for node in self.cluster.connected_nodes:
+            node_cert = self.generate_and_load_cert('rsa', node=node,
+                                                    is_client=False)
+            client_cert = self.generate_and_load_cert('rsa', node=node,
+                                                      is_client=True)
+            node_certs.append((node, node_cert, client_cert))
+        return node_certs
 
 
-def assert_CA_regenerated(cluster, trusted_cas_before, expected_new_pem):
+def wait_all_nodes_updated(cluster, node_certs_before, new_ca_pem):
+    def all_nodes_updated():
+        # Only check the node certs if we know the new ca
+        # TODO: do this properly
+        if new_ca_pem is not None and len(node_certs_before) > 0:
+            trusted_cas = get_trusted_CAs(cluster)
+            [new_ca_details] = [ca for ca in trusted_cas
+                                if ca['pem'] == new_ca_pem]
+            node_certs = new_ca_details['nodes']
+            assert len(node_certs) == len(node_certs_before), \
+                f"Not all node certs using new ca ({node_certs})"
+            client_cert_nodes = new_ca_details['client_cert_nodes']
+            assert len(client_cert_nodes) == len(node_certs_before), \
+                f"Not all client certs using new ca ({client_cert_nodes})"
+        # Confirm that node certs are regenerated
+        for (node, node_cert, client_cert) in node_certs_before:
+            assert_cert_regenerated(node, node_cert)
+            assert_cert_regenerated(node, client_cert, is_client=True)
+    testlib.poll_for_condition(all_nodes_updated, 1, timeout=60,
+                               retry_on_assert=True)
+
+
+def assert_no_certs_changed(cluster, node_certs_before, new_ca_pem):
+    if new_ca_pem is not None:
+        trusted_cas = get_trusted_CAs(cluster)
+        [new_ca_details] = [ca for ca in trusted_cas
+                            if ca['pem'] == new_ca_pem]
+        node_certs = new_ca_details['nodes']
+        assert len(node_certs) == 0, \
+            f"Node certs unexpectedly using the new ca ({node_certs})"
+        client_cert_nodes = new_ca_details['client_cert_nodes']
+        assert len(client_cert_nodes) == 0, \
+            f"Client certs unexpectedly using the new ca ({client_cert_nodes})"
+    # Confirm that node certs are unchanged
+    for (node, node_cert, client_cert) in node_certs_before:
+        assert_cert_unchanged(node, node_cert)
+        assert_cert_unchanged(node, client_cert, is_client=True)
+
+
+# Regenerate certs and tidy up trusted certs by removing unused ones
+def regenerate_certs_and_remove_unused_generated_cas(cluster,
+                                                     node_certs_before=None):
+    if node_certs_before is None:
+        node_certs_before = get_node_certs(cluster)
+    new_ca_pem = regenerate_certs(cluster)
+    wait_all_nodes_updated(cluster, node_certs_before, new_ca_pem)
+    for trusted_ca in get_trusted_CAs(cluster):
+        if (trusted_ca['type'] == 'generated' and
+                trusted_ca['pem'] != new_ca_pem):
+            ca_id = trusted_ca['id']
+            testlib.delete_succ(cluster,
+                                f'/pools/default/trustedCAs/{ca_id}',
+                                expected_code=204)
+
+
+def assert_CA_newly_trusted(cluster, trusted_cas_before, expected_new_pem):
     trusted_cas_after = get_trusted_CAs(cluster)
     ca_ids_before = [ca['id'] for ca in trusted_cas_before]
     new_cas = [ca for ca in trusted_cas_after if ca['id'] not in ca_ids_before]
@@ -243,19 +519,27 @@ def assert_CA_regenerated(cluster, trusted_cas_before, expected_new_pem):
            'unexpected pem in new CA'
 
 
-def assert_CA_unchanged(cluster, trusted_cas_before):
+def assert_trusted_CAs_unchanged(cluster, trusted_cas_before, identifier='id'):
     trusted_cas_after = get_trusted_CAs(cluster)
-    ids_before = [ca['id'] for ca in trusted_cas_before]
-    ids_after = [ca['id'] for ca in trusted_cas_after]
+    ids_before = [ca[identifier] for ca in trusted_cas_before]
+    ids_after = [ca[identifier] for ca in trusted_cas_after]
     assert ids_before == ids_after, 'CAs changed'
 
 
 def assert_cert_regenerated(node, prev_cert_before, is_client=False):
-    node_cert_after = get_node_cert(node, is_client=False)
+    node_cert_after = get_node_cert(node, is_client=is_client)
     assert node_cert_after['type'] == 'generated', \
            'node_cert_after type != generated'
     assert node_cert_after['pem'] != prev_cert_before['pem'], \
            'node_cert_after pem == node_cert_before pem'
+
+
+def assert_cert_unchanged(node, prev_cert_before, is_client=False):
+    node_cert_after = get_node_cert(node, is_client=is_client)
+    assert node_cert_after['type'] != 'generated', \
+           'node_cert_after type == generated'
+    assert node_cert_after['pem'] == prev_cert_before['pem'], \
+           'node_cert_after pem != node_cert_before pem'
 
 
 def regenerate_certs(cluster, force_reset_ca=True, drop_uploaded_certs=True):
@@ -270,6 +554,15 @@ def regenerate_certs(cluster, force_reset_ca=True, drop_uploaded_certs=True):
 def get_trusted_CAs(cluster):
     r = testlib.get_succ(cluster, '/pools/default/trustedCAs')
     return r.json()
+
+
+def get_node_certs(cluster):
+    node_certs = []
+    for node in cluster.connected_nodes:
+        node_cert = get_node_cert(node)
+        client_cert = get_node_cert(node, is_client=True)
+        node_certs.append((node, node_cert, client_cert))
+    return node_certs
 
 
 def get_node_cert(node, is_client=False):
