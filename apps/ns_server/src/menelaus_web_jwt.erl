@@ -464,7 +464,8 @@ validate_and_store_settings(Props, Req) ->
         {ok, _} ->
             RestFormat = storage_to_rest_format(Settings),
             EncodedSettings = encode_response(RestFormat),
-            ns_audit:settings(Req, modify_jwt, [{jwt_settings, RestFormat}]),
+            ns_audit:settings(Req, modify_jwt, [{jwt_settings,
+                                                 {json, EncodedSettings}}]),
             _ = sync_with_node(),
             menelaus_util:reply(Req, EncodedSettings, 200,
                                 [{"Content-Type", "application/json"}]);

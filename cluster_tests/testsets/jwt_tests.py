@@ -117,6 +117,10 @@ class JWTTests(testlib.BaseTestSet):
         testlib.set_config_key(self.cluster,
                                 "{jwt_cache, jwks_cooldown_interval_ms}",
                                 1000)
+
+        audit_payload = {"auditdEnabled": "true"}
+        testlib.post_succ(self.cluster, "/settings/audit", data=audit_payload)
+
         # Disabled by default
         testlib.get_fail(self.cluster, self.endpoint, expected_code=404)
 
@@ -128,6 +132,9 @@ class JWTTests(testlib.BaseTestSet):
         testlib.delete_config_key(self.cluster, "oauthbearer_enabled")
         testlib.delete_succ(self.cluster, self.endpoint)
         testlib.get_fail(self.cluster, self.endpoint, expected_code=404)
+
+        audit_payload = {"auditdEnabled": "false"}
+        testlib.post_succ(self.cluster, "/settings/audit", data=audit_payload)
 
         # Clean up all test users
         for username in self.external_users:
