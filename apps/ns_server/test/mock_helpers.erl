@@ -116,10 +116,10 @@ auto_reprovision(PidMap) ->
     PidMap0 = setup_mocks([leader_registry],
                           PidMap),
 
-    {ok, AutoReprovisionPid} = auto_reprovision:start_link(),
+    {ok, AutoReprovisionPid} = ?FUNCTION_NAME:start_link(),
     PidMap0#{?FUNCTION_NAME => AutoReprovisionPid}.
 
-rebalance_report_manager(PidMap) ->
+ns_rebalance_report_manager(PidMap) ->
     fake_ns_config:update_snapshot(rest_creds, null),
 
     meck:new(cb_atomic_persistent_term, [passthrough]),
@@ -127,43 +127,43 @@ rebalance_report_manager(PidMap) ->
                 fun(_, _, F) ->
                         F(undefined)
                 end),
-    {ok, RebalanceReportManagerPid} = ns_rebalance_report_manager:start_link(),
+    {ok, RebalanceReportManagerPid} = ?FUNCTION_NAME:start_link(),
     PidMap#{?FUNCTION_NAME => RebalanceReportManagerPid}.
 
 ns_orchestrator(PidMap) ->
     PidMap0 = setup_mocks([ns_janitor_server,
                            ns_doctor,
-                           rebalance_report_manager,
+                           ns_rebalance_report_manager,
                            testconditions],
                           PidMap),
 
-    {ok, OrchestratorPid} = ns_orchestrator:start_link(),
+    {ok, OrchestratorPid} = ?FUNCTION_NAME:start_link(),
     PidMap0#{?FUNCTION_NAME => OrchestratorPid}.
 
 compat_mode_manager(PidMap) ->
-    {ok, CompatModeManagerPid} = compat_mode_manager:start_link(),
+    {ok, CompatModeManagerPid} = ?FUNCTION_NAME:start_link(),
     PidMap#{?FUNCTION_NAME => CompatModeManagerPid}.
 
 auto_failover(PidMap) ->
     PidMap0 = setup_mocks([compat_mode_events], PidMap),
 
-    {ok, AutoFailoverPid} = auto_failover:start_link(),
+    {ok, AutoFailoverPid} = ?FUNCTION_NAME:start_link(),
     PidMap0#{?FUNCTION_NAME => AutoFailoverPid}.
 
 compat_mode_events(PidMap) ->
     {ok, CompatModeEventsPid} = gen_event:start_link({local,
-                                                      compat_mode_events}),
+                                                      ?FUNCTION_NAME}),
     PidMap#{?FUNCTION_NAME => CompatModeEventsPid}.
 
 ns_node_disco_events(PidMap) ->
     {ok, NSNodeDiscoEventsPid} = gen_event:start_link({local,
-                                                       ns_node_disco_events}),
+                                                       ?FUNCTION_NAME}),
     PidMap#{?FUNCTION_NAME => NSNodeDiscoEventsPid}.
 
 chronicle_master(PidMap) ->
     PidMap0 = setup_mocks([chronicle], PidMap),
 
-    {ok, ChronicleMasterPid} = chronicle_master:start_link(),
+    {ok, ChronicleMasterPid} = ?FUNCTION_NAME:start_link(),
     PidMap0#{?FUNCTION_NAME => ChronicleMasterPid}.
 
 %%%===================================================================
@@ -175,16 +175,16 @@ chronicle_master(PidMap) ->
 %%%===================================================================
 
 chronicle(PidMap) ->
-    meck:new(chronicle),
-    meck:expect(chronicle, acquire_lock, fun() -> {ok, self()} end),
-    meck:expect(chronicle, set_peer_roles, fun(_,_) -> ok end),
+    meck:new(?FUNCTION_NAME),
+    meck:expect(?FUNCTION_NAME, acquire_lock, fun() -> {ok, self()} end),
+    meck:expect(?FUNCTION_NAME, set_peer_roles, fun(_,_) -> ok end),
 
     PidMap#{?FUNCTION_NAME => mocked}.
 
 janitor_agent(PidMap) ->
     %% Janitor_agent mecks required to perform a full failover (with map).
-    meck:new(janitor_agent, []),
-    meck:expect(janitor_agent, query_vbuckets,
+    meck:new(?FUNCTION_NAME, [passthrough]),
+    meck:expect(?FUNCTION_NAME, query_vbuckets,
                 fun(_,_,_,_) ->
                         %% We don't need to return anything useful for this
                         %% failover, we are failing over all but one node so
@@ -192,7 +192,7 @@ janitor_agent(PidMap) ->
                         {dict:from_list([{1, []}]), []}
                 end),
 
-    meck:expect(janitor_agent, fetch_vbucket_states,
+    meck:expect(?FUNCTION_NAME, fetch_vbucket_states,
                 fun(VBucket, _) ->
                         %% We need to return some semi-valid vBucket stat map
                         %% from this. We might use a couple of different maps
@@ -209,86 +209,86 @@ janitor_agent(PidMap) ->
                         A ++ R
                 end),
 
-    meck:expect(janitor_agent, find_vbucket_state,
+    meck:expect(?FUNCTION_NAME, find_vbucket_state,
                 fun(Node, States) ->
                         meck:passthrough([Node, States])
                 end),
 
-    meck:expect(janitor_agent, apply_new_bucket_config,
+    meck:expect(?FUNCTION_NAME, apply_new_bucket_config,
                 fun(_,_,_,_) ->
                         %% Just sets stuff in memcached, uninteresting here
                         ok
                 end),
 
-    meck:expect(janitor_agent, mark_bucket_warmed,
+    meck:expect(?FUNCTION_NAME, mark_bucket_warmed,
                 fun(_,_) ->
                         %% Just sets stuff in memcached, uninteresting here
                         ok
                 end),
 
-    meck:expect(janitor_agent, check_bucket_ready,
+    meck:expect(?FUNCTION_NAME, check_bucket_ready,
                 fun(_,_,_) ->
                         ready
                 end),
-    meck:expect(janitor_agent, delete_vbucket_copies,
+    meck:expect(?FUNCTION_NAME, delete_vbucket_copies,
                 fun(_,_,_,_) ->
                         ok
                 end),
-    meck:expect(janitor_agent, finish_rebalance,
+    meck:expect(?FUNCTION_NAME, finish_rebalance,
                 fun(_,_,_) ->
                         ok
                 end),
-    meck:expect(janitor_agent, prepare_nodes_for_rebalance,
+    meck:expect(?FUNCTION_NAME, prepare_nodes_for_rebalance,
                 fun(_,_,_) ->
                         ok
                 end),
 
-    meck:expect(janitor_agent, inhibit_view_compaction,
+    meck:expect(?FUNCTION_NAME, inhibit_view_compaction,
                 fun (_, _, _) -> nack end),
 
-    meck:expect(janitor_agent, uninhibit_view_compaction,
+    meck:expect(?FUNCTION_NAME, uninhibit_view_compaction,
                 fun (_, _, _, _) -> ok end),
 
-    meck:expect(janitor_agent, get_mass_dcp_docs_estimate,
+    meck:expect(?FUNCTION_NAME, get_mass_dcp_docs_estimate,
                 fun (_, _, VBs) ->
                         {ok, lists:duplicate(length(VBs), {0, 0, random_state})}
                 end),
 
-    meck:expect(janitor_agent, bulk_set_vbucket_state,
+    meck:expect(?FUNCTION_NAME, bulk_set_vbucket_state,
                 fun (_, _, _, _) -> ok end),
 
-    meck:expect(janitor_agent, initiate_indexing,
+    meck:expect(?FUNCTION_NAME, initiate_indexing,
                 fun (_, _, _, _, _) -> ok end),
 
-    meck:expect(janitor_agent, wait_dcp_data_move,
+    meck:expect(?FUNCTION_NAME, wait_dcp_data_move,
                 fun (_, _, _, _, _) -> ok end),
 
-    meck:expect(janitor_agent, get_vbucket_high_seqno,
+    meck:expect(?FUNCTION_NAME, get_vbucket_high_seqno,
                 fun (_, _, _, _) -> 0 end),
 
-    meck:expect(janitor_agent, wait_seqno_persisted,
+    meck:expect(?FUNCTION_NAME, wait_seqno_persisted,
                 fun (_, _, _, _, _) -> ok end),
 
-    meck:expect(janitor_agent, set_vbucket_state,
+    meck:expect(?FUNCTION_NAME, set_vbucket_state,
                 fun (_, _, _, _, _, _, _, _) -> ok end),
 
-    meck:expect(janitor_agent, wait_index_updated,
+    meck:expect(?FUNCTION_NAME, wait_index_updated,
                 fun (_, _, _, _, _) -> ok end),
 
-    meck:expect(janitor_agent, dcp_takeover,
+    meck:expect(?FUNCTION_NAME, dcp_takeover,
                 fun (_, _, _, _, _) -> ok end),
 
-    meck:expect(janitor_agent, get_src_dst_vbucket_replications,
+    meck:expect(?FUNCTION_NAME, get_src_dst_vbucket_replications,
                 fun (_, _) -> {[], []} end),
 
     PidMap#{?FUNCTION_NAME => mocked}.
 
 %% auto failover for orchestrator
 ns_janitor_server(PidMap) ->
-    meck:new(ns_janitor_server),
-    meck:expect(ns_janitor_server, start_cleanup,
+    meck:new(?FUNCTION_NAME),
+    meck:expect(?FUNCTION_NAME, start_cleanup,
                 fun(_) -> {ok, self()} end),
-    meck:expect(ns_janitor_server, terminate_cleanup,
+    meck:expect(?FUNCTION_NAME, terminate_cleanup,
                 fun(_) ->
                         CallerPid = self(),
                         CallerPid ! {cleanup_done, foo, bar},
@@ -298,28 +298,28 @@ ns_janitor_server(PidMap) ->
 
 %% from manual failover setup
 leader_activities(PidMap) ->
-    meck:new(leader_activities),
-    meck:expect(leader_activities, run_activity,
+    meck:new(?FUNCTION_NAME),
+    meck:expect(?FUNCTION_NAME, run_activity,
                 fun(_Name, _Quorum, Body) ->
                         Body()
                 end),
-    meck:expect(leader_activities, run_activity,
+    meck:expect(?FUNCTION_NAME, run_activity,
                 fun(_Name, _Quorum, Body, _Opts) ->
                         Body()
                 end),
-
-    meck:expect(leader_activities, activate_quorum_nodes,
+    meck:expect(?FUNCTION_NAME, activate_quorum_nodes,
                 fun(_) -> ok end),
-    meck:expect(leader_activities, deactivate_quorum_nodes,
+    meck:expect(?FUNCTION_NAME, deactivate_quorum_nodes,
                 fun(_) -> ok end),
     PidMap#{?FUNCTION_NAME => mocked}.
 
+
 ns_doctor(PidMap) ->
-    meck:new(ns_doctor),
-    meck:expect(ns_doctor, get_nodes, fun() -> [] end),
+    meck:new(?FUNCTION_NAME),
+    meck:expect(?FUNCTION_NAME, get_nodes, fun() -> [] end),
 
     meck:expect(
-      ns_doctor, get_memory_data,
+      ?FUNCTION_NAME, get_memory_data,
       fun(Nodes) ->
               {ok, [{Node, memsup:get_system_memory_data()} || Node <- Nodes]}
       end),
@@ -327,26 +327,26 @@ ns_doctor(PidMap) ->
     PidMap#{?FUNCTION_NAME => mocked}.
 
 rebalance_quirks(PidMap) ->
-    meck:new(rebalance_quirks, [passthrough]),
-    meck:expect(rebalance_quirks, get_quirks, fun(_,_) -> [] end),
+    meck:new(?FUNCTION_NAME, [passthrough]),
+    meck:expect(?FUNCTION_NAME, get_quirks, fun(_,_) -> [] end),
     PidMap#{?FUNCTION_NAME => mocked}.
 
 testconditions(PidMap) ->
-    meck:new(testconditions, [passthrough]),
-    meck:expect(testconditions, get, fun(_) -> ok end),
+    meck:new(?FUNCTION_NAME, [passthrough]),
+    meck:expect(?FUNCTION_NAME, get, fun(_) -> ok end),
     PidMap#{?FUNCTION_NAME => mocked}.
 
 rebalance_agent(PidMap) ->
-    meck:new(rebalance_agent),
-    meck:expect(rebalance_agent, prepare_rebalance, fun(_,_) -> ok end),
-    meck:expect(rebalance_agent, deactivate_bucket_data, fun(_,_,_) -> ok end),
+    meck:new(?FUNCTION_NAME),
+    meck:expect(?FUNCTION_NAME, prepare_rebalance, fun(_,_) -> ok end),
+    meck:expect(?FUNCTION_NAME, deactivate_bucket_data, fun(_,_,_) -> ok end),
 
-    meck:expect(rebalance_agent, unprepare_rebalance, fun(_,_) -> ok end),
+    meck:expect(?FUNCTION_NAME, unprepare_rebalance, fun(_,_) -> ok end),
     PidMap#{?FUNCTION_NAME => mocked}.
 
 ns_storage_conf(PidMap) ->
-    meck:new(ns_storage_conf),
-    meck:expect(ns_storage_conf, delete_unused_buckets_db_files,
+    meck:new(?FUNCTION_NAME),
+    meck:expect(?FUNCTION_NAME, delete_unused_buckets_db_files,
                 fun() -> ok end),
     PidMap#{?FUNCTION_NAME => mocked}.
 

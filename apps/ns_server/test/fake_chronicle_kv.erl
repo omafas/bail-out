@@ -94,15 +94,7 @@ teardown() ->
 %% -------------------------
 -spec update_snapshot(atom(), term()) -> true.
 update_snapshot(Key, Value) ->
-    OldSnapshot = get_ets_snapshot(),
-    NewSnapshot = maps:put(Key, add_rev_to_value(Value), OldSnapshot),
-
-    case store_ets_snapshot(OldSnapshot, NewSnapshot) of
-        ok ->
-            ok;
-        retry ->
-            update_snapshot(Key, Value)
-    end.
+    update_snapshot(#{Key => Value}).
 
 -spec update_snapshot(map()) -> true.
 update_snapshot(Map) when is_map(Map) ->
@@ -281,6 +273,21 @@ compare_and_swap(OldSnapshot, NewSnapshot) ->
            end),
     case ets:select_replace(?TABLE_NAME, MS) of
         1 ->
+            Mgr = chronicle_kv:event_manager(kv),
+            maps:foreach(
+              fun (seqno, _) ->
+                      ok;
+                  (Key, NewValue) ->
+                      case maps:find(Key, OldSnapshot) of
+                          {ok, NewValue} ->
+                              ok;
+                          _ ->
+                              {Value, Rev} = NewValue,
+                              gen_event:notify(Mgr,
+                                               {{key, Key}, Rev,
+                                                {updated, Value}})
+                      end
+              end, NewSnapshot),
             ok;
         0 ->
             retry
