@@ -56,17 +56,17 @@ class MnBucketItemComponent extends MnLifeCycleHooksToStream {
     let currentBucket = this.mnOnChanges
       .pipe(pluck('bucket', 'currentValue'));
 
-    let bucketNodes = currentBucket
+    this.bucketNodes = currentBucket
       .pipe(pluck('nodes'));
 
     this.residentRatio = currentBucket
       .pipe(map(mnBucketsService.getResidentRatio));
 
-    this.statusClass = bucketNodes
+    this.statusClass = currentBucket
       .pipe(map(v => mnBucketsService.getNodesStatusClass(v)),
             shareReplay({refCount: true, bufferSize: 1}));
 
-    this.nodesCountByStatusMessage = bucketNodes
+    this.nodesCountByStatusMessage = this.bucketNodes
       .pipe(map(v => mnBucketsService.getNodesCountByStatus(v)),
             map(v => mnBucketsService.getNodesCountByStatusMessage(v)),
             shareReplay({refCount: true, bufferSize: 1}));
@@ -83,6 +83,32 @@ class MnBucketItemComponent extends MnLifeCycleHooksToStream {
                     this.permissions)
       .pipe(map(this.isWarmUpProgressVisible.bind(this)),
             shareReplay({refCount: true, bufferSize: 1}));
+
+    this.storageBackend = currentBucket
+      .pipe(map(v => mnBucketsService.prepareStorageBackendText(v)),
+            shareReplay({refCount: true, bufferSize: 1}));
+
+    this.storageBackendChangePending = currentBucket
+      .pipe(map(v => mnBucketsService.isStorageBackendChangePending(v)));
+
+    this.nodesNrStorageBackendPending = currentBucket
+      .pipe(map(v => mnBucketsService.getNodesNrStorageBackendPending(v)));
+
+    this.nodesNrStorageBackendPendingDone = currentBucket
+      .pipe(map(v => mnBucketsService.getNodesNrStorageBackendPendingDone(v)));
+
+    this.evictionPolicy = currentBucket
+      .pipe(map(v => mnBucketsService.prepareEjectionMethodText(v)),
+            shareReplay({refCount: true, bufferSize: 1}));
+
+    this.evictionPolicyChangePending = currentBucket
+      .pipe(map(v => mnBucketsService.isEvictionPolicyChangePending(v)));
+
+    this.nodesNrEvictionPolicyPendingDone = currentBucket
+      .pipe(map(v => mnBucketsService.getNodesNrEvictionPolicyPendingDone(v)));
+
+    this.nodesNrEvictionPolicyPending = currentBucket
+      .pipe(map(v => mnBucketsService.getNodesNrEvictionPolicyPending(v)));
   }
 
   ngOnInit() {

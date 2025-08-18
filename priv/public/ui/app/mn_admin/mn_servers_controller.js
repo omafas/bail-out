@@ -42,6 +42,7 @@ import mnGsiService from "./mn_gsi_service.js";
 import mnGroupsService from "./mn_groups_service.js";
 import mnCertificatesService from "./mn_certificates_service.js";
 import mnStatisticsNewService from "./mn_statistics_service.js";
+import mnBucketsService from "./mn_buckets_service.js";
 
 import mnServersListItemDetailsController from "./mn_servers_list_item_details_controller.js";
 import mnServersListItemController from "./mn_servers_list_item_controller.js";
@@ -87,6 +88,7 @@ angular
     mnSortableTable,
     mnSelectableNodesList,
     mnServersService,
+    mnBucketsService,
     mnServersListItemDetailsService,
     mnGsiService,
     mnGroupsService,
@@ -96,7 +98,7 @@ angular
     mnEncryptionStatus,
   ])
   .config(["$stateProvider", configure])
-  .controller('mnServersController', ["$scope", "$state", "$uibModal", "mnPoolDefault", "mnPoller", "mnServersService", "mnHelper", "mnGroupsService", "mnPromiseHelper", "permissions", "mnStatisticsNewService", "mnCertificatesService", "pools", "poolDefault", "mnClusterConfigurationService", "encryptionSettings", mnServersController])
+  .controller('mnServersController', ["$scope", "$state", "$uibModal", "mnPoolDefault", "mnPoller", "mnServersService", "mnBucketsService", "mnHelper", "mnGroupsService", "mnPromiseHelper", "permissions", "mnStatisticsNewService", "mnCertificatesService", "pools", "poolDefault", "mnClusterConfigurationService", "encryptionSettings", mnServersController])
   .controller('mnServersListItemDetailsController', mnServersListItemDetailsController)
   .controller("mnServersListItemController", mnServersListItemController)
   .controller('mnServersFailOverDialogController', mnServersFailOverDialogController)
@@ -149,11 +151,11 @@ function configure($stateProvider) {
     });
 }
 
-function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller, mnServersService, mnHelper, mnGroupsService, mnPromiseHelper, permissions, mnStatisticsNewService, mnCertificatesService, pools, poolDefault, mnClusterConfigurationService, encryptionSettings) {
+function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller, mnServersService, mnBucketsService, mnHelper, mnGroupsService, mnPromiseHelper, permissions, mnStatisticsNewService, mnCertificatesService, pools, poolDefault, mnClusterConfigurationService, encryptionSettings) {
   var vm = this;
   vm.mnPoolDefault = mnPoolDefault.latestValue();
   vm.encryptionSettings = encryptionSettings.data;
-  
+
   vm.postStopRebalance = postStopRebalance;
   vm.onStopRecovery = onStopRecovery;
   vm.postRebalance = postRebalance;
@@ -180,6 +182,18 @@ function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller,
         .reloadOnScopeEvent(["serverGroupsUriChanged", "reloadServersPoller"])
         .cycle();
     }
+
+    mnBucketsService.clearCache();
+    new mnPoller($scope, function () {
+      return mnBucketsService.getBucketsByType();
+    })
+      .subscribe(function (buckets) {
+        vm.buckets = buckets.byName;
+      })
+      .reloadOnScopeEvent(["reloadServersPoller", "rebalanceFinished"])
+      .cycle();
+
+
 
     new mnPoller($scope, function () {
       return mnServersService.getNodes();

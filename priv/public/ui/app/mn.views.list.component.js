@@ -141,7 +141,7 @@ class MnViewsListComponent extends MnLifeCycleHooksToStream {
           return;
         }
 
-        let bucketStatus = mnBucketsService.getNodesStatusClass(bucket.nodes);
+        let bucketStatus = mnBucketsService.getNodesStatusClass(bucket);
 
         if (bucketStatus !== "dynamic_healthy") {
           return;

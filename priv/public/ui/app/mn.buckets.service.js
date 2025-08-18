@@ -79,7 +79,7 @@ class MnBucketsService {
             shareReplay({refCount: true, bufferSize: 1}));
 
     this.stream.bucketsCrossClusterVersioningEnabled = this.stream.getBuckets
-    .pipe(
+      .pipe(
           map(filter(propEq('enableCrossClusterVersioning', true))),
           map(buckets => buckets.map(bucket => bucket.name)),
           shareReplay({refCount: true, bufferSize: 1}));
@@ -174,8 +174,13 @@ class MnBucketsService {
     return false;
   }
 
-  getNodesStatusClass(nodes) {
+  getNodesStatusClass(bucket) {
+    let nodes = bucket.nodes;
     let statusClass = nodes.length ? 'healthy' : 'inactive';
+
+    if (this.isEvictionPolicyChangePending(bucket) || this.isStorageBackendChangePending(bucket)) {
+      statusClass = 'pending_change';
+    }
 
     for (let i = 0; i < nodes.length; i++) {
       let node = nodes[i];
@@ -332,6 +337,54 @@ class MnBucketsService {
     }
   }
 
+  isStorageBackendChangePending(bucket) {
+    if (!bucket) {
+      return false;
+    }
+
+    return !!bucket.nodes.find(node => node.storageBackend && node.storageBackend !== bucket.storageBackend);
+  }
+
+  getNodesNrStorageBackendPendingDone(bucket) {
+    if (!bucket) {
+      return 0;
+    }
+
+    return bucket.nodes.filter(node => !node.storageBackend || (node.storageBackend && node.storageBackend === bucket.storageBackend)).length;
+  }
+
+  getNodesNrStorageBackendPending(bucket) {
+    if (!bucket) {
+      return 0;
+    }
+
+    return bucket.nodes.filter(node => node.storageBackend && node.storageBackend !== bucket.storageBackend).length;
+  }
+
+  isEvictionPolicyChangePending(bucket) {
+    if (!bucket) {
+      return false;
+    }
+
+    return !!bucket.nodes.find(node => node.evictionPolicy && node.evictionPolicy !== bucket.evictionPolicy);
+  }
+
+  getNodesNrEvictionPolicyPendingDone(bucket) {
+    if (!bucket) {
+      return 0;
+    }
+
+    return bucket.nodes.filter(node => !node.evictionPolicy ||(node.evictionPolicy && node.evictionPolicy === bucket.evictionPolicy)).length;
+  }
+
+  getNodesNrEvictionPolicyPending(bucket) {
+    if (!bucket) {
+      return 0;
+    }
+
+    return bucket.nodes.filter(node => node.evictionPolicy && node.evictionPolicy !== bucket.evictionPolicy).length;
+  }
+
   getNumVBuckets(bucket) {
     return bucket.numVBuckets
   }
@@ -395,7 +448,7 @@ class MnBucketsService {
       purgeInterval: 3,
       durabilityMinLevel: 'none',
       storageBackend: 'magma',
-      numVBuckets: '',
+      numVBuckets: '128',
       autoCompactionDefined: false,
       autoCompactionSettings,
       enableEncryptionAtRest: false,
@@ -427,8 +480,7 @@ class MnBucketsService {
       purgeInterval: bucket.purgeInterval,
       durabilityMinLevel: bucket.durabilityMinLevel,
       storageBackend: bucket.storageBackend,
-      // Magma Configuration needs numVBuckets as either '1024' or ''
-      numVBuckets: (bucket.numVBuckets == 1024 ? bucket.numVBuckets + '' : ''),
+      numVBuckets: '' + bucket.numVBuckets,
       autoCompactionDefined: !!bucket.autoCompactionSettings,
       enableCrossClusterVersioning: !!bucket.enableCrossClusterVersioning,
     };

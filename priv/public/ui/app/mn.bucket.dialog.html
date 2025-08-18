@@ -115,8 +115,9 @@ licenses/APL2.txt.
           *ngIf="compatVersion79 | async"
           [hidden]="(storageBackend | async) === 'couchstore'"
         >
-          <label
-            >Number of vBuckets
+          <label [attr.disabled]="bucket"
+
+          >Number of vBuckets
             <ng-template #numVBucketTooltip>
               The number of Magma vBuckets affects performance and memory usage.
               <ul>
@@ -147,8 +148,9 @@ licenses/APL2.txt.
           <input
             type="radio"
             formControlName="numVBuckets"
-            value=""
+            value="128"
             id="for-magma-128"
+            [attr.disabled]="bucket"
           />
           <label for="for-magma-128">128</label>
           <input
@@ -156,8 +158,12 @@ licenses/APL2.txt.
             formControlName="numVBuckets"
             value="1024"
             id="for-magma-1024"
+            [attr.disabled]="bucket"
           />
           <label for="for-magma-1024">1024</label>
+        </div>
+        <div class="error margin-left-1-5" [hidden]="!(httpError | async)?.errors?.numVBuckets">
+          {{(httpError | async)?.errors?.numVBuckets}}
         </div>
       </div>
       <div class="formrow">
@@ -434,6 +440,31 @@ licenses/APL2.txt.
               id="for-metadata-full-eject"
             />
             <label for="for-metadata-full-eject">Full</label>
+            <div class="formrow checkbox-list margin-bottom-0" *ngIf="compatVersion79 | async">
+              <input type="checkbox" formControlName="noRestart" id="no-restart" />
+              <label for="no-restart" class="margin-right-zero">Don't restart the bucket now; change should be pending effect</label>
+              <ng-template #evictionPolicyNoRestartTooltip>
+                When this option is unchecked, the bucket will restart immediately
+                (which will lead to closing all open connections and some downtime).
+                <br /><br />
+                When this option is checked, the bucket remains available,
+                and the eviction policy for the bucket will be shown as the new value chosen,
+                but the change will be pending effect via either
+                1) a swap rebalance of the data nodes, or 2) a graceful failover, delta recovery, and rebalance of the data nodes.
+                <br /><br />
+                If you are changing storage backend at the same time as eviction policy, however,
+                you must do either option 1 above, or a graceful failover with full recovery and rebalance.
+              </ng-template>
+              <span
+                class="fa-stack icon-info"
+                [ngbTooltip]="evictionPolicyNoRestartTooltip"
+                triggers="click"
+                placement="right"
+              >
+                <span class="icon fa-circle-thin fa-stack-2x"></span>
+                <span class="icon fa-info fa-stack-1x"></span>
+              </span>
+            </div>
             <div class="error" [hidden]="!(evictionPolicyWarning | async)">
               {{(evictionPolicyWarning | async)}}
             </div>
@@ -594,6 +625,7 @@ licenses/APL2.txt.
               [mnErrors]="httpError"
               [isBucketSettings]="true"
               [mnStorage]="autoCompactionMode"
+              [forceDisableFields]="isStorageBackendChangePending || isEvictionPolicyChangePending"
             >
             </mn-auto-compaction-form>
           </div>

@@ -46,11 +46,11 @@
     <div
        class="error error-field"
        [hidden]="!(mnErrors | async)?.errors">
-      <div>{{(mnErrors | async)?.errors[mnKey + '[fromHour]']}}</div>
-      <div>{{(mnErrors | async)?.errors[mnKey + '[fromMinute]']}}</div>
-      <div>{{(mnErrors | async)?.errors[mnKey + '[toHour]']}}</div>
-      <div>{{(mnErrors | async)?.errors[mnKey + '[toMinute]']}}</div>
-      <div>{{(mnErrors | async)?.errors[mnKey]}}</div>
+      <div>{{(mnErrors | async)?.errors && (mnErrors | async)?.errors[mnKey + '[fromHour]']}}</div>
+      <div>{{(mnErrors | async)?.errors && (mnErrors | async)?.errors[mnKey + '[fromMinute]']}}</div>
+      <div>{{(mnErrors | async)?.errors && (mnErrors | async)?.errors[mnKey + '[toHour]']}}</div>
+      <div>{{(mnErrors | async)?.errors && (mnErrors | async)?.errors[mnKey + '[toMinute]']}}</div>
+      <div>{{(mnErrors | async)?.errors && (mnErrors | async)?.errors[mnKey]}}</div>
     </div>
   </div>
 

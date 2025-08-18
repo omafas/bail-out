@@ -13,12 +13,13 @@ licenses/APL2.txt.
    ng-click="rbac.cluster.nodes.read && serversCtl.toggleDetails(node.hostname)"
    ng-class="{['dynamic_' + node.clusterMembership] : serversCtl.isDetailsOpened(node.hostname) || serversItemCtl.isNodeInactiveFailed || serversItemCtl.isNodeInactiveAdded || serversItemCtl.isNodeUnhealthy || (adminCtl.tasks.inRebalance && adminCtl.tasks.tasksRebalance.status === 'running' && rbac.cluster.tasks.read),
               ['dynamic_' + node.status] : serversCtl.isDetailsOpened(node.hostname) || serversItemCtl.isNodeInactiveFailed || serversItemCtl.isNodeInactiveAdded || serversItemCtl.isNodeUnhealthy || (adminCtl.tasks.inRebalance && adminCtl.tasks.tasksRebalance.status === 'running' && rbac.cluster.tasks.read) || (!serversItemCtl.isNodeInactiveAdded && !serversItemCtl.isNodeUnhealthy && node.pendingEject),
+               'dynamic_pending_change server' : serversItemCtl.isStorageBackendChangePending || serversItemCtl.isEvictionPolicyChangePending,
                'eject-node' : !serversItemCtl.isNodeInactiveAdded && !serversItemCtl.isNodeUnhealthy && node.pendingEject,
                'minor_cert_warning' : serversItemCtl.hasMinorCertWarning(node),
                'major_cert_warning' : serversItemCtl.hasMajorCertWarning(node)}">
   <div
      class="cbui-tablerow has-hover resp-sml"
-     ng-class="{['dynamic_' + node.status] : !serversCtl.isDetailsOpened(node.hostname) && !(serversItemCtl.isNodeInactiveFailed || serversItemCtl.isNodeInactiveAdded || serversItemCtl.isNodeUnhealthy || (adminCtl.tasks.inRebalance && adminCtl.tasks.tasksRebalance.status === 'running' && rbac.cluster.tasks.read) || (!serversItemCtl.isNodeInactiveAdded && !serversItemCtl.isNodeUnhealthy && node.pendingEject)),
+     ng-class="{['dynamic_' + node.status] : !serversCtl.isDetailsOpened(node.hostname) && !(serversItemCtl.isNodeInactiveFailed || serversItemCtl.isNodeInactiveAdded || serversItemCtl.isNodeUnhealthy || (adminCtl.tasks.inRebalance && adminCtl.tasks.tasksRebalance.status === 'running' && rbac.cluster.tasks.read) || (!serversItemCtl.isNodeInactiveAdded && !serversItemCtl.isNodeUnhealthy && node.pendingEject) || serversItemCtl.isStorageBackendChangePending || serversItemCtl.isEvictionPolicyChangePending),
                 ['dynamic_' + node.clusterMembership] : !serversCtl.isDetailsOpened(node.hostname) && !(serversItemCtl.isNodeInactiveFailed || serversItemCtl.isNodeInactiveAdded || serversItemCtl.isNodeUnhealthy || (adminCtl.tasks.inRebalance && adminCtl.tasks.tasksRebalance.status === 'running' && rbac.cluster.tasks.read)),
                 'minor_cert_warning' : serversItemCtl.hasMinorCertWarning(node),
                 'major_cert_warning' : serversItemCtl.hasMajorCertWarning(node)}">
@@ -158,6 +159,38 @@ licenses/APL2.txt.
       Cancel Add
     </button>
   </div>
+
+
+  <!-- Storage Backend Change Pending, Eviction Policy Change Pending -------------------- -->
+  <div
+     class="cbui-tablerow resp-xsml error"
+     ng-show="(serversItemCtl.isStorageBackendChangePending || serversItemCtl.isEvictionPolicyChangePending)">
+    <span>
+      <span ng-show="serversItemCtl.isStorageBackendChangePending">
+        Storage backend change pending effect for bucket{{serversItemCtl.bucketsPendingStorageBackend.includes(',') ? 's' : ''}} {{serversItemCtl.bucketsPendingStorageBackend}}
+      </span>
+      <br/>
+      <span ng-show="serversItemCtl.isEvictionPolicyChangePending">
+        Eviction policy change pending effect for bucket{{serversItemCtl.bucketsPendingEvictionPolicy.includes(',') ? 's' : ''}} {{serversItemCtl.bucketsPendingEvictionPolicy}}
+      </span>
+    </span>
+  </div>
+  <div class="cbui-tablerow" ng-show="(serversItemCtl.isStorageBackendChangePending || serversItemCtl.isEvictionPolicyChangePending)">
+    <span ng-show="serversItemCtl.isStorageBackendChangePending && serversItemCtl.isEvictionPolicyChangePending">
+      Swap rebalance or a series of Graceful failover <strong>and</strong> Full recovery <strong>and</strong> Rebalance to complete the process of changing the storage backend and the eviction policy.
+      <br/>
+      Delta recovery will <strong>not</strong> work for changing the storage backend.
+    </span>
+    <span ng-show="serversItemCtl.isStorageBackendChangePending && !serversItemCtl.isEvictionPolicyChangePending">
+      Swap rebalance or a series of Graceful failover <strong>and</strong> Full recovery <strong>and</strong> Rebalance to complete the process of changing the storage backend.
+      <br/>
+      Delta recovery will <strong>not</strong> work for changing the storage backend.
+    </span>
+    <span ng-show="!serversItemCtl.isStorageBackendChangePending && serversItemCtl.isEvictionPolicyChangePending">
+      Swap rebalance or a series of Graceful failover <strong>and</strong> Delta recovery <strong>and</strong> Rebalance to complete the process of changing the eviction policy.
+    </span>
+  </div>
+
   <div
      class="cbui-tablerow"
      ng-if="serversItemCtl.isNodeInactiveFailed && !serversItemCtl.isNodeUnhealthy">
@@ -175,7 +208,7 @@ licenses/APL2.txt.
       <span
          ng-show="serversItemCtl.isKVNode"
          ng-click="serversItemCtl.reAddNode('delta', node.otpNode); $event.stopPropagation()">
-        <button class="outline">Add Back: Delta Recovery</button>
+        <button class="outline" ng-disabled="serversItemCtl.isStorageBackendChangePending">Add Back: Delta Recovery</button>
       </span>
     </span>
   </div>

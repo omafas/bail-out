@@ -40,6 +40,18 @@ function mnServersListItemController($scope, $rootScope, $uibModal, mnServersSer
     $scope.$watchGroup(['node', 'adminCtl.tasks'], function (values) {
       vm.getRebalanceProgress = getRebalanceProgress(values[0], values[1]);
     });
+
+    $scope.$watchGroup(['node', 'serversCtl.buckets'], function ([node, buckets]) {
+      if (node && buckets) {
+        vm.getStorageBackendChangePendingInfo = storageBackendChangePendingInfo(node);
+        vm.getEvictionPolicyChangePendingInfo = evictionPolicyChangePendingInfo(node);
+        vm.isStorageBackendChangePending = vm.getStorageBackendChangePendingInfo.hasStorageBackendPendingChange;
+        vm.bucketsPendingStorageBackend = vm.getStorageBackendChangePendingInfo.bucketList.join(', ');
+
+        vm.isEvictionPolicyChangePending = vm.getEvictionPolicyChangePendingInfo.hasEvictionPolicyPendingChange;
+        vm.bucketsPendingEvictionPolicy = vm.getEvictionPolicyChangePendingInfo.bucketList.join(', ');
+      }
+    });
   }
   function onNodeUpdate(node) {
     vm.isNodeUnhealthy = isNodeUnhealthy(node);
@@ -55,6 +67,7 @@ function mnServersListItemController($scope, $rootScope, $uibModal, mnServersSer
     vm.getSwapUsageConf = getSwapUsageConf(node);
     vm.getCpuUsageConf = getCpuUsageConf(node);
   }
+
   function isKVNode(node) {
     return node.services.indexOf("kv") > -1;
   }
@@ -212,4 +225,42 @@ function mnServersListItemController($scope, $rootScope, $uibModal, mnServersSer
 
     return nodeCertificate && (nodeCertificate.highestSeverity == 3);
   }
+
+  function storageBackendChangePendingInfo(node) {
+    let buckets = Object.values($scope.serversCtl.buckets || []);
+    let hasStorageBackendPendingChange = false;
+    let bucketList = [];
+    buckets.forEach(bucket => bucket.nodes.find(n => {
+      if (n.nodeUUID === node.nodeUUID) {
+        if (n.storageBackend && n.storageBackend !== bucket.storageBackend) {
+          hasStorageBackendPendingChange = true;
+          bucketList.push(bucket.name);
+        }
+        return true;
+      }
+      return false;
+    }));
+
+    return { hasStorageBackendPendingChange, bucketList };
+  }
+
+  function evictionPolicyChangePendingInfo(node) {
+    let buckets = Object.values($scope.serversCtl.buckets || []);
+    let hasEvictionPolicyPendingChange = false;
+    let bucketList = [];
+    buckets.forEach(bucket => bucket.nodes.find(n => {
+      if (n.nodeUUID === node.nodeUUID) {
+        if (n.evictionPolicy && n.evictionPolicy !== bucket.evictionPolicy) {
+          hasEvictionPolicyPendingChange = true;
+          bucketList.push(bucket.name);
+        }
+        return true;
+      }
+      return false;
+    }));
+
+    return { hasEvictionPolicyPendingChange, bucketList };
+  }
+
+  
 }

@@ -75,15 +75,51 @@ licenses/APL2.txt.
       </a>
     </span>
   </div>
-
   <div
-     class="cbui-tablerow ahgdhajd"
+     class="cbui-tablerow"
      [hidden]="(statusClass | async) === 'dynamic_healthy'">
     <span
        class="error"
        *ngFor="let message of (nodesCountByStatusMessage | async)">
       {{message}}
     </span>
+  </div>
+
+  <div
+     class="cbui-tablerow"
+     *ngIf="(statusClass | async) === 'dynamic_pending_change'">
+    <span class="error" *ngIf="storageBackendChangePending | async">
+      Storage backend change pending effect.
+      <span *ngIf="evictionPolicyChangePending | async"> Eviction policy change pending effect.</span>
+    </span>
+    <span class="error" *ngIf="(evictionPolicyChangePending | async) && !(storageBackendChangePending | async)">
+      Eviction policy change pending effect.
+    </span>
+  </div>
+  <div
+     class="cbui-tablerow"
+     *ngIf="(statusClass | async) === 'dynamic_pending_change'">
+     <span>
+      <span *ngIf="(evictionPolicyChangePending | async) && !(storageBackendChangePending | async)">
+        For each Data node, Swap rebalance or a series of Graceful failover <strong>and</strong> Delta recovery <strong>and</strong> Rebalance to complete the process of changing the eviction policy.
+      </span>
+      <span *ngIf="storageBackendChangePending | async">
+        For each Data node, Swap rebalance or a series of Graceful failover <strong>and</strong> Full recovery <strong>and</strong> Rebalance to complete the process of changing the storage backend.
+        <br/>
+        Delta recovery will <strong>not</strong> work for changing the storage backend.
+      </span>
+      <br/>
+      <span *ngIf="storageBackendChangePending | async">
+        <br/>
+        {{nodesNrStorageBackendPendingDone | async}}/{{(bucketNodes | async)?.length}} nodes converted to {{storageBackend | async}} storage engine.
+        {{nodesNrStorageBackendPending | async}}/{{(bucketNodes | async)?.length}} pending.
+      </span>
+      <br/>
+      <span *ngIf="evictionPolicyChangePending | async">
+        {{nodesNrEvictionPolicyPendingDone | async}}/{{(bucketNodes | async)?.length}} nodes converted to {{evictionPolicy | async}} eviction policy.
+        {{nodesNrEvictionPolicyPending | async}}/{{(bucketNodes | async)?.length}} pending.
+      </span>
+     </span>
   </div>
 
   <div

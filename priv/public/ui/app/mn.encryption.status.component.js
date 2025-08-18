@@ -57,7 +57,7 @@ class MnEncryptionStatusComponent extends MnLifeCycleHooksToStream {
 
   ngOnInit() {
     this.statusLabel = this.currentEncryptionInfo.pipe(map(r => this.mapEncryptionStatusToLabels(r.dataStatus)));
-    this.hasIssues = this.currentEncryptionInfo.pipe(map(r => !!r.issues.length));
+    this.hasIssues = this.currentEncryptionInfo.pipe(map(r => !!r.issues?.length));
     this.shouldShowIcon = this.currentEncryptionInfo.pipe(map(this.isIconVisible.bind(this)));
   }
 

@@ -31,7 +31,8 @@ class MnSettingsAutoCompactionFormComponent extends MnLifeCycleHooksToStream {
         'mnGroup',
         'mnErrors',
         'isBucketSettings',
-        'mnStorage'
+        'mnStorage',
+        'forceDisableFields'
       ]
     })
   ]}
@@ -131,7 +132,7 @@ class MnSettingsAutoCompactionFormComponent extends MnLifeCycleHooksToStream {
   maybeDisableField(control, enabled) {
     let controlField = this.mnGroup.get(control);
     if (controlField) {
-      controlField[enabled ? "enable" : "disable"]();
+      controlField[enabled && !this.forceDisableFields ? "enable" : "disable"]();
     }
   }
 

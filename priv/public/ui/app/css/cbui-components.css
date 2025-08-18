@@ -2259,6 +2259,13 @@ span.adder:hover {
   border-left: 8px solid #f7a623;
   animation: pulse_warning 3s infinite;
 }
+.dynamic_pending_change {
+  border-left: 8px solid #f7a623;
+  animation: pulse_warning 3s infinite;
+}
+.dynamic_pending_change.server {
+  animation: none !important;
+}
 @keyframes pulse_warning {
   50% {
     border-left-color: #fdedd3; /* orange-6 */

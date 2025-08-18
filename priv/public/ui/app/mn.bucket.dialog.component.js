@@ -116,6 +116,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
         replicaIndex: null,
         evictionPolicy: null,
         evictionPolicyEphemeral: null,
+        noRestart: null,
         maxTTLEnabled: null,
         maxTTL: null,
         compressionMode: null,
@@ -168,6 +169,13 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
       .success(() => {
         this.activeModal.dismiss();
         this.mnBucketsService.stream.updateBucketsPoller.next();
+      });
+
+    this.form.getLastRequest().error
+      .pipe(takeUntil(this.mnOnDestroy), map(error => error?.error), filter(error => !!error))
+      .subscribe(error => {
+        this.form.errorMessage(error);
+        this.activeModal.dismiss();
       });
 
     this.httpError = postRequest.error
@@ -245,7 +253,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
     this.bucketType
       .pipe(takeUntil(this.mnOnDestroy))
       .subscribe(bucketType =>
-                 this.maybeDisableField('storageBackend', !this.bucket && bucketType === 'membase'));
+                 this.maybeDisableField('storageBackend', bucketType === 'membase'));
 
     this.autoCompactionDefined = this.form.group.get('autoCompactionDefined').valueChanges
       .pipe(startWith(this.form.group.get('autoCompactionDefined').value),
@@ -272,7 +280,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
       .subscribe(v => this.maybeDisableField('purgeInterval', v));
 
     if (this.bucket) {
-      ['name', 'bucketType', 'conflictResolutionType','storageBackend','numVBuckets']
+      ['name', 'bucketType', 'conflictResolutionType']
         .forEach(field =>
                  this.maybeDisableField(field, false));
 
@@ -313,7 +321,19 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
       shareReplay({refCount: true, bufferSize: 1}),
       takeUntil(this.mnOnDestroy)
     );
+
+
+    this.isStorageBackendChangePending = this.mnBucketsService.isStorageBackendChangePending(this.bucket);
+    this.isEvictionPolicyChangePending = this.mnBucketsService.isEvictionPolicyChangePending(this.bucket);
+
+    if (this.isStorageBackendChangePending || this.isEvictionPolicyChangePending) {
+      // only these fields can be changed while storageBackend migration or evictionPolicy migration is in progress
+      const exceptionFields = ['storageBackend', 'numVBuckets', 'evictionPolicy', 'noRestart', 'ramQuotaMB'];
+      this.disableFields(this.form.group.controls, exceptionFields);
+    }
   }
+
+
 
   getBucketTotalRam(ramSummary) {
     return (ramSummary.items[2].name === 'overcommitted') ?
@@ -329,6 +349,17 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
       .pipe(startWith(this.form.group.get(flag).value),
             takeUntil(this.mnOnDestroy))
       .subscribe(v => this.maybeDisableField(field, v));
+  }
+
+  disableFields(fields, exceptionFields) {
+    Object.entries(fields).forEach(([fieldName, fieldControl]) => {
+      if (!exceptionFields.includes(fieldName)) {
+        fieldControl.disable();
+        if (fieldControl.controls) {
+          this.disableFields(fieldControl.controls, exceptionFields);
+        }
+      }
+    });
   }
 
   onReplicaNumberEnabled(enabled) {
@@ -358,15 +389,24 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
   threadsEvictionWarning(fieldName) {
     let initValue = this.bucket[fieldName];
 
-    this[fieldName + "Warning"] = this.form.group.get(fieldName).valueChanges
-      .pipe(startWith(this.form.group.get(fieldName).value),
-            map((value) =>
-              (value != initValue) ?
-                ('Changing ' + (fieldName === 'evictionPolicy' ?
-                  'eviction policy' :
-                  'bucket priority')  +
-                  ' will restart the bucket. This will lead to closing all' +
-                  ' open connections and some downtime') : ''));
+    this[fieldName + "Warning"] = combineLatest(
+        this.form.group.get(fieldName).valueChanges.pipe(startWith(this.form.group.get(fieldName).value)),
+        this.form.group.get('noRestart').valueChanges.pipe(startWith(this.form.group.get('noRestart').value)),
+        this.compatVersion79)
+      .pipe(map(([value, noRestart, compatVersion79]) => {
+              const evictionPolicyWarning = (value != initValue) ?
+              ('Changing ' + (fieldName === 'evictionPolicy' ?
+                'eviction policy' :
+                'bucket priority')  +
+                ' will restart the bucket. This will lead to closing all' +
+                ' open connections and some downtime') : '';
+
+              if (fieldName === 'evictionPolicy' && compatVersion79 && noRestart && value != initValue) {
+                return 'Eviction policy change pending effect. Complete the change with either 1) a swap rebalance, or 2) a graceful failover, recovery & rebalance of Data nodes.';
+              }
+
+              return evictionPolicyWarning;
+            }));
   }
 
   setDurabilityMinLevelOptions(bucketType) {
@@ -414,9 +454,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
     let isEphemeral = formData.bucketType === 'ephemeral';
 
     copyProperty('name');
-    if (!this.bucket) {
-      copyProperty('bucketType');
-    }
+    copyProperty('ramQuotaMB');
 
     if (isEnterprise && isMembase) {
       copyProperty('storageBackend');
@@ -425,13 +463,31 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
       }
     }
     if (isMembase) {
-      copyProperties(['autoCompactionDefined', 'evictionPolicy']);
+      copyProperty('evictionPolicy');
+      if (compat79) {
+        copyProperty('noRestart');
+      }
+    }
+
+    // stop here with the payload if the bucket is in pending change of storage backend or eviction policy
+    if (this.isStorageBackendChangePending || this.isEvictionPolicyChangePending) {
+      return saveData;
+    }
+
+    if (isMembase) {
+      copyProperty('autoCompactionDefined');
     }
 
     if (isEphemeral) {
       copyProperties(['purgeInterval', 'durabilityMinLevel']);
       saveData['evictionPolicy'] = formData['evictionPolicyEphemeral'];
     }
+
+    if (!this.bucket) {
+      copyProperty('bucketType');
+    }
+
+
 
     if (isMembase || isEphemeral) {
       copyProperties(['replicaNumber', 'durabilityMinLevel']);
@@ -481,7 +537,8 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
       }
     }
 
-    copyProperties(['ramQuotaMB', 'flushEnabled']);
+
+    copyProperty('flushEnabled');
     saveData.flushEnabled = saveData.flushEnabled ? 1 : 0;
 
     if (isEnterprise && !(this.bucket && this.bucket.enableCrossClusterVersioning)) {

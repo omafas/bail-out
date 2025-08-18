@@ -29,9 +29,9 @@
          formControlName="magmaFragmentationPercentage">
       <small>%</small>
       <div
-         [hidden]="!(mnErrors | async)?.errors.magmaFragmentationPercentage"
+         [hidden]="!(mnErrors | async)?.errors?.magmaFragmentationPercentage"
          class="error error-field">
-        {{(mnErrors | async)?.errors.magmaFragmentationPercentage}}
+        {{(mnErrors | async)?.errors?.magmaFragmentationPercentage}}
       </div>
     </div>
   </div>
@@ -63,9 +63,9 @@
          formControlName="percentage">
       <small>%</small>
       <div
-         [hidden]="!(mnErrors | async)?.errors['databaseFragmentationThreshold[percentage]']"
+         [hidden]="!((mnErrors | async)?.errors && (mnErrors | async)?.errors['databaseFragmentationThreshold[percentage]'])"
          class="error error-field">
-        {{(mnErrors | async)?.errors['databaseFragmentationThreshold[percentage]']}}
+        {{(mnErrors | async)?.errors && (mnErrors | async)?.errors['databaseFragmentationThreshold[percentage]']}}
       </div>
     </div>
 
@@ -85,9 +85,9 @@
          formControlName="size">
       <small>MiB</small>
       <div
-         [hidden]="!(mnErrors | async)?.errors['databaseFragmentationThreshold[size]']"
+         [hidden]="!((mnErrors | async)?.errors && (mnErrors | async)?.errors['databaseFragmentationThreshold[size]'])"
          class="error error-field">
-        {{(mnErrors | async)?.errors['databaseFragmentationThreshold[size]']}}
+        {{(mnErrors | async)?.errors && (mnErrors | async)?.errors['databaseFragmentationThreshold[size]']}}
       </div>
     </div>
 
@@ -111,9 +111,9 @@
          type="number">
       <small>%</small>
       <div
-         [hidden]="!(mnErrors | async)?.errors['viewFragmentationThreshold[percentage]']"
+         [hidden]="!((mnErrors | async)?.errors && (mnErrors | async)?.errors['viewFragmentationThreshold[percentage]'])"
          class="error error-field" >
-        {{(mnErrors | async)?.errors['viewFragmentationThreshold[percentage]']}}
+        {{(mnErrors | async)?.errors && (mnErrors | async)?.errors['viewFragmentationThreshold[percentage]']}}
       </div>
     </div>
 
@@ -133,9 +133,9 @@
          formControlName="size">
       <small>MiB</small>
       <div
-         [hidden]="!(mnErrors | async)?.errors['viewFragmentationThreshold[size]']"
+         [hidden]="!((mnErrors | async)?.errors && (mnErrors | async)?.errors['viewFragmentationThreshold[size]'])"
          class="error error-field">
-        {{(mnErrors | async)?.errors['viewFragmentationThreshold[size]']}}
+        {{(mnErrors | async)?.errors && (mnErrors | async)?.errors['viewFragmentationThreshold[size]']}}
       </div>
     </div>
 
@@ -209,13 +209,13 @@
           </div>
           <div
              class="error error-field"
-             [hidden]="!(mnErrors | async)?.errors['indexCircularCompaction[daysOfWeek]']">
-            {{(mnErrors | async)?.errors['indexCircularCompaction[daysOfWeek]']}}.
+             [hidden]="!((mnErrors | async)?.errors && (mnErrors | async)?.errors['indexCircularCompaction[daysOfWeek]'])">
+            {{(mnErrors | async)?.errors && (mnErrors | async)?.errors['indexCircularCompaction[daysOfWeek]']}}.
           </div>
           <div
              class="error error-field"
-             [hidden]="!(mnErrors | async)?.errors.indexCompactionMode">
-            {{(mnErrors | async)?.errors.indexCompactionMode}}.
+             [hidden]="!((mnErrors | async)?.errors && (mnErrors | async)?.errors['indexCompactionMode'])">
+            {{(mnErrors | async)?.errors && (mnErrors | async)?.errors['indexCompactionMode']}}.
           </div>
         </div>
 
@@ -265,9 +265,9 @@
     <br>
     <div class="desc">Range 0.04 (1hr) - 60 days</div>
     <div
-       [hidden]="!(mnErrors | async)?.errors.purgeInterval"
+       [hidden]="!((mnErrors | async)?.errors && (mnErrors | async)?.errors['purgeInterval'])"
        class="error error-field">
-      {{(mnErrors | async)?.errors.purgeInterval}}.
+      {{(mnErrors | async)?.errors && (mnErrors | async)?.errors['purgeInterval']}}.
     </div>
   </div>
 </div>

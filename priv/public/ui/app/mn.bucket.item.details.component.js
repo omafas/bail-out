@@ -116,7 +116,19 @@ class MnBucketItemDetailsComponent extends MnLifeCycleHooksToStream {
             filter(([tasks, bucket]) => tasks && bucket),
             map(v => mnBucketsService.getWarmUpTasks(v)));
 
-    this.isRebalancing = mnAdminService.stream.isRebalancing;
+    this.storageBackendChangePending = currentBucket
+      .pipe(map(v => mnBucketsService.isStorageBackendChangePending(v)));
+
+    this.nodesNrStorageBackendPendingDone = currentBucket
+      .pipe(map(v => mnBucketsService.getNodesNrStorageBackendPendingDone(v)));
+
+    this.evictionPolicyChangePending = currentBucket
+      .pipe(map(v => mnBucketsService.isEvictionPolicyChangePending(v)));
+
+    this.nodesNrEvictionPolicyPendingDone = currentBucket
+      .pipe(map(v => mnBucketsService.getNodesNrEvictionPolicyPendingDone(v)));
+
+      this.isRebalancing = mnAdminService.stream.isRebalancing;
   }
 
   ngOnInit() {
