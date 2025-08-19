@@ -712,7 +712,9 @@ start_fake_json_rpc_connection(Label) ->
     gen_event:notify(json_rpc_events,
                      {started, Label, [internal,
                                        {heartbeat, ?HEARTBEAT_TIME_S}],
-                      self()}).
+                      self()}),
+    %% Wait for initial notify to be handled, to avoid racy tests
+    meck:wait(1, menelaus_cbauth_worker, notify, ['_', '_'], ?LONG_TIMEOUT).
 
 cbauth_init_t() ->
     %% UpdateDB gets called once almost immediately
@@ -772,9 +774,6 @@ cbauth_stats_t() ->
     [] = stats().
 
 cbauth_many_notify_t() ->
-    %% Wait for initial notify to be handled
-    meck:wait(1, menelaus_cbauth_worker, notify, ['_', '_'],
-              ?LONG_TIMEOUT),
     meck:wait(1, json_rpc_connection, perform_call,
               ['_', "AuthCacheSvc.UpdateDB", '_', '_'], ?LONG_TIMEOUT),
     %% Ensure that the next perform_call doesn't immediately return
