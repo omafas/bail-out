@@ -2899,7 +2899,7 @@ chronicle_upgrade_bucket_props_to_79(BucketName, ChronicleTxn) ->
                  {memory_high_watermark,
                   attribute_default(memory_high_watermark)},
                  {warmup_behavior,
-                  attribute_default(attribute_default)},
+                  attribute_default(warmup_behavior)},
                  {durability_impossible_fallback,
                   attribute_default(durability_impossible_fallback)},
                  %% The default value isn't used for existing buckets as it
