@@ -669,7 +669,7 @@ setup_t() ->
     fake_chronicle_kv:setup(),
     %% Test setups return a map of pids for later shutdown in the teardown
     PidMap = mock_helpers:setup_mocks([json_rpc_events,
-                                       ns_node_disco_events,
+                                       ns_node_disco,
                                        user_storage_events,
                                        ssl_service_events,
                                        json_rpc_connection_sup,

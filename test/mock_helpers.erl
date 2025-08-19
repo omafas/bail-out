@@ -151,15 +151,14 @@ compat_mode_events(PidMap) ->
     PidMap#{?FUNCTION_NAME => CompatModeEventsPid}.
 
 ns_node_disco(PidMap) ->
-    setup_mocks([dist_manager], PidMap),
+    PidMap0 = setup_mocks([dist_manager, ns_node_disco_events], PidMap),
     {ok, NsNodeDiscoPid} = ns_node_disco:start_link(),
-    PidMap#{?FUNCTION_NAME => NsNodeDiscoPid}.
+    PidMap0#{?FUNCTION_NAME => NsNodeDiscoPid}.
 
 ns_node_disco_events(PidMap) ->
-    PidMap0 = setup_mocks([ns_node_disco], PidMap),
     {ok, NSNodeDiscoEventsPid} = gen_event:start_link({local,
                                                        ?FUNCTION_NAME}),
-    PidMap0#{?FUNCTION_NAME => NSNodeDiscoEventsPid}.
+    PidMap#{?FUNCTION_NAME => NSNodeDiscoEventsPid}.
 
 json_rpc_events(PidMap) ->
     {ok, JsonRpcEventsPid} = gen_event:start_link({local, ?FUNCTION_NAME}),
