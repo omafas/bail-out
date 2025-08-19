@@ -155,10 +155,28 @@ compat_mode_events(PidMap) ->
                                                       ?FUNCTION_NAME}),
     PidMap#{?FUNCTION_NAME => CompatModeEventsPid}.
 
+ns_node_disco(PidMap) ->
+    setup_mocks([dist_manager], PidMap),
+    {ok, NsNodeDiscoPid} = ns_node_disco:start_link(),
+    PidMap#{?FUNCTION_NAME => NsNodeDiscoPid}.
+
 ns_node_disco_events(PidMap) ->
+    PidMap0 = setup_mocks([ns_node_disco], PidMap),
     {ok, NSNodeDiscoEventsPid} = gen_event:start_link({local,
                                                        ?FUNCTION_NAME}),
-    PidMap#{?FUNCTION_NAME => NSNodeDiscoEventsPid}.
+    PidMap0#{?FUNCTION_NAME => NSNodeDiscoEventsPid}.
+
+json_rpc_events(PidMap) ->
+    {ok, JsonRpcEventsPid} = gen_event:start_link({local, ?FUNCTION_NAME}),
+    PidMap#{?FUNCTION_NAME => JsonRpcEventsPid}.
+
+user_storage_events(PidMap) ->
+    {ok, UserStorageEventsPid} = gen_event:start_link({local, ?FUNCTION_NAME}),
+    PidMap#{?FUNCTION_NAME => UserStorageEventsPid}.
+
+ssl_service_events(PidMap) ->
+    {ok, SslServiceEventsPid} = gen_event:start_link({local, ?FUNCTION_NAME}),
+    PidMap#{?FUNCTION_NAME => SslServiceEventsPid}.
 
 %%%===================================================================
 %%% Mock setup functions
@@ -254,5 +272,31 @@ rebalance_quirks(PidMap) ->
 
 testconditions(PidMap) ->
     meck:new(?FUNCTION_NAME, [passthrough]),
-    meck:expect(?FUNCTION_NAME, get, fun(_) -> ok end),
+    meck:expect(?FUNCTION_NAME, get, fun(_) -> false end),
+    PidMap#{?FUNCTION_NAME => mocked}.
+
+json_rpc_connection_sup(PidMap) ->
+    meck:expect(?FUNCTION_NAME, reannounce, fun () -> ok end),
+    PidMap#{?FUNCTION_NAME => mocked}.
+
+ns_ssl_services_setup(PidMap) ->
+    meck:expect(?FUNCTION_NAME, client_cert_auth, fun () -> [] end),
+    PidMap#{?FUNCTION_NAME => mocked}.
+
+menelaus_users(PidMap) ->
+    meck:expect(?FUNCTION_NAME, get_auth_version,
+                fun () -> {0, 0} end),
+    meck:expect(?FUNCTION_NAME, get_users_version,
+                fun () -> {0, 0} end),
+    meck:expect(?FUNCTION_NAME, get_groups_version,
+                fun () -> {0, 0} end),
+    PidMap#{?FUNCTION_NAME => mocked}.
+
+ns_secrets(PidMap) ->
+    meck:expect(?FUNCTION_NAME, get_pkey_pass,
+                fun (_) -> ?HIDE(undefined) end),
+    PidMap#{?FUNCTION_NAME => mocked}.
+
+dist_manager(PidMap) ->
+    meck:expect(?FUNCTION_NAME, get_rename_txn_pid, fun () -> undefined end),
     PidMap#{?FUNCTION_NAME => mocked}.

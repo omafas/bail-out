@@ -37,7 +37,12 @@
 -include("ns_common.hrl").
 -include_lib("ns_common/include/cut.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -define(VERSION_1, "v1").
+-define(WORKER_SYNC_TIMEOUT, 5000).
 
 handle_rpc_connect(?VERSION_1, Label, Req) ->
     case ns_config_auth:is_system_provisioned() of
@@ -76,6 +81,9 @@ sync() ->
     sync(node()).
 
 sync(Node) ->
+    sync(Node, ?WORKER_SYNC_TIMEOUT).
+
+sync(Node, WorkerSyncTimeout) ->
     InternalConnections =
         gen_server:call({?MODULE, Node}, get_internal_connections, infinity),
     %% If the above call succeeds, but a worker exits before we make the below
@@ -86,7 +94,7 @@ sync(Node) ->
     %% caller
     misc:parallel_map(
       fun (Pid) ->
-              try menelaus_cbauth_worker:sync(Pid)
+              try menelaus_cbauth_worker:sync(Pid, WorkerSyncTimeout)
               catch exit:{noproc, _} ->
                       ?log_error("Process ~p no longer exists", [Pid])
               end
@@ -643,3 +651,226 @@ service_to_label(xdcr) ->
     "goxdcr-cbauth";
 service_to_label(Service) ->
     atom_to_list(Service) ++ "-cbauth".
+
+-ifdef(TEST).
+-define(SERVICE, "<service>").
+-define(LABEL, "<service>-cbauth").
+-define(HEARTBEAT_TIME_S, 1).
+%% Short timeout for waiting to confirm that something doesn't immediately
+%% happen, without waiting so long that it significantly increases test duration
+-define(SHORT_TIMEOUT, 500).
+%% Timeout for things that should eventually happen, but not necessarily
+%% immediately
+-define(LONG_TIMEOUT, 60_000).
+
+setup_t() ->
+    meck:expect(config_profile, get,
+                fun () ->
+                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                end),
+
+    fake_ns_config:setup(),
+    fake_chronicle_kv:setup(),
+    %% Test setups return a map of pids for later shutdown in the teardown
+    PidMap = mock_helpers:setup_mocks([json_rpc_events,
+                                       ns_node_disco_events,
+                                       user_storage_events,
+                                       ssl_service_events,
+                                       json_rpc_connection_sup,
+                                       ns_ssl_services_setup,
+                                       menelaus_users,
+                                       ns_secrets,
+                                       testconditions]),
+
+    %% Set config values for a few keys, since these are needed for greater
+    %% coverage, and to avoid errors
+    fake_chronicle_kv:update_snapshot(#{nodes_wanted => [node()],
+                                        bucket_names => []}),
+    fake_ns_config:update_snapshot([{rest, [{port, 8091}]},
+                                    {rest_creds, placeholder},
+                                    {memcached, [{admin_user, "user"},
+                                                 {admin_pass, "pass"}]}]),
+
+    meck:new(menelaus_cbauth_worker, [passthrough]),
+
+    {ok, Pid} = menelaus_cbauth:start_link(),
+    start_fake_json_rpc_connection(?LABEL),
+    PidMap#{?MODULE => Pid}.
+
+teardown_t(PidMap) ->
+    Name = list_to_atom("json_rpc_connection-" ++ ?LABEL),
+    erlang:unregister(Name),
+    mock_helpers:shutdown_processes(PidMap),
+    fake_chronicle_kv:teardown(),
+    fake_ns_config:teardown(),
+    meck:unload().
+
+start_fake_json_rpc_connection(Label) ->
+    Name = list_to_atom("json_rpc_connection-" ++ Label),
+    Pid = self(),
+    true = erlang:register(Name, Pid),
+    meck:expect(json_rpc_connection, perform_call,
+                fun (_Label, _Call, _EJsonArg, _Opts) ->
+                        {ok, true}
+                end),
+    gen_event:notify(json_rpc_events,
+                     {started, Label, [internal,
+                                       {heartbeat, ?HEARTBEAT_TIME_S}],
+                      self()}).
+
+cbauth_init_t() ->
+    %% UpdateDB gets called once almost immediately
+    meck:wait(json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.UpdateDB", '_', '_'], ?LONG_TIMEOUT),
+    %% Heartbeat gets called once
+    meck:wait(json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.Heartbeat", '_', '_'],
+              2_000 * ?HEARTBEAT_TIME_S),
+    %% Heartbeat gets called again
+    meck:reset(json_rpc_connection),
+    meck:wait(json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.Heartbeat", '_', '_'],
+              2_000 * ?HEARTBEAT_TIME_S),
+    %% UpdateDB isn't called immediately again
+    ?assertError(timeout,
+                 meck:wait(json_rpc_connection, perform_call,
+                           ['_', "AuthCacheSvc.UpdateDB", '_', '_'],
+                           ?SHORT_TIMEOUT)).
+
+cbauth_sync_t() ->
+    %% UpdateDB gets called once immediately
+    meck:wait(json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.UpdateDB", '_', '_'],
+              ?LONG_TIMEOUT),
+    [ok] = sync(),
+    %% Ensure that the next perform_call doesn't immediately return until after
+    %% the sync call would time out
+    meck:expect(json_rpc_connection, perform_call,
+                fun (_, "AuthCacheSvc.UpdateDB", _, _) ->
+                        timer:sleep(2 * ?SHORT_TIMEOUT);
+                    (_, _, _, _) ->
+                        ok
+                end),
+    meck:reset(menelaus_cbauth_worker),
+    %% Force an update by updating the snapshot
+    fake_ns_config:update_snapshot(rest, [{port, 8092}]),
+    %% Wait for the update to start being handled
+    meck:wait(menelaus_cbauth_worker, notify, ['_', '_'], ?LONG_TIMEOUT),
+    %% Sync with timeout half the perform_call sleep time, to ensure it gets hit
+    ?assertExit({timeout, _}, sync(node(), ?SHORT_TIMEOUT)).
+
+cbauth_stats_t() ->
+    meck:expect(json_rpc_connection, perform_call,
+                fun (_Label, "AuthCacheSvc.GetStats", _EJsonArg, _Opts) ->
+                        {ok, {[ok]}};
+                    (_Label, _Call, _EJsonArg, _Opts) ->
+                        {ok, true}
+                end),
+    [{<<?SERVICE>>, ok}] = stats(),
+    meck:expect(json_rpc_connection, perform_call,
+                fun (_Label, "AuthCacheSvc.GetStats", _EJsonArg, _Opts) ->
+                        {error, error};
+                    (_Label, _Call, _EJsonArg, _Opts) ->
+                        {ok, true}
+                end),
+    [] = stats().
+
+cbauth_many_notify_t() ->
+    %% Wait for initial notify to be handled
+    meck:wait(1, menelaus_cbauth_worker, notify, ['_', '_'],
+              ?LONG_TIMEOUT),
+    meck:wait(1, json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.UpdateDB", '_', '_'], ?LONG_TIMEOUT),
+    %% Ensure that the next perform_call doesn't immediately return
+    meck:expect(json_rpc_connection, perform_call,
+                fun (_, "AuthCacheSvc.UpdateDB", _, _) ->
+                        receive return_from_call -> {ok, true}
+                        after ?LONG_TIMEOUT -> error(timeout) end;
+                    (_Label, _Call, _EJsonArg, _Opts) ->
+                        {ok, true}
+                end),
+    %% Send three updates, ensuring three notify calls with different values:
+    %% - The first is to get the worker stuck in the above meck:expect
+    %% - The second is to provide a value, which we want to become stale
+    %% - The third will be the new value, which should get used, instead of the
+    %%   stale value, after the first update is processed
+    lists:foreach(
+      fun (N) ->
+              fake_ns_config:update_snapshot(rest, [{port, N}]),
+              meck:wait(N, menelaus_cbauth_worker, notify, ['_', '_'],
+                        ?LONG_TIMEOUT)
+      end, [2, 3, 4]),
+    %% Extract value from next update
+    meck:expect(json_rpc_connection, perform_call,
+                fun (_, "AuthCacheSvc.UpdateDB", {Info}, _) ->
+                        [{Node}] = proplists:get_value(nodes, Info, []),
+                        [undefined, Port] = proplists:get_value(ports, Node),
+                        %% Expect the last value, not the stale value
+                        ?assertEqual(4, Port),
+                        {ok, true};
+                    (_Label, _Call, _EJsonArg, _Opts) ->
+                        {ok, true}
+                end),
+    %% Release worker
+    WorkerPid = whereis(list_to_atom("menelaus_cbauth_worker-" ++ ?LABEL)),
+    WorkerPid ! return_from_call,
+    %% Wait for both the stuck and final call to return
+    meck:wait(3, json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.UpdateDB", '_', '_'], ?LONG_TIMEOUT).
+
+trigger_notification(ns_node_disco_events) ->
+    %% To avoid needing to trick ns_node_disco into recognising fake nodes, just
+    %% make the node list different by removing the only node.
+    %% Note, this tests ns_node_disco_events as well as chronicle_kv, as the
+    %% event handler for chronicle_compat_events in this module does not cover
+    %% the nodes_wanted key (although the ns_node_disco handler does cover this
+    %% key, hence how this tests the ns_node_disco_events handler)
+    fake_chronicle_kv:update_snapshot(nodes_wanted, []);
+trigger_notification(ns_config_events) ->
+    %% This is just an arbitrary key in ns_config that we use for the cbauth
+    %% info, that is covered by the chronicle_compat_events handler
+    fake_ns_config:update_snapshot(rest, [{port, 8092}]);
+trigger_notification(chronicle_kv) ->
+    %% While the bucket_names key isn't subscribed to, the collections key is,
+    %% and we need to update both for the info to be updated
+    fake_chronicle_kv:update_snapshot(
+      #{bucket_names => ["test"],
+        {bucket, "test", collections} => [{uid, 0}],
+        {bucket, "test", props} => [{type, membase}]});
+trigger_notification(user_storage_events) ->
+    meck:expect(menelaus_users, get_users_version, 0, {1, 0}),
+    %% It isn't worth the complexity to trigger a user version change through
+    %% less artificial means, so just manually trigger the event
+    gen_event:notify(user_storage_events, event);
+trigger_notification(ssl_service_events) ->
+    %% It isn't worth the complexity to trigger an ssl_service_event through
+    %% less artificial means, so just manually trigger the event
+    gen_event:notify(ssl_service_events, client_cert_changed).
+
+cbauth_notify_tests() ->
+    %% Check that expected events cause notifications
+    [{"cbauth notify " ++ atom_to_list(EventManager) ++ " test",
+      fun () ->
+              %% UpdateDB gets called once almost immediately
+              meck:wait(json_rpc_connection, perform_call,
+                        ['_', "AuthCacheSvc.UpdateDB", '_', '_'],
+                        ?LONG_TIMEOUT),
+              meck:reset(json_rpc_connection),
+              trigger_notification(EventManager),
+              meck:wait(json_rpc_connection, perform_call,
+                        ['_', "AuthCacheSvc.UpdateDB", '_', '_'],
+                        ?LONG_TIMEOUT)
+      end} || EventManager <- [ns_node_disco_events,
+                               ns_config_events,
+                               chronicle_kv,
+                               user_storage_events,
+                               ssl_service_events]].
+
+cbauth_test_() ->
+    {foreach, fun setup_t/0, fun teardown_t/1,
+     [{"cbauth init test", fun cbauth_init_t/0},
+      {"cbauth sync test", fun cbauth_sync_t/0},
+      {"cbauth stats test", fun cbauth_stats_t/0},
+      {"cbauth many notify test", fun cbauth_many_notify_t/0}
+     | cbauth_notify_tests()]}.
+-endif.
