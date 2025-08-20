@@ -10,14 +10,14 @@ licenses/APL2.txt.
 
 export default mnStatisticsDetailedChartController;
 
-mnStatisticsDetailedChartController.$inject = ["$scope", "$timeout", "$state", "chart", "items", "mnStatisticsNewService", "mnStatisticsNewScope"];
-function mnStatisticsDetailedChartController($scope, $timeout, $state, chart, items, mnStatisticsNewService, mnStatisticsNewScope) {
+mnStatisticsDetailedChartController.$inject = ["$scope", "$timeout", "$state", "chart", "items", "mnStatisticsNewService", "mnStatisticsNewScope", "bucket"];
+function mnStatisticsDetailedChartController($scope, $timeout, $state, chart, items, mnStatisticsNewService, mnStatisticsNewScope, bucket) {
   var vm = this;
   vm.chart = Object.assign({}, chart, {size: "extra"});
 
   vm.items = items;
   vm.onSelectZoom = onSelectZoom;
-  vm.bucket = $state.params.commonBucket;
+  vm.bucket = bucket || $state.params.commonBucket; // Use the passed bucket, fallback to state param
   vm.zoom = $state.params.scenarioZoom !== "minute" ? $state.params.scenarioZoom : "hour";
   vm.node = $state.params.statsHostname;
   vm.options = {showFocus: true, showTicks: true, showLegends: true};
