@@ -61,6 +61,7 @@ type storedKeyIface interface {
 	kind() string
 	needRewrite(*storedKeyConfig, *StoredKeysState, *storedKeysCtx) (bool, int, error)
 	ad() []byte
+	asBytes() ([]byte, error)
 	encryptMe(*StoredKeysState, *storedKeysCtx) error
 	decryptMe(bool, *StoredKeysState, *storedKeysCtx) error
 	encryptData([]byte, []byte) ([]byte, error)
@@ -91,6 +92,7 @@ const (
 	encryptedFileHeaderSize     = 80
 	encryptedFileKeyNameLength  = byte(36)
 	macLen                      = 101 // Vsn: 1B, UUID: 36B, MAC: 64B
+	intTokenSize                = 64
 )
 
 // Struct for marshalling/unmarshalling of a raw aes-gcm stored key
@@ -286,11 +288,14 @@ func (state *StoredKeysState) maybeRegenerateProof(path, name string, ctx *store
 		logDbg("Failed to read key %s from file %s: %s", name, filePathPrefix, err.Error())
 		return err
 	}
-	parts := strings.Split(proof, ":")
-	if len(parts) != 2 {
-		return fmt.Errorf("file %s has invalid proof format", filePathPrefix)
+	proofBytes, err := base64.StdEncoding.DecodeString(proof)
+	if err != nil {
+		return fmt.Errorf("file %s has invalid proof format: %s", filePathPrefix, err.Error())
 	}
-	uuid := parts[0]
+	uuid, _, err := parseMac(proofBytes)
+	if err != nil {
+		return fmt.Errorf("file %s has invalid proof format: %s", filePathPrefix, err.Error())
+	}
 	if uuid == state.intTokens[0].uuid {
 		// Proof is still valid, no need to regenerate proof
 		return nil
@@ -312,7 +317,7 @@ func (state *StoredKeysState) maybeRegenerateProof(path, name string, ctx *store
 func (state *StoredKeysState) generateIntToken(ctx *storedKeysCtx) error {
 	newToken := intToken{
 		uuid:  uuid.New().String(),
-		token: createRandomKey(),
+		token: generateRandomBytes(intTokenSize),
 	}
 	prevTokens := state.intTokens
 	state.intTokens = append([]intToken{newToken}, state.intTokens...)
@@ -415,12 +420,10 @@ func (state *StoredKeysState) mac(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("no keys")
 	}
 	token := state.intTokens[0]
-	h := hmac.New(sha512.New, token.token)
-	h.Write(data)
-	mac := h.Sum(nil)
+	hmacBytes := hmacSHA512(token.token, data)
 	// Format: Version: 1 byte, TokenUUID, MAC
 	res := append([]byte{0}, token.uuid...)
-	res = append(res, mac...)
+	res = append(res, hmacBytes...)
 	if len(res) != macLen {
 		return nil, fmt.Errorf("unexpected mac length: %d", len(res))
 	}
@@ -428,34 +431,41 @@ func (state *StoredKeysState) mac(data []byte) ([]byte, error) {
 }
 
 func (state *StoredKeysState) verifyMac(mac, data []byte) error {
-	if len(mac) == 0 {
-		return fmt.Errorf("mac is empty")
+	uuid, hmacBytes, err := parseMac(mac)
+	if err != nil {
+		return err
 	}
-	if mac[0] != 0 {
-		return fmt.Errorf("unknown mac version: %v", mac[0])
-	}
-
-	if len(mac) != macLen {
-		return fmt.Errorf("unexpected mac length: %d", len(mac))
-	}
-	uuidBytes := mac[1:37]
-	if !utf8.Valid(uuidBytes) {
-		return fmt.Errorf("invalid utf-8 in uuid: %q", uuidBytes)
-	}
-	uuid := string(uuidBytes)
-	mac = mac[37:]
 	for _, token := range state.intTokens {
 		if token.uuid == uuid {
-			h := hmac.New(sha512.New, token.token)
-			h.Write(data)
-			expectedMac := h.Sum(nil)
-			if hmac.Equal(mac, expectedMac) {
+			expectedHmacBytes := hmacSHA512(token.token, data)
+			if hmac.Equal(hmacBytes, expectedHmacBytes) {
 				return nil
 			}
-			return fmt.Errorf("invalid mac")
+			return fmt.Errorf("invalid mac (token uuid: %s)", uuid)
 		}
 	}
 	return fmt.Errorf("unknown token: %s", uuid)
+}
+
+// Format: Version = 0: 1 byte, TokenUUID (36 bytes), MAC (64 bytes)
+func parseMac(mac []byte) (string, []byte, error) {
+	if len(mac) == 0 {
+		return "", nil, fmt.Errorf("mac is empty")
+	}
+	if mac[0] != 0 {
+		return "", nil, fmt.Errorf("unknown mac version: %v", mac[0])
+	}
+
+	if len(mac) != macLen {
+		return "", nil, fmt.Errorf("unexpected mac length: %d", len(mac))
+	}
+	uuidBytes := mac[1:37]
+	if !utf8.Valid(uuidBytes) {
+		return "", nil, fmt.Errorf("invalid utf-8 in uuid: %q", uuidBytes)
+	}
+	uuid := string(uuidBytes)
+	hmacBytes := mac[37:]
+	return uuid, hmacBytes, nil
 }
 
 func (state *StoredKeysState) revalidateKeyCache(ctx *storedKeysCtx) {
@@ -850,9 +860,9 @@ func (state *StoredKeysState) decryptKey(keyIface storedKeyIface, validateProof 
 		return err
 	}
 	if validateProof {
-		err = validateKeyProof(keyIface, proof, state.intTokens)
+		err = state.validateKeyProof(keyIface, proof)
 		if err != nil {
-			return err
+			return fmt.Errorf("key integrity check failed for key %s: %s", keyIface.name(), err.Error())
 		}
 	}
 	if keyIface.canBeCached() {
@@ -872,7 +882,7 @@ func (state *StoredKeysState) writeKeyToFile(keyIface storedKeyIface, curVsn int
 	if err != nil {
 		return err
 	}
-	proof, err := generateKeyProof(keyIface, state.intTokens)
+	proof, err := state.generateKeyProof(keyIface)
 	if err != nil {
 		return err
 	}
@@ -908,48 +918,40 @@ func (state *StoredKeysState) writeKeyToFile(keyIface storedKeyIface, curVsn int
 	return nil
 }
 
-func generateKeyProof(keyIface storedKeyIface, intTokens []intToken) (string, error) {
-	if len(intTokens) == 0 {
-		return "", fmt.Errorf("failed to generate proof: empty integrity tokens")
-	}
-	tokenHash := tokenHash(intTokens[0], keyIface)
-	encryptedTokenHash, err := keyIface.encryptData(tokenHash[:], []byte(keyIface.name()))
+func (state *StoredKeysState) generateKeyProof(keyIface storedKeyIface) (string, error) {
+	keyBytes, err := keyIface.asBytes()
 	if err != nil {
-		return "", fmt.Errorf("failed to use key to generate proof: %s", err.Error())
+		return "", fmt.Errorf("failed to convert key to bytes: %s", err.Error())
 	}
-	proof := fmt.Sprintf("%s:%s", intTokens[0].uuid, base64.StdEncoding.EncodeToString(encryptedTokenHash))
-	return proof, nil
+	proofBytes, err := state.mac(keyBytes)
+	if err != nil {
+		return "", err
+	}
+	proofStr := base64.StdEncoding.EncodeToString(proofBytes)
+	return proofStr, nil
 }
 
-func validateKeyProof(keyIface storedKeyIface, proof string, intTokens []intToken) error {
-	parts := strings.Split(proof, ":")
-	if len(parts) != 2 {
-		return fmt.Errorf("key integrity check failed: invalid proof format")
+func (state *StoredKeysState) validateKeyProof(keyIface storedKeyIface, proof string) error {
+	proofBytes, err := base64.StdEncoding.DecodeString(proof)
+	if err != nil {
+		return fmt.Errorf("failed to decode proof: %s", err.Error())
 	}
-	uuid := parts[0]
-	encryptedTokenHashBase64 := parts[1]
-	for _, token := range intTokens {
-		if token.uuid == uuid {
-			encryptedTokenHash, err := base64.StdEncoding.DecodeString(encryptedTokenHashBase64)
-			if err != nil {
-				return fmt.Errorf("key integrity check failed: failed to decode encrypted token hash: %s", err.Error())
-			}
-			decryptedTokenHash, err := keyIface.decryptData(encryptedTokenHash, []byte(keyIface.name()))
-			if err != nil {
-				return fmt.Errorf("key integrity check failed: failed to decrypt proof: %s", err.Error())
-			}
-			tokenHash := tokenHash(token, keyIface)
-			if bytes.Equal(tokenHash[:], decryptedTokenHash) {
-				return nil
-			}
-			return fmt.Errorf("key integrity check failed: invalid integrity token (token uuid: %s, key name: %s)", uuid, keyIface.name())
-		}
+	keyBytes, err := keyIface.asBytes()
+	if err != nil {
+		return fmt.Errorf("failed to convert key to bytes: %s", err.Error())
 	}
-	return fmt.Errorf("key integrity check failed: unknown token: %s (key name: %s)", uuid, keyIface.name())
+	err = state.verifyMac(proofBytes, keyBytes)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func tokenHash(token intToken, keyIface storedKeyIface) [64]byte {
-	return sha512.Sum512(append(token.token, []byte(keyIface.name())...))
+func hmacSHA512(key []byte, data []byte) []byte {
+	h := hmac.New(sha512.New, key)
+	h.Write(data)
+	mac := h.Sum(nil)
+	return mac
 }
 
 func (state *StoredKeysState) encryptWithKey(keyKind, keyName string, data, AD []byte, ctx *storedKeysCtx) ([]byte, error) {
@@ -1313,6 +1315,13 @@ func (k *rawAesGcmStoredKey) ad() []byte {
 	return []byte(string(rawAESGCMKey) + k.Name + k.Kind + k.CreationTime + k.EncryptionKeyName + strconv.FormatBool(k.CanBeCached))
 }
 
+func (k *rawAesGcmStoredKey) asBytes() ([]byte, error) {
+	if k.DecryptedKey == nil {
+		return nil, fmt.Errorf("key %s is encrypted", k.Name)
+	}
+	return append(k.ad(), k.DecryptedKey...), nil
+}
+
 func (k *rawAesGcmStoredKey) encryptMe(state *StoredKeysState, ctx *storedKeysCtx) error {
 	if k.EncryptedKey != nil {
 		// Seems like it is already encrypted
@@ -1447,6 +1456,20 @@ func (k *awsStoredKey) needRewrite(settings *storedKeyConfig, state *StoredKeysS
 
 func (k *awsStoredKey) ad() []byte {
 	return []byte("")
+}
+
+func (k *awsStoredKey) asBytes() ([]byte, error) {
+	return []byte(
+		string(awskmKey) +
+			k.Name +
+			k.Kind +
+			k.KeyArn +
+			k.Region +
+			k.ConfigFile +
+			k.CredsFile +
+			k.Profile +
+			strconv.FormatBool(k.UseIMDS) +
+			k.CreationTime), nil
 }
 
 func (k *awsStoredKey) encryptMe(state *StoredKeysState, ctx *storedKeysCtx) error {
@@ -1623,6 +1646,13 @@ func (k *kmipStoredKey) ad() []byte {
 			k.CaSelection +
 			k.EncryptionKeyName +
 			k.CreationTime)
+}
+
+func (k *kmipStoredKey) asBytes() ([]byte, error) {
+	if k.decryptedPassphrase == nil {
+		return nil, fmt.Errorf("key %s is encrypted", k.Name)
+	}
+	return append(k.ad(), k.decryptedPassphrase...), nil
 }
 
 func (k *kmipStoredKey) encryptMe(state *StoredKeysState, ctx *storedKeysCtx) error {

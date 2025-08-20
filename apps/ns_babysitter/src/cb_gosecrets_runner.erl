@@ -1543,7 +1543,7 @@ mac_test() ->
                              verify_mac(Pid, <<0, 1, 2, 3>>, Data)),
                 ?assertMatch({error, "invalid utf-8 in uuid: " ++ _},
                              verify_mac(Pid, RandomUUIDMac, Data)),
-                ?assertEqual({error, "invalid mac"},
+                ?assertMatch({error, "invalid mac (token uuid: " ++ _},
                              verify_mac(Pid, WrongMac, Data)),
 
                 %% Rotate tokens and make sure that old mac is still valid
