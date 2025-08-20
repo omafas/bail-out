@@ -1899,6 +1899,70 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
             lambda: not pre_morpheus_bucket_dir.exists(),
             sleep_time=1, attempts=50, verbose=True)
 
+    def breakpad_state_changes_test(self):
+        def assert_breakpad_status_on_all_nodes(expected_en):
+            for node in self.cluster.connected_nodes:
+                def check():
+                    BaseP = Path(node.data_path())
+                    memcached_file_path = BaseP / 'config' / 'memcached.json'
+                    assert memcached_file_path.exists(), \
+                           f'{memcached_file_path} not found on {node}'
+                    stdout = node.run_cbcat("", memcached_file_path)
+                    try:
+                        content = json.loads(stdout)
+                        return content['breakpad']['enabled'] == expected_en
+                    except Exception as e:
+                        msg = (f'Failed to get breakpad status from '
+                               f'{memcached_file_path}: {e}')
+                        assert False, msg
+                testlib.poll_for_condition(
+                    check, sleep_time=1, attempts=30, verbose=True)
+
+        # Default is enabled so breakpad should be initially enabled
+        assert_breakpad_status_on_all_nodes(True)
+
+        # Enable log encryption and breakpad on all nodes should go disabled
+        set_log_encryption(self.cluster, 'nodeSecretManager', -1)
+        assert_breakpad_status_on_all_nodes(False)
+
+        # Disable log encryption and breakpad on all nodes should go enabled
+        set_log_encryption(self.cluster, 'disabled', -1)
+        assert_breakpad_status_on_all_nodes(True)
+
+        # Enable bucket encryption and breakpad on all nodes should go disabled
+        secret = cb_managed_secret(usage=['bucket-encryption'])
+        secret_id = create_secret(self.random_node(), secret)
+        self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
+                                    'encryptionAtRestKeyId': secret_id},
+                                   sync=True)
+        assert_breakpad_status_on_all_nodes(False)
+
+        # Remove encrypted bucket and breakpad on all nodes should go enabled
+        self.cluster.delete_bucket(self.bucket_name)
+        assert_breakpad_status_on_all_nodes(True)
+
+        # Enable log encryption and breakpad on all nodes should go disabled
+        set_log_encryption(self.cluster, 'nodeSecretManager', -1)
+        assert_breakpad_status_on_all_nodes(False)
+
+        try:
+            # forceCrashDumps=true and breakpad on all nodes should go enabled
+            testlib.post_succ(self.cluster, '/settings/security',
+                              data={'forceCrashDumps': 'true'})
+            assert_breakpad_status_on_all_nodes(True)
+
+            # forceCrashDumps=false and breakpad on all nodes should go disabled
+            testlib.post_succ(self.cluster, '/settings/security',
+                              data={'forceCrashDumps': 'false'})
+            assert_breakpad_status_on_all_nodes(False)
+        finally:
+            testlib.delete(self.cluster, f'/settings/security/forceCrashDumps')
+
+        # Disable log encryption and breakpad on all nodes should go enabled
+        set_log_encryption(self.cluster, 'disabled', -1)
+        assert_breakpad_status_on_all_nodes(True)
+
+
 
 # Set master password and restart the cluster
 # Testing that we can decrypt deks when master password is set
