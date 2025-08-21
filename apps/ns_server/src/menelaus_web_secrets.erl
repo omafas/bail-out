@@ -64,7 +64,7 @@ handle_post_secret(Req) ->
     menelaus_util:assert_is_enterprise(),
     assert_is_79(),
     with_validated_secret(
-      fun (ToAdd) ->
+      fun (ToAdd, _) ->
           maybe
               {ok, Res} ?= cb_cluster_secrets:add_new_secret(ToAdd),
               Formatted = export_secret(Res),
@@ -72,44 +72,38 @@ handle_post_secret(Req) ->
               menelaus_util:reply_json(Req, {Formatted}),
               ok
           end
-      end, #{}, Req).
+      end, undefined, Req).
 
 handle_put_secret(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
     assert_is_79(),
     Id = parse_id(IdStr),
-    case cb_cluster_secrets:get_secret(Id) of
-        {ok, CurProps} ->
-            with_validated_secret(
-              fun (Props) ->
-                  maybe
-                      IsSecretWritableMFA = {?MODULE, is_writable_remote,
-                                             [?HIDE(Req), node()]},
-                      %% replace_secret will check "old usages" inside txn
-                      {ok, Res} ?= cb_cluster_secrets:replace_secret(
-                                     Id, Props, IsSecretWritableMFA),
-                      Formatted = export_secret(Res),
-                      ns_audit:set_encryption_secret(Req, Formatted),
-                      menelaus_util:reply_json(Req, {Formatted}),
-                      ok
-                  end
-              end, CurProps, Req);
-        {error, not_found} ->
-            %% We don't want PUT to create secrets because we generate id's
-            menelaus_util:reply_not_found(Req)
-    end.
+    with_validated_secret(
+      fun (Props, _) ->
+          maybe
+              IsSecretWritableMFA = {?MODULE, is_writable_remote,
+                                      [?HIDE(Req), node()]},
+              %% replace_secret will check "old usages" inside txn
+              {ok, Res} ?= cb_cluster_secrets:replace_secret(
+                              Id, Props, IsSecretWritableMFA),
+              Formatted = export_secret(Res),
+              ns_audit:set_encryption_secret(Req, Formatted),
+              menelaus_util:reply_json(Req, {Formatted}),
+              ok
+          end
+      end, Id, Req).
 
 handle_test_post_secret(Req) ->
     menelaus_util:assert_is_enterprise(),
     assert_is_79(),
     with_validated_secret(
-      fun (Params) ->
+      fun (Params, _) ->
           maybe
               ok ?= cb_cluster_secrets:test(Params, undefined),
               menelaus_util:reply(Req, 200),
               ok
           end
-      end, #{}, Req).
+      end, undefined, Req).
 
 handle_test_post_secret(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
@@ -140,21 +134,16 @@ handle_test_put_secret(IdStr, Req) ->
     menelaus_util:assert_is_enterprise(),
     assert_is_79(),
     Id = parse_id(IdStr),
-    case cb_cluster_secrets:get_secret(Id) of
-        {ok, CurProps} ->
-            with_validated_secret(
-              fun (Params) ->
-                  maybe
-                      ok ?= cb_cluster_secrets:test(Params, CurProps),
-                      menelaus_util:reply(Req, 200),
-                      ok
-                  end
-              end, CurProps, Req);
-        {error, not_found} ->
-            menelaus_util:reply_not_found(Req)
-    end.
+    with_validated_secret(
+        fun (Params, CurProps) ->
+            maybe
+                ok ?= cb_cluster_secrets:test(Params, CurProps),
+                menelaus_util:reply(Req, 200),
+                ok
+            end
+        end, Id, Req).
 
-with_validated_secret(Fun, CurProps, Req) ->
+with_validated_secret(Fun, ExistingId, Req) ->
     %% We need to fetch snapshot with read_consistency in order to deal with
     %% the following scenario:
     %% 1. User creates a bucket on a node which is not an orchestrator
@@ -167,28 +156,42 @@ with_validated_secret(Fun, CurProps, Req) ->
                  %[ns_bucket:fetch_snapshot(all, _, [uuid])],
                  [cb_cluster_secrets:fetch_snapshot_in_txn(_)],
                  #{read_consistency => quorum}),
-    validator:handle(
-      fun (RawProps) ->
-          maybe
-              Props = import_secret(RawProps),
-              %% Note: All "usages" should be writable by current user.
-              %% This includes "new usages" (usages that are being set)
-              %% and "old usages" (usages that are being replaced)
-              %% Checking "new usages" here:
-              true ?= is_writable(Props, Req),
-              %% Fun is responsible for checking "old usages" inside txn
-              ok ?= Fun(Props)
-          else
-              false ->
-                  menelaus_util:web_exception(403, format_error(forbidden));
-              {error, forbidden} ->
-                  menelaus_util:web_exception(403, format_error(forbidden));
-              {error, no_quorum} ->
-                  menelaus_util:web_exception(503, format_error(no_quorum));
-              {error, Reason} ->
-                  menelaus_util:reply_global_error(Req, format_error(Reason))
-          end
-      end, Req, json, secret_validators(CurProps, Snapshot)).
+    CurPropsRes = case ExistingId of
+                      undefined -> {ok, #{}};
+                      _ -> cb_cluster_secrets:get_secret(ExistingId, Snapshot)
+                  end,
+
+    case CurPropsRes of
+        {ok, CurProps} ->
+            validator:handle(
+              fun (RawProps) ->
+                  maybe
+                      Props = import_secret(RawProps),
+                      %% Note: All "usages" should be writable by current user.
+                      %% This includes "new usages" (usages that are being set)
+                      %% and "old usages" (usages that are being replaced)
+                      %% Checking "new usages" here:
+                      true ?= is_writable(Props, Req),
+                      %% Fun is responsible for checking "old usages" inside txn
+                      ok ?= Fun(Props, CurProps)
+                  else
+                      false ->
+                          menelaus_util:web_exception(403,
+                                                      format_error(forbidden));
+                      {error, forbidden} ->
+                          menelaus_util:web_exception(403,
+                                                      format_error(forbidden));
+                      {error, no_quorum} ->
+                          menelaus_util:web_exception(503,
+                                                      format_error(no_quorum));
+                      {error, Reason} ->
+                          menelaus_util:reply_global_error(Req,
+                                                           format_error(Reason))
+                  end
+              end, Req, json, secret_validators(CurProps, Snapshot));
+        {error, not_found} ->
+            menelaus_util:reply_not_found(Req)
+    end.
 
 %% Note: CurProps can only be used for static fields validation here.
 %% Any field that can be modified and needs to use CurProps should be
