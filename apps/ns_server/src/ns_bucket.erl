@@ -3280,19 +3280,109 @@ get_force_encryption_timestamp(BucketUUID, Snapshot) ->
         Settings = chronicle_compat:get(Snapshot, sub_key(Bucket, encr_at_rest),
                                         #{default => #{}}),
         DropDT = maps:get(dek_drop_datetime, Settings, undefined),
-        ForceDT = maps:get(force_encryption_datetime, Settings, DropDT),
+        ForceDT = maps:get(force_encryption_datetime, Settings, undefined),
+
+        EffectiveForceDT = case {DropDT, ForceDT} of
+                                {undefined, undefined} -> undefined;
+                                {undefined, DT} -> DT;
+                                {DT, undefined} -> DT;
+                                {DT1, DT2} -> max(DT1, DT2)
+                            end,
+
         LastToggleDT = proplists:get_value(encryption_last_toggle_datetime,
                                            Config),
         if
-            ForceDT =:= undefined -> {ok, undefined};
-            LastToggleDT =:= undefined -> {ok, ForceDT};
-            LastToggleDT > ForceDT -> {ok, undefined};
-            true -> {ok, ForceDT}
+            EffectiveForceDT =:= undefined -> {ok, undefined};
+            LastToggleDT =:= undefined -> {ok, EffectiveForceDT};
+            LastToggleDT > EffectiveForceDT -> {ok, undefined};
+            true -> {ok, EffectiveForceDT}
         end
     else
         not_present -> {error, not_found};
         {error, R} -> {error, R}
     end.
+
+-ifdef(TEST).
+get_force_encryption_timestamp_test() ->
+    meck:new(cluster_compat_mode, [passthrough]),
+    try
+        meck:expect(cluster_compat_mode, is_cluster_79,
+                    fun () -> true end),
+        meck:expect(cluster_compat_mode, is_enterprise,
+                    fun () -> true end),
+
+        NewDate = {{2025,8,21},{23,28,56}},
+        OldDate = {{2025,8,21},{23,27,29}},
+        SuperOldDate = {{2025,8,21},{23,26,29}},
+        B = <<"test_bucket">>,
+        BUUID = <<"123">>,
+
+        BucketCommon = #{root => {[B], 0},
+                        uuid2bucket_key(BUUID) => {B, 0},
+                        uuid_key(B) => {BUUID, 0}},
+
+        SetToggleDT =
+            fun (S, undefined) ->
+                    S#{sub_key(B, props) => {[], 0}};
+                (S, DT) ->
+                    S#{sub_key(B, props) =>
+                        {[{encryption_last_toggle_datetime, DT}], 0}}
+            end,
+
+        SetOtherDT =
+            fun (S, undefined, undefined) -> S;
+                (S, ForceDT, undefined) ->
+                    S#{sub_key(B, encr_at_rest) =>
+                        {#{force_encryption_datetime => ForceDT}, 0}};
+                (S, undefined, DropDT) ->
+                    S#{sub_key(B, encr_at_rest) =>
+                        {#{dek_drop_datetime => DropDT}, 0}};
+                (S, ForceDT, DropDT) ->
+                    S#{sub_key(B, encr_at_rest) =>
+                        {#{dek_drop_datetime => DropDT,
+                            force_encryption_datetime => ForceDT}, 0}}
+            end,
+
+        Snapshot = fun (ForceDT, DropDT, LastToggleDT) ->
+                    functools:chain(
+                        BucketCommon,
+                        [SetToggleDT(_, LastToggleDT),
+                        SetOtherDT(_, ForceDT, DropDT)])
+                end,
+
+        Assert = fun (Expected, ForceDT, DropDT, LastToggleDT) ->
+                     ?assertEqual({ok, Expected},
+                                  get_force_encryption_timestamp(
+                                    BUUID, Snapshot(ForceDT, DropDT, LastToggleDT)))
+                 end,
+
+        Assert(NewDate, NewDate, OldDate, SuperOldDate),
+        Assert(NewDate, OldDate, NewDate, SuperOldDate),
+        Assert(NewDate, undefined, NewDate, SuperOldDate),
+        Assert(NewDate, NewDate, undefined, SuperOldDate),
+        Assert(undefined, undefined, undefined, SuperOldDate),
+
+        Assert(undefined, OldDate, SuperOldDate, NewDate),
+        Assert(undefined, SuperOldDate, OldDate, NewDate),
+        Assert(undefined, undefined, OldDate, NewDate),
+        Assert(undefined, SuperOldDate, undefined, NewDate),
+        Assert(undefined, undefined, undefined, NewDate),
+
+        Assert(NewDate, SuperOldDate, NewDate, OldDate),
+        Assert(NewDate, NewDate, SuperOldDate, OldDate),
+        Assert(undefined, undefined, SuperOldDate, OldDate),
+        Assert(NewDate, NewDate, undefined, OldDate),
+
+        Assert(NewDate, NewDate, OldDate, undefined),
+        Assert(NewDate, OldDate, NewDate, undefined),
+        Assert(NewDate, undefined, NewDate, undefined),
+        Assert(NewDate, NewDate, undefined, undefined),
+        Assert(undefined, undefined, undefined, undefined)
+    after
+        meck:unload(cluster_compat_mode)
+    end.
+
+-endif.
 
 %% fusion
 

@@ -881,25 +881,99 @@ get_drop_keys_timestamp(Type, Snapshot) ->
 get_force_encryption_timestamp(Type, Snapshot) ->
     maybe
         Settings = menelaus_web_encr_at_rest:get_settings(Snapshot),
-        TypeSettings = maps:get(Type, Settings, undefined),
-        {ok, ForceDT} ?=
-            case TypeSettings of
-                undefined ->
-                    {error, not_found};
-                #{force_encryption_datetime := {set, DT}} ->
-                    {ok, DT};
-                #{force_encryption_datetime := {not_set, _}} ->
-                    get_drop_keys_timestamp(Type, Snapshot)
+        {ok, TypeSettings} ?= case maps:find(Type, Settings) of
+                                  error -> {error, not_found};
+                                  {ok, S} -> {ok, S}
+                              end,
+
+        ForceDT = maps:get(force_encryption_datetime, TypeSettings,
+                           {not_set, []}),
+        DropDT = maps:get(dek_drop_datetime, TypeSettings,
+                          {not_set, []}),
+        EffectiveForceDT =
+            case {ForceDT, DropDT} of
+                {{not_set, _}, {not_set, _}} -> undefined;
+                {{not_set, []}, {set, DT}} -> DT;
+                {{set, DT}, {not_set, []}} -> DT;
+                {{set, DT1}, {set, DT2}} -> max(DT1, DT2)
             end,
         LastToggleDT = maps:get(encryption_last_toggle_datetime, TypeSettings,
                                 undefined),
         if
-            ForceDT =:= undefined -> {ok, undefined};
-            LastToggleDT =:= undefined -> {ok, ForceDT};
-            LastToggleDT > ForceDT -> {ok, undefined};
-            true -> {ok, ForceDT}
+            EffectiveForceDT =:= undefined -> {ok, undefined};
+            LastToggleDT =:= undefined -> {ok, EffectiveForceDT};
+            LastToggleDT > EffectiveForceDT -> {ok, undefined};
+            true -> {ok, EffectiveForceDT}
         end
     end.
+
+-ifdef(TEST).
+
+get_force_encryption_timestamp_test() ->
+    NewDate = {{2025,8,21},{23,28,56}},
+    OldDate = {{2025,8,21},{23,27,29}},
+    SuperOldDate = {{2025,8,21},{23,26,29}},
+    meck:new(cluster_compat_mode, [passthrough]),
+    try
+        meck:expect(cluster_compat_mode, is_cluster_79,
+                    fun () -> true end),
+        meck:expect(cluster_compat_mode, is_enterprise,
+                    fun () -> true end),
+        Mock = fun (ForceDT, DropDT, LastToggleDT) ->
+                  meck:expect(
+                    menelaus_web_encr_at_rest, get_settings,
+                    fun (_Snapshot) ->
+                        C1 = case LastToggleDT of
+                                 undefined -> #{};
+                                 _ ->
+                                    #{encryption_last_toggle_datetime =>
+                                          LastToggleDT}
+                             end,
+                        C2 = #{force_encryption_datetime => ForceDT,
+                               dek_drop_datetime => DropDT},
+                        #{config_encryption => maps:merge(C1, C2)}
+                    end)
+              end,
+
+        Assert = fun (Expected, Force, Drop, LastToggle) ->
+                     Val = fun (undefined) -> {not_set, []};
+                               (V) -> {set, V}
+                           end,
+                     Mock(Val(Force), Val(Drop), LastToggle),
+                     ?assertEqual({error, not_found},
+                                  get_force_encryption_timestamp(unknown, #{})),
+                     ?assertEqual({ok, Expected},
+                                  get_force_encryption_timestamp(
+                                    config_encryption, #{}))
+                 end,
+
+        Assert(NewDate, NewDate, OldDate, SuperOldDate),
+        Assert(NewDate, OldDate, NewDate, SuperOldDate),
+        Assert(NewDate, undefined, NewDate, SuperOldDate),
+        Assert(NewDate, NewDate, undefined, SuperOldDate),
+        Assert(undefined, undefined, undefined, SuperOldDate),
+
+        Assert(undefined, OldDate, SuperOldDate, NewDate),
+        Assert(undefined, SuperOldDate, OldDate, NewDate),
+        Assert(undefined, undefined, OldDate, NewDate),
+        Assert(undefined, SuperOldDate, undefined, NewDate),
+        Assert(undefined, undefined, undefined, NewDate),
+
+        Assert(NewDate, SuperOldDate, NewDate, OldDate),
+        Assert(NewDate, NewDate, SuperOldDate, OldDate),
+        Assert(undefined, undefined, SuperOldDate, OldDate),
+        Assert(NewDate, NewDate, undefined, OldDate),
+
+        Assert(NewDate, NewDate, OldDate, undefined),
+        Assert(NewDate, OldDate, NewDate, undefined),
+        Assert(NewDate, undefined, NewDate, undefined),
+        Assert(NewDate, NewDate, undefined, undefined),
+        Assert(undefined, undefined, undefined, undefined)
+
+    after
+        meck:unload(cluster_compat_mode)
+    end.
+-endif.
 
 %%%===================================================================
 %%% Internal functions
