@@ -978,6 +978,28 @@ retire_key(Kind, Filename) ->
         ok ->
             case misc:atomic_rename(FromPath, ToPath) of
                 ok -> ok;
+                {error, exdev} ->
+                    %% Cross-filesystem rename, fall back to copy + delete
+                    ?log_debug("Cross-filesystem rename failed, "
+                               "will try copy+delete ~p to ~p",
+                               [FromPath, ToPath]),
+                    case file:copy(FromPath, ToPath) of
+                        {ok, _} -> ok;
+                        {error, CopyReason} ->
+                            %% Copy failed, but it is not critical enough to
+                            %% fail the whole operation, as the reason we keep
+                            %% the keys in retired_keys_dir is "just in case".
+                            %% The system can work without it.
+                            ?log_error("Copy failed ~p to ~p: ~p",
+                                       [FromPath, ToPath, CopyReason])
+                    end,
+                    case file:delete(FromPath) of
+                        ok -> ok;
+                        {error, DeleteReason} ->
+                            ?log_error("Failed to delete file ~p: ~p",
+                                       [FromPath, DeleteReason]),
+                            {error, DeleteReason}
+                    end;
                 {error, Reason} ->
                     ?log_error("Failed to retire ~p key ~p (~p): ~p",
                                 [Kind, Filename, FromPath, Reason]),
