@@ -84,7 +84,8 @@
          node_supports_encryption_at_rest/1,
          max_dek_num/1,
          fetch_snapshot_in_txn/1,
-         recalculate_deks_info/0]).
+         recalculate_deks_info/0,
+         is_secret_used/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -848,6 +849,18 @@ max_dek_num(Kind) ->
                   _ -> 50
               end,
     ?get_param({max_dek_num, Kind}, Default).
+
+-spec is_secret_used(secret_id(), chronicle_snapshot()) -> boolean().
+is_secret_used(Id, Snapshot) ->
+    case get_secret(Id, Snapshot) of
+        {ok, SecretProps} ->
+            case can_delete_secret(SecretProps, Snapshot) of
+                ok -> false;
+                {error, {used_by, _}} -> true
+            end;
+        {error, not_found} ->
+            false
+    end.
 
 %%%===================================================================
 %%% gen_server callbacks

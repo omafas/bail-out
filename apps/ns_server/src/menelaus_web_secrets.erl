@@ -64,7 +64,7 @@ handle_post_secret(Req) ->
     menelaus_util:assert_is_enterprise(),
     assert_is_79(),
     with_validated_secret(
-      fun (ToAdd, _) ->
+      fun (ToAdd, _, _) ->
           maybe
               {ok, Res} ?= cb_cluster_secrets:add_new_secret(ToAdd),
               Formatted = export_secret(Res),
@@ -79,8 +79,20 @@ handle_put_secret(IdStr, Req) ->
     assert_is_79(),
     Id = parse_id(IdStr),
     with_validated_secret(
-      fun (Props, _) ->
+      fun (Props, CurProps, Snapshot) ->
           maybe
+              %% If the secret is already in use, we need to test it before
+              %% saving it (because we test key when we are assigning it for
+              %% encryption). Strictly speaking, the fact that it works now
+              %% doesn't mean that it will work in the future, but it's better
+              %% than nothing, and hopefully it will help avoiding most of the
+              %% issues. Not doing it inside a save transaction because
+              %% (1) testing is very slow and (2) it will still give us no
+              %% guarantee that it will work in the future.
+              ok ?= case cb_cluster_secrets:is_secret_used(Id, Snapshot) of
+                        true -> cb_cluster_secrets:test(Props, CurProps);
+                        false -> ok
+                    end,
               IsSecretWritableMFA = {?MODULE, is_writable_remote,
                                       [?HIDE(Req), node()]},
               %% replace_secret will check "old usages" inside txn
@@ -97,7 +109,7 @@ handle_test_post_secret(Req) ->
     menelaus_util:assert_is_enterprise(),
     assert_is_79(),
     with_validated_secret(
-      fun (Params, _) ->
+      fun (Params, _, _) ->
           maybe
               ok ?= cb_cluster_secrets:test(Params, undefined),
               menelaus_util:reply(Req, 200),
@@ -135,7 +147,7 @@ handle_test_put_secret(IdStr, Req) ->
     assert_is_79(),
     Id = parse_id(IdStr),
     with_validated_secret(
-        fun (Params, CurProps) ->
+        fun (Params, CurProps, _) ->
             maybe
                 ok ?= cb_cluster_secrets:test(Params, CurProps),
                 menelaus_util:reply(Req, 200),
@@ -173,7 +185,7 @@ with_validated_secret(Fun, ExistingId, Req) ->
                       %% Checking "new usages" here:
                       true ?= is_writable(Props, Req),
                       %% Fun is responsible for checking "old usages" inside txn
-                      ok ?= Fun(Props, CurProps)
+                      ok ?= Fun(Props, CurProps, Snapshot)
                   else
                       false ->
                           menelaus_util:web_exception(403,
