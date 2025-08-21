@@ -4068,8 +4068,8 @@ log_succ_kek_rotation(Id, Name, IsAutomatic) ->
                        {is_automatic, IsAutomatic}]).
 
 log_unsucc_kek_rotation(Id, Name, Reason, IsAutomatic) ->
-    ale:error(?USER_LOGGER, "KEK rotation failed for ~s (id ~p): ~p",
-              [Name, Id, Reason]),
+    ale:error(?USER_LOGGER, "KEK rotation failed for ~s (id ~p): ~s",
+              [Name, Id, menelaus_web_secrets:format_error(Reason)]),
     event_log:add_log(encryption_key_rotation_failed,
                       [{encryption_key_id, Id},
                        {encryption_key_name, iolist_to_binary(Name)},
@@ -4085,8 +4085,8 @@ log_unsucc_dek_rotation(Kind, Reason) ->
     DataTypeName = try cb_deks:kind2datatype(Kind)
                    catch error:not_found -> <<"unknown">>
                    end,
-    ale:error(?USER_LOGGER, "DEK rotation failed for ~s: ~p",
-              [DataTypeName, Reason]),
+    ale:error(?USER_LOGGER, "DEK rotation failed for ~s: ~s",
+              [DataTypeName, menelaus_web_secrets:format_error(Reason)]),
     event_log:add_log(encr_at_rest_dek_rotation_failed,
                       [{kind, cb_deks:kind2bin(Kind, <<"unknown">>)},
                        {reason, format_failure_reason(Reason)}]).
