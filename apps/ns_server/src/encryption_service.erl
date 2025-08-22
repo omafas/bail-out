@@ -40,7 +40,7 @@
          get_state/0,
          os_pid/0,
          reconfigure/1,
-         store_kek/5,
+         store_kek/6,
          store_aws_key/4,
          store_kmip_key/5,
          store_dek/5,
@@ -107,15 +107,16 @@ reconfigure(NewCfg) ->
 garbage_collect_keks(InUseKeyIds) ->
     garbage_collect_keys(kek, InUseKeyIds).
 
-store_kek(Id, Key, KekIdToEncrypt, CreationDT, CanBeCached) ->
+store_kek(Id, Key, KekIdToEncrypt, CreationDT, CanBeCached, TestOnly) ->
     store_key(kek, Id, 'raw-aes-gcm', Key, KekIdToEncrypt, CreationDT,
-              CanBeCached).
+              CanBeCached, TestOnly).
 
 store_dek({bucketDek, BucketUUID}, Id, Key, KekIdToEncrypt, CreationDT) ->
     store_dek(bucketDek, bucket_dek_id(BucketUUID, Id), Key, KekIdToEncrypt,
               CreationDT);
 store_dek(Kind, Id, Key, KekIdToEncrypt, CreationDT) ->
-    store_key(Kind, Id, 'raw-aes-gcm', Key, KekIdToEncrypt, CreationDT, false).
+    store_key(Kind, Id, 'raw-aes-gcm', Key, KekIdToEncrypt, CreationDT, false,
+              false).
 
 store_aws_key(Id, Params, CreationDT, TestOnly) ->
     store_key(kek, Id, 'awskms-symmetric',
@@ -571,11 +572,6 @@ wait_for_server_start() ->
               _:_ -> false
           end
       end, ?RESTART_WAIT_TIMEOUT, 100).
-
-store_key(Kind, Name, Type, KeyData, EncryptionKeyId, CreationDT,
-          CanBeCached) ->
-    store_key(Kind, Name, Type, KeyData, EncryptionKeyId, CreationDT,
-              CanBeCached, false).
 
 store_key(Kind, Name, Type, KeyData, undefined, CreationDT, CanBeCached,
           TestOnly) ->
