@@ -137,7 +137,9 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
       .trackSubmit()
       .clearErrors();
 
-    this.filteredSecrets = this.secrets.filter(secret => secret.usage.find(u => u.includes('KEK-encryption')));
+    this.filteredSecrets = this.secrets.filter(secret => {
+      return secret.usage.find(u => this.item?.id !== secret.id && u.includes('KEK-encryption'));
+    });
 
     this.httpError = this.item ?
       this.mnSecuritySecretsService.stream.putSecret.error : this.mnSecuritySecretsService.stream.postSecret.error;
