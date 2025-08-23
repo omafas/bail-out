@@ -332,13 +332,28 @@ handle_post(Path, Req) ->
       settings_to_list(AlreadyDefined), settings_to_list(defaults()), Req).
 
 handle_bucket_drop_keys(Bucket, Req) ->
-    handle_bucket_drop_keys(Bucket, dek_drop_datetime, dropKeysDate, Req).
+    ApplySettings = fun (_Enabled, Settings, Time) ->
+                        Settings#{dek_drop_datetime => Time}
+                    end,
+    AuditProps = fun (_Enabled,ISOTime) -> [{dropKeysDate, ISOTime}] end,
+    handle_bucket_drop_keys(Bucket, ApplySettings, AuditProps, Req).
 
 handle_bucket_force_encr(Bucket, Req) ->
-    handle_bucket_drop_keys(Bucket, force_encryption_datetime,
-                            forceEncryptionDate, Req).
+    ApplySettings = fun (false, Settings, Time) ->
+                            Settings#{force_encryption_datetime => Time,
+                                      dek_drop_datetime => Time};
+                        (true, Settings, Time) ->
+                            Settings#{force_encryption_datetime => Time}
+                    end,
+    AuditProps = fun (false, ISOTime) ->
+                         [{forceEncryptionDate, ISOTime},
+                          {dropKeysDate, ISOTime}];
+                     (true, ISOTime) ->
+                         [{forceEncryptionDate, ISOTime}]
+                 end,
+    handle_bucket_drop_keys(Bucket, ApplySettings, AuditProps, Req).
 
-handle_bucket_drop_keys(Bucket, DropDeksTimeKey, AuditKey, Req) ->
+handle_bucket_drop_keys(Bucket, ApplySettings, AuditPropsFun, Req) ->
     menelaus_util:assert_is_enterprise(),
     handle_set_drop_time(
       fun (Time) ->
@@ -350,25 +365,29 @@ handle_bucket_drop_keys(Bucket, DropDeksTimeKey, AuditKey, Req) ->
                           true ->
                               CurVal = chronicle_compat:get(Snapshot, Key,
                                                             #{default => #{}}),
-                              NewVal = CurVal#{DropDeksTimeKey => Time},
-                              {commit, [{set, Key, NewVal}]};
+                              {ok, BCfg} = ns_bucket:get_bucket(Bucket,
+                                                                Snapshot),
+                              Enabled = ns_bucket:is_encryption_enabled(BCfg),
+                              NewVal = ApplySettings(Enabled, CurVal, Time),
+                              ResProps = AuditPropsFun(Enabled,
+                                                       iso8601:format(Time)),
+                              {commit, [{set, Key, NewVal}], ResProps};
                           false ->
                               menelaus_util:web_exception(
                                 404, "Requested resource not found.\r\n")
                       end
                   end),
           case Res of
-              ok ->
+              {ok, ToReturn} ->
                   AuditProps = [{dekType, "bucket"},
-                                {bucketName, Bucket},
-                                {AuditKey, iso8601:format(Time)}],
+                                {bucketName, Bucket}] ++ ToReturn,
                   ns_audit:encryption_at_rest_drop_deks(Req, AuditProps),
-                  ok;
+                  ToReturn;
               {error, no_quorum = R} ->
                   menelaus_util:web_exception(
                     503, menelaus_web_secrets:format_error(R))
           end
-      end, AuditKey, Req).
+      end, Req).
 
 build_bucket_encr_at_rest_info(BucketUUID, BucketConfig) ->
     NodesInfo = ns_doctor:get_nodes(),
@@ -391,13 +410,28 @@ format_encr_at_rest_info(Info) ->
                 end, Info)}.
 
 handle_drop_keys(TypeName, Req) ->
-    handle_drop_keys(TypeName, dek_drop_datetime, dropKeysDate, Req).
+    ApplySettings = fun (_Enabled, Settings, Time) ->
+                        Settings#{dek_drop_datetime => {set, Time}}
+                    end,
+    AuditProps = fun (_Enabled, ISOTime) -> [{dropKeysDate, ISOTime}] end,
+    handle_drop_keys(TypeName, ApplySettings, AuditProps, Req).
 
 handle_force_encr(TypeName, Req) ->
-    handle_drop_keys(TypeName, force_encryption_datetime,
-                     forceEncryptionDate, Req).
+    ApplySettings = fun (false, Settings, Time) ->
+                            Settings#{force_encryption_datetime => {set, Time},
+                                      dek_drop_datetime => {set, Time}};
+                        (true, Settings, Time) ->
+                            Settings#{force_encryption_datetime => {set, Time}}
+                    end,
+    AuditProps = fun (false, ISOTime) ->
+                         [{forceEncryptionDate, ISOTime},
+                          {dropKeysDate, ISOTime}];
+                     (true, ISOTime) ->
+                         [{forceEncryptionDate, ISOTime}]
+                 end,
+    handle_drop_keys(TypeName, ApplySettings, AuditProps, Req).
 
-handle_drop_keys(TypeName, DropDeksTimeKey, AuditKey, Req) ->
+handle_drop_keys(TypeName, ApplySettings, AuditPropsFun, Req) ->
     menelaus_util:assert_is_enterprise(),
     handle_set_drop_time(
       fun (Time) ->
@@ -416,26 +450,26 @@ handle_drop_keys(TypeName, DropDeksTimeKey, AuditKey, Req) ->
                                       ?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY,
                                       #{default => #{}}),
                       SubSettings = maps:get(TypeKey, AllSettings, #{}),
-                      NewSubSetting = SubSettings#{DropDeksTimeKey =>
-                                                   {set, Time}},
+                      Enabled = is_encryption_enabled(TypeKey, Snapshot),
+                      NewSubSetting = ApplySettings(Enabled, SubSettings, Time),
                       NewSettings = AllSettings#{TypeKey => NewSubSetting},
+                      ResProps = AuditPropsFun(Enabled, iso8601:format(Time)),
                       {commit,
                        [{set, ?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY,
-                        NewSettings}]}
+                         NewSettings}], ResProps}
                   end),
           case Res of
-              ok ->
-                  AuditProps = [{dekType, TypeName},
-                                {AuditKey, iso8601:format(Time)}],
+              {ok, ToReturn} ->
+                  AuditProps = [{dekType, TypeName}] ++ ToReturn,
                   ns_audit:encryption_at_rest_drop_deks(Req, AuditProps),
-                  ok;
+                  ToReturn;
               {error, no_quorum = R} ->
                   menelaus_util:web_exception(
                     503, menelaus_web_secrets:format_error(R))
           end
-      end, AuditKey, Req).
+      end, Req).
 
-handle_set_drop_time(SetTimeFun, AuditKey, Req) ->
+handle_set_drop_time(SetTimeFun, Req) ->
     %% We need to sync with all node monitors to make sure that all nodes
     %% have generated DEKs that they have to be generated by this moment.
     %% This is needed to make sure dek drop time doesn't match the time of
@@ -469,8 +503,8 @@ handle_set_drop_time(SetTimeFun, AuditKey, Req) ->
                      undefined -> calendar:universal_time();
                      DT -> DT
                  end,
-          ok = SetTimeFun(Time),
-          Reply = {[{AuditKey, iso8601:format(Time)}]},
+          ResPropList = SetTimeFun(Time),
+          Reply = {ResPropList},
           menelaus_util:reply_json(Req, Reply)
       end, Req, form, [validator:iso_8601_parsed(datetime, _),
                        validator:unsupported(_)]).
@@ -677,3 +711,10 @@ get_dek_kinds_by_type(Type) ->
               #{required_usage := _} -> []
           end
       end, cb_deks:dek_cluster_kinds_list(direct)).
+
+%% Caution: This function assumes that Type exists in the settings.
+is_encryption_enabled(Type, Snapshot) ->
+    case get_settings(Snapshot) of
+        #{Type := #{encryption := disabled}} -> false;
+        #{Type := #{encryption := _}} -> true
+    end.

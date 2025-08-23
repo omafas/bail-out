@@ -217,7 +217,8 @@
          get_dek_rotation_interval/2,
          get_drop_keys_timestamp/2,
          get_force_encryption_timestamp/2,
-         validate_encryption_secret/3]).
+         validate_encryption_secret/3,
+         is_encryption_enabled/1]).
 
 %% fusion
 -export([is_fusion/1,
@@ -3972,3 +3973,7 @@ upgrade_to_79_test() ->
     meck:unload().
 
 -endif.
+
+is_encryption_enabled(BucketConfig) ->
+    proplists:get_value(encryption_secret_id, BucketConfig,
+                        ?SECRET_ID_NOT_SET) /= ?SECRET_ID_NOT_SET.
