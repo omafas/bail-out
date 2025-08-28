@@ -38,6 +38,7 @@ config={'colors': support_colors(),
         'screen_width': 80,
         'dry_run': False,
         'intercept_output': True,
+        'keep_tmp_dirs': False,
         'report_time': True,
         'test_timeout': 600}
 

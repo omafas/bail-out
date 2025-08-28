@@ -219,7 +219,6 @@ def main():
     with_tags = None
     without_tags = None
     ignore_unknown_tags = False
-    keep_tmp_dirs = False
     seed = testlib.random_str(16)
     reuse_clusters = True
     randomize_clusters = False
@@ -266,7 +265,7 @@ def main():
         elif o == '--ignore-unknown-tags':
             ignore_unknown_tags = True
         elif o in ('--keep-tmp-dirs', '-k'):
-            keep_tmp_dirs = True
+            testlib.config['keep_tmp_dirs'] = True
         elif o in ('--dont-intercept-output', '-o'):
             testlib.config['intercept_output'] = False
         elif o in ('--seed', '-s'):
@@ -478,7 +477,7 @@ def main():
         error_exit("Tests finished with errors")
     elif len(not_ran) > 0:
         warning_exit("Some tests were skipped")
-    elif not (keep_tmp_dirs or
+    elif not (testlib.config['keep_tmp_dirs'] or
               check_for_core_files() or
               cluster.is_existing_cluster()):
         # Kill any created nodes and possibly delete directories as we don't

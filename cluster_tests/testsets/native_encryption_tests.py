@@ -20,10 +20,16 @@ import dateutil
 from testsets.secret_management_tests import change_password, post_es_config
 from testlib.requirements import Service
 import time
+import textwrap
 import uuid
 from testsets.sample_buckets import SampleBucketTasksBase
 from testsets.users_tests import put_user
 import shutil
+from contextlib import contextmanager
+from contextlib import suppress
+from multiprocessing import Process
+from kmip.pie.client import ProxyKmipClient, enums
+from kmip.services.server import KmipServer
 
 encrypted_file_magic = b'\x00Couchbase Encrypted\x00'
 min_timer_interval = 1 # seconds
@@ -35,6 +41,7 @@ min_dek_lifetime = 60*60*24*30
 default_dek_rotation = 60*60*24*30
 min_dek_rotation = 60*60*24*7
 dek_lifetime_margin = 5*60
+kmip_port = 5696
 
 class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
@@ -147,6 +154,45 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
     def random_node(self):
         return random.choice(self.cluster.connected_nodes)
+
+    def kmip_key_test(self):
+        with setup_kmip_server():
+            # There is no such secret in the kmip server, so it should fail
+            # bucket creation
+            invalidKmip = kmip_secret('Kmip1', 99999)
+            invalid_secret_id = create_secret(self.random_node(), invalidKmip)
+            self.cluster.create_bucket(
+                {'name': self.bucket_name,
+                 'ramQuota': 100,
+                 'encryptionAtRestKeyId': invalid_secret_id},
+                expected_code=400)
+
+            # There is such secret in the kmip server, so it should succeed in
+            # creating a bucket with that secret and the dek file should get
+            # encrypted with the KMIP key
+            validKmip = kmip_secret('Kmip2', 1)
+            valid_secret_id = create_secret(self.random_node(), validKmip)
+            self.cluster.create_bucket(
+                {'name': self.bucket_name,
+                 'ramQuota': 100,
+                 'encryptionAtRestKeyId': valid_secret_id})
+            bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
+            kek1_id = get_kek_id(self.random_node(), valid_secret_id)
+            poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
+                                          verify_key_count=1,
+                                          verify_encryption_kek=kek1_id)
+
+            # We rotate the underlying KMIP key for the secret bucket is
+            # encrypted with and the bucket DEK should get encrypted by the new
+            # KMIP key
+            validKmip = kmip_secret('Kmip2', 5)
+            valid_secret_id = update_secret(self.random_node(),
+                                            valid_secret_id, validKmip)
+            kek2_id = get_kek_id(self.random_node(), valid_secret_id)
+            poll_verify_bucket_deks_files(self.cluster, bucket_uuid,
+                                          verify_key_count=1,
+                                          verify_encryption_kek=kek2_id)
+
 
     def basic_create_update_delete_test(self):
         data = testlib.random_str(8)
@@ -2298,6 +2344,37 @@ def aws_test_secret(name=None, usage=None, should_work=True):
             'usage': usage,
             'data': {'keyARN': key_arn}}
 
+def kmip_secret(name, kmip_id):
+    key_path = os.path.join(testlib.get_resources_dir(),
+                            'pykmip/kmip_pkcs8.key')
+    cert_path = os.path.join(testlib.get_resources_dir(),
+                             'pykmip/localhost.crt')
+    return {
+        'name': f'{name}',
+        'type': 'kmip-aes-key-256',
+        'usage': [
+            'KEK-encryption',
+            'bucket-encryption',
+            'config-encryption',
+            'log-encryption',
+            'audit-encryption'
+        ],
+        'data':
+        {
+            'caSelection': 'skipServerCertVerification',
+            'reqTimeoutMs': 5000,
+            'encryptionApproach': 'useEncryptDecrypt',
+            'encryptWith': 'nodeSecretManager',
+            'encryptWithKeyId': -1,
+            'activeKey': {'kmipId': f'{kmip_id}'},
+            'keyPath': f'{key_path}',
+            'certPath': f'{cert_path}',
+            'keyPassphrase': 'makeitso',
+            'host': 'localhost',
+            'port': kmip_port
+        }
+    }
+
 
 def get_secret(cluster, secret_id, expected_code=200, auth=None):
     if auth is None:
@@ -2616,6 +2693,9 @@ def get_kek_id(cluster, secret_id):
                 return k['id']
     if r['type'] == 'awskms-symmetric-key':
         return r['data']['storedKeyIds'][0]['id']
+    if r['type'] == 'kmip-aes-key-256':
+        return r['data']['activeKey']['id']
+
     return None
 
 
@@ -2940,3 +3020,187 @@ def get_doc(cluster, bucket_name, key):
     r = r.json()
     assert 'base64' in r, f'no base64 in response: {r}'
     return str(base64.b64decode(r['base64']), 'utf-8')
+
+
+def start_kmip_server(server_conf_path, pykmip_tmp_dir_path):
+    original_stdout = os.dup(1)
+    original_stderr = os.dup(2)
+
+    try:
+        # The pykmip server log is verbose on standard out, it logs to
+        # server.log anyways so we redirect stdout to avoid cluttering
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull_fd, 1)
+        os.dup2(devnull_fd, 2)
+
+        server = KmipServer(config_path=server_conf_path,
+                            log_path=f'{pykmip_tmp_dir_path}/server.log')
+        server.start()
+        server.serve()
+    finally:
+        for fn in (
+            lambda: os.dup2(original_stdout, 1),
+            lambda: os.dup2(original_stderr, 2),
+            lambda: os.close(original_stdout),
+            lambda: os.close(original_stderr),
+            lambda: os.close(devnull_fd)
+        ):
+            with suppress(Exception): fn()
+
+
+@contextmanager
+def setup_kmip_server():
+    server_process = None
+    pykmip_path = os.path.join(testlib.get_resources_dir(), 'pykmip')
+    pykmip_tmp_dir_path = os.path.join(pykmip_path, 'tmp')
+
+    def create_server_config_file():
+        cert_path = os.path.join(pykmip_path, 'localhost.crt')
+        key_path = os.path.join(pykmip_path, 'private.key')
+        db_path = os.path.join(pykmip_tmp_dir_path, 'pykmip.db')
+
+        server_conf_content = textwrap.dedent(f"""
+            [server]
+            hostname=127.0.0.1
+            port={kmip_port}
+            certificate_path={cert_path}
+            key_path={key_path}
+            ca_path={cert_path}
+            auth_suite=TLS1.2
+            enable_tls_client_auth=True
+            logging_level=DEBUG
+            database_path={db_path}
+            """).strip()
+
+        server_conf_path = os.path.join(pykmip_tmp_dir_path, 'server.conf')
+        with open(server_conf_path, 'w') as f:
+            f.write(server_conf_content)
+
+        return server_conf_path
+
+    def create_client_config_file():
+        cert_path = os.path.join(pykmip_path, 'localhost.crt')
+        key_path = os.path.join(pykmip_path, 'private.key')
+
+        client_conf_content = textwrap.dedent(f"""
+            [client]
+            host=127.0.0.1
+            port={kmip_port}
+            certfile={cert_path}
+            keyfile={key_path}
+            ca_certs={cert_path}
+            cert_reqs=CERT_REQUIRED
+            ssl_version=PROTOCOL_SSLv23
+            do_handshake_on_connect=True
+            suppress_ragged_eofs=True
+            """).strip()
+
+        client_conf_path = os.path.join(pykmip_tmp_dir_path, 'client.conf')
+        with open(client_conf_path, 'w') as f:
+            f.write(client_conf_content)
+
+        return client_conf_path
+
+    def create_key(key_id, clientHandle):
+        key_id = clientHandle.create(
+            enums.CryptographicAlgorithm.AES,
+            256,
+            operation_policy_name='default',
+            name=f'Test_256_AES_Symmetric_Key3_{key_id+1}',
+            cryptographic_usage_mask=[
+                enums.CryptographicUsageMask.ENCRYPT,
+                enums.CryptographicUsageMask.DECRYPT,
+            ])
+        clientHandle.activate(key_id)
+
+    def is_kmip_port_open():
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(5)
+            result = sock.connect_ex(('127.0.0.1', kmip_port))
+            return result == 0
+
+    def check_server_ready_for_client(client):
+        if not is_kmip_port_open():
+            print('PyKMIP server is not running, waiting for it to start...')
+            return False
+
+        try:
+            with client as c:
+                create_key(0, c)
+            return True
+        except Exception as e:
+            print(f'PyKMIP server is running, but not ready for client:: {e}')
+            return False
+
+    def cleanup_pykmip_server(server_process):
+        if server_process is not None and server_process.is_alive():
+            print('Terminating PyKMIP server...')
+            server_process.terminate()
+            server_process.join(timeout=5)
+            if server_process.is_alive():
+                print('PyKMIP server did not terminate gracefully, killing...')
+                server_process.kill()
+                server_process.join(timeout=5)
+                if server_process.is_alive():
+                    print('PyKMIP server force kill initiated ' \
+                          '(may still be running)')
+                else:
+                    print('PyKMIP server killed')
+            else:
+                print('PyKMIP server terminated gracefully')
+        elif server_process is not None:
+            print('PyKMIP server already terminated')
+        else:
+            print('PyKMIP server was never started')
+
+    if is_kmip_port_open():
+        assert False, 'PyKMIP server is already running'
+
+
+    try:
+        if os.path.exists(pykmip_tmp_dir_path):
+            shutil.rmtree(pykmip_tmp_dir_path)
+
+        os.mkdir(pykmip_tmp_dir_path)
+
+        client_conf_path = create_client_config_file()
+        client = ProxyKmipClient(hostname='127.0.0.1', port=kmip_port,
+                                config='client',
+                                config_file=f'{client_conf_path}',
+                                kmip_version=enums.KMIPVersion.KMIP_1_2)
+
+
+        server_conf_path = create_server_config_file()
+        server_process = Process(target=start_kmip_server,
+                                 args=(server_conf_path, pykmip_tmp_dir_path))
+        server_process.start()
+
+        if not server_process.is_alive():
+            assert False, 'PyKMIP server process failed to start or ' \
+                          'exited immediately'
+
+        testlib.poll_for_condition(
+            lambda: check_server_ready_for_client(client),
+            sleep_time=2, attempts=15,
+            retry_on_assert=True, verbose=True)
+
+        print('PyKMIP server started successfully, adding more keys...')
+        with client as c:
+            for i in range(4):
+                create_key(i + 1, c)
+
+        yield server_process
+    finally:
+        try:
+            cleanup_pykmip_server(server_process)
+        finally:
+            if not testlib.config['keep_tmp_dirs'] \
+                 and os.path.exists(pykmip_tmp_dir_path):
+                try:
+                    shutil.rmtree(pykmip_tmp_dir_path)
+                    print('Cleaned up tmp server data')
+                except Exception as e:
+                    assert False, f'Warning: Could not remove tmp server'\
+                                  f'data: {e}'
+
