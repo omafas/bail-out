@@ -548,6 +548,8 @@ turn_into_gen_server({local, Name}, Mod, Args, GenServerOpts) ->
             {ok, S} ->
                 {S, false};
             {ok, S, hibernate} ->
+                {S, true};
+            {ok, S, {timeout, _T, {hibernate, _Ref}}} ->
                 {S, true}
         end,
     proc_lib:init_ack({ok, self()}),
