@@ -132,7 +132,8 @@ function mnStatisticsChartsController($scope, $uibModal, mnStatisticsNewService,
       resolve: {
         items: mnHelper.wrapInFunction($scope.mnStatsGroupsCtl.items),
         chart: mnHelper.wrapInFunction(vm.getChart()),
-        mnStatisticsNewScope: mnHelper.wrapInFunction($scope.statisticsNewCtl.mnStatisticsNewScope)
+        mnStatisticsNewScope: mnHelper.wrapInFunction($scope.statisticsNewCtl.mnStatisticsNewScope),
+        bucket: mnHelper.wrapInFunction($scope.statisticsNewCtl.bucket),
       }
     })
   }
