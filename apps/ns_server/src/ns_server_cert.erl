@@ -129,16 +129,23 @@ generate_cluster_CA(ForceRegenerateCA, DropUploadedCerts) ->
           fun (Txn) ->
                   case chronicle_kv:txn_get(root_cert_and_pkey, Txn) of
                       {ok, {{_, OldKey} = OldPair, _}}
-                                                  when not ForceRegenerateCA,
-                                                       not DropUploadedCerts,
-                                                       OldKey /= undefined ->
+                        when not ForceRegenerateCA,
+                             not DropUploadedCerts,
+                             OldKey /= undefined ->
                           {abort, {ok, undefined, OldPair}};
-                      {ok, {{_, OldKey} = OldPair, _}}
-                                                  when not ForceRegenerateCA,
-                                                       OldKey /= undefined ->
+                      {ok, {{OldCert, OldKey} = OldPair, _}}
+                        when not ForceRegenerateCA,
+                             OldKey /= undefined ->
+                          %% In case the CA cert is not trusted, we attempt to
+                          %% add it here. Note that add_CAs_txn_fun will check
+                          %% for the cert already being trusted, so there's no
+                          %% need for such a check here
+                          {ok, AddOldCA} =
+                              add_CAs_txn_fun(generated, OldCert, []),
+                          {commit, Changes0, _} = AddOldCA(Txn),
                           Epoch = ReadEpoch(Txn) + 1,
-                          {commit, [{set, cluster_certs_epoch, Epoch}],
-                           OldPair};
+                          Changes1 = [{set, cluster_certs_epoch, Epoch}],
+                          {commit, Changes0 ++ Changes1, OldPair};
                       _ ->
                           Changes0 =
                               case DropUploadedCerts of
