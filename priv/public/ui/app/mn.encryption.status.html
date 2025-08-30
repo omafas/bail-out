@@ -11,6 +11,20 @@ licenses/APL2.txt.
 <ng-template #tooltipTemplate>
   <ul>
     <li>Encryption Status: {{statusLabel | async}}</li>
+    <li *ngIf="isEncryptionEnabled && !(hasIssues | async) && (currentEncryptionInfo | async).dataStatus === 'partiallyEncrypted'">
+        Click <a (click)="forceEncryption()">Here</a> to Encrypt Everything
+        <span class="text-finer grayblack-2" style="line-height: 1.25">
+           <span class="block">Some of this data is not encrypted.</span>
+           <span class="block">This can occur when data existed before encryption was enabled.</span>
+        </span>
+    </li>
+    <li *ngIf="!isEncryptionEnabled && !(hasIssues | async) && (currentEncryptionInfo | async).dataStatus === 'partiallyEncrypted'">
+       Click <a (click)="forceEncryption()">Here</a> to Decrypt Everything
+       <span class="text-finer grayblack-2" style="line-height: 1.25">
+          <span class="block">Some of this data is still encrypted.</span>
+          <span class="block">This can occur when encrypted data existed before encryption was disabled.</span>
+       </span>
+    </li>
     <li>DEK Number: {{(currentEncryptionInfo | async).dekNumber}}</li>
     <li [hidden]="!(currentEncryptionInfo | async).oldestDekCreationDatetime">Oldest DEK Creation Time:
       <span class="semi-bold nowrap">{{(currentEncryptionInfo | async).oldestDekCreationDatetime | date: 'mediumTime'}}</span>
@@ -33,16 +47,35 @@ licenses/APL2.txt.
   </ul>
 </ng-template>
 
-{{isEncryptionEnabled ? 'Enabled' : 'Disabled'}}
-<span
-   class="icon cursor-pointer margin-left-quarter"
-   [hidden]="!(shouldShowIcon | async)"
-   [ngClass]="{
-              'fa-eye green-3': !(hasIssues | async) && (currentEncryptionInfo | async).dataStatus === 'encrypted',
-              'fa-low-vision orange-3': !(hasIssues | async) && (currentEncryptionInfo | async).dataStatus === 'partiallyEncrypted',
+<div class="row flex-left">
+   <strong>Encryption At Rest:</strong>&nbsp;{{isEncryptionEnabled ? 'Enabled' : 'Disabled'}}
+</div>
+<div *ngIf="(shouldShowIcon | async) && !(hasIssues | async)" class="row margin-left-half flex-left">
+   <strong>Data Status:</strong>
+   <span class="orange--1 text-smaller cursor-pointer margin-left-quarter"
+         [ngbTooltip]="tooltipTemplate"
+         placement="right"
+         triggers="click:hover"
+         tooltipClass="med"
+         [ngClass]="{
+           'green-0': (currentEncryptionInfo | async).dataStatus === 'encrypted',
+           'orange--1':  (currentEncryptionInfo | async).dataStatus === 'partiallyEncrypted'
+         }">
+     {{(currentEncryptionInfo | async).dataStatus === 'partiallyEncrypted' ? 'Partially Encrypted' : ''}}
+     {{(currentEncryptionInfo | async).dataStatus === 'encrypted' ? 'Fully Encrypted': ''}}
+   </span>
+   <span
+       class="icon cursor-pointer margin-left-quarter"
+       [hidden]="!(shouldShowIcon | async)"
+       [ngbTooltip]="tooltipTemplate"
+       placement="right"
+       triggers="click:hover"
+       tooltipClass="med"
+       [ngClass]="{
+              'fa-eye green-0': !(hasIssues | async) && (currentEncryptionInfo | async).dataStatus === 'encrypted',
+              'fa-low-vision orange--1': !(hasIssues | async) && (currentEncryptionInfo | async).dataStatus === 'partiallyEncrypted',
               'fa-eye-slash red-3': !(hasIssues | async) && (currentEncryptionInfo | async).dataStatus === 'unencrypted',
               'fa-warning red-3': (hasIssues | async)
-              }"
-   [ngbTooltip]="tooltipTemplate"
-   tooltipClass="med">
-</span>
+              }">
+   </span>
+</div>

@@ -9,18 +9,36 @@ licenses/APL2.txt.
 -->
 
 <div>
-  {{vm.getStatusLabel(vm.encryptionInfo.dataStatus)}}
-
-  <span
-     class="icon cursor-pointer margin-left-quarter"
-     ng-class="{
+   <div>
+   <strong>Encryption at Rest {{vm.itemTypeLabel}}:</strong>
+   {{vm.encryptionSettings[vm.itemType].encryptionKeyId > -1 ? 'Enabled' : 'Disabled'}}
+   </div>
+      <div ng-if="!['unknown','unencrypted'].includes(vm.encryptionInfo.dataStatus) || vm.encryptionSettings[vm.itemType].encryptionKeyId > -1"
+        class="margin-left-quarter margin-top-0">
+      <strong>{{vm.itemTypeLabel}} Data Status:</strong>
+      <span class="cursor-pointer"
+            tooltip-trigger="click"
+            tooltip-append-to-body="true"
+            uib-tooltip-template="'app/components/directives/mn_encryption_status/mn_encryption_status_template.html'"
+            tooltip-class="med"
+      >
+         <span
+             ng-class="{
+       'green-0': !vm.hasIssues() && vm.encryptionInfo.dataStatus === 'encrypted',
+       'orange--1': !vm.hasIssues() && vm.encryptionInfo.dataStatus === 'partiallyEncrypted',
+       'red-3': !vm.hasIssues() && vm.encryptionInfo.dataStatus === 'unencrypted',
+       'red-3': vm.hasIssues()}">
+            {{vm.getStatusLabel(vm.encryptionInfo.dataStatus)}}
+         </span>
+         <span
+             class="icon margin-left-quarter"
+             ng-class="{
        'fa-eye green-3': !vm.hasIssues() && vm.encryptionInfo.dataStatus === 'encrypted',
        'fa-low-vision orange-3': !vm.hasIssues() && vm.encryptionInfo.dataStatus === 'partiallyEncrypted',
        'fa-eye-slash red-3': !vm.hasIssues() && vm.encryptionInfo.dataStatus === 'unencrypted',
        'fa-warning red-3': vm.hasIssues()}"
-     tooltip-trigger="mouseenter"
-     tooltip-append-to-body="true"
-     uib-tooltip-template="'app/components/directives/mn_encryption_status/mn_encryption_status_template.html'"
-     tooltip-class="med">
-  </span>
+         >
+         </span>
+      </span>
+   </div>
 </div>

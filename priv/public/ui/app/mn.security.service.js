@@ -288,4 +288,10 @@ class MnSecurityService {
       }
     }
   }
+
+  forceEncryption(itemType,bucketName) { // itemType is 'config' | 'audit' | 'logs' | 'bucket'
+    const url = itemType === 'bucket' ? `/controller/forceEncryptionAtRest/${itemType}/${bucketName}`
+      : `/controller/forceEncryptionAtRest/${itemType}`;
+    return this.http.post(url, {});
+  }
 }

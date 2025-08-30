@@ -43,7 +43,9 @@ function mnServersFactory($http, $q, $uibModal, mnPoolDefault) {
     addNodesByStatus: addNodesByStatus,
     getNodes: getNodes,
     addServer: addServer,
-    getServicesStatus: getServicesStatus
+    getServicesStatus: getServicesStatus,
+    getNodeEncryptionSettings: getNodeEncryptionSettings,
+    forceEncryption: forceEncryption
   };
 
   return mnServersService;
@@ -323,6 +325,19 @@ function mnServersFactory($http, $q, $uibModal, mnPoolDefault) {
       method: 'POST',
       url: '/controller/rebalance',
       data: config,
+    });
+  }
+  function getNodeEncryptionSettings() {
+    return $http({
+      method: 'get',
+      url: '/settings/security/encryptionAtRest',
+    });
+  }
+  function forceEncryption(itemType) { // itemType is 'config' | 'audit' | 'logs'
+    return $http({
+      method: 'post',
+      url: '/controller/forceEncryptionAtRest/' + itemType,
+      data: {}
     });
   }
 }

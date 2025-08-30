@@ -14,6 +14,7 @@ import {CommonModule} from '@angular/common';
 import {NgbModule} from '@ng-bootstrap/ng-bootstrap';
 
 import {MnEncryptionStatusComponent} from './mn.encryption.status.component.js';
+import {MnEncryptionForceConfirmationComponent} from './mn.encryption.force.confirmation.component.js';
 
 export {MnEncryptionStatusModule}
 
@@ -25,7 +26,11 @@ class MnEncryptionStatusModule {
         NgbModule,
       ],
       declarations: [
-        MnEncryptionStatusComponent
+        MnEncryptionStatusComponent,
+        MnEncryptionForceConfirmationComponent
+      ],
+      entryComponents: [
+        MnEncryptionForceConfirmationComponent
       ],
       exports: [
         MnEncryptionStatusComponent

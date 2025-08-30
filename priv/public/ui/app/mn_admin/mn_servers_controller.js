@@ -96,7 +96,7 @@ angular
     mnEncryptionStatus,
   ])
   .config(["$stateProvider", configure])
-  .controller('mnServersController', ["$scope", "$state", "$uibModal", "mnPoolDefault", "mnPoller", "mnServersService", "mnHelper", "mnGroupsService", "mnPromiseHelper", "permissions", "mnStatisticsNewService", "mnCertificatesService", "pools", "poolDefault", "mnClusterConfigurationService", mnServersController])
+  .controller('mnServersController', ["$scope", "$state", "$uibModal", "mnPoolDefault", "mnPoller", "mnServersService", "mnHelper", "mnGroupsService", "mnPromiseHelper", "permissions", "mnStatisticsNewService", "mnCertificatesService", "pools", "poolDefault", "mnClusterConfigurationService", "encryptionSettings", mnServersController])
   .controller('mnServersListItemDetailsController', mnServersListItemDetailsController)
   .controller("mnServersListItemController", mnServersListItemController)
   .controller('mnServersFailOverDialogController', mnServersFailOverDialogController)
@@ -118,6 +118,11 @@ function configure($stateProvider) {
       },
       data: {
         title: "Servers"
+      },
+      resolve: {
+        encryptionSettings: ['mnServersService', function (mnServersService) {
+          return mnServersService.getNodeEncryptionSettings();
+        }]
       }
     })
     .state('app.admin.servers.list', {
@@ -144,10 +149,11 @@ function configure($stateProvider) {
     });
 }
 
-function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller, mnServersService, mnHelper, mnGroupsService, mnPromiseHelper, permissions, mnStatisticsNewService, mnCertificatesService, pools, poolDefault, mnClusterConfigurationService) {
+function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller, mnServersService, mnHelper, mnGroupsService, mnPromiseHelper, permissions, mnStatisticsNewService, mnCertificatesService, pools, poolDefault, mnClusterConfigurationService, encryptionSettings) {
   var vm = this;
   vm.mnPoolDefault = mnPoolDefault.latestValue();
-
+  vm.encryptionSettings = encryptionSettings.data;
+  
   vm.postStopRebalance = postStopRebalance;
   vm.onStopRecovery = onStopRecovery;
   vm.postRebalance = postRebalance;

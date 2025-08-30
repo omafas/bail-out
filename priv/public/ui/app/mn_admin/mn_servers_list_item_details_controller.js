@@ -21,6 +21,7 @@ function mnServersListItemDetailsController($scope, mnServersListItemDetailsServ
   vm.getServicePath = getServicePath;
   vm.isPathPresent = isPathPresent;
   vm.filterQuotaServices = filterQuotaServices;
+  vm.encryptionSettings = $scope.serversCtl.encryptionSettings;
 
   $scope.$watchCollection(() => ({
     stats: $scope.mnUIStats,

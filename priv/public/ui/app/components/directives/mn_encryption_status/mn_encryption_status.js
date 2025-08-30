@@ -21,22 +21,25 @@ angular
 function mnEncryptionStatusDirective() {
   var mnEncryptionStatus = {
     restrict: 'E',
-    require: ["mnEncryptionStatus"],
     scope: {
-      encryptionInfo: "="
+      encryptionInfo: "=",
+      encryptionSettings: "=",
+      itemTypeLabel: "@",
+      itemType: "@" // 'config' | 'audit' | 'logs'
     },
     template,
-    controller: ["$scope", "$element", "$attrs", "mnTimezoneDetailsServiceDowngrade", mnEncryptionStatusController],
+    controller: ["$scope", "$element", "$attrs", "$uibModal", "$uibTooltip","mnServersService", "mnTimezoneDetailsServiceDowngrade", mnEncryptionStatusController],
     controllerAs: "vm",
     bindToController: true
   };
   return mnEncryptionStatus;
 
-  function mnEncryptionStatusController($scope, $element, $attrs, mnTimezoneDetailsServiceDowngrade) {
+  function mnEncryptionStatusController($scope, $element, $attrs, $uibModal, $uibTooltip, mnServersService, mnTimezoneDetailsServiceDowngrade) {
     var vm = this;
     vm.getStatusLabel = getStatusLabel;
     vm.hasIssues = hasIssues;
     vm.mnTimezoneDetailsServiceDowngrade = mnTimezoneDetailsServiceDowngrade;
+    vm.forceEncryption = forceEncryption;
 
     function getStatusLabel(status) {
       switch (status) {
@@ -50,6 +53,65 @@ function mnEncryptionStatusDirective() {
 
     function hasIssues() {
       return !!vm.encryptionInfo?.issues.length;
+    }
+
+    function forceEncryption() {
+      // Close any open uib tooltips
+      let tt = angular.element(document.querySelectorAll(".tooltip"));
+      Array.from(tt).forEach(e => e.remove());
+
+      var modalInstance = openConfirmationModal();
+      // Handle modal result
+      modalInstance.result.then(function(result) {
+        if (result === 'ok') {
+          // User confirmed, call the service
+          mnServersService.forceEncryption(vm.itemType)
+            .then(function(response) {
+            })
+            .catch(function(error) {
+            });
+        }
+      }, function(dismissReason) {
+        // User cancelled or dismissed the modal
+      });
+    }
+
+    function openConfirmationModal() {
+      const isEncryptionEnabled = vm.encryptionSettings[vm.itemType].encryptionKeyId > -1;
+
+      return $uibModal.open({
+        template: `
+          <div class="dialog-med">
+            <h3 class="panel-header">Confirm Force Encryption</h3>
+            <div class="panel-content">
+              <div class="row flex-left">
+                <span class="icon fa-warning fa-2x red-3"></span>
+                <p>
+                  Are you sure you want to fully ${isEncryptionEnabled ? 'encrypt' : 'decrypt'} the ${vm.itemType}?
+                </p>
+              </div>
+            </div>
+            <div class="panel-footer">
+              <button class="btn btn-default" type="button" ng-click="vm.cancel()">Cancel</button>
+              <button class="btn btn-primary" type="button" ng-click="vm.ok()">OK</button>
+            </div>
+          </div>
+        `,
+        controller: ['$scope', '$uibModalInstance', function($scope, $uibModalInstance) {
+          $scope.vm = {
+            itemTypeLabel: vm.itemTypeLabel,
+            ok: function() {
+              $uibModalInstance.close('ok');
+            },
+            cancel: function() {
+              $uibModalInstance.dismiss('cancel');
+            }
+          };
+        }],
+        size: 'md',
+        backdrop: true,  // Ensure backdrop is enabled
+        keyboard: true   // Ensure keyboard navigation is enabled
+      });
     }
   }
 }
