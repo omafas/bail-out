@@ -980,7 +980,10 @@ get_props_raw(Type, Identity) when Type == user; Type == group; Type == auth ->
 
 -spec user_exists(rbac_identity()) -> boolean().
 user_exists(Identity) ->
-    false =/= replicated_dets:get(storage_name(), {user, Identity}).
+    ?call_on_ns_server_node(
+       begin
+           false =/= replicated_dets:get(storage_name(), {user, Identity})
+       end, [Identity]).
 
 -spec get_roles(rbac_identity()) -> [rbac_role()].
 get_roles(Identity) ->
