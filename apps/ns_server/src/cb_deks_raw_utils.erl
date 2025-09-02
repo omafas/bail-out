@@ -125,7 +125,11 @@ external_read_keys(DekKind, KeyIds, Opts) ->
                 BPath
         end,
     GosecretsCfg = filename:join(ConfigDir, "gosecrets.cfg"),
-    GosecretsPath = filename:join(BinDir, "gosecrets"),
+    GosecretsExec = case misc:is_windows() of
+                        true -> "gosecrets.exe";
+                        false -> "gosecrets"
+                    end,
+    GosecretsPath = filename:join(BinDir, GosecretsExec),
     HiddenPass = maps:get(hidden_pass, Opts, ?HIDE(undefined)),
     Input = case ?UNHIDE(HiddenPass) of
                 undefined -> undefined;
