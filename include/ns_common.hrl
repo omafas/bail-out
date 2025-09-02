@@ -450,4 +450,13 @@
 -define(REPLICATED_DETS_HIGH_PRIORITY, 1).
 -define(QUERY_NODE_QUOTA_DEFAULT, 0).
 
+-define(call_on_ns_server_node(Body, Args),
+        case ns_node_disco:couchdb_node() == node() of
+            false ->
+                Body;
+            true ->
+                rpc:call(ns_node_disco:ns_server_node(), ?MODULE,
+                         ?FUNCTION_NAME, Args)
+        end).
+
 -endif.
