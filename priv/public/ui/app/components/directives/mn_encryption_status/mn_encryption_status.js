@@ -77,7 +77,7 @@ function mnEncryptionStatusDirective() {
     }
 
     function openConfirmationModal() {
-      const isEncryptionEnabled = vm.encryptionSettings[vm.itemType].encryptionKeyId > -1;
+      const isEncryptionEnabled = vm.encryptionSettings[vm.itemType].encryptionMethod !== 'disabled';
 
       return $uibModal.open({
         template: `

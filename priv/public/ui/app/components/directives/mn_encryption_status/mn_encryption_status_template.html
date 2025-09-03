@@ -1,13 +1,13 @@
 <ul>
   <li>Encryption Status: {{vm.getStatusLabel(vm.encryptionInfo.dataStatus)}}</li>
-  <li ng-if="vm.encryptionInfo.dataStatus === 'partiallyEncrypted' && vm.encryptionSettings[vm.itemType].encryptionKeyId > -1">
+  <li ng-if="vm.encryptionInfo.dataStatus === 'partiallyEncrypted' && vm.encryptionSettings[vm.itemType].encryptionMethod !== 'disabled'">
     Click <a class="cursor-pointer" ng-click="vm.forceEncryption()">Here</a> to Encrypt Everything
     <span class="text-finer grayblack-2" style="line-height: 1.25;">
        <span class="block">Some of this data is not encrypted.</span>
        <span class="block">This can occur when data existed before encryption was enabled.</span>
     </span>
   </li>
-   <li ng-if="vm.encryptionInfo.dataStatus === 'partiallyEncrypted' && vm.encryptionSettings[vm.itemType].encryptionKeyId == -1">
+   <li ng-if="vm.encryptionInfo.dataStatus === 'partiallyEncrypted' && vm.encryptionSettings[vm.itemType].encryptionMethod === 'disabled'">
       Click <a class="cursor-pointer" ng-click="vm.forceEncryption()">Here</a> to Decrypt Everything
       <span class="text-finer grayblack-2" style="line-height: 1.25;">
        <span class="block">Some of this data is still encrypted.</span>
