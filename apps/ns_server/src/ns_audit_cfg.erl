@@ -153,11 +153,11 @@ handle_info(notify_memcached, State) ->
     notify_memcached(State),
     {noreply, State};
 
-handle_info(update_audit_json, #state{merged = OldMerged}) ->
+handle_info(update_audit_json, #state{merged = OldMerged} = State) ->
     misc:flush(update_audit_json),
     {Global, Local} = read_config(),
     Merged = prepare_params(Global, Local),
-    NewState = #state{global = Global, merged = Merged},
+    NewState = State#state{global = Global, merged = Merged},
     case Merged of
         OldMerged ->
             {noreply, NewState};
