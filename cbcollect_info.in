@@ -3088,7 +3088,7 @@ def main():
                 "var/lib/couchbase/logs"),
             "path_config_datadir": os.path.join(
                 prefix,
-                "/var/lib/couchbase"
+                "var/lib/couchbase"
             )}
 
         guts_initargs_path = os.path.abspath(prefix)
