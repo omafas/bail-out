@@ -86,4 +86,15 @@ class MnEncryptionStatusComponent extends MnLifeCycleHooksToStream {
     let hiddenCondition = !this.isEncryptionEnabled && (encryption.dataStatus === 'unencrypted') && !encryption.issues.length;
     return this.isEncryptionEnabled || !hiddenCondition;
   }
+
+  getUserVisibleDataStatus(encryption) {
+    switch (encryption.dataStatus) {
+      case 'encrypted': return 'Fully Encrypted';
+      case 'partiallyEncrypted': return 'Partially Encrypted';
+      case 'unencrypted': return 'Not Encrypted';
+      case 'unknown':
+      default:
+        return 'unknown';
+    }
+  }
 }

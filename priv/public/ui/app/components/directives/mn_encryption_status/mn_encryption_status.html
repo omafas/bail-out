@@ -13,8 +13,7 @@ licenses/APL2.txt.
    <strong>Encryption at Rest {{vm.itemTypeLabel}}:</strong>
    {{vm.encryptionSettings[vm.itemType].encryptionMethod !== 'disabled' ? 'Enabled' : 'Disabled'}}
    </div>
-      <div ng-if="!['unknown','unencrypted'].includes(vm.encryptionInfo.dataStatus) || vm.encryptionSettings[vm.itemType].encryptionKeyId > -1"
-        class="margin-left-quarter margin-top-0">
+      <div ng-if="vm.isDataStatusVisible(vm.encryptionInfo)" class="margin-left-quarter margin-top-0">
       <strong>{{vm.itemTypeLabel}} Data Status:</strong>
       <span class="cursor-pointer"
             tooltip-trigger="click"

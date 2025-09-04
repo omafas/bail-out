@@ -50,7 +50,7 @@ licenses/APL2.txt.
 <div class="row flex-left">
    <strong>Encryption At Rest:</strong>&nbsp;{{isEncryptionEnabled ? 'Enabled' : 'Disabled'}}
 </div>
-<div *ngIf="(shouldShowIcon | async) && !(hasIssues | async)" class="row margin-left-half flex-left">
+<div *ngIf="(shouldShowIcon | async) && !(hasIssues | async)" class="row margin-left-half flex-left margin-top-0 margin-bottom-quarter line-height-1">
    <strong>Data Status:</strong>
    <span class="orange--1 text-smaller cursor-pointer margin-left-quarter"
          [ngbTooltip]="tooltipTemplate"
@@ -61,8 +61,7 @@ licenses/APL2.txt.
            'green-0': (currentEncryptionInfo | async).dataStatus === 'encrypted',
            'orange--1':  (currentEncryptionInfo | async).dataStatus === 'partiallyEncrypted'
          }">
-     {{(currentEncryptionInfo | async).dataStatus === 'partiallyEncrypted' ? 'Partially Encrypted' : ''}}
-     {{(currentEncryptionInfo | async).dataStatus === 'encrypted' ? 'Fully Encrypted': ''}}
+     {{getUserVisibleDataStatus(currentEncryptionInfo | async)}}
    </span>
    <span
        class="icon cursor-pointer margin-left-quarter"

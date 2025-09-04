@@ -40,15 +40,21 @@ function mnEncryptionStatusDirective() {
     vm.hasIssues = hasIssues;
     vm.mnTimezoneDetailsServiceDowngrade = mnTimezoneDetailsServiceDowngrade;
     vm.forceEncryption = forceEncryption;
+    vm.isDataStatusVisible = isDataStatusVisible;
 
     function getStatusLabel(status) {
       switch (status) {
         case "encrypted": return "Fully Encrypted";
         case "partiallyEncrypted": return "Partially Encrypted";
         case "unencrypted": return "Not Encrypted";
-        case "unknown": return "-";
+        case "unknown": return "unknown";
         default: return status;
       }
+    }
+
+    function isDataStatusVisible(encryption) {
+      let hiddenCondition = !this.isEncryptionEnabled && (encryption.dataStatus === 'unencrypted') && !encryption.issues.length;
+      return this.isEncryptionEnabled || !hiddenCondition;
     }
 
     function hasIssues() {
