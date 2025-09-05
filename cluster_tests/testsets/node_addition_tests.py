@@ -17,9 +17,63 @@ from testlib.util import Service
 import testlib
 import os
 from testlib import ClusterRequirements
+from testsets.sample_buckets import SampleBucketTasksBase
 from testsets.cert_load_tests import read_cert_file, generate_node_certs, \
      load_ca, load_node_cert, load_client_cert, generate_internal_client_cert, \
      to_pkcs8
+
+class NodeAdditionCommunityTests(testlib.BaseTestSet, SampleBucketTasksBase):
+
+    def __init__(self, cluster):
+        super().__init__(cluster)
+        SampleBucketTasksBase.__init__(self)
+
+    @staticmethod
+    def requirements():
+        return [ClusterRequirements(edition="Community",
+                                    memsize=256,
+                                    min_num_nodes=3, num_connected=1,
+                                    encryption=False, afamily='ipv4',
+                                    exact_services=[Service.KV])]
+
+    def setup(self):
+        self.sample_bucket = "beer-sample"
+        pass
+
+    def teardown(self):
+        pass
+
+    def test_teardown(self):
+        self.cluster.delete_bucket(self.sample_bucket)
+        if len(self.cluster.connected_nodes) > 1:
+            self.cluster.rebalance(self.cluster.connected_nodes[1:], wait=True,
+                                verbose=True)
+            assert_cluster_size(self.cluster, 1)
+        self.cluster.wait_nodes_up()
+
+    def basic_node_addition_with_rebalance_test(self):
+        self.load_and_assert_sample_bucket(self.cluster, self.sample_bucket)
+        nodes_to_add = self.cluster.disconnected_nodes()
+        assert len(nodes_to_add) >= 2, "Expected at least 2 nodes to add"
+
+        # Add nodes using both addition methods
+        self.cluster.add_node(nodes_to_add[0])
+        self.cluster.do_join_cluster(nodes_to_add[1])
+        self.cluster.rebalance(wait=True)
+        assert_cluster_size(self.cluster, 3)
+
+        # Remove nodes from the cluster
+        self.cluster.rebalance(self.cluster.connected_nodes[1:], wait=True,
+                               verbose=True)
+        assert_cluster_size(self.cluster, 1)
+        self.cluster.wait_nodes_up()
+
+        # Add nodes to the cluster again, primarily to test bucket cleanup
+        # procedures (bucket data that is left after first node removal)
+        self.cluster.add_node(nodes_to_add[0])
+        self.cluster.do_join_cluster(nodes_to_add[1])
+        self.cluster.rebalance(wait=True)
+        assert_cluster_size(self.cluster, 3)
 
 
 class NodeAdditionTests(testlib.BaseTestSet):

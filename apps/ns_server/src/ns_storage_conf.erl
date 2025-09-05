@@ -801,8 +801,8 @@ delete_unused_db_files(Dir) when is_list(Dir) ->
         end,
     case IsBucketDirUUID of
         true ->
-            cb_cluster_secrets:destroy_deks(
-                {bucketDek, MaybeBucketUUID},
+            IsEnterprise = cluster_compat_mode:is_enterprise(),
+            DeleteFun =
                 fun () ->
                     case ns_couchdb_api:delete_databases_and_files_uuid(
                            MaybeBucketUUID) of
@@ -813,7 +813,14 @@ delete_unused_db_files(Dir) when is_list(Dir) ->
                                     "dir ~p. Error = ~p", [Dir, Other]),
                             Other
                     end
-                end);
+                end,
+            case IsEnterprise of
+                true ->
+                    cb_cluster_secrets:destroy_deks(
+                        {bucketDek, MaybeBucketUUID}, DeleteFun);
+                false ->
+                    DeleteFun()
+            end;
         false ->
             case ns_couchdb_api:delete_databases_and_files(Dir) of
                 ok ->
