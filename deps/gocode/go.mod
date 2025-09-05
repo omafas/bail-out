@@ -13,6 +13,8 @@ require (
 	golang.org/x/crypto v0.24.0
 )
 
+replace github.com/akeylesslabs/go-kmip => ./go-kmip
+
 require (
 	github.com/aws/aws-sdk-go v1.50.36 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.27.2 // indirect
