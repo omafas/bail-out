@@ -52,6 +52,7 @@ class ServicelessNodeTests(testlib.BaseTestSet):
     @staticmethod
     def requirements():
         return ClusterRequirements(
+            edition="Enterprise",
             min_num_nodes=3,
             num_connected=1,
             afamily="ipv4",
