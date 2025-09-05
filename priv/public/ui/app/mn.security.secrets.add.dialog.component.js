@@ -220,7 +220,10 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
   }
 
   setDate(value) {
-    this.form.group.get('generated-secret.nextRotationTime.date').setValue(new Date(value));
+    // take the exact date from the input (MB-68377)
+    const [year, month, day] = value.split('-').map(Number);
+    const localDate = new Date(year, month - 1, day); // month is 0-indexed
+    this.form.group.get('generated-secret.nextRotationTime.date').setValue(localDate);
   }
 
   unpackData(item) {
@@ -301,11 +304,11 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
         if (autoRotation) {
           data.rotationIntervalInDays = rotationIntervalInDays;
           const {date, hour, minute} = nextRotationTime;
+          date.setHours(hour || 0);
+          date.setMinutes(minute || 0);
+          date.setSeconds(0);
+          date.setMilliseconds(0);
           var copiedDate = new Date(date.getTime());
-          copiedDate.setHours(hour || 0);
-          copiedDate.setMinutes(minute || 0);
-          copiedDate.setSeconds(0);
-          copiedDate.setMilliseconds(0);
           data.nextRotationTime = copiedDate.toISOString();
         }
         data.canBeCached = canBeCached;
