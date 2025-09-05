@@ -436,11 +436,12 @@ store_users(Users, CanOverwrite) ->
 
 %% Sets high priority for auth and user documents in the context of user-
 %% related changes (store_user(s), delete_user).
-%% For auth docs, high priority is required for password changes to take
-%% precedence over concurrent hash migration updates (which use normal
-%% priority). User documents were inadvertently marked as high priority in
-%% earlier releases. To ensure backward compatibility, user documents must now
-%% be explicitly set to high priority on sets and deletes.
+%% For auth docs, high priority is required for user-initiated changes (password
+%% changes, user creates or deletes) to take precedence over concurrent hash
+%% migration updates (which use normal priority).
+%% user docs were inadvertently marked as high priority in earlier releases. To
+%% ensure backward compatibility, user documents must now be explicitly set to
+%% high priority on sets and deletes (to be prioritized equally).
 %% All other document operations default to normal priority.
 maybe_set_high_priority_user_changes(Docs) ->
     case cluster_compat_mode:is_cluster_76() of
@@ -588,25 +589,23 @@ change_password({_UserName, local} = Identity, Password) when is_list(Password) 
 -spec delete_user(rbac_identity()) -> {commit, ok} |
                                       {abort, {error, not_found}}.
 delete_user({_, Domain} = Identity) ->
-    case Domain of
-        local ->
-            Docs0 = [{delete, {auth, Identity}},
-                     {delete, profile_key(Identity)}],
+    case user_exists(Identity) of
+        true ->
+            Docs0 =
+                case Domain of
+                    local ->
+                        [{delete, {auth, Identity}},
+                         {delete, profile_key(Identity)}];
+                    external ->
+                        []
+                end,
+            Docs1 = [{delete, {user, Identity}} | Docs0],
 
-            %% Delete auth key at a higher priority. This is to ensure that
-            %% user-initiated deletes take precedence over background hash
-            %% migration auth updates.
-            Docs1 = maybe_set_high_priority_user_changes(Docs0),
-
-            ok = replicated_dets:change_multiple(storage_name(), Docs1);
-        external ->
-            ok
-    end,
-    case replicated_dets:delete(storage_name(), {user, Identity}) of
-        {not_found, _} ->
-            {abort, {error, not_found}};
-        ok ->
-            {commit, ok}
+            Docs2 = maybe_set_high_priority_user_changes(Docs1),
+            ok = replicated_dets:change_multiple(storage_name(), Docs2),
+            {commit, ok};
+        false ->
+            {abort, {error, not_found}}
     end.
 
 get_salt_and_mac(Auth) ->
