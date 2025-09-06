@@ -6,6 +6,7 @@ package kmip
 
 import (
 	"crypto/tls"
+	"net"
 	"time"
 
 	"github.com/pkg/errors"
@@ -27,7 +28,7 @@ type Client struct {
 	Version ProtocolVersion
 
 	// Network timeouts
-	ReadTimeout, WriteTimeout time.Duration
+	ReadTimeout, WriteTimeout, DialTimeout time.Duration
 
 	conn *tls.Conn
 	e    *Encoder
@@ -38,7 +39,12 @@ type Client struct {
 func (c *Client) Connect() error {
 	var err error
 
-	if c.conn, err = tls.Dial("tcp", c.Endpoint, c.TLSConfig); err != nil {
+	dialer := &net.Dialer{}
+	if c.DialTimeout != 0 {
+		dialer.Timeout = c.DialTimeout
+	}
+
+	if c.conn, err = tls.DialWithDialer(dialer, "tcp", c.Endpoint, c.TLSConfig); err != nil {
 		return errors.Wrap(err, "error dialing connection")
 	}
 
