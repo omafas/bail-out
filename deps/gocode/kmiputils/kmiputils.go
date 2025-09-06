@@ -104,7 +104,13 @@ func getKmipClient(config KmipClientConfig) (*kmip.Client, error) {
 	}
 
 	endPoint := fmt.Sprintf("%s:%d", config.Host, config.Port)
-	client := kmip.Client{Endpoint: endPoint, ReadTimeout: config.TimeoutDuration, WriteTimeout: config.TimeoutDuration, TLSConfig: tlsConfig}
+	client := kmip.Client{
+		Endpoint:     endPoint,
+		ReadTimeout:  config.TimeoutDuration,
+		WriteTimeout: config.TimeoutDuration,
+		DialTimeout:  config.TimeoutDuration,
+		TLSConfig:    tlsConfig}
+
 	err = client.Connect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect client: %w", err)
