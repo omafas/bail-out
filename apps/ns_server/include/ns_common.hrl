@@ -258,7 +258,7 @@
 -define(VERSION_72, [7, 2]).
 -define(VERSION_76, [7, 6]).
 -define(VERSION_79, [7, 9]).
--define(VERSION_MORPHEUS, [8, 0]).
+-define(VERSION_80, [8, 0]).
 
 -define(MIN_SUPPORTED_VERSION, ?VERSION_71).
 
@@ -269,7 +269,7 @@
 %% This require coordination with the UI to update the version.
 -define(LATEST_UI_COMPAT_VERSION, ?VERSION_70).
 
--define(LATEST_VERSION_NUM, ?VERSION_MORPHEUS).
+-define(LATEST_VERSION_NUM, ?VERSION_80).
 -define(MASTER_ADVERTISED_VERSION, [8, 0, 0]).
 
 %% We use 'prod' and 'prod_name' during compatibility checks when validating

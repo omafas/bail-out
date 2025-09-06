@@ -1696,7 +1696,7 @@ validate_bucket_type_specific_params(CommonParams, Params,
 
     case BucketType of
         memcached ->
-            %% Remove in major release after Morpheus.
+            %% Remove in major release after 8.0.
             [{error, bucketType,
               <<"memcached buckets are no longer supported">>}];
         membase ->
@@ -2001,7 +2001,7 @@ get_bucket_type(false = _IsNew, BucketConfig, _Params)
     ns_bucket:bucket_type(BucketConfig);
 get_bucket_type(_IsNew, _BucketConfig, Params) ->
     case proplists:get_value("bucketType", Params) of
-        %% Remove in major release after Morpheus.
+        %% Remove in major release after 8.0.
         "memcached" -> memcached;
         "membase" -> membase;
         "couchbase" -> membase;
@@ -3760,8 +3760,8 @@ parse_validate_no_restart(Params) ->
             ignore;
         Value ->
             %% TODO: Remove allow_online_eviction_policy_change when min
-            %% supported version is morpheus.
-            case cluster_compat_mode:is_cluster_morpheus() orelse
+            %% supported version is 8.0.
+            case cluster_compat_mode:is_cluster_80() orelse
                 ns_config:read_key_fast(allow_online_eviction_policy_change,
                                         false) of
                 true ->

@@ -24,7 +24,7 @@
          handle_node_setting_get/3,
          handle_node_setting_delete/3,
          config_upgrade_to_79/1,
-         config_upgrade_to_morpheus/1]).
+         config_upgrade_to_80/1]).
 
 -import(menelaus_util,
         [reply_json/2,
@@ -447,7 +447,7 @@ config_upgrade_to_79_node_memcached_cfg(Config) ->
             end
         end, [], supported_nodes()).
 
-config_upgrade_to_morpheus(Config) ->
+config_upgrade_to_80(Config) ->
     %% We want to enable the magma blind write optimisation by default for all
     %% 8.0 clusters. We have a get_param though such that we can turn this off
     %% prior to the upgrade just in case.
@@ -520,17 +520,17 @@ upgrade_config_from_76_to_79_t() ->
     ?assertEqual(false,
                  lists:keyfind(connection_limit_mode, 1, UpgradedNodeMcdCfg)).
 
-upgrade_config_to_morpheus_t() ->
-    Default = ns_config_default:default(?VERSION_MORPHEUS),
+upgrade_config_to_80_t() ->
+    Default = ns_config_default:default(?VERSION_80),
 
-    Txns0 = config_upgrade_to_morpheus([Default]),
+    Txns0 = config_upgrade_to_80([Default]),
     ?assertEqual(
        [{set, memcached,
          [{magma_blind_write_optimisation_enabled, true}]}],
        Txns0),
 
     DefaultWithoutMcd = proplists:delete(memcached, Default),
-    Txns1 = config_upgrade_to_morpheus([DefaultWithoutMcd]),
+    Txns1 = config_upgrade_to_80([DefaultWithoutMcd]),
     ?assertEqual(
        [{set, memcached,
          [{magma_blind_write_optimisation_enabled, true}]}], Txns1),
@@ -540,7 +540,7 @@ upgrade_config_to_morpheus_t() ->
                         false
                 end),
 
-    Txns2 = config_upgrade_to_morpheus([DefaultWithoutMcd]),
+    Txns2 = config_upgrade_to_80([DefaultWithoutMcd]),
     ?assertEqual(
        [{set, memcached,
          [{magma_blind_write_optimisation_enabled, false}]}], Txns2).
@@ -550,6 +550,6 @@ upgrade_config_test_() ->
     {setup, fun upgrade_config_test_setup/0,
             fun upgrade_config_test_teardown/1,
             [fun upgrade_config_from_76_to_79_t/0,
-             fun upgrade_config_to_morpheus_t/0]}.
+             fun upgrade_config_to_80_t/0]}.
 
 -endif.

@@ -1684,7 +1684,7 @@ do_engage_cluster_validate_cert(NodeKVList, Services) ->
 %% ensure that those certs will still be verifiable by the rest of the cluster
 %% after node addition completes.
 validate_local_certificate_chain(_CertType, undefined) ->
-    %% If the existing node is pre-Morpheus, it won't send the trustedCAs,
+    %% If the existing node is pre-8.0, it won't send the trustedCAs,
     %% so we also skip validation in that case
     ok;
 validate_local_certificate_chain(CertType, TrustedCAs) ->

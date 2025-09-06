@@ -29,9 +29,9 @@ class BucketDirsCleanupTests(testlib.BaseTestSet):
 
     def setup(self):
         self.fake_bucket_dirs = [
-            # This one looks like a bucket name (pre-morpheus bucket dir)
+            # This one looks like a bucket name (pre-8.0 bucket dir)
             testlib.random_str(8),
-            # This one looks like a bucket UUID (post-morpheus bucket dir)
+            # This one looks like a bucket UUID (post-8.0 bucket dir)
             binascii.hexlify(os.urandom(16)).decode()
         ]
         self.to_garbage_collect = []

@@ -253,7 +253,7 @@ class UsersBackupTests(testlib.BaseTestSet):
                     auth_user=(user, password))
 
             # Ensure these tranformations have occurred where old roles, no
-            # longer supported on morpheus are replaced with supported roles.
+            # longer supported on 8.0 are replaced with supported roles.
             #
             #   localsecurityadmin76:
             #       security_admin_local => security_admin + user_admin_local

@@ -100,6 +100,6 @@ upgrade(?VERSION_76, Config) ->
          menelaus_web_mcd_settings:config_upgrade_to_79(Config)};
 
 upgrade(?VERSION_79, Config) ->
-    {?VERSION_MORPHEUS,
-     menelaus_web_mcd_settings:config_upgrade_to_morpheus(Config) ++
-         ns_bucket:config_upgrade_to_morpheus(Config)}.
+    {?VERSION_80,
+     menelaus_web_mcd_settings:config_upgrade_to_80(Config) ++
+         ns_bucket:config_upgrade_to_80(Config)}.

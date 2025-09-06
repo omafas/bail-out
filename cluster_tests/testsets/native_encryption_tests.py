@@ -1838,7 +1838,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
     def bucket_dir_migration_test(self):
         # Since bucket name is considered PII, we should stop using bucket
-        # name as bucket dir name in morpheus
+        # name as bucket dir name in 8.0
         # Node should move all existing bucket data to the new bucket dir (uuid)
         # during the first startup after the upgrade (and before creating
         # buckets in memcached)
@@ -1849,11 +1849,11 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
         data_dir = Path(kv_node.data_path()) / 'data'
         new_bucket_dir = data_dir / bucket_uuid
-        pre_morpheus_bucket_dir = data_dir / self.bucket_name
+        pre_80_bucket_dir = data_dir / self.bucket_name
         assert new_bucket_dir.exists(), \
                f'new bucket dir {new_bucket_dir} does not exist'
-        assert not pre_morpheus_bucket_dir.exists(), \
-               f'pre-morpheus bucket dir {pre_morpheus_bucket_dir} exists'
+        assert not pre_80_bucket_dir.exists(), \
+               f'pre-8.0 bucket dir {pre_80_bucket_dir} exists'
 
         docs = {}
         for i in range(10):
@@ -1862,10 +1862,10 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
 
         self.cluster.stop_node(kv_node)
 
-        # move cluster data to old bucket dir, imitating pre-morpheus bucket
-        print(f'renaming {new_bucket_dir} to {pre_morpheus_bucket_dir}')
+        # move cluster data to old bucket dir, imitating pre-8.0 bucket
+        print(f'renaming {new_bucket_dir} to {pre_80_bucket_dir}')
         moved_files = list(new_bucket_dir.iterdir())
-        os.rename(new_bucket_dir, pre_morpheus_bucket_dir)
+        os.rename(new_bucket_dir, pre_80_bucket_dir)
 
         self.cluster.restart_node(kv_node)
 
@@ -1874,7 +1874,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
             sleep_time=1, attempts=50, verbose=True)
 
         testlib.poll_for_condition(
-            lambda: not pre_morpheus_bucket_dir.exists(),
+            lambda: not pre_80_bucket_dir.exists(),
             sleep_time=1, attempts=50, verbose=True)
 
         # Make sure that all documents are still present (basically making
@@ -1896,7 +1896,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
             lambda: not new_bucket_dir.exists(),
             sleep_time=1, attempts=50, verbose=True)
         testlib.poll_for_condition(
-            lambda: not pre_morpheus_bucket_dir.exists(),
+            lambda: not pre_80_bucket_dir.exists(),
             sleep_time=1, attempts=50, verbose=True)
 
     def breakpad_state_changes_test(self):

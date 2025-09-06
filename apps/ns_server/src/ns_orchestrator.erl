@@ -895,7 +895,7 @@ idle({delete_bucket, BucketName}, From, _State) ->
 %% In mixed mode cluster, depending upon the node from which the update bucket
 %% request is being sent, the length of the message could vary. In order to
 %% be backwards compatible we need to field both types of messages. We can
-%% remove the 4-parameter version once min_supported_version >= morpheus.
+%% remove the 4-parameter version once min_supported_version >= 8.0.
 %% This was introduced in 7.6.8.
 idle({update_bucket,
       BucketType, StorageMode, BucketName, UpdatedProps}, From, _State) ->
@@ -937,7 +937,7 @@ idle({failover, Nodes, Options}, From, _State) when is_map(Options) ->
     handle_start_failover(Nodes, From, true, hard_failover, Options);
 idle({start_failover, Nodes, AllowUnsafe}, From, _State)
   when is_boolean(AllowUnsafe) ->
-    %% calls from pre-morpheus nodes
+    %% calls from pre-8.0 nodes
     handle_start_failover(Nodes, From, false, hard_failover,
                           #{allow_unsafe => AllowUnsafe});
 idle({start_failover, Nodes, Options}, From, _State) when is_map(Options) ->

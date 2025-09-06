@@ -598,7 +598,7 @@ get_bucket_capabilities(?VERSION_79,
                         IsMagma) ->
     get_bucket_capabilities(?VERSION_76, IsEnterprise, IsMagma) ++
     ['subdoc.BinaryXattr', 'subdoc.AccessDeleted'];
-get_bucket_capabilities(?VERSION_MORPHEUS,
+get_bucket_capabilities(?VERSION_80,
                         IsEnterprise,
                         IsMagma) ->
     get_bucket_capabilities(?VERSION_79, IsEnterprise, IsMagma);
