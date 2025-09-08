@@ -526,18 +526,39 @@ store_users(Users, CanOverwrite) ->
     Snapshot = ns_bucket:get_snapshot(all, [collections, uuid]),
     case prepare_store_users_docs(Snapshot, Users, CanOverwrite) of
         {ok, {UpdatedUsers, PreparedDocs}} ->
-            case cluster_compat_mode:is_cluster_76() of
-                true ->
-                    ok = replicated_dets:change_multiple(
-                           storage_name(), PreparedDocs,
-                           [{priority, ?REPLICATED_DETS_HIGH_PRIORITY}]);
-                false ->
-                    ok = replicated_dets:change_multiple(
-                           storage_name(), PreparedDocs)
-            end,
+            FinalDocs = maybe_set_high_priority_user_changes(PreparedDocs),
+            ok = replicated_dets:change_multiple(storage_name(), FinalDocs),
             {ok, UpdatedUsers};
         {error, _} = Error ->
             Error
+    end.
+
+%% Sets high priority for auth and user documents in the context of user-
+%% related changes (store_user(s), delete_user).
+%% For auth docs, high priority is required for user-initiated changes (password
+%% changes, user creates or deletes) to take precedence over concurrent hash
+%% migration updates (which use normal priority).
+%% user docs were inadvertently marked as high priority in earlier releases. To
+%% ensure backward compatibility, user documents must now be explicitly set to
+%% high priority on sets and deletes (to be prioritized equally).
+%% All other document operations default to normal priority.
+maybe_set_high_priority_user_changes(Docs) ->
+    case cluster_compat_mode:is_cluster_76() of
+        true ->
+            lists:map(
+              fun ({set, Key, Val}) when element(1, Key) =:= user;
+                                         element(1, Key) =:= auth ->
+                      {set, Key, Val, [{priority,
+                                        ?REPLICATED_DETS_HIGH_PRIORITY}]};
+                  ({delete, Key}) when element(1, Key) =:= user;
+                                       element(1, Key) =:= auth ->
+                      {delete, Key, [{priority,
+                                      ?REPLICATED_DETS_HIGH_PRIORITY}]};
+                  (Other) ->
+                      Other
+              end, Docs);
+        false ->
+            Docs
     end.
 
 prepare_store_users_docs(Snapshot, Users, CanOverwrite) ->
@@ -775,33 +796,25 @@ store_lock(Identity, Locked) ->
           {commit, ok} |
           {abort, {error, not_found}}.
 delete_user({_, Domain} = Identity) ->
-    case Domain of
-        local ->
-            %% Add deletes at a higher priority to make sure they take
-            %% precedence over any concurrent update to auth.
-            case cluster_compat_mode:is_cluster_76() of
-                true ->
-                    _ = replicated_dets:delete(
-                          storage_name(), {auth, Identity},
-                          [{priority, ?REPLICATED_DETS_HIGH_PRIORITY}]);
-                false ->
-                    _ = replicated_dets:delete(
-                          storage_name(), {auth, Identity})
-            end,
+    case user_exists(Identity) of
+        true ->
+            Docs0 =
+                case Domain of
+                    local ->
+                        [{delete, {auth, Identity}},
+                         {delete, profile_key(Identity)},
+                         {delete, {locked, Identity}},
+                         {delete, {activity, Identity}}];
+                    external ->
+                        []
+                end,
+            Docs1 = [{delete, {user, Identity}} | Docs0],
 
-            _ = delete_profile(Identity),
-
-            _ = replicated_dets:delete(storage_name(), {locked, Identity}),
-
-            _ = replicated_dets:delete(storage_name(), {activity, Identity});
-        external ->
-            ok
-    end,
-    case replicated_dets:delete(storage_name(), {user, Identity}) of
-        {not_found, _} ->
-            {abort, {error, not_found}};
-        ok ->
-            {commit, ok}
+            Docs2 = maybe_set_high_priority_user_changes(Docs1),
+            ok = replicated_dets:change_multiple(storage_name(), Docs2),
+            {commit, ok};
+        false ->
+            {abort, {error, not_found}}
     end.
 
 get_salt_and_mac(Auth) ->
