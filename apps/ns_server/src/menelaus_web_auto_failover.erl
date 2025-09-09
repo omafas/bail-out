@@ -24,7 +24,6 @@
          config_check_can_abort_rebalance/0,
          default_config/1,
          get_stats/0,
-         config_upgrade_to_72/1,
          config_upgrade_to_76/1,
          config_upgrade_to_79/1]).
 
@@ -494,12 +493,6 @@ disable_disk_failover(Config) ->
         false ->
             []
     end.
-
-config_upgrade_to_72(Config) ->
-    [{set, ?ROOT_CONFIG_KEY,
-      auto_failover:get_cfg(Config) ++
-          [{?FAILOVER_PRESERVE_DURABILITY_MAJORITY_CONFIG_KEY,
-            ?FAILOVER_PRESERVE_DURABILITY_MAJORITY_DEFAULT}]}].
 
 -ifdef(TEST).
 config_upgrade_to_79_test() ->

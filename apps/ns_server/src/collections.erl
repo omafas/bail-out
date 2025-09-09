@@ -55,7 +55,6 @@
          diff_manifests/2,
          last_seen_ids_key/2,
          last_seen_ids_set/3,
-         chronicle_upgrade_to_72/2,
          upgrade_to_76/2,
          history_retention_enabled/2]).
 
@@ -1282,44 +1281,6 @@ update_last_seen_ids() ->
 last_seen_ids_set(Node, Bucket, Manifest) ->
     {set, last_seen_ids_key(Node, Bucket), get_next_uids(Manifest)}.
 
-chronicle_upgrade_to_72(Bucket, ChronicleTxn) ->
-    PropsKey = ns_bucket:sub_key(Bucket, props),
-    {ok, BucketConfig} = chronicle_upgrade:get_key(PropsKey, ChronicleTxn),
-    case ns_bucket:history_retention_collection_default(BucketConfig) of
-        %% Nothing to do
-        false -> ChronicleTxn;
-        %% Upgrade should add the history prop to each collection
-        true ->
-            %% We're going to generate a new manifest by modifying each
-            %% collection. When we modify a collection we need both the Scope
-            %% and the Collection name. We don't have that in a convenient
-            %% format, so we'll have to extract it from the manifest.
-            {ok, Manifest} = chronicle_upgrade:get_key(key(Bucket),
-                                                       ChronicleTxn),
-            AllCollections =
-                lists:flatmap(
-                  fun({ScopeName, ScopeProps}) ->
-                          Collections = get_collections(ScopeProps),
-                          [{ScopeName, CollectionName} ||
-                              {CollectionName, _} <- Collections]
-                  end, get_scopes(Manifest)),
-
-            NewManifest1 =
-                lists:foldl(
-                  fun({Scope, Collection}, Acc) ->
-                          modify_collection_props(Acc, Collection, Scope,
-                                                  [{history, true}])
-                  end,
-                  Manifest,
-                  AllCollections),
-
-            %% We must bump the manifest uid too or KV won't treat this as a new
-            %% manifest.
-            NewManifest2 = advance_manifest_id(upgrade, NewManifest1),
-
-            chronicle_upgrade:set_key(key(Bucket), NewManifest2, ChronicleTxn)
-    end.
-
 upgrade_to_76(ManifestIn, BucketConfig) ->
     Manifest0 =
         on_scopes(
@@ -2183,57 +2144,6 @@ set_manifest_t() ->
     ?assertEqual([{maxTTL, ?USE_BUCKET_MAXTTL}, {uid, 8}, {history, true}],
                  get_collection("c1", get_scope("s1", Manifest5_4))).
 
-upgrade_to_72_t() ->
-    CollectionsKey = key("bucket"),
-
-    %% To test the upgrade we need to create a 7.1 (or older) manifest. To do
-    %% do that we must set history_retention_collection_default to false in the
-    %% BucketConfig that we're using. Whilst we can do that explicitly,
-    %% particularly in this test via calling
-    %% "manifest_test_set_history_default(false)", we can more idiomatically
-    %% just pretend this is a pre-7.2.0 cluster via cluster_compat_mode which we
-    %% must check to ensure that we don't create collections with history=true
-    %% in mixed mode clusters when using the default history value.
-    meck:expect(cluster_compat_mode, is_cluster_72, fun() -> false end),
-    meck:expect(cluster_compat_mode, is_cluster_76, fun() -> false end),
-    meck:expect(config_profile, get_bool,
-                fun (enable_system_scope) -> false;
-                    (enable_metered_collections) -> false
-                end),
-
-    {ok, BucketConf71} = get_bucket_config("bucket"),
-    Manifest71 = default_manifest(BucketConf71),
-    ?assertEqual(undefined,
-                 proplists:get_value(history,
-                                     get_collection("_default",
-                                                    get_scope("_default",
-                                                              Manifest71)))),
-    ?assertEqual(0, proplists:get_value(uid, Manifest71)),
-
-    meck:expect(cluster_compat_mode, is_cluster_72, fun() -> true end),
-
-    %% collections:chronicle_upgrade_to_72/2 requires that we upgrade the
-    %% BucketConfig /before/ we call it to perform the upgrade successfully,
-    %% namely we must set history_retention_collection_default to true. We're
-    %% going to "upgrade" the BucketConfig that we pass into the Snapshot here
-    %% to accomplish that.
-    manifest_test_set_history_default(true),
-    {ok, BucketConf72} = get_bucket_config("bucket"),
-    Snapshot1 = maps:put({bucket, "bucket", props}, BucketConf72, maps:new()),
-    Snapshot71 = maps:put(CollectionsKey, Manifest71, Snapshot1),
-    Txn = {Snapshot71, undefined},
-
-    {Snapshot72, _Txn} = chronicle_upgrade_to_72("bucket", Txn),
-
-    %% Time to test the result of the upgrade
-    Manifest72 = maps:get(CollectionsKey, Snapshot72),
-    ?assert(proplists:get_value(history,
-                                get_collection("_default",
-                                               get_scope("_default",
-                                                         Manifest72)))),
-
-    ?assertEqual(1, proplists:get_value(uid, Manifest72)).
-
 %% The _system scope gets added on upgrade containing service-specific
 %% collections for query and mobile.
 upgrade_to_76_system_scope_t() ->
@@ -2299,7 +2209,6 @@ basic_collections_manifest_test_() ->
       {"modify collection test", fun() -> modify_collection_t() end},
       {"history default test", fun() -> history_default_t() end},
       {"set manifest test", fun() -> set_manifest_t() end},
-      {"upgrade to 72 test", fun() -> upgrade_to_72_t() end},
       {"upgrade to 7.6 test (system scope)",
        fun() -> upgrade_to_76_system_scope_t() end},
       {"upgrade to 7.6 test (collection history)",

@@ -253,14 +253,12 @@
 %% passed to memcached as it will likely throw an error.
 -define(MAX_64BIT_UNSIGNED_INT, 16#FFFFFFFFFFFFFFFF).
 
--define(VERSION_70, [7, 0]).
--define(VERSION_71, [7, 1]).
 -define(VERSION_72, [7, 2]).
 -define(VERSION_76, [7, 6]).
 -define(VERSION_79, [7, 9]).
 -define(VERSION_80, [8, 0]).
 
--define(MIN_SUPPORTED_VERSION, ?VERSION_71).
+-define(MIN_SUPPORTED_VERSION, ?VERSION_72).
 
 -define(version_string(Version),
         lists:flatten(lists:join(".", lists:map(fun erlang:integer_to_list/1,

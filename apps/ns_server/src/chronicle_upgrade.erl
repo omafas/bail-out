@@ -103,7 +103,7 @@ upgrade_loop(UpgradeTxn, FinalVersion) ->
     CurrentVersion =
         case get_key(cluster_compat_version, UpgradeTxn) of
             {error, not_found} ->
-                ?VERSION_71;
+                ?VERSION_72;
             {ok, V} ->
                 V
         end,
@@ -117,9 +117,6 @@ upgrade_loop(UpgradeTxn, FinalVersion) ->
             upgrade_loop(set_key(cluster_compat_version, NewVersion, NewTxn),
                          FinalVersion)
     end.
-
-upgrade_to(?VERSION_71, UpgradeTxn) ->
-    {?VERSION_72, ns_bucket:chronicle_upgrade_to_72(UpgradeTxn)};
 
 upgrade_to(?VERSION_72, UpgradeTxn) ->
     {?VERSION_76,

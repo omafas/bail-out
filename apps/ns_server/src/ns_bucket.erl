@@ -175,7 +175,6 @@
          buckets_with_data_on_this_node/0,
          activate_bucket_data_on_this_node/1,
          deactivate_bucket_data_on_this_node/1,
-         chronicle_upgrade_to_72/1,
          chronicle_upgrade_to_76/1,
          chronicle_upgrade_to_79/1,
          config_upgrade_to_80/1,
@@ -3008,46 +3007,6 @@ chronicle_upgrade_to_76(ChronicleTxn) ->
     {ok, BucketNames} = chronicle_upgrade:get_key(root(), ChronicleTxn),
     chronicle_upgrade_bucket(chronicle_upgrade_bucket_to_76(_, _),
                              BucketNames, ChronicleTxn).
-
-upgrade_bucket_config_to_72(Bucket, ChronicleTxn) ->
-    PropsKey = sub_key(Bucket, props),
-    {ok, BCfg} = chronicle_upgrade:get_key(PropsKey, ChronicleTxn),
-    case is_magma(BCfg) of
-        true ->
-            %% Only add the keys if this is a magma Bucket as they are
-            %% not relevant to couchstore buckets.
-            BCfg1 = lists:keystore(history_retention_seconds, 1, BCfg,
-                                   {history_retention_seconds, 0}),
-            BCfg2 = lists:keystore(history_retention_bytes, 1, BCfg1,
-                                   {history_retention_bytes, 0}),
-            BCfg3 =
-                lists:keystore(history_retention_collection_default,
-                               1, BCfg2,
-                               {history_retention_collection_default,
-                                true}),
-            BCfg4 =
-                lists:keystore(magma_key_tree_data_blocksize,
-                               1, BCfg3,
-                               {magma_key_tree_data_blocksize,
-                                ?MAGMA_KEY_TREE_DATA_BLOCKSIZE}),
-            BCfg5 =
-                lists:keystore(magma_seq_tree_data_blocksize,
-                               1, BCfg4,
-                               {magma_seq_tree_data_blocksize,
-                                ?MAGMA_SEQ_TREE_DATA_BLOCKSIZE}),
-
-            chronicle_upgrade:set_key(PropsKey, BCfg5, ChronicleTxn);
-        _ ->
-            ChronicleTxn
-    end.
-
-chronicle_upgrade_to_72(ChronicleTxn) ->
-    {ok, BucketNames} = chronicle_upgrade:get_key(root(), ChronicleTxn),
-    lists:foldl(
-      fun (Name, Txn) ->
-              Txn1 = upgrade_bucket_config_to_72(Name, Txn),
-              collections:chronicle_upgrade_to_72(Name, Txn1)
-      end, ChronicleTxn, BucketNames).
 
 %% returns proplist with only props useful for ns_bucket
 extract_bucket_props(Props) ->

@@ -254,7 +254,6 @@ jsonify_props(Props) ->
 user_to_json({Id, Domain}, Props) ->
     RolesJson = user_roles_to_json(Props),
     Name = proplists:get_value(name, Props),
-    %% UUID is only defined for local users in VERSION_71 clusters.
     UUID = proplists:get_value(uuid, Props),
     Groups = proplists:get_value(groups, Props),
     ExtGroups = proplists:get_value(external_groups, Props),
@@ -2904,7 +2903,7 @@ t_wrap(Tests) ->
              meck:expect(cluster_compat_mode, is_enterprise,
                          fun () -> true end),
              meck:expect(cluster_compat_mode, get_compat_version,
-                         fun () -> ?VERSION_71 end)
+                         fun () -> ?VERSION_72 end)
      end,
      fun (_) ->
              meck:unload(cluster_compat_mode)

@@ -38,7 +38,7 @@
          terminate/2, code_change/3, handle_settings_alerts_limits_post/1,
          handle_settings_alerts_limits_get/1]).
 
--export([alert_keys/0, config_upgrade_to_72/1, config_upgrade_to_76/1,
+-export([alert_keys/0, config_upgrade_to_76/1,
          config_upgrade_to_79/1]).
 
 %% @doc Hold client state for any alerts that need to be shown in
@@ -432,18 +432,6 @@ alert_keys() ->
      cert_expires_soon, cert_expired, memory_threshold, history_size_warning,
      stuck_rebalance, memcached_connections, disk_guardrail,
      indexer_diverging_replicas].
-
-config_upgrade_to_72(Config) ->
-    config_email_alerts_upgrade(
-      Config, fun config_email_alerts_upgrade_to_72/1).
-
-config_email_alerts_upgrade(Config, Upgrade) ->
-    case ns_config:search(Config, email_alerts) of
-        false ->
-            [];
-        {value, EmailAlerts} ->
-            Upgrade(EmailAlerts)
-    end.
 
 config_upgrade_to_76(Config) ->
     Ret = case ns_config:search(Config, email_alerts) of
@@ -1617,17 +1605,6 @@ upgrade_alerts(EmailAlerts, Mutations) ->
           {EmailAlerts, []}, Mutations),
     maybe_upgrade_email_alerts(EmailAlerts, Result) ++ ExtraNsCfgChanges.
 
-config_email_alerts_upgrade_to_72(EmailAlerts) ->
-    Result =
-        functools:chain(
-          EmailAlerts,
-          [add_proplist_list_elem(alerts,history_size_warning, _),
-           add_proplist_list_elem(alerts,indexer_low_resident_percentage, _),
-           add_proplist_list_elem(pop_up_alerts, history_size_warning, _),
-           add_proplist_list_elem(pop_up_alerts,
-                                  indexer_low_resident_percentage, _)]),
-    maybe_upgrade_email_alerts(EmailAlerts, Result).
-
 maybe_upgrade_email_alerts(Old, New) ->
     case misc:sort_kv_list(New) =:= misc:sort_kv_list(Old) of
         true ->
@@ -1798,25 +1775,6 @@ add_proplist_list_elem_test() ->
                  {enabled, false}],
     Result2 = add_proplist_list_elem(alerts, time_out_of_sync, PL2),
     ?assertEqual(misc:sort_kv_list(Expected2), misc:sort_kv_list(Result2)).
-
-config_upgrade_to_72_test() ->
-    Config = [[{email_alerts,
-                [{pop_up_alerts, [ip, disk]},
-                 {enabled, false},
-                 {alerts, [ip, communication_issue]}]
-               },
-               {alert_limits,
-                [{max_disk_used, 90},
-                 {max_indexer_ram, 75}]}]],
-    ExpectedAlerts = [{pop_up_alerts,
-                       [disk, ip, history_size_warning,
-                        indexer_low_resident_percentage]},
-                      {alerts,
-                       [communication_issue, ip, history_size_warning,
-                        indexer_low_resident_percentage]},
-                      {enabled, false}],
-    [{set, email_alerts, Alerts}] = config_upgrade_to_72(Config),
-    ?assertEqual(misc:sort_kv_list(ExpectedAlerts), misc:sort_kv_list(Alerts)).
 
 config_upgrade_to_76_test() ->
     Config1 = [],

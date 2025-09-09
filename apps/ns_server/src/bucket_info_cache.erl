@@ -608,11 +608,7 @@ get_bucket_capabilities(_Version, _IsEnterprise, _IsMagma) ->
     [].
 
 membase_bucket_capabilities_test_() ->
-    Tests = [{?VERSION_71, false, false},
-             {?VERSION_71, true, false},
-             {?VERSION_71, false, true},
-             {?VERSION_71, true, true},
-             {?VERSION_72, false, false},
+    Tests = [{?VERSION_72, false, false},
              {?VERSION_72, true, false},
              {?VERSION_72, false, true},
              {?VERSION_72, true, true},

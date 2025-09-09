@@ -460,9 +460,6 @@ upgrade_config(Config) ->
         CurrentVersion ->
             [];
         MinVersion ->
-            [{set, {node, node(), config_version}, {7,2}} |
-             upgrade_config_from_7_1_to_7_2(Config)];
-        {7,2} ->
             [{set, {node, node(), config_version}, {7,6}} |
              upgrade_config_from_7_2_to_76(Config)];
         {7,6} ->
@@ -522,16 +519,6 @@ do_upgrade_sub_keys(SubKeys, Props, DefaultProps) ->
               Val = {SubKey, _} = lists:keyfind(SubKey, 1, DefaultProps),
               lists:keystore(SubKey, 1, Acc, Val)
       end, Props, SubKeys).
-
-upgrade_config_from_7_1_to_7_2(Config) ->
-    DefaultConfig = default(?VERSION_72),
-    do_upgrade_config_from_7_1_to_7_2(Config, DefaultConfig).
-
-do_upgrade_config_from_7_1_to_7_2(_Config, DefaultConfig) ->
-    [upgrade_key(memcached_config, DefaultConfig),
-     upgrade_key(memcached_defaults, DefaultConfig),
-     upgrade_key(database_dir, DefaultConfig),
-     upgrade_key(index_dir, DefaultConfig)].
 
 upgrade_config_from_7_2_to_76(Config) ->
     DefaultConfig = default(?VERSION_76),

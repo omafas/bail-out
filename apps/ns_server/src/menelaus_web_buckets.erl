@@ -4367,47 +4367,6 @@ basic_bucket_params_screening_t() ->
                    <<"Magma data blocksize can only be used with Magma">>}],
                  E21),
 
-    meck:expect(cluster_compat_mode, supported_compat_version,
-        fun() ->
-            ?VERSION_71
-        end),
-
-    {_OK22, E22} = basic_bucket_params_screening(
-                     true,
-                     "HistoryEnterpriseMagma7.1",
-                     [{"bucketType", "membase"},
-                      {"ramQuota", "1024"},
-                      {"storageBackend", "magma"},
-                      {"historyRetentionSeconds", "10"},
-                      {"historyRetentionBytes", "10"},
-                      {"historyRetentionCollectionDefault", "true"},
-                      {"magmaKeyTreeDataBlockSize", "10"},
-                      {"magmaSeqTreeDataBlockSize", "10"}],
-                     AllBuckets,
-                     [node1]),
-    ?assertEqual([{historyRetentionSeconds,
-                    <<"History Retention cannot be set until the cluster is "
-                       "fully 7.2">>},
-                  {historyRetentionBytes,
-                    <<"History Retention cannot be set until the cluster is "
-                      "fully 7.2">>},
-                  {historyRetentionCollectionDefault,
-                    <<"History Retention cannot be set until the cluster is "
-                      "fully 7.2">>},
-                  {magmaKeyTreeDataBlockSize,
-                   <<"Magma data blocksize cannot be set until the cluster is "
-                     "fully running 7.2">>},
-                  {magmaSeqTreeDataBlockSize,
-                   <<"Magma data blocksize cannot be set until the cluster is "
-                     "fully running 7.2">>}],
-                 E22),
-
-    %% put back the compat_mode to 7.6
-    meck:expect(cluster_compat_mode, supported_compat_version,
-                fun() ->
-                        ?VERSION_76
-                end),
-
     {_OK23, E23} = basic_bucket_params_screening(
         true,
         "HistoryEnterpriseMagma7.1",
@@ -5598,7 +5557,7 @@ build_dynamic_bucket_info_test_teardown() ->
 
 %% Test the output of build_dynamic_bucket_info. Aspirationally this would test
 %% the entire output of the function, but for now it just tests a subset of it.
-build_dynamic_bucket_info_test(Version, IsMagma) ->
+build_dynamic_bucket_info_test(IsMagma) ->
     BucketConfigBase = [{type, membase},
                         {num_replicas, 1},
                         {ram_quota, 1024},
@@ -5644,32 +5603,24 @@ build_dynamic_bucket_info_test(Version, IsMagma) ->
                         end,
                         MainBucketConf)),
 
-            ExpectedConfBase = [{storageQuotaPercentage, 50}],
-            ExpectedConf = ExpectedConfBase ++
-                           case Version of
-                               ?VERSION_71 ->
-                                   [];
-                               ?VERSION_72 ->
-                                   [{historyRetentionSeconds,
-                                     ?HISTORY_RETENTION_SECONDS_DEFAULT},
-                                    {historyRetentionBytes,
-                                     ?HISTORY_RETENTION_BYTES_DEFAULT},
-                                    {historyRetentionCollectionDefault,
-                                     ?HISTORY_RETENTION_COLLECTION_DEFAULT_DEFAULT},
-                                    {magmaKeyTreeDataBlockSize,
-                                     ?MAGMA_KEY_TREE_DATA_BLOCKSIZE},
-                                    {magmaSeqTreeDataBlockSize,
-                                     ?MAGMA_SEQ_TREE_DATA_BLOCKSIZE}]
-                           end,
+            ExpectedConf =
+                [{storageQuotaPercentage, 50},
+                 {historyRetentionSeconds,
+                  ?HISTORY_RETENTION_SECONDS_DEFAULT},
+                 {historyRetentionBytes,
+                  ?HISTORY_RETENTION_BYTES_DEFAULT},
+                 {historyRetentionCollectionDefault,
+                  ?HISTORY_RETENTION_COLLECTION_DEFAULT_DEFAULT},
+                 {magmaKeyTreeDataBlockSize,
+                  ?MAGMA_KEY_TREE_DATA_BLOCKSIZE},
+                 {magmaSeqTreeDataBlockSize,
+                  ?MAGMA_SEQ_TREE_DATA_BLOCKSIZE}],
 
             ?assertEqual(ExpectedConf, MagmaBucketConf)
     end.
 
 build_dynamic_bucket_info_test_() ->
-    Tests = [{?VERSION_71, false, false},
-             {?VERSION_71, true, false},
-             {?VERSION_71, true, true},
-             {?VERSION_72, false, false},
+    Tests = [{?VERSION_72, false, false},
              {?VERSION_72, true, false},
              {?VERSION_72, true, true}],
 
@@ -5677,7 +5628,7 @@ build_dynamic_bucket_info_test_() ->
                       {lists:flatten(io_lib:format(
                                        "Version ~p, Enterprise ~p, Magma ~p",
                                        [Version, IsEnterprise, IsMagma])),
-                       ?cut(build_dynamic_bucket_info_test(Version, IsMagma))}
+                       ?cut(build_dynamic_bucket_info_test(IsMagma))}
               end,
 
     {foreachx,
@@ -5933,34 +5884,34 @@ parse_validate_storage_mode_test_() ->
     %%            ExpectedResult}.
     TestArgs =
         [%% New bucket creates.
-         {{undefined, "magma", true, ?VERSION_71, true, false, false},
+         {{undefined, "magma", true, ?VERSION_72, true, false, false},
           ok},
-         {{undefined, "magma", true, ?VERSION_71, false, false, false},
+         {{undefined, "magma", true, ?VERSION_72, false, false, false},
           error},
          {{undefined, "magma", true, ?VERSION_76, true,
            false, false}, ok},
          {{undefined, "magma", true, ?VERSION_76, false,
            false, false}, error},
-         {{undefined, "couchstore", true, ?VERSION_71, true,
+         {{undefined, "couchstore", true, ?VERSION_72, true,
            false, false}, ok},
-         {{undefined, "couchstore", true, ?VERSION_71, false,
+         {{undefined, "couchstore", true, ?VERSION_72, false,
            false, false}, ok},
          {{undefined, "couchstore", true, ?VERSION_76, true,
            false, false}, ok},
          {{undefined, "couchstore", true, ?VERSION_76, false,
            false, false}, ok},
          %% Storage mode migration.
-         {{"magma", "couchstore", false, ?VERSION_71, true, true, false},
+         {{"magma", "couchstore", false, ?VERSION_72, true, true, false},
           error},
-         {{"magma", "couchstore", false, ?VERSION_71, false, true, false},
+         {{"magma", "couchstore", false, ?VERSION_72, false, true, false},
           error},
          {{"magma", "couchstore", false, ?VERSION_76, true,
            true, false}, ok},
          {{"magma", "couchstore", false, ?VERSION_76, false,
            true, false}, error},
-         {{"couchstore", "magma", false, ?VERSION_71, true, true, false},
+         {{"couchstore", "magma", false, ?VERSION_72, true, true, false},
           error},
-         {{"couchstore", "magma", false, ?VERSION_71, false,
+         {{"couchstore", "magma", false, ?VERSION_72, false,
            true, false}, error},
          {{"couchstore", "magma", false, ?VERSION_76, true,
            true, false}, ok},
@@ -5969,9 +5920,9 @@ parse_validate_storage_mode_test_() ->
          {{"couchstore", "magma", false, ?VERSION_76, false,
            true, true}, error},
          %% Couchstore bucket updates.
-         {{"couchstore", undefined, false, ?VERSION_71, true,
+         {{"couchstore", undefined, false, ?VERSION_72, true,
            false, false}, ok},
-         {{"couchstore", undefined, false, ?VERSION_71, false,
+         {{"couchstore", undefined, false, ?VERSION_72, false,
            false, false}, ok},
          {{"couchstore", undefined, false, ?VERSION_76, true,
            false, false}, ok},
