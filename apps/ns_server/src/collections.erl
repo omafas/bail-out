@@ -1374,7 +1374,6 @@ update_manifest_test_modules() ->
 update_manifest_test_setup() ->
     meck:new(update_manifest_test_modules(), [passthrough]),
 
-    meck:expect(cluster_compat_mode, is_cluster_72, fun () -> true end),
     meck:expect(cluster_compat_mode, is_cluster_76, fun () -> true end),
     meck:expect(cluster_compat_mode, is_cluster_79, fun () -> true end),
     meck:expect(cluster_compat_mode, is_enterprise, fun () -> true end),

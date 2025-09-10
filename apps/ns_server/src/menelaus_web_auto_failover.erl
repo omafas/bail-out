@@ -345,11 +345,7 @@ disk_non_responsiveness_validators() ->
      validate_enabled_param(KeyEnabled, KeyTimePeriod, _)].
 
 preserve_durability_majority_validators() ->
-    case cluster_compat_mode:is_cluster_72() of
-        false -> [];
-        true ->
-            [validator:boolean(failoverPreserveDurabilityMajority, _)]
-    end.
+    [validator:boolean(failoverPreserveDurabilityMajority, _)].
 
 failover_ephemeral_no_replicas_validators() ->
     case cluster_compat_mode:is_cluster_79() of
@@ -462,8 +458,7 @@ get_extra_settings(Config) ->
                [{failoverPreserveDurabilityMajority,
                  proplists:get_value(
                      ?FAILOVER_PRESERVE_DURABILITY_MAJORITY_CONFIG_KEY,
-                     Config)}
-                   || cluster_compat_mode:is_cluster_72()],
+                     Config)}],
                [{failoverOnDataDiskNonResponsiveness,
                  {[{enabled, DNREnabled}, {timePeriod, DNRTimePeriod}]}} ||
                 {DNREnabled, DNRTimePeriod} <-

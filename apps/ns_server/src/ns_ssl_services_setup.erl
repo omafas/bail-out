@@ -572,15 +572,9 @@ tls_client_opts(Config, PresetOpts) ->
             "hybrid" -> tls_client_certs_opts();
             _ -> []
         end,
-    RawTLSOptions2 =
-        case cluster_compat_mode:is_cluster_72() of
-            true ->
-                IntVsn = internal_ssl_minimum_protocol(),
-                IntVsns = lists:reverse(supported_versions(IntVsn)),
-                [{versions, IntVsns} | RawTLSOptions];
-            false ->
-                RawTLSOptions
-        end,
+    IntVsn = internal_ssl_minimum_protocol(),
+    IntVsns = lists:reverse(supported_versions(IntVsn)),
+    RawTLSOptions2 = [{versions, IntVsns} | RawTLSOptions],
     RawTLSOptions3 = misc:update_proplist(RawTLSOptions2, PresetOpts),
     merge_ns_config_tls_options(client, ?MODULE, RawTLSOptions3).
 

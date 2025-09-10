@@ -862,27 +862,23 @@ check(xdcr_certs, Opaque, _History, _Stats) ->
 %% @doc check if the mutation history size is over the alert threshold for at
 %% least one vbucket of a bucket
 check(history_size_warning, Opaque, History, _Stats) ->
-    case cluster_compat_mode:is_cluster_72() of
-        true ->
-            {value, Config} = ns_config:search(alert_limits),
-            Threshold = proplists:get_value(history_warning_threshold, Config,
-                                            ?HIST_WARN_PERC),
-            lists:foreach(
-              fun (Bucket) ->
-                      Key = {history_size_warning, Bucket},
-                      case other_node_already_alerted(Key, History) of
-                          false ->
-                              case get_history_size_alert(Bucket, Threshold) of
-                                  ok -> ok;
-                                  Err -> global_alert(Key, Err)
-                              end;
-                          true ->
-                              ok
-                      end
-              end, ns_bucket:get_bucket_names());
-        false ->
-            ok
-    end,
+    {value, Config} = ns_config:search(alert_limits),
+    Threshold = proplists:get_value(history_warning_threshold, Config,
+                                    ?HIST_WARN_PERC),
+    lists:foreach(
+      fun (Bucket) ->
+              Key = {history_size_warning, Bucket},
+              case other_node_already_alerted(Key, History) of
+                  false ->
+                      case get_history_size_alert(Bucket, Threshold) of
+                          ok -> ok;
+                          Err -> global_alert(Key, Err)
+                      end;
+                  true ->
+                      ok
+              end
+      end, ns_bucket:get_bucket_names()),
+
     Opaque;
 
 check(memory_threshold, Opaque, _History, Stats) ->

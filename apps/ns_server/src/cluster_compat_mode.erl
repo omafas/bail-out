@@ -23,7 +23,6 @@
          is_index_aware_rebalance_on/0,
          is_index_pausing_on/0,
          rebalance_ignore_view_compactions/0,
-         is_cluster_72/0,
          is_version_72/1,
          is_cluster_76/0,
          is_version_76/1,
@@ -133,9 +132,6 @@ is_enabled(FeatureVersion) ->
 
 is_version_72(ClusterVersion) ->
     is_enabled_at(ClusterVersion, ?VERSION_72).
-
-is_cluster_72() ->
-    is_enabled(?VERSION_72).
 
 is_version_76(ClusterVersion) ->
     is_enabled_at(ClusterVersion, ?VERSION_76).

@@ -191,7 +191,6 @@ class Cluster:
                                      data=code).text == "true"
 
         self.is_enterprise = get_bool("cluster_compat_mode:is_enterprise().")
-        self.is_72 = get_bool("cluster_compat_mode:is_cluster_72().")
         self.is_76 = get_bool("cluster_compat_mode:is_cluster_76().")
         self.is_79 = get_bool("cluster_compat_mode:is_cluster_79().")
         self.is_serverless = get_bool("config_profile:is_serverless().")

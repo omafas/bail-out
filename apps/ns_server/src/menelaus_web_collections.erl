@@ -125,8 +125,7 @@ history_validator(BucketConfig, State) ->
 
 collection_modifiable_validators(BucketConfig) ->
     HistoryAllowedValues =
-        case cluster_compat_mode:is_enterprise() andalso
-             cluster_compat_mode:is_cluster_72() of
+        case cluster_compat_mode:is_enterprise() of
             true -> ["true", "false"];
             false -> ["false"]
         end,

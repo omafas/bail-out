@@ -539,8 +539,7 @@ history_retention_collection_default(BucketConfig) ->
     %% History can only be true for a magma bucket.
     proplists:get_value(history_retention_collection_default, BucketConfig,
                         ?HISTORY_RETENTION_COLLECTION_DEFAULT_DEFAULT)
-    andalso is_magma(BucketConfig)
-    andalso cluster_compat_mode:is_cluster_72().
+    andalso is_magma(BucketConfig).
 
 config_upgrade_to_80(_Config) ->
     %% Remove the hidden setting allow_online_eviction_policy_change as it's now

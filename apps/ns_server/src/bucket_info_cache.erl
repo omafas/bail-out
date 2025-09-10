@@ -333,11 +333,9 @@ build_bucket_capabilities(BucketConfig) ->
                      {'subdoc.DocumentMacroSupport', true},
                      {'subdoc.ReviveDocument', true},
                      {'nonDedupedHistory',
-                      cluster_compat_mode:is_cluster_72() and
                       cluster_compat_mode:is_enterprise() and
                       ns_bucket:is_magma(BucketConfig)},
-                     {'dcp.IgnorePurgedTombstones',
-                      cluster_compat_mode:is_cluster_72()},
+                     {'dcp.IgnorePurgedTombstones', true},
                      {preserveExpiry,
                       cluster_compat_mode:is_cluster_76()},
                      {querySystemCollection,
@@ -655,7 +653,6 @@ membase_bucket_capabilities_test_() ->
 verify_compatibility_test() ->
     meck:new(cluster_compat_mode, [passthrough]),
     config_profile:load_default_profile_for_test(),
-    meck:expect(cluster_compat_mode, is_cluster_72, fun () -> true end),
     meck:expect(cluster_compat_mode, is_cluster_76, fun () -> true end),
     meck:expect(cluster_compat_mode, is_cluster_79, fun () -> true end),
     meck:expect(cluster_compat_mode, is_enterprise, fun () -> true end),

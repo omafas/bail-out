@@ -53,7 +53,6 @@ class AutoFailoverSettingsTestBase(testlib.BaseTestSet):
         self.prev_settings = testlib.get(self.cluster, self.endpoint).json()
         self.init_result_keys(list(self.prev_settings.keys()))
         self.is_enterprise = self.cluster.is_enterprise
-        self.is_72 = self.cluster.is_72
         self.is_76 = self.cluster.is_76
         self.is_79 = self.cluster.is_79
         self.is_serverless = self.cluster.is_serverless
@@ -85,13 +84,7 @@ class AutoFailoverSettingsTestBase(testlib.BaseTestSet):
             assert 'canAbortRebalance' in self.post_data_keys
             assert 'failoverOnDataDiskIssues[enabled]' in self.post_data_keys
             assert 'failoverOnDataDiskIssues[timePeriod]' in self.post_data_keys
-
-            if self.is_72:
-                assert 'failoverPreserveDurabilityMajority' in \
-                    self.post_data_keys
-            else:
-                assert not 'failoverPreserveDurabilityMajority' in \
-                    self.post_data_keys
+            assert 'failoverPreserveDurabilityMajority' in self.post_data_keys
 
             if self.is_76:
                 assert 'disableMaxCount' in self.post_data_keys
@@ -406,11 +399,7 @@ class AutoFailoverSettingsTestBase(testlib.BaseTestSet):
         if self.is_76:
             return 'failoverServerGroup'
 
-        if self.is_72:
-            return random.choice(['failoverServerGroup', 'disableMaxCount'])
-
-        return random.choice(['failoverServerGroup', 'disableMaxCount',
-                              'failoverPreserveDurabilityMajority'])
+        return random.choice(['failoverServerGroup', 'disableMaxCount'])
 
     """
     Given an input dictionary with possible parameter value(s):
