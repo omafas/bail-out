@@ -89,19 +89,24 @@ rest_request(Method, URL, Headers, MimeType, Body, HiddenAuth, HTTPOptions) ->
     NewHeaders = rest_add_mime_type(NewHeaders0, MimeType),
     Timeout = proplists:get_value(timeout, HTTPOptions, 30000),
     HTTPOptions1 = lists:keydelete(timeout, 1, HTTPOptions),
-    HTTPOptions2 = add_tls_options(URL, HTTPOptions1),
-    lhttpc:request(URL, Method, NewHeaders, Body, Timeout, HTTPOptions2).
+    VerifyServer = proplists:get_value(server_verification, HTTPOptions1, true),
+    HTTPOptions2 = lists:keydelete(server_verification, 1, HTTPOptions1),
 
-add_tls_options("https://" ++ _, Options) ->
+    HTTPOptions3 = add_tls_options(URL, HTTPOptions2, VerifyServer),
+    lhttpc:request(URL, Method, NewHeaders, Body, Timeout, HTTPOptions3).
+
+add_tls_options("https://" ++ _, Options, VerifyServer) ->
     ConnectOptions = proplists:get_value(connect_options, Options, []),
     TLSOptions =
-        case ns_server_cert:this_node_uses_self_generated_certs() of
-            true -> [];
-            false -> ns_ssl_services_setup:ssl_client_opts()
+        case VerifyServer of
+            true ->
+                ns_ssl_services_setup:ssl_client_opts();
+            false ->
+                ns_ssl_services_setup:ssl_no_peer_verification_client_opts()
         end,
     NewConnectOptions = misc:update_proplist(TLSOptions, ConnectOptions),
     misc:update_proplist(Options, [{connect_options, NewConnectOptions}]);
-add_tls_options("http://" ++ _, Options) -> Options.
+add_tls_options("http://" ++ _, Options, _) -> Options.
 
 decode_json_response_ext({ok, {{200 = _StatusCode, _} = _StatusLine,
                                _Headers, Body} = _Result},

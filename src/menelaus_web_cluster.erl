@@ -482,7 +482,10 @@ call_add_node(OtherScheme, OtherHost, OtherPort, HiddenAuth, AFamily,
                 {SVCPayload, "/controller/addNodeV2"}
         end,
 
-    Options = [{connect_options, [AFamily]}],
+    GeneratedCerts = ns_server_cert:this_node_uses_self_generated_certs(
+                       ns_config:latest()),
+    Options = [{connect_options, [AFamily]},
+               {server_verification, not GeneratedCerts}],
 
     Res = menelaus_rest:json_request_hilevel(
             post,

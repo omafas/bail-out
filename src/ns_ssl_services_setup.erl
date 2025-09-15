@@ -36,6 +36,7 @@
          get_user_name_from_client_cert/1,
          set_node_certificate_chain/4,
          ssl_client_opts/0,
+         ssl_no_peer_verification_client_opts/0,
          configured_ciphers_names/2,
          honor_cipher_order/1,
          honor_cipher_order/2,
@@ -506,6 +507,9 @@ ssl_client_opts() ->
      {verify, verify_peer},
      {depth, ?ALLOWED_CERT_CHAIN_LENGTH},
      {reuse_sessions, false}].
+
+ssl_no_peer_verification_client_opts() ->
+    [{verify, verify_none}].
 
 start_link_rest_service() ->
     case service_ports:get_port(ssl_rest_port) of
