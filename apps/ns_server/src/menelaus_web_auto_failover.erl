@@ -99,7 +99,12 @@ default_config(?MIN_SUPPORTED_VERSION, IsEnterprise) ->
        {failover_on_data_disk_issues, [{enabled, false},
                                        {timePeriod, 120}]},
        {max_count, 1},
-       {?CAN_ABORT_REBALANCE_CONFIG_KEY, IsEnterprise}]}].
+       {?CAN_ABORT_REBALANCE_CONFIG_KEY, IsEnterprise},
+       %% Prior to 8.0 this was set in an upgrade function. As all supported
+       %% prior releases will already have it set it's not needed in upgrade
+       %% but is still needed for new configurations.
+       {?FAILOVER_PRESERVE_DURABILITY_MAJORITY_CONFIG_KEY,
+        ?FAILOVER_PRESERVE_DURABILITY_MAJORITY_DEFAULT}]}].
 
 max_events_allowed() ->
     100.
