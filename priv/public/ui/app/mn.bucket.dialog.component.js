@@ -272,8 +272,7 @@ class MnBucketDialogComponent extends MnLifeCycleHooksToStream {
       .subscribe(v => this.maybeDisableField('purgeInterval', v));
 
     if (this.bucket) {
-      ['name', 'bucketType', 'conflictResolutionType','storageBackend','numVBuckets',
-        'evictionPolicyEphemeral']
+      ['name', 'bucketType', 'conflictResolutionType','storageBackend','numVBuckets']
         .forEach(field =>
                  this.maybeDisableField(field, false));
 
