@@ -89,8 +89,8 @@ default_roles() ->
       [{name, <<"Read-Only Admin">>},
        {folder, admin},
        {desc, <<"Can view all cluster statistics. This user can access the "
-                "web console. This user cannot read security related "
-                "settings">>},
+                "web console. This user cannot read security-related "
+                "information, including listing users or groups.">>},
        {ce, true}],
       [{[{bucket, any}, data], none},
        {[{bucket, any}, fts], none},
@@ -98,7 +98,7 @@ default_roles() ->
        {[admin, security], none},
        {[admin, security_info], none},
        {[admin, stats_export], [read]},
-       {[admin, users], [read]},
+       {[admin, users], none},
        {[admin], none},
        {[eventing], none},
        {[analytics], none},
@@ -1754,7 +1754,7 @@ ro_admin_test__() ->
     ?assertEqual(false, is_allowed({[admin, security], write}, Roles)),
     ?assertEqual(false, is_allowed({[admin, security], read}, Roles)),
     ?assertEqual(false, is_allowed({[admin, security_info], read}, Roles)),
-    ?assertEqual(true, is_allowed({[admin, users], read}, Roles)),
+    ?assertEqual(false, is_allowed({[admin, users], read}, Roles)),
     ?assertEqual(false, is_allowed({[admin, users], write}, Roles)),
     ?assertEqual(false, is_allowed({[admin, event], write}, Roles)),
     ?assertEqual(false, is_allowed({[admin, event], read}, Roles)),
@@ -2354,7 +2354,7 @@ produce_roles_by_permission_test__() ->
             {[admin, security, admin], write})},
       {"users permission",
        Test([admin, user_admin_local, user_admin_external,
-             ro_admin, security_admin, ro_security_admin],
+             security_admin, ro_security_admin],
             {[admin, users], any})},
       {"security_info permission",
        Test([user_admin_local, user_admin_external, admin, ro_security_admin,
