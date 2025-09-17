@@ -63,8 +63,6 @@ supported_setting_names() ->
      {tcp_user_timeout, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {free_connection_pool_size, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {max_client_connection_details, {int, 0, ?MAX_32BIT_SIGNED_INT}},
-     {fusion_migration_rate_limit, {int, 0, ?MAX_32BIT_SIGNED_INT}},
-     {fusion_sync_rate_limit, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {dcp_consumer_max_marker_version, {one_of, ["2.0", "2.2"]}},
      {dcp_snapshot_marker_hps_enabled, bool},
      {dcp_snapshot_marker_purge_seqno_enabled, bool}]
