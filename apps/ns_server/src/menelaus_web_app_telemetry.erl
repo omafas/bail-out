@@ -22,12 +22,14 @@
 %%%===================================================================
 
 handle_get(Req) ->
+    menelaus_util:assert_is_enterprise(),
     menelaus_util:assert_is_79(),
 
     menelaus_web_settings2:handle_get([], params(), undefined, get_config(),
                                       Req).
 
 handle_post(Req) ->
+    menelaus_util:assert_is_enterprise(),
     menelaus_util:assert_is_79(),
 
     menelaus_web_settings2:handle_post(
