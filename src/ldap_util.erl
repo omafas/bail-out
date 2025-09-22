@@ -251,8 +251,7 @@ with_simple_bind(DN, [], _Settings, _Fun) when DN =/= [] ->
 with_simple_bind(DN, Password, Settings, Fun) ->
     with_connection(Settings,
                     fun (Handle) ->
-                            PasswordBin = iolist_to_binary(Password),
-                            Bind = eldap:simple_bind(Handle, DN, PasswordBin),
+                            Bind = eldap:simple_bind(Handle, DN, Password),
                             ?log_debug("Simple bind for DN ~p: ~p",
                                        [ns_config_log:tag_user_name(DN), Bind]),
                             case Bind of
