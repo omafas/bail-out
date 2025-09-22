@@ -581,15 +581,11 @@ verify_fun(Cert, Event, State) ->
                        [Subject, Error]),
 
             Trace = erlang:process_info(self(), [current_stacktrace]),
-            OtpCert = public_key:pkix_decode_cert(State#verify_state.root_cert, otp),
-            InitValidationState =
-                pubkey_cert:init_validation_state(OtpCert, State#verify_state.chain_len, []),
 
             ?log_debug("Certificate validation trace:~n"
-                       "     Initial Context: ~p~n"
                        "     Cert: ~p~n"
                        "     Stack: ~p~n",
-                       [InitValidationState, Cert, Trace]),
+                       [Cert, Trace]),
             {fail, {Error, Subject}};
         {extension, Ext} ->
             ?log_warning(
