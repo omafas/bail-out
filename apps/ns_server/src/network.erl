@@ -70,7 +70,7 @@ socket_close({sslsocket, _, _} = Socket) ->
 socket_close(Socket) ->
     gen_tcp:close(Socket).
 
--spec sockname(ssl:sslsocket() | gen_tcp:socket()) ->
+-spec sockname({ssl, ssl:sslsocket()} | gen_tcp:socket()) ->
     {ok,
         {inet:ip_address(), inet:port_number()} |
          inet:returned_non_ip_address()} |
