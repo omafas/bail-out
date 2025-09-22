@@ -345,23 +345,26 @@ annotate_status(Node, Status, Now, LiveNodes) ->
 send_log_msg() ->
     erlang:send_after(?LOG_INTERVAL, self(), log).
 
-maybe_refresh_tasks_version(#state{nodes = Nodes,
-                                   tasks_hash_nodes = VersionNodes,
-                                   global_tasks_hash = GlobalTasksHash} = State)
-  when Nodes =:= VersionNodes ->
-    %% global tasks are not included in node statuses, so the tasks version may
-    %% still have changed when Nodes =:= VersionNodes, so we pre-compute the
-    %% global tasks hash in case we still need to refresh
-    NewGlobalTasksHash = compute_global_tasks_hash(),
-    case NewGlobalTasksHash =:= GlobalTasksHash of
+maybe_refresh_tasks_version(
+  #state{nodes = Nodes,
+         tasks_hash_nodes = VersionNodes,
+         global_tasks_hash = GlobalTasksHash} = State) ->
+    case Nodes =:= VersionNodes of
         true ->
-            State;
+            %% global tasks are not included in node statuses, so the tasks version may
+            %% still have changed when Nodes =:= VersionNodes, so we pre-compute the
+            %% global tasks hash in case we still need to refresh
+            NewGlobalTasksHash = compute_global_tasks_hash(),
+            case NewGlobalTasksHash =:= GlobalTasksHash of
+                true ->
+                    State;
+                false ->
+                    do_refresh_tasks_version(State, NewGlobalTasksHash)
+            end;
         false ->
+            NewGlobalTasksHash = compute_global_tasks_hash(),
             do_refresh_tasks_version(State, NewGlobalTasksHash)
-    end;
-maybe_refresh_tasks_version(State) ->
-    GlobalTasksHash = compute_global_tasks_hash(),
-    do_refresh_tasks_version(State, GlobalTasksHash).
+    end.
 
 do_refresh_tasks_version(State, GlobalTasksHash) ->
     Nodes = State#state.nodes,
