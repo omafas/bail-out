@@ -16,7 +16,6 @@
 
 handle_settings_get(Req) ->
     Settings = get_settings(),
-    true = (Settings =/= undefined),
     menelaus_util:reply_json(Req, {Settings}).
 
 enterprise_only_settings() ->

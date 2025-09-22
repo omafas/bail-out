@@ -731,7 +731,6 @@ parse_on_behalf_roles(List) ->
         undefined -> [];
         RolesStr ->
             Parsed = menelaus_web_rbac:parse_roles(RolesStr),
-            true = Parsed =/= {error, _},
             {GoodRoles, BadRoles} = menelaus_roles:validate_roles(Parsed),
             BadRoles /= [] andalso
                 ?log_warning("ignoring invalid roles in on-behalf-extras: ~p",
