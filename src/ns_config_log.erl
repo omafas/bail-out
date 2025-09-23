@@ -28,11 +28,11 @@
 -record(state, {buckets=[]}).
 
 %% state sanitization
--export([format_status/2, tag_user_data/1, tag_user_name/1, tag_doc_id/1,
+-export([format_status/1, tag_user_data/1, tag_user_name/1, tag_doc_id/1,
          tag_user_props/1, tag_misc_item/1]).
 
-format_status(_Opt, [_PDict, State]) ->
-    sanitize(State).
+format_status(#{state := State}) ->
+    #{state => sanitize(State)}.
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).

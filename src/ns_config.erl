@@ -90,10 +90,10 @@
 -export([stop/0, resave/0, reannounce/0]).
 
 %% state sanitization
--export([format_status/2]).
+-export([format_status/1]).
 
-format_status(_Opt, [_PDict, State]) ->
-    ns_config_log:sanitize(State).
+format_status(#{state := State}) ->
+    #{state => ns_config_log:sanitize(State)}.
 
 %% API
 
