@@ -323,7 +323,7 @@ validate_pkey(PKeyPemBin, PassFun) ->
             end;
         [{_Type, _, CipherInfo} = Entry] ->
             try {supported_pkey_cipher(CipherInfo),
-                 element(1, public_key:pem_entry_decode(Entry, PassFun()))} of
+                 element(1, public_key:pem_entry_decode(Entry, PassFun))} of
                 {true, T} when ?SUPPORTED_PKEY_TYPE(T) ->
                     {ok, Entry};
                 {false, _} ->
@@ -357,7 +357,7 @@ validate_cert_and_pkey({'Certificate', DerCert, not_encrypted},
                        PKey, PassphraseFun) ->
     case validate_pkey(PKey, PassphraseFun) of
         {ok, DerKey} ->
-            DecodedKey = public_key:pem_entry_decode(DerKey, PassphraseFun()),
+            DecodedKey = public_key:pem_entry_decode(DerKey, PassphraseFun),
 
             Msg = <<"1234567890">>,
             Signature = public_key:sign(Msg, sha, DecodedKey),
@@ -961,7 +961,7 @@ with_test_otp_server(Fun, ChainPem, PKeyPem, PassphraseFun) ->
     ChainDer = [D || {'Certificate', D, not_encrypted} <- ChainEntries],
 
     [{KeyType, _, _} = PKeyEntry] = public_key:pem_decode(PKeyPem),
-    PrivateKey = public_key:pem_entry_decode(PKeyEntry, PassphraseFun()),
+    PrivateKey = public_key:pem_entry_decode(PKeyEntry, PassphraseFun),
     {_, KeyDer, _} = public_key:pem_entry_encode(KeyType, PrivateKey),
 
     ServerOpts = lists:map(
@@ -972,13 +972,13 @@ with_test_otp_server(Fun, ChainPem, PKeyPem, PassphraseFun) ->
     case ssl:listen(0, ServerOpts) of
         {ok, LSocket} ->
             Accepter = spawn(fun () ->
-                                 {ok, HS} = ssl:transport_accept(LSocket,
-                                                                 30000),
-                                 {ok, S} = ssl:handshake(HS, 30000),
-                                 receive
-                                    stop -> catch ssl:close(S)
-                                 after 30000 -> ok
-                                 end
+                                     {ok, HS} = ssl:transport_accept(LSocket,
+                                                                     30000),
+                                     {ok, S} = ssl:handshake(HS, 30000),
+                                     receive
+                                         stop -> catch ssl:close(S)
+                                     after 30000 -> ok
+                                     end
                              end),
             try
                 {ok, {_, Port}} = ssl:sockname(LSocket),

@@ -391,14 +391,24 @@ preflight_base_url(BaseURL, {upload_proxy, URL}) ->
                                      BaseURL,
                                      [{proxy, URL},
                                       {proxy_ssl_options,
-                                       [{server_name_indication, Host}]}]);
+                                       [{server_name_indication, Host}]}] ++
+                                         build_connect_options(BaseURL));
         {error, _} = Error ->
             Error
     end;
 preflight_base_url(BaseURL, false) ->
-    preflight_lhttpc_request("Base", BaseURL, []).
+    preflight_lhttpc_request("Base", BaseURL, build_connect_options(BaseURL)).
 
 preflight_proxy_url(false) ->
     ok;
 preflight_proxy_url({upload_proxy, URL}) ->
-    preflight_lhttpc_request("Proxy", URL, []).
+    preflight_lhttpc_request("Proxy", URL, build_connect_options(URL)).
+
+build_connect_options(URL) ->
+    case URL of
+        "https://" ++ _ ->
+            [{connect_options,
+              [{verify, verify_none}]}];
+        "http://" ++ _ ->
+            []
+    end.

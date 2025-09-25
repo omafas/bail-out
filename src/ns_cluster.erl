@@ -1141,14 +1141,14 @@ check_otp_tls_connectivity(Host, Port, AFamily, Options) ->
     %% cb_dist might not have updated the password in ssl_dist_opts yet,
     %% so update it here
     PassFun = ns_secrets:get_pkey_pass(client_cert),
-    Opts2 = misc:update_proplist(Opts, [{password, PassFun()}]),
+    Opts2 = misc:update_proplist(Opts, [{password, PassFun}]),
     SNIOpts = case inet:parse_address(Host) of
                   {ok, _} -> [];
                   _ -> [{server_name_indication, Host}]
               end,
     AllOpts = [binary, {active, false}, {packet, 4},
                AFamily, {nodelay, true}, {erl_dist, true}] ++ SNIOpts ++
-               lists:ukeysort(1, Opts2 ++ TLSOpts),
+        lists:ukeysort(1, Opts2 ++ TLSOpts),
     AllOpts2 =
         lists:foldl(
           fun ({cert, Cert}, Acc) ->

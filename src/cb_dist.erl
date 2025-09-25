@@ -678,12 +678,11 @@ maybe_update_pkey_passphrase(Type, #s{is_pkey_encrypted = IsPKeyEncrypted}) ->
         #{Type := true} ->
             case extract_pkey_passphrase(Type) of
                 {ok, PassFun} ->
-                    Pass = PassFun(),
-                    case set_dist_tls_opts(Type, [{password, Pass}]) of
+                    case set_dist_tls_opts(Type, [{password, PassFun}]) of
                         ok ->
                             info_msg("Updated ~p ssl_dist_opts (password)",
                                      [Type]),
-                            case Pass of
+                            case PassFun() of
                                 undefined ->
                                     error_msg("Extracted ~p pkey passphrase is "
                                               "undefined", [Type]),

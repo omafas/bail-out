@@ -211,7 +211,7 @@ handle_arguments(Arguments) ->
                          Flag =:= name;
                          Flag =:= hidden;
                          Flag =:= setcookie;
-                         Flag =:= detach;
+                         Flag =:= detached;
                          Flag =:= noinput;
                          Flag =:= noshell;
                          Flag =:= bindir;

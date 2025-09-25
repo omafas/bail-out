@@ -446,7 +446,8 @@ ssl_auth_options() ->
         disable ->
             [];
         enable ->
-            [{verify, verify_peer}, {depth, ?ALLOWED_CERT_CHAIN_LENGTH}];
+            [{fail_if_no_peer_cert, false},
+             {verify, verify_peer}, {depth, ?ALLOWED_CERT_CHAIN_LENGTH}];
         mandatory ->
             [{fail_if_no_peer_cert, true},
              {verify, verify_peer}, {depth, ?ALLOWED_CERT_CHAIN_LENGTH}]
@@ -510,16 +511,16 @@ ssl_server_opts() ->
     Versions = supported_versions(ssl_minimum_protocol(ns_server)),
     RawTLSOptions =
         ssl_auth_options() ++
-            [{keyfile, pkey_file_path(node_cert)},
-             {certfile, chain_file_path(node_cert)},
-             {versions, Versions},
-             {cacerts, read_ca_certs(ca_file_path())},
-             {dh, dh_params_der()},
-             {ciphers, CipherSuites},
-             {honor_cipher_order, Order},
-             {secure_renegotiate, true},
-             {client_renegotiation, ClientReneg},
-             {password, PassphraseFun()}],
+        [{keyfile, pkey_file_path(node_cert)},
+         {certfile, chain_file_path(node_cert)},
+         {versions, Versions},
+         {cacerts, read_ca_certs(ca_file_path())},
+         {dh, dh_params_der()},
+         {ciphers, CipherSuites},
+         {honor_cipher_order, Order},
+         {secure_renegotiate, true},
+         {client_renegotiation, ClientReneg},
+         {password, PassphraseFun}],
     merge_ns_config_tls_options(server, ?MODULE, RawTLSOptions).
 
 tls_option_versions(anti_replay) -> ['tlsv1.3'];
