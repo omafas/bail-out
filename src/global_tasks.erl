@@ -400,7 +400,7 @@ teardown(_) ->
 
 -define(EXTRAS, [[], [{test, <<"test">>}]]).
 -define(UUID, <<"test">>).
--define(SNAPSHOT, #{{bucket, "default", uuid} => {?UUID, 0}}).
+-define(SNAPSHOT, begin #{{bucket, "default", uuid} => {?UUID, 0}} end).
 
 %% Generate tasks of all possible type and status, and for each of those
 %% configurations, also generate one with/without a bucket, and with/without a
