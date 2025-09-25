@@ -117,16 +117,9 @@ manage_replicators(Bucket, NeededNodes, NeededConnections) ->
     RepFeatures = get_replication_features(),
     ExpectedNodes = [{Node, RepFeatures} || Node <- NeededNodes],
 
-
-    ToKill = lists:filter(
-               fun({Node, _Features}) ->
-                       case lists:keyfind(Node, 1, ExpectedNodes) of
-                           %% not found - keep - kill
-                           false -> true;
-                           %% match - don't keep - don't kill
-                           _ -> false
-                       end
-               end, CurrNodes),
+    %% CurrNodes includes entries for each connection, so we have to remove the
+    %% duplicates to find those that we should kill.
+    ToKill = lists:uniq(CurrNodes) -- ExpectedNodes,
 
     [kill_replicator(Bucket, CurrId, NeededConnections) || CurrId <- ToKill],
     [start_replicator(Bucket, NewId, NeededConnections) ||
