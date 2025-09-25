@@ -20,7 +20,7 @@
 -type rbac_user_id() :: string().
 -type rbac_password() :: string().
 -type rbac_identity_type() :: unknown | wrong_token | anonymous | admin |
-                              ro_admin | bucket | external | local |
+                              bucket | external | local |
                               local_token | stats_reader.
 -type rbac_identity() :: {rbac_user_id(), rbac_identity_type()}.
 -type rbac_role_param() :: string() | {string(), binary()} | any.
