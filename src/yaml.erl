@@ -65,7 +65,7 @@ format(#{} = Map) ->
                   [[KBin, ":"]] ++
                   ["  " ++ L || L <- MultiLine]
           end
-      end, maps:to_list(Map));
+      end, maps:to_list(maps:iterator(Map, ordered)));
 format([]) ->
     [];
 format([El | Tail]) ->
@@ -86,9 +86,7 @@ format(A) when is_atom(A) ->
 format(B) when is_binary(B) ->
     [["'", B, "'"]].
 
-%% XXX: disable as the last test is non-determistic due to maps:to_list being
-%% arbitrary in its results.
--ifdef(TESTDisabled).
+-ifdef(TEST).
 encode_test() ->
     ?assertEqual(encode([]), <<>>),
     ?assertEqual(encode(#{}), <<>>),
@@ -151,16 +149,16 @@ encode_test() ->
                    "        target_label: 'name'\n"
                    "    metrics_path: '/_prometheusMetrics'\n"
                    "    relabel_configs:\n"
-                   "      - source_labels:\n"
-                   "          - '__address__'\n"
-                   "        target_label: 'instance'\n"
-                   "        regex: '127\\.0\\.0\\.1:9000'\n"
+                   "      - regex: '127\\.0\\.0\\.1:9000'\n"
                    "        replacement: 'ns_server'\n"
-                   "      - source_labels:\n"
+                   "        source_labels:\n"
                    "          - '__address__'\n"
                    "        target_label: 'instance'\n"
-                   "        regex: '127\\.0\\.0\\.1:9200'\n"
+                   "      - regex: '127\\.0\\.0\\.1:9200'\n"
                    "        replacement: 'fts'\n"
+                   "        source_labels:\n"
+                   "          - '__address__'\n"
+                   "        target_label: 'instance'\n"
                    "    static_configs:\n"
                    "      - targets:\n"
                    "          - '127.0.0.1:9000'\n"
