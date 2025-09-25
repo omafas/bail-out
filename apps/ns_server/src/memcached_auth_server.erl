@@ -240,8 +240,8 @@ authenticate(<<"OAUTHBEARER">>, AuthReq) ->
             case sasl_decode_oauthbearer_challenge(Challenge) of
                 {ok, {Id, Token}} ->
                     case menelaus_auth:authenticate({jwt, Token}) of
-                        {ok, #authn_res{identity={Id, external}}=AuthnRes, _,
-                         AuditProps} ->
+                        {ok, #authn_res{identity={User, external}}=AuthnRes, _,
+                         AuditProps} when Id =:= undefined orelse Id =:= User ->
                             ?log_debug("JWT Successful authentication for ~p",
                                        [ns_config_log:tag_user_name(Id)]),
                             {ok, AuthnRes, AuditProps};
@@ -338,26 +338,43 @@ sasl_decode_plain_challenge(Challenge) ->
         _:_ -> error
     end.
 
-%% RFC7628
+find_bearer_token(Fields) ->
+    [Token ||
+        Field <- Fields,
+        <<"auth=", AuthRest/binary>> <- [Field],
+        [Type, Token] <- [binary:split(AuthRest, <<" ">>, [trim_all])],
+        string:equal(Type, "bearer", true)
+    ].
+
+%% RFC7628 (oauthbearer), RFC5801 (gs2-header)
 sasl_decode_oauthbearer_challenge(undefined) -> error;
 sasl_decode_oauthbearer_challenge(Challenge) ->
     try base64:decode(Challenge, #{mode => urlsafe}) of
-        <<"n,a=", Rest0/binary>> ->
-            case binary:split(Rest0, <<",">>) of
-                [User, Rest1] ->
-                    case binary:split(Rest1, <<1>>, [global, trim_all]) of
-                        [<<"auth=Bearer ", Token/binary>>] ->
-                            {ok, {binary_to_list(User), binary_to_list(Token)}};
+        FullMessage ->
+            case binary:split(FullMessage, <<1>>, [global, trim_all]) of
+                [GS2Header | AuthFields] ->
+                    case GS2Header of
+                        <<"n,", Rest/binary>> ->
+                            User =
+                                case binary:split(Rest, <<",">>, [trim_all]) of
+                                    [<<"a=", UserBin/binary>> | _] ->
+                                        binary_to_list(UserBin);
+                                    _ ->
+                                        %% No authzid in header
+                                        undefined
+                                end,
+                            case find_bearer_token(AuthFields) of
+                                [Token] ->
+                                    {ok, {User, binary_to_list(Token)}};
+                                _ ->
+                                    error
+                            end;
                         _ ->
-                            error
-                    end;
-                _ ->
-                    error
-            end;
-        _ ->
+                            error % Invalid GS2 header
+                    end
+            end
+    catch _:_ ->
             error
-    catch
-        _:_ -> error
     end.
 
 update_mcd_rbac([], _) -> ok;
@@ -403,14 +420,53 @@ process_data_test() ->
     User3Challenge = <<"AFVzZXIzAGp3dA==">>, % User3/jwt
 
     %% OAUTHBEARER challenges
-    ValidJWTChallenge =
-        <<"bixhPVVzZXIzLGF1dGg9QmVhcmVyIGp3dF90b2tlbgEB">>,
+    %% n,a=User3,\01auth=Bearer jwt_token\01
+    ValidWithAuthzidJWTChallenge =
+        <<"bixhPVVzZXIzLAFhdXRoPUJlYXJlciBqd3RfdG9rZW4B">>,
+    %% n,\01key=value1\01auth=BeArEr jwt_token\01key2=value2\01
+    ValidWithoutAuthzidJWTChallenge =
+        <<"biwBa2V5PXZhbHVlMQFhdXRoPUJlQXJFciBqd3RfdG9rZW4Ba2V5Mj12YWx1ZTIB">>,
+    %% n,a=WrongUser,\01auth=Bearer jwt_token\01
     UserMismatchChallenge =
-        <<"bixhPVdyb25nVXNlcixhdXRoPUJlYXJlciBqd3RfdG9rZW4BAQ==">>,
+        <<"bixhPVdyb25nVXNlciwBYXV0aD1CZWFyZXIgand0X3Rva2VuAQ==">>,
+    %% n,a=User3,\01auth=Bearer invalid_token\01
     InvalidTokenChallenge =
-        <<"bixhPVVzZXIzLGF1dGg9QmVhcmVyIGludmFsaWRfdG9rZW4BAQ==">>,
+        <<"bixhPVVzZXIzLAFhdXRoPUJlYXJlciBpbnZhbGlkX3Rva2VuAQ==">>,
     InvalidFormatChallenge =
         <<"invalid_challenge">>,
+
+    ValidateJWTProps =
+        fun(PropsToValidate) ->
+                [{<<"token">>, {TokenProps}},
+                 {<<"audit_props">>, {AuditProps}}] =
+                    PropsToValidate,
+
+                Rbac = proplists:get_value(<<"rbac">>, TokenProps),
+                Exp = proplists:get_value(<<"exp">>, TokenProps),
+                true = is_number(Exp),
+                {[{<<"User3">>, UserProps}]} = Rbac,
+                {UserData} = UserProps,
+
+                <<"external">> =
+                    proplists:get_value(<<"domain">>, UserData),
+
+                {Buckets} = proplists:get_value(<<"buckets">>,
+                                                UserData),
+                B1 = proplists:get_value(<<"b1">>, Buckets),
+                B2 = proplists:get_value(<<"b2">>, Buckets),
+                {[{<<"privileges">>, _}]} = B1,
+                {[{<<"privileges">>, _}]} = B2,
+
+                <<"jwt">> = proplists:get_value(<<"type">>, AuditProps),
+                <<"test-issuer">> =
+                    proplists:get_value(<<"iss">>, AuditProps),
+                <<"User3">> = proplists:get_value(<<"sub">>,
+                                                  AuditProps),
+                <<"2099-01-01T00:00:00Z">> =
+                    proplists:get_value(<<"expiry_with_leeway">>,
+                                        AuditProps),
+                ok
+        end,
 
     with_mocked_users(
       Users,
@@ -473,37 +529,19 @@ process_data_test() ->
               test_process_data(
                 {?MC_AUTH_REQUEST, undefined,
                  {[{mechanism, <<"OAUTHBEARER">>},
-                   {challenge, ValidJWTChallenge}]}},
+                   {challenge, ValidWithAuthzidJWTChallenge}]}},
                 fun (?MC_AUTH_REQUEST, ?SUCCESS, undefined,
                      {Props}) ->
-                        [{<<"token">>, {TokenProps}},
-                         {<<"audit_props">>, {AuditProps}}] = Props,
+                        ValidateJWTProps(Props)
+                end),
 
-                        Rbac = proplists:get_value(<<"rbac">>, TokenProps),
-                        Exp = proplists:get_value(<<"exp">>, TokenProps),
-                        true = is_number(Exp),
-                        {[{<<"User3">>, UserProps}]} = Rbac,
-                        {UserData} = UserProps,
-
-                        <<"external">> =
-                            proplists:get_value(<<"domain">>, UserData),
-
-                        {Buckets} = proplists:get_value(<<"buckets">>,
-                                                        UserData),
-                        B1 = proplists:get_value(<<"b1">>, Buckets),
-                        B2 = proplists:get_value(<<"b2">>, Buckets),
-                        {[{<<"privileges">>, _}]} = B1,
-                        {[{<<"privileges">>, _}]} = B2,
-
-                        <<"jwt">> = proplists:get_value(<<"type">>, AuditProps),
-                        <<"test-issuer">> =
-                            proplists:get_value(<<"iss">>, AuditProps),
-                        <<"User3">> = proplists:get_value(<<"sub">>,
-                                                          AuditProps),
-                        <<"2099-01-01T00:00:00Z">> =
-                            proplists:get_value(<<"expiry_with_leeway">>,
-                                                AuditProps),
-                        ok
+              test_process_data(
+                {?MC_AUTH_REQUEST, undefined,
+                 {[{mechanism, <<"OAUTHBEARER">>},
+                   {challenge, ValidWithoutAuthzidJWTChallenge}]}},
+                fun (?MC_AUTH_REQUEST, ?SUCCESS, undefined,
+                     {Props}) ->
+                        ValidateJWTProps(Props)
                 end),
 
               %% OAUTHBEARER tests - invalid token
