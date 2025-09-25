@@ -819,7 +819,9 @@ extract_on_behalf_of_authn_res(Req) ->
             case parse_on_behalf_of_header(Header) of
                 {User, Domain} ->
                     try list_to_existing_atom(Domain) of
-                        ExistingDomain ->
+                        ExistingDomain when ExistingDomain =:= local;
+                                            ExistingDomain =:= external;
+                                            ExistingDomain =:= admin ->
                             case parse_on_behalf_extras_header(Req) of
                                 error ->
                                     ?log_debug("Invalid format of "
@@ -828,7 +830,11 @@ extract_on_behalf_of_authn_res(Req) ->
                                                   Header)]),
                                     error;
                                 Extras -> {User, ExistingDomain, Extras}
-                            end
+                            end;
+                        _ ->
+                            ?log_debug("Invalid domain in cb-on-behalf-of: ~s",
+                                       [ns_config_log:tag_user_name(Header)]),
+                            error
                     catch
                         error:badarg ->
                             ?log_debug("Invalid domain in cb-on-behalf-of: ~s",
