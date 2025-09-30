@@ -117,7 +117,9 @@ all_ports() ->
 
      %% Misc ports
      ?define_port(prometheus_http_port,        prometheusPort,  misc, 9123),
-     ?define_port(cont_backup_http_port,       contBackupPort,  misc, 9125),
+
+     %% Continuous backup ports - always runs on kv nodes
+     ?define_port(cont_backup_stats_port, contBackupStatsPort,  misc, 9125),
 
      %% Backup service ports
      ?define_port(backup_http_port,  backupAPI,      backup, 8097),

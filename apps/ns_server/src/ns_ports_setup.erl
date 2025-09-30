@@ -528,7 +528,7 @@ goport_args(cont_backup, Config, _Cmd, _NodeUUID) ->
 
     ["backup"] ++
     build_afamily_requirement("--") ++
-    build_port_args([{"--stats-port", cont_backup_http_port}], Config) ++
+    build_port_args([{"--stats-port", cont_backup_stats_port}], Config) ++
     ["--username=" ++ "@ns_server",
      "--backup-path=" ++ ContBackupDir,
      "--local-host=" ++ misc:local_url(
