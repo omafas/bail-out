@@ -117,16 +117,6 @@ validate_key_algorithm(Key, Algorithm) ->
             {error, lists:flatten(
                       io_lib:format("Invalid key for ~p signing algorithm",
                                     [Algorithm]))};
-        {eddsa, #'SubjectPublicKeyInfo'{
-                   algorithm =
-                       #'AlgorithmIdentifier'{
-                          algorithm = ?'id-Ed25519'
-                         }}} -> ok;
-        {eddsa, #'SubjectPublicKeyInfo'{
-                   algorithm =
-                       #'AlgorithmIdentifier'{
-                          algorithm = ?'id-Ed448'
-                         }}} -> ok;
         {eddsa, _} ->
             {error, lists:flatten(
                       io_lib:format("Invalid key for ~p signing algorithm",
@@ -319,7 +309,7 @@ decode_key(Entry) ->
     catch T:E:S ->
             ?log_error("Unknown error while parsing PEM entry:~n~p",
                        [{T, E, S}]),
-            decode_spki_from_der(Entry)
+            {error, "Invalid key"}
     end.
 
 %% Normalize decoded keys to consistent format
@@ -343,23 +333,6 @@ normalize_key(#'RSAPublicKey'{} = Key) -> Key;
 %% Don't allow private keys (RSAPrivateKey, ECPrivateKey, PrivateKeyInfo) or
 %% unrecognized types.
 normalize_key(_) -> {error, "Invalid key"}.
-
--spec decode_spki_from_der(Entry :: {'SubjectPublicKeyInfo', binary(),
-                                     'not_encrypted'}) ->
-          pubkey() | {error, string()}.
-decode_spki_from_der({'SubjectPublicKeyInfo', Der, _}) when is_binary(Der) ->
-    %% For EdDSA curves (Ed25519 and Ed448), public_key:pem_entry_decode throws
-    %% an error while attempting der_decode('EcpkParameters, asn1_NOVALUE).
-    %% EdDSA curves never contain parameters in AlgorithmIdentifier (RFC 8410).
-    %% Ignore the error while attempting to decode EcpkParameters of NULL.
-    %% See Erlang/OTP Issue #9009.
-    try public_key:der_decode('SubjectPublicKeyInfo', Der)
-    catch T:E:S ->
-            ?log_error("Unknown error der_decode:~n~p", [{T, E, S}]),
-            {error, "Invalid key"}
-    end;
-decode_spki_from_der(_) ->
-    {error, "Invalid key"}.
 
 -spec get_key_from_certificate(#'Certificate'{}) -> pubkey() |
           {error, string()}.

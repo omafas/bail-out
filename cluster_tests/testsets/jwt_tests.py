@@ -653,8 +653,8 @@ class JWTTests(testlib.BaseTestSet):
                 self.cluster, self.endpoint, expected_code=400, json=payload
             )
             err_msg = r.json()["errors"]["issuers"][0]["publicKey"]
-            assert "Invalid key for 'EdDSA' signing algorithm" in err_msg, (
-                f"Expected invalid key error for ES384 key with EdDSA algorithm"
+            assert "Mismatch between algorithm in key" in err_msg, (
+                f"Expected mismatch error for ES384 key with EdDSA algorithm"
             )
 
     def invalid_jwks_test(self):
