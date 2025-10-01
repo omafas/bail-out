@@ -13,7 +13,6 @@
 -include_lib("ns_common/include/cut.hrl").
 
 -include_lib("public_key/include/public_key.hrl").
--include_lib("public_key/include/PKCS-FRAME.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
