@@ -22,7 +22,7 @@
   0},
  {<<"jose">>,
   {git,"https://github.com/couchbasedeps/erlang-jose.git",
-       {ref,"eb6de2cb506b55533f550a1b0776c81b15317e23"}},
+       {ref,"e174687ec387996c79d6444296fd93e1a6646dca"}},
   0},
  {<<"ranch">>,{pkg,<<"ranch">>,<<"1.8.0">>},1}]}.
 [
