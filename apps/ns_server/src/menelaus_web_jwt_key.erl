@@ -71,6 +71,10 @@ ec_params_to_algorithm('secp384r1') ->
     'ES384';
 ec_params_to_algorithm('secp521r1') ->
     'ES512';
+ec_params_to_algorithm('ed448') ->
+    'EdDSA';
+ec_params_to_algorithm('ed25519') ->
+    'EdDSA';
 ec_params_to_algorithm(Parameters) when is_tuple(Parameters) ->
     ec_params_to_algorithm(pubkey_cert_records:namedCurves(Parameters)).
 
@@ -99,7 +103,8 @@ validate_key_algorithm(Key, Algorithm) ->
             {error, lists:flatten(
                       io_lib:format("Invalid key for ~p signing algorithm",
                                     [Algorithm]))};
-        {ecdsa, {#'ECPoint'{}, {namedCurve, Params}}} ->
+        {Type, {#'ECPoint'{}, {namedCurve, Params}}} when Type =:= ecdsa;
+                                                          Type =:= eddsa ->
             case ec_params_to_algorithm(Params) of
                 X when X =:= Algorithm -> ok;
                 Y -> {error,
