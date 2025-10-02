@@ -240,7 +240,7 @@ massage_params(Params) ->
     EventStates = calculate_event_states(Params),
     DisabledUsers = proplists:get_value(disabled_users, Params, []),
 
-    FilteringEnabled = EventStates =/= [] orelse DisabledUsers =/= [],
+    FilteringEnabled = EventStates =/= {[]} orelse DisabledUsers =/= [],
 
     NewParams =
         misc:update_proplist(Params, [{event_states, EventStates},
