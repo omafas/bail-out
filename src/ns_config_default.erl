@@ -239,6 +239,7 @@ default(Vsn) ->
        {num_auxio_threads, <<"default">>},
        {num_nonio_threads, <<"default">>},
        {num_storage_threads, <<"default">>},
+       {magma_flusher_thread_percentage, 20},
        {tcp_keepalive_idle, 360},
        {tcp_keepalive_interval, 10},
        {tcp_keepalive_probes, 3},
@@ -315,6 +316,7 @@ default(Vsn) ->
         {num_auxio_threads, num_auxio_threads},
         {num_nonio_threads, num_nonio_threads},
         {num_storage_threads, num_storage_threads},
+        {magma_flusher_thread_percentage, magma_flusher_thread_percentage},
 
         {logger,
          {[{filename, {"~s/~s", [log_path, log_prefix]}},

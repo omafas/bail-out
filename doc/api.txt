@@ -422,6 +422,7 @@ GET /pools/default/serverGroups =>
   (connection_limit_mode: "disconnect" | "recycle")?
   (free_connection_pool_size: <number>)?
   (max_client_connection_details: <number>)?
+  (magma_flusher_thread_percentage: <number>)?
 }
 
 
