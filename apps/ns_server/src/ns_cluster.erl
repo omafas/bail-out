@@ -1188,7 +1188,7 @@ check_otp_tls_connectivity(Host, Port, AFamily, Options) ->
               end,
     AllOpts = [binary, {active, false}, {packet, 4},
                AFamily, {nodelay, true}, {erl_dist, true}] ++ SNIOpts ++
-               lists:ukeysort(1, Opts2 ++ TLSOpts),
+        lists:ukeysort(1, Opts2 ++ TLSOpts),
     AllOpts2 =
         lists:foldl(
           fun ({cert, Cert}, Acc) ->

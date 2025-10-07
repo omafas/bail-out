@@ -21,7 +21,7 @@
 -export([init/1, handle_cast/2, handle_call/3,
          handle_info/2, terminate/2, code_change/3]).
 
--export([format_status/2]).
+-export([format_status/1]).
 
 -define(MAX_RENAME_RETRIES, 6).
 
@@ -41,12 +41,12 @@
                 sync_froms = [],
                 keys_in_use}).
 
-format_status(_Opt, [_PDict, #state{module = Mod, stuff = Stuff} = State]) ->
+format_status(#{state := #state{module = Mod, stuff = Stuff} = State}) ->
     case erlang:function_exported(Mod, format_status, 1) of
         true ->
-            State#state{stuff = Mod:format_status(Stuff)};
+            #{state => State#state{stuff = Mod:format_status(Stuff)}};
         false ->
-            State
+            #{state => State}
     end.
 
 sync(Module) ->
