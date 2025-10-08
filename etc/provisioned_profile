@@ -1,4 +1,7 @@
 {name, "provisioned"}.
+%% MB-68878: The enabled flag can only be eliminated in this profile once
+%% upgrade from 7.6 is no longer supported
+{{resource_management, enabled}, true}.
 {{resource_management, configure_promql}, true}.
 {{resource_management, configurables},
  ["bucket",
