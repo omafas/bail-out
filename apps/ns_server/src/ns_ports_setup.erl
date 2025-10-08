@@ -527,6 +527,7 @@ goport_args(cont_backup, Config, _Cmd, _NodeUUID) ->
     ContBackupDir = get_writable_subdir(data, "@continuous_backup"),
 
     ["backup"] ++
+    build_afamily_requirement("--") ++
     build_port_args([{"--stats-port", cont_backup_http_port}], Config) ++
     ["--username=" ++ "@ns_server",
      "--backup-path=" ++ ContBackupDir,
