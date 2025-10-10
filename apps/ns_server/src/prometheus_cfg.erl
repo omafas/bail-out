@@ -26,7 +26,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, format_status/2]).
+         terminate/2, code_change/3, format_status/1]).
 
 %% Making it a fun to make sure it doesn't get dumped in logs accidentally
 -type prom_creds() :: fun(() -> {User :: string(), Pass :: string()} |
@@ -632,8 +632,8 @@ terminate(Reason, #s{pruning_pid = PruningPid,
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-format_status(_Opt, [_PDict, #s{cur_settings = Settings} = State]) ->
-    State#s{cur_settings = sanitize_settings(Settings)}.
+format_status(#{state := #s{cur_settings = Settings} = State}) ->
+    #{state => State#s{cur_settings = sanitize_settings(Settings)}}.
 
 derived_metrics_interval(Settings) ->
     case proplists:get_value(derived_metrics_interval, Settings) of

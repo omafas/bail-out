@@ -15,7 +15,7 @@
   {git,"https://github.com/couchbasedeps/gen_smtp.git",
        {ref,"83846d04bef94ef217fdc89d9a34587448de0702"}},
   0},
- {<<"iso8601">>,{pkg,<<"iso8601">>,<<"1.3.3">>},0},
+ {<<"iso8601">>,{pkg,<<"iso8601">>,<<"1.3.4">>},0},
  {<<"jiffy">>,
   {git,"https://github.com/couchbasedeps/jiffy.git",
        {ref,"8bac9d21846a1f62a110305e648cee894d81a2e0"}},
@@ -27,9 +27,9 @@
  {<<"ranch">>,{pkg,<<"ranch">>,<<"1.8.0">>},1}]}.
 [
 {pkg_hash,[
- {<<"iso8601">>, <<"994AFF5DFE760F14A8C4F2D8C3CF500371BF1A8CF309C3C0CB510401064223E0">>},
+ {<<"iso8601">>, <<"7B1F095F86F6CF65E1E5A77872E8E8BF69BD58D4C3A415B3F77D9CC9423ECBB9">>},
  {<<"ranch">>, <<"8C7A100A139FD57F17327B6413E4167AC559FBC04CA7448E9BE9057311597A1D">>}]},
 {pkg_hash_ext,[
- {<<"iso8601">>, <<"BCC7767D691E4D8A26E713F48DA51ABD951BEC4E071AE841F371766F96B46834">>},
+ {<<"iso8601">>, <<"A334469C07F1C219326BC891A95F5EEC8EB12DD8071A3FFF56A7843CB20FAE34">>},
  {<<"ranch">>, <<"49FBCFD3682FAB1F5D109351B61257676DA1A2FDBE295904176D5E521A2DDFE5">>}]}
 ].
