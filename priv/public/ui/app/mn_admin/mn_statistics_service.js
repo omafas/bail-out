@@ -95,13 +95,17 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
 
   function switchToFullStatInfo(config, originConfig) {
     config.step = rangeZoomToStep(originConfig.zoom);
-    config.timeWindow = Math.max(config.step * 2, 360);
     config.start = 0 - rangeZoomToSec(originConfig.zoom);
     if (originConfig.zoom == "minute") {
+      config.timeWindow = Math.max(config.step * 2, 360);
       //in order to make sure that we recieve 12 samples UI
       //should send a bit less seconds
       //e.g. start = - N * step + 1 (- 12 * 10  + 1 = -119)
       config.start += 1;
+    }
+    // adjust the config for other zoom levels
+    else {
+      fixLongChartConfig(config);
     }
   }
 
@@ -109,7 +113,30 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
     let step = rangeZoomToStep(originConfig.zoom);
     config.start = -step;
     config.step = step;
-    config.timeWindow = Math.max(step * 2, 360);
+    // for one-minute charts, need timeWindow at least 360
+    if (originConfig.zoom == "minute") {
+      config.timeWindow = Math.max(config.step * 2, 360);
+    }
+    else {
+      fixLongChartConfig(config);
+    }
+  }
+
+  // for charts showing an hour or more, need to tweak the settings
+  function fixLongChartConfig(config) {
+    // for > 1-minute zoom levels, set timeWindow to step
+    config.timeWindow = config.step;
+    // need to adjust applyFunctions configurations. Possible applyFunctions are:
+    // - []                -> ['avg_over_time']
+    // - ['irate']         -> ['rate']
+    // - ['irate', 'sum']  -> ['rate', 'sum']
+    // - ['sum']           -> ['avg_over_time', 'sum' ]
+    // - ['increase']      -> ['increase'] (no change)
+    config.applyFunctions = config.applyFunctions || ['avg_over_time'];
+    config.applyFunctions = config.applyFunctions.map(func => func === 'irate' ? 'rate' : func);
+    if (config.applyFunctions.includes('sum') && config.applyFunctions.length == 1) {
+      config.applyFunctions.unshift('avg_over_time');
+    }
   }
 
   function createStatsPoller(scope) {
@@ -561,6 +588,9 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
         });
         if (config.alignTimestamps) {
           cfg1.alignTimestamps = true;
+        }
+        if (config.zoom !== "minute") {
+          fixLongChartConfig(cfg1);
         }
         rv.push(cfg1);
       });
