@@ -1349,6 +1349,14 @@ maybe_substitute_user_roles(User) ->
 %% replacements are being done in 7.9. Once 7.9 is the oldest supported
 %% release we no longer have to support this replacement.
 maybe_substitute_roles(Roles) ->
+    case cluster_compat_mode:is_enterprise() of
+        false ->
+            Roles;
+        true ->
+            maybe_substitute_roles_helper(Roles)
+    end.
+
+maybe_substitute_roles_helper(Roles) ->
     lists:flatmap(
       fun (security_admin_local) ->
               [security_admin, user_admin_local];
@@ -1432,10 +1440,14 @@ upgrade_test_() ->
              meck:new(replicated_dets, [passthrough]),
              meck:expect(replicated_dets, select_with_update,
                          fun replicated_dets:toy_select_with_update/4),
+             meck:new(cluster_compat_mode, [passthrough]),
+             meck:expect(cluster_compat_mode, is_enterprise,
+                         fun () -> true end),
              replicated_dets:toy_init(storage_name())
      end,
      fun (_) ->
              meck:unload(replicated_dets),
+             meck:unload(cluster_compat_mode),
              ets:delete(storage_name())
      end,
      [Test(?VERSION_76,

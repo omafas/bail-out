@@ -1229,3 +1229,55 @@ def test_sdk_kv(sdk_cluster: Cluster):
         return True
     except AuthenticationException:
         return False
+
+
+class RbacCommunityTests(testlib.BaseTestSet):
+
+    def __init__(self, cluster):
+        super().__init__(cluster)
+
+    @staticmethod
+    def requirements():
+        return [testlib.ClusterRequirements(edition='Community',
+                                            min_num_nodes=1, num_connected=1,
+                                            encryption=False, afamily='ipv4',
+                                            exact_services=[Service.KV])]
+
+    def setup(self):
+        pass
+
+    def teardown(self):
+        pass
+
+    def test_teardown(self):
+        pass
+
+    # Allowed admin user creations on community edition.
+    def allowed_admin_user_creation_test(self):
+        name = testlib.random_str(10)
+        password = testlib.random_str(10)
+
+        for role in ['ro_admin', 'admin', 'bucket_full_access[*]']:
+            data = build_payload(roles=role, password=password,
+                                 full_name=name)
+            testlib.put_succ(self.cluster,
+                             f'/settings/rbac/users/local/testuser',
+                             data=data)
+            testlib.delete_succ(self.cluster,
+                                '/settings/rbac/users/local/testuser')
+
+    # Disallowed admin user creations on community edition.
+    def disallowed_admin_user_creation_test(self):
+        name = testlib.random_str(10)
+        password = testlib.random_str(10)
+
+        for role in ['security_admin', 'ro_security_admin]',
+                     'user_admin_local', 'user_admin_external',
+                     'cluster_admin', 'eventing_admin', 'backup_admin',
+                     'views_admin', 'external_stats_reader',
+                     'application_telemetry_writer']:
+            data = build_payload(roles=role, password=password,
+                                 full_name=name)
+            testlib.put_fail(self.cluster,
+                             f'/settings/rbac/users/local/testuser',
+                             400, data=data)
