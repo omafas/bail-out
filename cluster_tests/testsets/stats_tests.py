@@ -11,6 +11,10 @@ import time
 import math
 import sys
 from pprint import pprint
+import requests
+import os
+
+from testlib.test_tag_decorator import tag, Tag
 from testlib.util import Service
 
 
@@ -333,3 +337,69 @@ def node_aggregation_common_params():
     return {'start': now - 10,
             'end': now,
             'step': 1}
+
+
+class StatsTests(testlib.BaseTestSet):
+
+    @staticmethod
+    def requirements():
+        return testlib.ClusterRequirements(num_nodes=3)
+
+    def setup(self):
+        pass
+
+    def teardown(self):
+        pass
+
+    def from_node(self):
+        return self.cluster.connected_nodes[0]
+
+    def connected_node(self):
+        return self.cluster.connected_nodes[1]
+
+    # This test kills one of the nodes and verifies the associated stat
+    # is incremented.
+    def node_unreachable_prometheus_metric_test(self):
+        statname = "cm_node_unreachable_total"
+        victim_node = self.connected_node()
+
+        # Until the stat is "created" there won't be any results.
+        def stat_in_results():
+            return make_prometheus_query(self.from_node(), statname) != []
+
+        # Return sum of the stats, ignoring "reason" as it is OS-specific.
+        def get_stat_total():
+            total = 0
+            for res in make_prometheus_query(self.from_node(), statname):
+                if res["metric"]["node"] == victim_node.otp_node():
+                    total += int(res["value"][1])
+            return total
+
+        def node_unreachable_metric_recorded():
+            return get_stat_total() > starting_total
+
+        # Wait until the stat exists and is available. Save the initial
+        # total to verify our actions cause the stat to get incremented.
+        testlib.poll_for_condition(stat_in_results, sleep_time=2, timeout=60)
+        starting_total = get_stat_total()
+
+        victim_node.kill_ns_server()
+        testlib.poll_for_condition(lambda: check_node_up(victim_node),
+                                   sleep_time=2, timeout=300,
+                                   msg="wait for ns_server to be back up")
+
+        testlib.poll_for_condition(node_unreachable_metric_recorded,
+                                   sleep_time=2, timeout=60)
+
+
+def make_prometheus_query(node, statname):
+    query = f"/_prometheus/api/v1/query?query={statname}"
+    return testlib.get_succ(node, query).json()["data"]["result"]
+
+
+def check_node_up(node):
+    try:
+        r = testlib.get(node, "/pools/default")
+        return r.status_code == 200
+    except requests.exceptions.ConnectionError:
+        return False

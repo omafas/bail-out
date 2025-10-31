@@ -118,6 +118,7 @@ init([]) ->
     send_ping_all_msg(),
     self() ! nodes_wanted_updated,
     % Track the last list of actual ndoes.
+    create_node_unreachable_metric(nodes_actual()),
     {ok, maybe_monitor_rename_txn(dist_manager:get_rename_txn_pid(),
                                   #state{nodes = []})}.
 
@@ -174,6 +175,16 @@ handle_info({nodedown, Node, InfoList}, State) ->
     event_log:add_log(node_down, [{down_node, Node},
                                   {reason, iolist_to_binary(
                                              io_lib:format("~p",[InfoList]))}]),
+    Reason = proplists:get_value(nodedown_reason, InfoList, "unknown"),
+    maybe_apply_metrics_function(
+      Node,
+      fun (N) ->
+              ns_server_stats:notify_counter(
+                {<<"node_unreachable">>,
+                 [{node, N},
+                  {reason, Reason}]})
+      end),
+
     self() ! notify_clients,
     {noreply, State};
 
@@ -225,10 +236,25 @@ do_notify(#state{nodes = NodesOld} = State) ->
     NodesNew = nodes_actual(),
     case NodesNew =:= NodesOld of
         true  -> State;
-        false -> gen_event:notify(ns_node_disco_events,
-                                  {ns_node_disco_events, NodesOld, NodesNew}),
-                 State#state{nodes = NodesNew}
+        false ->
+            create_node_unreachable_metric(NodesNew),
+            gen_event:notify(ns_node_disco_events,
+                             {ns_node_disco_events, NodesOld, NodesNew}),
+            State#state{nodes = NodesNew}
     end.
+
+create_node_unreachable_metric(Nodes) ->
+    lists:foreach(
+      fun (Node) ->
+              maybe_apply_metrics_function(
+                Node,
+                fun (N) ->
+                        ns_server_stats:create_counter(
+                          {<<"node_unreachable">>,
+                           [{node, N},
+                            {reason, "unknown"}]})
+                end)
+      end, Nodes).
 
 ping_all(Nodes) ->
     lists:filter(fun(N) -> net_adm:ping(N) == pong end, Nodes).
@@ -247,3 +273,11 @@ ns_log_code_string(?NODE_UP) ->
     "node up";
 ns_log_code_string(?NODE_DOWN) ->
     "node down".
+
+maybe_apply_metrics_function(Node, Fun) ->
+    case node() =/= 'nonode@nohost' andalso node() =/= Node of
+        true ->
+            Fun(Node);
+        false ->
+            ok
+    end.

@@ -37,7 +37,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -export([init_stats/0, notify_counter/1, notify_counter/2, notify_gauge/2,
-         notify_gauge/3, notify_histogram/2, notify_histogram/4, notify_max/2]).
+         notify_gauge/3, notify_histogram/2, notify_histogram/4, notify_max/2,
+         create_counter/1]).
 
 -export([increment_counter/2,
          get_ns_server_stats/0,
@@ -81,6 +82,12 @@ notify_counter(Metric) ->
 notify_counter(Metric, Val) when Val > 0, is_integer(Val) ->
     Key = {c, normalized_metric(Metric)},
     catch ets:update_counter(?MODULE, Key, Val, {Key, 0}),
+    ok.
+
+-spec create_counter(metric()) -> ok.
+create_counter(Metric) ->
+    Key = {c, normalized_metric(Metric)},
+    catch ets:insert_new(?MODULE, {Key, 0}),
     ok.
 
 -spec notify_gauge(metric(), gauge_value()) -> ok.

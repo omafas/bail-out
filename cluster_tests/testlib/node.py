@@ -9,6 +9,7 @@
 
 import testlib
 from testlib.util import strings_to_services
+import os
 
 
 class Node:
@@ -89,6 +90,10 @@ class Node:
     def get_ns_server_pid(self):
         r = testlib.diag_eval(self, "os:getpid().")
         return int(r.text.replace('"',""))
+
+    def kill_ns_server(self):
+        print(f'Killing ns_server for node {self.url}...')
+        os.kill(self.get_ns_server_pid(), 9)
 
     def get_services(self):
         if self.services_cached is None:
