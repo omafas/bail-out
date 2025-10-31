@@ -48,6 +48,8 @@ supported_setting_names() ->
      {num_auxio_threads, fun validate_num_storage_auxio_nonio_threads/1},
      {num_nonio_threads, fun validate_num_storage_auxio_nonio_threads/1},
      {num_storage_threads, fun validate_num_storage_auxio_nonio_threads/1},
+     {magma_flusher_thread_percentage, {int, 0, 100}},
+     {magma_max_default_storage_threads, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {system_connections, {int, 1000, ?MAX_32BIT_SIGNED_INT}},
      {verbosity, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {ssl_cipher_list, string},
