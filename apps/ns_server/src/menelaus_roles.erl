@@ -70,7 +70,11 @@
          ui_folders/0,
          get_visible_role_definitions/0,
          strip_ids/2,
-         chronicle_upgrade_to_totoro/1]).
+         chronicle_upgrade_to_totoro/1,
+         get_all_mutable_roles/0,
+         get_role/1,
+         set_role/1,
+         delete_role/1]).
 
 -export([start_compiled_roles_cache/0]).
 
@@ -821,7 +825,8 @@ ui_folders() ->
      {eventing, "Eventing"},
      {xdcr, "XDCR"},
      {backup, "Backup"},
-     {mobile, "Mobile"}].
+     {mobile, "Mobile"},
+     {custom_roles, "Custom"}].
 
 internal_roles() ->
     [{stats_reader, [], [], [{[admin, internal, stats], [read]}]},
@@ -1115,7 +1120,8 @@ compile_role({Name, Params}, CompileRole, Definitions, Snapshot) ->
         false ->
             false
     end;
-compile_role(Name, CompileRole, Definitions, Snapshot) when is_atom(Name) ->
+compile_role(Name, CompileRole, Definitions, Snapshot) when is_atom(Name);
+    is_binary(Name) ->
     compile_role({Name, []}, CompileRole, Definitions, Snapshot).
 
 compile_roles(CompileRole, Roles, Definitions, Snapshot) ->
@@ -1434,7 +1440,8 @@ get_param_defs(RoleName, Definitions) ->
 
 -spec validate_role(rbac_role(), [rbac_role_def()], map()) ->
                            false | {ok, rbac_role()}.
-validate_role(Role, Definitions, Snapshot) when is_atom(Role) ->
+validate_role(Role, Definitions, Snapshot) when is_atom(Role);
+                                                is_binary(Role) ->
     validate_role(Role, [], Definitions, Snapshot);
 validate_role({Role, Params}, Definitions, Snapshot) ->
     validate_role(Role, Params, Definitions, Snapshot).
@@ -1512,6 +1519,81 @@ chronicle_upgrade_to_totoro(ChronicleTxn) ->
     RoleDefinitions = default_roles_totoro(),
     chronicle_upgrade:set_key(role_definitions, RoleDefinitions,
                               ChronicleTxn).
+
+-spec get_role(binary()) ->
+          {binary(), [], proplists:proplist(),
+           proplists:proplist()} | undefined.
+get_role(Name) ->
+    Roles = chronicle_compat:get(role_definitions, #{required => true}),
+    case lists:keyfind(Name, 1, Roles) of
+        {_, _, _, _} = Role -> Role;
+        false -> undefined
+    end.
+
+-spec is_mutable(rbac_role_name(), [rbac_role_def()], term()) ->
+    boolean() | term().
+is_mutable(RoleId, Definitions, Default) ->
+    case lists:keyfind(RoleId, 1, Definitions) of
+        false -> Default;
+        Role -> is_mutable(Role)
+    end.
+
+-spec is_mutable(rbac_role_def() | rbac_role()) -> boolean().
+is_mutable({_, _, Props, _}) ->
+    proplists:get_bool(mutable, Props).
+
+-spec get_all_mutable_roles() -> [rbac_role_def()].
+get_all_mutable_roles() ->
+    lists:filter(fun is_mutable/1, role_definitions()).
+
+-spec set_role(rbac_role_def()) -> ok | {error, immutable}.
+set_role({RoleId, _, _, _} = NewRole) ->
+    Result = chronicle_compat:txn(
+        fun (Txn) ->
+                case chronicle_compat:txn_get(role_definitions, Txn) of
+                    {error, _} = Err ->
+                        {abort, Err};
+                    {ok, {Defs, _}} ->
+                        WasMutable = is_mutable(RoleId, Defs, true),
+                        WillBeMutable = is_mutable(NewRole),
+                        case WasMutable andalso WillBeMutable of
+                            true ->
+                                NewDefs = lists:keystore(RoleId, 1, Defs,
+                                                         NewRole),
+                                {commit, [{set, role_definitions, NewDefs}]};
+                            false ->
+                                {abort, {error, immutable}}
+                        end
+                end
+        end),
+    case Result of
+        {ok, _} -> ok;
+        {error, _} = Err -> Err
+    end.
+
+-spec delete_role(rbac_role_name()) -> ok | {error, not_found | immutable}.
+delete_role(RoleId) ->
+    Result = chronicle_compat:txn(
+        fun (Txn) ->
+                case chronicle_compat:txn_get(role_definitions, Txn) of
+                    {error, _} = Err ->
+                        {abort, Err};
+                    {ok, {Defs, _}} ->
+                         case is_mutable(RoleId, Defs, not_found) of
+                             true ->
+                                 NewDefs = lists:keydelete(RoleId, 1, Defs),
+                                 {commit, [{set, role_definitions, NewDefs}]};
+                             false ->
+                                 {abort, {error, immutable}};
+                             not_found ->
+                                 {abort, {error, not_found}}
+                         end
+                end
+        end),
+    case Result of
+        {ok, _} -> ok;
+        {error, _} = Err -> Err
+    end.
 
 -ifdef(TEST).
 set_role_definitions() ->
@@ -2478,6 +2560,41 @@ extended_roles_test__() ->
     ?assertEqual(true, is_allowed({[ui], read}, Roles2)),
     ?assertEqual(false, is_allowed({[pools], read}, Roles2)).
 
+custom_roles_test__() ->
+    CustomRole = [{[custom, x, y], [z]},
+                  {[{collection, ["default", "s", "c1"]}], none},
+                  {[{collection, ["default", "s", any]}], all},
+                  {[{bucket, "default"}, data, dcp], [read]}],
+    ok = set_role({<<"simple_role">>, [], [{mutable, true}], CustomRole}),
+    Roles = compile_roles([<<"simple_role">>,
+                           <<"wrong_role">>,
+                           {scope_admin, ["default", "s1"]}],
+                          roles()),
+    ?assertEqual([CustomRole,
+                  [{[{collection, ["default", "s1", any]}, collections], all}]],
+                 Roles),
+    ?assertEqual(true, is_allowed({[custom, x, y], z}, Roles)),
+    ?assertEqual(false, is_allowed({[custom, x, y], w}, Roles)),
+    ?assertEqual(true, is_allowed({[{collection, ["default", "s", "c2"]}], r},
+                                  Roles)),
+    %% Counter-intuitively, the "c1" exclusion matches first (since it is more
+    %% specific), so checking for 'any' is somewhat arbitrary
+    ?assertEqual(false, is_allowed({[{collection, ["default", "s", any]}], r},
+                                   Roles)),
+    ?assertEqual(false, is_allowed({[{collection, ["default", "s", "c1"]}], r},
+                                   Roles)),
+
+    %% Despite data.dcp!read not being allowed for default:s:c1, it is still
+    %% allowed at the bucket level
+    ?assertEqual(true, is_allowed({[{bucket, "default"}, data, dcp], read},
+                                  Roles)),
+    ?assertEqual(false, is_allowed({[{bucket, "default"}, data, dcp], write},
+                                   Roles)),
+
+    ?assertEqual({error, not_found}, delete_role(<<"unknown_id">>)),
+    ?assertEqual({error, immutable}, delete_role(admin)),
+    ?assertEqual(ok, delete_role(<<"simple_role">>)).
+
 default_profile_test_setup() ->
     setup_meck(),
     fake_chronicle_kv:setup(),
@@ -2521,7 +2638,8 @@ default_profile_test_() ->
       fun roles_pre_76_format_test__/0,
       fun roles_pre_79_format_test__/0,
       fun roles_pre_totoro_format_test__/0,
-      fun extended_roles_test__/0]}.
+      fun extended_roles_test__/0,
+      fun custom_roles_test__/0]}.
 
 analytics_admin_empty_profile_test_() ->
     %% use "default" explicitly here so that this test passes when run on a

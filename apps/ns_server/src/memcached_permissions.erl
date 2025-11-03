@@ -821,7 +821,31 @@ permissions_for_user_test_() ->
                          fun (_, _) -> Snapshot end),
              config_profile:load_default_profile_for_test(),
              fake_chronicle_kv:setup(),
-             menelaus_roles:set_role_definitions()
+             menelaus_roles:set_role_definitions(),
+             SimpleRole0 = [{[{collection, ["default", "s", any]}], all}],
+             ok = menelaus_roles:set_role({<<"simple_role">>,
+                                           [], [{mutable, true}], SimpleRole0}),
+             SimpleRole1 = [{[{collection, ["default", "s", "c1"]}], none},
+                            {[{collection, ["default", "s", any]}], all}],
+             ok = menelaus_roles:set_role({<<"simple_role_with_exclusion">>,
+                                          [], [{mutable, true}], SimpleRole1}),
+             ComplexRole0 = [{[{collection, ["default", "s", "_c"]}], none},
+                            {[{collection, ["default", "s1", "_c"]}], all},
+                            {[{collection, ["default", "s1", any]}], none},
+                            {[{collection, ["default", any, any]}], all}],
+             ok = menelaus_roles:set_role({<<"complex_role">>,
+                                          [], [{mutable, true}], ComplexRole0}),
+             ComplexRole1 =
+                 [{[{collection, ["default", any, any]}, data], none},
+                  {[{collection, ["default", "s1", any]}], all},
+                  %% This line has no effect since the 'none' above overrides it
+                  {[{bucket, "default"}, data], [delete]},
+                  %% This line has minimal effect as only stats is uncovered by
+                  %% the 'none' line
+                  {[{bucket, "default"}], [read]}],
+             ok = menelaus_roles:set_role(
+                    {<<"complex_role_with_mixed_parameterisation">>,
+                     [], [{mutable, true}], ComplexRole1})
      end,
      fun (_) ->
              fake_chronicle_kv:teardown(),
@@ -928,5 +952,25 @@ permissions_for_user_test_() ->
             {["default", 1], ['Delete', 'Insert', 'Upsert']},
             {["default", 1, 1], ['Delete', 'Insert', 'Upsert']},
             {["default", 2],
-             ['Read', 'RangeScan', 'SystemCollectionLookup']}])]}.
+             ['Read', 'RangeScan', 'SystemCollectionLookup']}]),
+      Test([<<"simple_role">>],
+           [],
+           [{["default", 1], All(JustCollections)}
+           ]),
+      Test([<<"simple_role_with_exclusion">>],
+           [],
+           [{["default", 1, 2], ['SystemCollectionLookup',
+                                 'SystemCollectionMutation']},
+            {["default", 1], All(JustCollections)}
+           ]),
+      Test([<<"complex_role">>],
+           [],
+           [{["default", 1, 1], [empty]},
+            {["default", 2, 3], All(JustCollections)},
+            {["default", 1], All(JustCollections)},
+            {["default"], AllBucketPermissions}]),
+      Test([<<"complex_role_with_mixed_parameterisation">>],
+           [],
+           [{["default"], ['SimpleStats']},
+            {["default", 2], All(JustCollections)}])]}.
 -endif.

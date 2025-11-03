@@ -181,7 +181,7 @@ is_user_covered(_Identity, _) ->
 
 strip_role_parameterisation({Role, _}) when is_atom(Role) ->
     Role;
-strip_role_parameterisation(Role) when is_atom(Role) ->
+strip_role_parameterisation(Role) when is_atom(Role); is_binary(Role) ->
     Role.
 
 do_lists_intersect(List1, List2) ->

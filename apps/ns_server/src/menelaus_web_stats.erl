@@ -1317,8 +1317,13 @@ collection_perm([B]) ->       {[{collection, [B, all, all]}, stats], read}.
 build_stats_perm_map(UserRoles, PermCheckFun, RolesDefinitions) ->
     ParamDefs = menelaus_roles:get_param_defs(_, RolesDefinitions),
     StrippedParams =
-        [{Defs, menelaus_roles:strip_ids(Defs, P)} || {R, P} <- UserRoles,
-                                                      Defs <- [ParamDefs(R)]],
+        [{Defs, menelaus_roles:strip_ids(Defs, P)} ||
+            {R, P} <- UserRoles,
+            Defs <- [ParamDefs(R)],
+            %% Filtering out any 'not_found' definition, which will be custom
+            %% roles. Support for use of custom roles with the stats API will
+            %% be added in a later commit.
+            Defs =/= not_found],
 
     %% Filtering out all the params that give full access to all buckets
     %% because: 1. the rest of the function assumes that bucket is a binary

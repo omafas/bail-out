@@ -89,9 +89,11 @@ init([]) ->
         end,
     ns_pubsub:subscribe_link(UserEvents, EventHandler),
 
-    %% Flush the roles cache when a bucket, collection or scope changes.
+    %% Flush the roles cache when associated chronicle keys change
     chronicle_compat_events:subscribe(
       fun (cluster_compat_version) ->
+              true;
+          (role_definitions) ->
               true;
           (Key) ->
               ns_bucket:buckets_change(Key)
