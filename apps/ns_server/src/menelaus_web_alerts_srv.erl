@@ -117,6 +117,7 @@
 -export([start_link/0, stop/0, local_alert/2, global_alert/2,
          fetch_alerts/0, consume_alerts/1, reset/0]).
 
+-type alert_key() :: atom() | {atom(), any()}.
 
 %% short description for a specific error; used in email subject
 short_description(ip) ->
@@ -261,7 +262,7 @@ start_link() ->
 
 
 %% @doc Send alert to all connected nodes
--spec global_alert(any(), binary() | string()) -> ok.
+-spec global_alert(alert_key(), binary() | string()) -> ok.
 global_alert(Type, Msg) ->
     ale:info(?USER_LOGGER, to_str(Msg)),
     [rpc:cast(Node, ?MODULE, local_alert, [{Type, node()}, Msg])
@@ -270,7 +271,7 @@ global_alert(Type, Msg) ->
 
 
 %% @doc Show to user on running node only
--spec local_alert({any(), node()}, binary()) -> ok | ignored.
+-spec local_alert({alert_key(), node()}, binary()) -> ok | ignored.
 local_alert(Key, Val) ->
     gen_server:call(?MODULE, {add_alert, Key, Val}).
 
@@ -278,7 +279,7 @@ local_alert(Key, Val) ->
 %% @doc fetch a list of binary string, clearing out the message
 %% history
 -spec fetch_alerts() -> {[{Key, Message, Time, NoUIPopUp}], Token}
-  when Key :: term(),
+  when Key :: {alert_key(), node()},
        Message :: binary(),
        Time :: pos_integer(),
        NoUIPopUp :: boolean(),
@@ -1301,7 +1302,7 @@ maybe_alert_stuck_rebalance(Service, NowTime, Threshold, Opaque) ->
                         1 ->
                             Msg = fmt_to_bin(errors(stuck_rebalance),
                                              [Service, Id, StuckTime]),
-                            global_alert({stuck_rebalance, Service, Id}, Msg);
+                            global_alert({stuck_rebalance, {Service, Id}}, Msg);
                         0 ->
                             ok
                     end,
@@ -1389,7 +1390,7 @@ hit_rate_limit(Key, Dict) ->
     end.
 
 %% @doc check if any other nodes have recently fired an alert for this alert key
--spec other_node_already_alerted(any(), any()) -> true | false.
+-spec other_node_already_alerted(alert_key(), any()) -> true | false.
 other_node_already_alerted(Key, Hist) ->
     AlertMatches =
         fun ({OldKey, _, _, _, _}) ->
