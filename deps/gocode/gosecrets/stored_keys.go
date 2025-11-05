@@ -288,13 +288,19 @@ func (state *StoredKeysState) maybeRegenerateProof(path, name string, ctx *store
 		logDbg("Failed to read key %s from file %s: %s", name, filePathPrefix, err.Error())
 		return err
 	}
-	proofBytes, err := base64.StdEncoding.DecodeString(proof)
-	if err != nil {
-		return fmt.Errorf("file %s has invalid proof format: %s", filePathPrefix, err.Error())
-	}
-	uuid, _, err := parseMac(proofBytes)
-	if err != nil {
-		return fmt.Errorf("file %s has invalid proof format: %s", filePathPrefix, err.Error())
+	var uuid string
+	if isLegacyProofFormat(proof) {
+		// Legacy proof format is used in 7.9 only
+		uuid = proof[:36]
+	} else {
+		proofBytes, err := base64.StdEncoding.DecodeString(proof)
+		if err != nil {
+			return fmt.Errorf("file %s has invalid proof format: %s", filePathPrefix, err.Error())
+		}
+		uuid, _, err = parseMac(proofBytes)
+		if err != nil {
+			return fmt.Errorf("file %s has invalid proof format: %s", filePathPrefix, err.Error())
+		}
 	}
 	if uuid == state.intTokens[0].uuid {
 		// Proof is still valid, no need to regenerate proof
@@ -932,6 +938,9 @@ func (state *StoredKeysState) generateKeyProof(keyIface storedKeyIface) (string,
 }
 
 func (state *StoredKeysState) validateKeyProof(keyIface storedKeyIface, proof string) error {
+	if isLegacyProofFormat(proof) {
+		return validateLegacyKeyProof(keyIface, proof, state.intTokens)
+	}
 	proofBytes, err := base64.StdEncoding.DecodeString(proof)
 	if err != nil {
 		return fmt.Errorf("failed to decode proof: %s", err.Error())
@@ -945,6 +954,43 @@ func (state *StoredKeysState) validateKeyProof(keyIface storedKeyIface, proof st
 		return err
 	}
 	return nil
+}
+
+func isLegacyProofFormat(proof string) bool {
+	return proof[36] == ':'
+}
+
+func validateLegacyKeyProof(keyIface storedKeyIface, proof string, intTokens []intToken) error {
+	// Legacy proof format is used in 7.9 only
+	// Can be removed after 7.9 is no longer supported.
+	// Format: uuid:encryptedTokenHash
+	// where uuid is 36 bytes long string
+	//       encryptedTokenHash is base64 encoded sha512(token.token | key name)
+	//       encrypted with keyIface
+	parts := strings.Split(proof, ":")
+	if len(parts) != 2 {
+		return fmt.Errorf("key integrity check failed: invalid proof format")
+	}
+	uuid := parts[0]
+	encryptedTokenHashBase64 := parts[1]
+	for _, token := range intTokens {
+		if token.uuid == uuid {
+			encryptedTokenHash, err := base64.StdEncoding.DecodeString(encryptedTokenHashBase64)
+			if err != nil {
+				return fmt.Errorf("key integrity check failed: failed to decode encrypted token hash: %s", err.Error())
+			}
+			decryptedTokenHash, err := keyIface.decryptData(encryptedTokenHash, []byte(keyIface.name()))
+			if err != nil {
+				return fmt.Errorf("key integrity check failed: failed to decrypt proof: %s", err.Error())
+			}
+			tokenHash := sha512.Sum512(append(token.token, []byte(keyIface.name())...))
+			if bytes.Equal(tokenHash[:], decryptedTokenHash) {
+				return nil
+			}
+			return fmt.Errorf("key integrity check failed: invalid integrity token (token uuid: %s, key name: %s)", uuid, keyIface.name())
+		}
+	}
+	return fmt.Errorf("key integrity check failed: unknown token: %s (key name: %s)", uuid, keyIface.name())
 }
 
 func hmacSHA512(key []byte, data []byte) []byte {
