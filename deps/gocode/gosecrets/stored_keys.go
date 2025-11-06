@@ -93,6 +93,7 @@ const (
 	encryptedFileKeyNameLength  = byte(36)
 	macLen                      = 101 // Vsn: 1B, UUID: 36B, MAC: 64B
 	intTokenSize                = 64
+	maxTokensCount              = 100
 )
 
 // Struct for marshalling/unmarshalling of a raw aes-gcm stored key
@@ -230,9 +231,16 @@ func (state *StoredKeysState) rotateIntegrityTokens(keyName string, ctx *storedK
 		return fmt.Errorf("read-only mode is enabled")
 	}
 
+	if len(state.intTokens) >= maxTokensCount && state.encryptionKeyName == keyName {
+		// We already have too many tokens. Since the key is not changing current
+		// tokens are safe and there is no need to generate new token.
+		logDbg("There are too many tokens (current: %d, max: %d), no need to generate new token", len(state.intTokens), maxTokensCount)
+		return nil
+	}
+
 	// It is important to use new key to encrypt the integrity tokens file
 	// because otherwise we can store newly generated token unencrypted
-	logDbg("Rotating integrity tokens, and encrypting file with key %s (old key: %s)", keyName, state.encryptionKeyName)
+	logDbg("Rotating integrity tokens, and encrypting tokens file with key %s (old key: %s)", keyName, state.encryptionKeyName)
 	oldKeyName := state.encryptionKeyName
 	state.encryptionKeyName = keyName
 	err := state.generateIntToken(ctx)
@@ -275,7 +283,7 @@ func (state *StoredKeysState) removeOldIntegrityTokens(paths []string, ctx *stor
 		state.intTokens = prevTokens
 		return err
 	}
-	for _, token := range prevTokens {
+	for _, token := range prevTokens[1:] {
 		logDbg("Removing old token with uuid %s", token.uuid)
 	}
 	return nil
