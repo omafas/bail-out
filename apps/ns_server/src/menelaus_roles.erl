@@ -1542,18 +1542,15 @@ setup_meck() ->
     meck:expect(cluster_compat_mode, is_cluster_79,
         fun () -> true end),
     meck:expect(cluster_compat_mode, is_enterprise,
-        fun () -> true end),
+                fun () -> true end),
+    meck:expect(cluster_compat_mode, get_compat_version,
+                fun () -> ?LATEST_VERSION_NUM end),
+    meck:expect(cluster_compat_mode, is_developer_preview,
+                fun () -> false end),
     meck:new(ns_config, [passthrough]),
     meck:expect(ns_config, search_node_with_default,
                 fun (_, Default) -> Default end),
-    meck:new(config_profile, [passthrough]),
-    meck:expect(config_profile, get,
-                fun () -> ?DEFAULT_EMPTY_PROFILE_FOR_TESTS end).
-
-teardown_meck() ->
-    meck:unload(cluster_compat_mode),
-    meck:unload(ns_config),
-    meck:unload(config_profile).
+    meck:new(ns_bucket, [passthrough]).
 
 filter_out_invalid_roles_test() ->
     Roles = [{role1, [{"bucket1", <<"id1">>}]},
@@ -2149,8 +2146,8 @@ collection_roles_test_() ->
           [false, false, false, false, false, false, false, false]}
         ],
 
-    {setup, fun config_profile:load_default_profile_for_test/0,
-     fun config_profile:unload_profile_for_test/1,
+    {setup, fun default_profile_test_setup/0,
+     fun default_profile_test_teardown/1,
      [{Title ++ ", role = " ++ atom_to_list(Role),
        fun () ->
                compile_and_assert(Role, Perm, Params,
@@ -2199,8 +2196,8 @@ query_functions_test_() ->
                          [false, false, false, false])}]
           end, Roles),
 
-    {setup, fun config_profile:load_default_profile_for_test/0,
-     fun config_profile:unload_profile_for_test/1, Tests}.
+    {setup, fun default_profile_test_setup/0,
+     fun default_profile_test_teardown/1, Tests}.
 
 eventing_functions_test_() ->
     Roles = [{eventing_manage_functions, [eventing, function], manage}],
@@ -2230,8 +2227,8 @@ eventing_functions_test_() ->
                            [false, false, false])}]
           end, Roles),
 
-    {setup, fun config_profile:load_default_profile_for_test/0,
-     fun config_profile:unload_profile_for_test/1, Tests}.
+    {setup, fun default_profile_test_setup/0,
+     fun default_profile_test_teardown/1, Tests}.
 
 validate_role_test__() ->
     ValidateRole = validate_role(_, roles(), toy_buckets()),
@@ -2278,31 +2275,6 @@ enum_roles(Roles, ParamsList) ->
                 end, Roles)
       end, ParamsList).
 
-produce_roles_by_permission_test_() ->
-    try
-        config_profile:load_default_profile_for_test()
-    of
-        _ ->
-            {setup,
-             fun() ->
-                     meck:new(cluster_compat_mode, [passthrough]),
-                     meck:expect(cluster_compat_mode, is_enterprise,
-                                 fun () -> true end),
-                     meck:expect(cluster_compat_mode, get_compat_version,
-                                 fun () -> ?LATEST_VERSION_NUM end),
-                     meck:expect(cluster_compat_mode, is_developer_preview,
-                                 fun () -> false end),
-                     config_profile:load_default_profile_for_test()
-             end,
-             fun (_) ->
-                     meck:unload(cluster_compat_mode),
-                     config_profile:unload_profile_for_test()
-             end,
-             produce_roles_by_permission_test__()}
-    after
-        config_profile:unload_profile_for_test()
-    end.
-
 produce_roles_by_permission_test__() ->
     GetRoles =
         fun (Permission) ->
@@ -2313,116 +2285,114 @@ produce_roles_by_permission_test__() ->
         end,
     Test =
         fun (Roles, Permission) ->
-                fun () ->
-                        ?assertListsEqual(Roles, GetRoles(Permission))
-                end
+                ?_assertListsEqual(Roles, GetRoles(Permission))
         end,
     TestBucket = {"test", <<"test_id">>},
     DefaultBucket = {"default", <<"default_id">>},
 
-     [{"security permission",
-       Test([admin, security_admin, ro_security_admin],
-            {[admin, security], any})},
-      {"admin security permission (read)",
-       Test([admin, ro_security_admin],
-            {[admin, security, admin], read})},
-      {"admin security permission (write)",
-       Test([admin],
-            {[admin, security, admin], write})},
-      {"users permission",
-       Test([admin, user_admin_local, user_admin_external,
-             security_admin, ro_security_admin],
-            {[admin, users], any})},
-      {"security_info permission",
-       Test([user_admin_local, user_admin_external, admin, ro_security_admin,
-             security_admin],
-            {[admin, security_info], read})},
-      {"pools read",
-       fun () ->
-               Roles = GetRoles({[pools], read}),
-               ?assertListsEqual(
-                  [],
-                  [admin, analytics_reader,
-                   {data_reader, [any, any, any]}] -- Roles)
-       end},
-      {"bucket settings read",
-       Test([admin, cluster_admin, query_external_access, query_system_catalog,
-             replication_admin, ro_admin, security_admin, user_admin_local,
-             user_admin_external, eventing_admin, backup_admin,
-             ro_security_admin] ++
-                enum_roles([bucket_full_access, bucket_admin, views_admin,
-                            data_backup, data_dcp_reader,
-                            data_monitoring, data_writer, data_reader,
-                            fts_admin, fts_searcher, query_delete,
-                            query_insert, query_manage_index,
-                            query_list_index, query_select,
-                            query_update, replication_target,
-                            mobile_sync_gateway],
-                           [[any], [TestBucket]]),
-            {[{bucket, "test"}, settings], read})},
-      {"docs insert for bucket",
-       Test([admin, eventing_admin, backup_admin] ++
-                enum_roles([bucket_full_access, data_backup, data_writer,
-                            mobile_sync_gateway, query_insert],
-                           [[any], [TestBucket]]),
-            {[{bucket, "test"}, data, docs], insert})},
-      {"docs insert for wrong bucket",
-       Test([admin, eventing_admin, backup_admin] ++
-                enum_roles([bucket_full_access, data_backup, data_writer,
-                            mobile_sync_gateway, query_insert],
-                           [[any]]),
-            {[{bucket, "wrong"}, data, docs], insert})},
-      {"docs insert for collection",
-       Test([admin, eventing_admin, backup_admin] ++
-                enum_roles([bucket_full_access, data_backup, data_writer,
-                            mobile_sync_gateway, query_insert],
-                           [[any], [DefaultBucket]]) ++
-                enum_roles([data_writer, query_insert],
-                           [[DefaultBucket, {"s", 1}]]) ++
-                enum_roles([data_writer, query_insert],
-                           [[DefaultBucket, {"s", 1}, {"c", 1}]]),
-            {[{collection, ["default", "s", "c"]}, data, docs], insert})},
-      {"docs insert for wrong collection",
-       Test([admin, eventing_admin, backup_admin] ++
-                enum_roles([bucket_full_access, data_backup, data_writer,
-                            mobile_sync_gateway, query_insert],
-                           [[any], [DefaultBucket]]) ++
-                enum_roles([data_writer, query_insert],
-                           [[DefaultBucket, {"s", 1}]]),
-            {[{collection, ["default", "s", "w"]}, data, docs], insert})},
-      {"docs insert for scope",
-       Test([admin, eventing_admin, backup_admin] ++
-                enum_roles([bucket_full_access, data_backup, data_writer,
-                            mobile_sync_gateway, query_insert],
-                           [[any], [DefaultBucket]]) ++
-                enum_roles([data_writer, query_insert],
-                           [[DefaultBucket, {"s", 1}]]),
-            {[{scope, ["default", "s"]}, data, docs], insert})},
-      {"docs insert for wrong scope",
-       Test([admin, eventing_admin, backup_admin] ++
-                enum_roles([bucket_full_access, data_backup, data_writer,
-                            mobile_sync_gateway, query_insert],
-                           [[any], [DefaultBucket]]),
-            {[{scope, ["default", "w"]}, data, docs], insert})},
-      {"any bucket",
-       Test([admin, eventing_admin, backup_admin] ++
-                enum_roles([bucket_full_access, data_backup, data_writer,
-                            mobile_sync_gateway, query_insert],
-                           [[any]]),
-            {[{bucket, any}, data, docs], insert})},
-      {"wrong bucket",
-       Test([admin, eventing_admin, backup_admin] ++
-                enum_roles([bucket_full_access, data_backup, data_writer,
-                            mobile_sync_gateway, query_insert],
-                           [[any]]),
-            {[{bucket, "wrong"}, data, docs], insert})},
-      {"read indexes",
-       Test([admin, ro_admin, backup_admin, eventing_admin] ++
-                enum_roles([bucket_full_access,
-                            mobile_sync_gateway, query_list_index,
-                            query_manage_index],
-                           [[any]]),
-            {[{bucket, any}, n1ql, index], read})}].
+    [{"security permission",
+      Test([admin, security_admin, ro_security_admin],
+           {[admin, security], any})},
+     {"admin security permission (read)",
+      Test([admin, ro_security_admin],
+           {[admin, security, admin], read})},
+     {"admin security permission (write)",
+      Test([admin],
+           {[admin, security, admin], write})},
+     {"users permission",
+      Test([admin, user_admin_local, user_admin_external,
+            security_admin, ro_security_admin],
+           {[admin, users], any})},
+     {"security_info permission",
+      Test([user_admin_local, user_admin_external, admin, ro_security_admin,
+            security_admin],
+           {[admin, security_info], read})},
+     {"pools read",
+      fun () ->
+              Roles = GetRoles({[pools], read}),
+              ?assertListsEqual(
+                 [],
+                 [admin, analytics_reader,
+                  {data_reader, [any, any, any]}] -- Roles)
+      end},
+     {"bucket settings read",
+      Test([admin, cluster_admin, query_external_access, query_system_catalog,
+            replication_admin, ro_admin, security_admin, user_admin_local,
+            user_admin_external, eventing_admin, backup_admin,
+            ro_security_admin] ++
+               enum_roles([bucket_full_access, bucket_admin, views_admin,
+                           data_backup, data_dcp_reader,
+                           data_monitoring, data_writer, data_reader,
+                           fts_admin, fts_searcher, query_delete,
+                           query_insert, query_manage_index,
+                           query_list_index, query_select,
+                           query_update, replication_target,
+                           mobile_sync_gateway],
+                          [[any], [TestBucket]]),
+           {[{bucket, "test"}, settings], read})},
+     {"docs insert for bucket",
+      Test([admin, eventing_admin, backup_admin] ++
+               enum_roles([bucket_full_access, data_backup, data_writer,
+                           mobile_sync_gateway, query_insert],
+                          [[any], [TestBucket]]),
+           {[{bucket, "test"}, data, docs], insert})},
+     {"docs insert for wrong bucket",
+      Test([admin, eventing_admin, backup_admin] ++
+               enum_roles([bucket_full_access, data_backup, data_writer,
+                           mobile_sync_gateway, query_insert],
+                          [[any]]),
+           {[{bucket, "wrong"}, data, docs], insert})},
+     {"docs insert for collection",
+      Test([admin, eventing_admin, backup_admin] ++
+               enum_roles([bucket_full_access, data_backup, data_writer,
+                           mobile_sync_gateway, query_insert],
+                          [[any], [DefaultBucket]]) ++
+               enum_roles([data_writer, query_insert],
+                          [[DefaultBucket, {"s", 1}]]) ++
+               enum_roles([data_writer, query_insert],
+                          [[DefaultBucket, {"s", 1}, {"c", 1}]]),
+           {[{collection, ["default", "s", "c"]}, data, docs], insert})},
+     {"docs insert for wrong collection",
+      Test([admin, eventing_admin, backup_admin] ++
+               enum_roles([bucket_full_access, data_backup, data_writer,
+                           mobile_sync_gateway, query_insert],
+                          [[any], [DefaultBucket]]) ++
+               enum_roles([data_writer, query_insert],
+                          [[DefaultBucket, {"s", 1}]]),
+           {[{collection, ["default", "s", "w"]}, data, docs], insert})},
+     {"docs insert for scope",
+      Test([admin, eventing_admin, backup_admin] ++
+               enum_roles([bucket_full_access, data_backup, data_writer,
+                           mobile_sync_gateway, query_insert],
+                          [[any], [DefaultBucket]]) ++
+               enum_roles([data_writer, query_insert],
+                          [[DefaultBucket, {"s", 1}]]),
+           {[{scope, ["default", "s"]}, data, docs], insert})},
+     {"docs insert for wrong scope",
+      Test([admin, eventing_admin, backup_admin] ++
+               enum_roles([bucket_full_access, data_backup, data_writer,
+                           mobile_sync_gateway, query_insert],
+                          [[any], [DefaultBucket]]),
+           {[{scope, ["default", "w"]}, data, docs], insert})},
+     {"any bucket",
+      Test([admin, eventing_admin, backup_admin] ++
+               enum_roles([bucket_full_access, data_backup, data_writer,
+                           mobile_sync_gateway, query_insert],
+                          [[any]]),
+           {[{bucket, any}, data, docs], insert})},
+     {"wrong bucket",
+      Test([admin, eventing_admin, backup_admin] ++
+               enum_roles([bucket_full_access, data_backup, data_writer,
+                           mobile_sync_gateway, query_insert],
+                          [[any]]),
+           {[{bucket, "wrong"}, data, docs], insert})},
+     {"read indexes",
+      Test([admin, ro_admin, backup_admin, eventing_admin] ++
+               enum_roles([bucket_full_access,
+                           mobile_sync_gateway, query_list_index,
+                           query_manage_index],
+                          [[any]]),
+           {[{bucket, any}, n1ql, index], read})}].
 
 
 params_version_get_snapshot(TestProps, _, SubKeys) ->
@@ -2444,24 +2414,16 @@ params_version_case(TestProps) ->
     ?assertEqual(params_version(), Version),
     Version.
 
-params_version_test() ->
-    setup_meck(),
-    meck:new(ns_bucket, [passthrough]),
-
-    try
-        Update = ?cut(lists:keyreplace("test", 1, toy_buckets_props(),
-                                       {"test", _})),
-        BaseVersion = params_version_case(toy_buckets_props()),
-        lists:foreach(
-          fun(X) -> ?assertNotEqual(params_version_case(X), BaseVersion) end,
-          [lists:keydelete("test", 1, toy_buckets_props()),
-           Update([{uuid, <<"test_id1">>}, {props, toy_props()}]),
-           Update([{uuid, <<"test_id">>}, {collections, toy_manifest()},
-                   {props, toy_props()}])])
-    after
-        meck:unload(ns_bucket),
-        teardown_meck()
-    end.
+params_version_test__() ->
+    Update = ?cut(lists:keyreplace("test", 1, toy_buckets_props(),
+                                   {"test", _})),
+    BaseVersion = params_version_case(toy_buckets_props()),
+    lists:foreach(
+      fun(X) -> ?assertNotEqual(params_version_case(X), BaseVersion) end,
+      [lists:keydelete("test", 1, toy_buckets_props()),
+       Update([{uuid, <<"test_id1">>}, {props, toy_props()}]),
+       Update([{uuid, <<"test_id">>}, {collections, toy_manifest()},
+               {props, toy_props()}])]).
 
 validate_test_roles(Roles) ->
     lists:all(
@@ -2469,36 +2431,31 @@ validate_test_roles(Roles) ->
                                                    is_list(Params),
                                                    is_list(Desc),
                                                    is_list(Permissions) ->
-          ?assert(lists:member(Params, all_params_combinations())),
-          ?assert(lists:all(fun ({_, _}) -> true; (_) -> false end, Desc)),
-          ValidateObject =
-              fun (Obj) ->
-                  ?assert(lists:all(
-                            fun (A) when is_atom(A) -> true;
-                                ({A, _}) when is_atom(A) -> true;
-                                (_) -> false
-                            end, Obj)),
-                  true
-              end,
-          ?assert(lists:all(
-                    fun ({Object, all}) -> ValidateObject(Object);
-                        ({Object, none}) -> ValidateObject(Object);
-                        ({Object, Ops}) when is_list(Ops) ->
-                            ?assert(lists:all(fun (A) -> is_atom(A) end, Ops)),
-                            ValidateObject(Object)
-                    end, Permissions)),
-          true
+              ?assert(lists:member(Params, all_params_combinations())),
+              ?assert(lists:all(fun ({_, _}) -> true; (_) -> false end, Desc)),
+              ValidateObject =
+                  fun (Obj) ->
+                          ?assert(lists:all(
+                                    fun (A) when is_atom(A) -> true;
+                                        ({A, _}) when is_atom(A) -> true;
+                                        (_) -> false
+                                    end, Obj)),
+                          true
+                  end,
+              lists:all(
+                fun ({Object, all}) -> ValidateObject(Object);
+                    ({Object, none}) -> ValidateObject(Object);
+                    ({Object, Ops}) when is_list(Ops) ->
+                        ?assert(lists:all(fun (A) -> is_atom(A) end, Ops)),
+                        ValidateObject(Object)
+                end, Permissions)
       end, Roles).
 
-roles_format_test() ->
-    setup_meck(),
-
+roles_format_test__() ->
     ?assert(validate_test_roles(roles())),
     ?assert(validate_test_roles(menelaus_old_roles:roles_pre_76())),
     ?assert(validate_test_roles(menelaus_old_roles:roles_pre_79())),
-    ?assert(validate_test_roles(menelaus_old_roles:roles_pre_totoro())),
-
-    teardown_meck().
+    ?assert(validate_test_roles(menelaus_old_roles:roles_pre_totoro())).
 
 params_from_permissions_test__() ->
     CompiledRoles =
@@ -2528,81 +2485,47 @@ params_from_permissions_test__() ->
 
     ?assertEqual(Expected, get_params_from_permissions(CompiledRoles)).
 
-extended_roles_test() ->
-    meck:new(config_profile, [passthrough]),
-    try
-        MyRoles = [{superman, [],
-                    [{name, <<"Superman">>},
-                     {folder, admin},
-                     {desc, <<"Able to leap tall buildings in a single bound!">>},
-                     {ce, true}],
-                    [{[admin, security_info], none},
-                     {[], all}]},
-                   {analytics_select, [],
-                    [{name, <<"Analytics Select">>},
-                     {folder, analytics},
-                     {desc, <<"This user can access the web console.">>}],
-                    [{[ui], [read]}]}],
-        meck:expect(config_profile, get,
-                    fun () ->
-                            [{name, "my_profile"},
-                             {extra_roles, MyRoles}]
-                    end),
-        validate_test_roles(roles()),
-        Roles = compile_roles([superman], roles()),
-        ?assertEqual(true, is_allowed({[anything], access}, Roles)),
-        ?assertEqual(false, is_allowed({[admin, security_info], read}, Roles)),
-        Roles2 = compile_roles([analytics_select], roles()),
-        ?assertEqual(true, is_allowed({[ui], read}, Roles2)),
-        ?assertEqual(false, is_allowed({[pools], read}, Roles2))
-    after
-        meck:unload(config_profile)
-    end.
+extended_roles_test__() ->
+    MyRoles = [{superman, [],
+                [{name, <<"Superman">>},
+                 {folder, admin},
+                 {desc, <<"Able to leap tall buildings in a single bound!">>},
+                 {ce, true}],
+                [{[admin, security_info], none},
+                 {[], all}]},
+               {analytics_select, [],
+                [{name, <<"Analytics Select">>},
+                 {folder, analytics},
+                 {desc, <<"This user can access the web console.">>}],
+                [{[ui], [read]}]}],
+    meck:expect(config_profile, get,
+                fun () ->
+                        [{name, "my_profile"},
+                         {extra_roles, MyRoles}]
+                end),
+    validate_test_roles(roles()),
+    Roles = compile_roles([superman], roles()),
+    ?assertEqual(true, is_allowed({[anything], access}, Roles)),
+    ?assertEqual(false, is_allowed({[admin, security_info], read}, Roles)),
+    Roles2 = compile_roles([analytics_select], roles()),
+    ?assertEqual(true, is_allowed({[ui], read}, Roles2)),
+    ?assertEqual(false, is_allowed({[pools], read}, Roles2)).
 
-analytics_access_test() ->
-    config_profile:load_profile_for_test(?ANALYTICS_PROFILE_STR),
-    try
-        Roles = compile_roles([analytics_access], roles()),
-        ?assertEqual(true, is_allowed({[analytics], access}, Roles)),
-        ?assertEqual(false, is_allowed(
-                              {[admin, settings, metrics], any}, Roles))
-    after
-        config_profile:unload_profile_for_test()
-    end.
+default_profile_test_setup() ->
+    setup_meck(),
+    config_profile:load_default_profile_for_test().
 
-analytics_admin_empty_profile_test() ->
-    %% use "default" explicitly here so that this test passes when run on a
-    %% workspace based on enterprise-analytics manifest
-    config_profile:load_profile_for_test("default"),
-    try
-        Roles = compile_roles([analytics_admin], roles()),
-        ?log_debug(
-           "compile_roles: ~p",
-           [Roles]),
-        ?assertEqual(true,
-                     is_allowed(
-                       {[{bucket, "foobar"}, analytics], manage}, Roles)),
-        ?assertEqual(false, is_allowed({[analytics], access}, Roles))
-    after
-        config_profile:unload_profile_for_test()
-    end.
+default_profile_test_teardown(_) ->
+    default_profile_test_teardown().
 
-analytics_admin_test() ->
-    config_profile:load_profile_for_test(?ANALYTICS_PROFILE_STR),
-    try
-        Roles = compile_roles([analytics_admin], roles()),
-        ?assertEqual(false,
-                     is_allowed(
-                       {[{bucket, "foobar"}, analytics], manage}, Roles)),
-        ?assertEqual(true, is_allowed({[analytics], access}, Roles))
-    after
-        config_profile:unload_profile_for_test()
-    end.
+default_profile_test_teardown() ->
+    config_profile:unload_profile_for_test(),
+    meck:unload().
 
-all_test_() ->
+default_profile_test_() ->
     {setup,
-     fun config_profile:load_default_profile_for_test/0,
-     fun config_profile:unload_profile_for_test/1,
+     fun default_profile_test_setup/0,
+     fun default_profile_test_teardown/1,
      [fun admin_test__/0,
       fun cluster_admin_test__/0,
       fun eventing_admin_test__/0,
@@ -2622,7 +2545,56 @@ all_test_() ->
       fun views_admin_wildcard_test__/0,
       fun bucket_full_access_test__/0,
       fun replication_admin_test__/0,
+      {generator, fun produce_roles_by_permission_test__/0},
+      fun params_version_test__/0,
       fun validate_role_test__/0,
-      fun params_from_permissions_test__/0]}.
+      fun roles_format_test__/0,
+      fun params_from_permissions_test__/0,
+      fun extended_roles_test__/0]}.
+
+analytics_admin_empty_profile_test_() ->
+    %% use "default" explicitly here so that this test passes when run on a
+    %% workspace based on enterprise-analytics manifest
+    {setup,
+     fun () -> config_profile:load_profile_for_test("default") end,
+     fun (_) -> config_profile:unload_profile_for_test() end,
+     [fun () ->
+              Roles = compile_roles([analytics_admin], roles()),
+              ?log_debug(
+                 "compile_roles: ~p",
+                 [Roles]),
+              ?assertEqual(true,
+                           is_allowed(
+                             {[{bucket, "foobar"}, analytics], manage}, Roles)),
+              ?assertEqual(false, is_allowed({[analytics], access}, Roles))
+      end]}.
+
+analytics_access_test__() ->
+    Roles = compile_roles([analytics_access], roles()),
+    ?assertEqual(true, is_allowed({[analytics], access}, Roles)),
+    ?assertEqual(false, is_allowed(
+                          {[admin, settings, metrics], any}, Roles)).
+
+analytics_admin_test__() ->
+    Roles = compile_roles([analytics_admin], roles()),
+    ?assertEqual(false,
+                 is_allowed(
+                   {[{bucket, "foobar"}, analytics], manage}, Roles)),
+    ?assertEqual(true, is_allowed({[analytics], access}, Roles)).
+
+analytics_profile_test_setup() ->
+    setup_meck(),
+    config_profile:load_profile_for_test(?ANALYTICS_PROFILE_STR).
+
+analytics_profile_test_teardown(_) ->
+    config_profile:unload_profile_for_test(),
+    meck:unload().
+
+analytics_profile_test_() ->
+    {setup,
+     fun analytics_profile_test_setup/0,
+     fun analytics_profile_test_teardown/1,
+     [fun analytics_access_test__/0,
+      fun analytics_admin_test__/0]}.
 
 -endif.
