@@ -95,8 +95,7 @@ licenses/APL2.txt.
         </form>
       </div>
 
-      <div class="forms" [hidden]="!(getAuthMethods | async)?.saml ||
-                                    (getAuthMethods | async)?.clientCertificates === 'must_use'">
+      <div class="forms" [hidden]="!(getAuthMethods | async)?.saml">
         <hr>
         <div class="panel-content border-top">
           <div
