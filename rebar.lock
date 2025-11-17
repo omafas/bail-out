@@ -20,16 +20,15 @@
   {git,"https://github.com/couchbasedeps/jiffy.git",
        {ref,"8bac9d21846a1f62a110305e648cee894d81a2e0"}},
   0},
- {<<"jose">>,
-  {git,"https://github.com/couchbasedeps/erlang-jose.git",
-       {ref,"e174687ec387996c79d6444296fd93e1a6646dca"}},
-  0},
+ {<<"jose">>,{pkg,<<"jose">>,<<"1.11.11">>},0},
  {<<"ranch">>,{pkg,<<"ranch">>,<<"1.8.0">>},1}]}.
 [
 {pkg_hash,[
  {<<"iso8601">>, <<"7B1F095F86F6CF65E1E5A77872E8E8BF69BD58D4C3A415B3F77D9CC9423ECBB9">>},
+ {<<"jose">>, <<"FC29A6A00AD3DD26FF65AC51E502058C37C5163CE7FD31F7F2FFA509209E97FA">>},
  {<<"ranch">>, <<"8C7A100A139FD57F17327B6413E4167AC559FBC04CA7448E9BE9057311597A1D">>}]},
 {pkg_hash_ext,[
  {<<"iso8601">>, <<"A334469C07F1C219326BC891A95F5EEC8EB12DD8071A3FFF56A7843CB20FAE34">>},
+ {<<"jose">>, <<"C9F0742B4B55D9249C76FF4E7B743D847D5BC915D29813618A1050864C2C7EAD">>},
  {<<"ranch">>, <<"49FBCFD3682FAB1F5D109351B61257676DA1A2FDBE295904176D5E521A2DDFE5">>}]}
 ].
