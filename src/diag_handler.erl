@@ -883,7 +883,21 @@ diag_vbucket_per_node(BucketName, Node) ->
 handle_diag_vbuckets(Req) ->
     Params = mochiweb_request:parse_qs(Req),
     BucketName = proplists:get_value("bucket", Params),
-    {ok, BucketConfig} = ns_bucket:get_bucket(BucketName),
+    case ns_bucket:get_bucket(BucketName) of
+        not_present ->
+            menelaus_util:reply_json(Req, <<"Bucket not found">>, 404);
+        {ok, BucketConfig} ->
+            case ns_bucket:bucket_type(BucketConfig) of
+                memcached ->
+                    menelaus_util:reply_json(Req,
+                                             <<"memcached not supported">>,
+                                             400);
+                _ ->
+                    handle_diag_vbuckets_inner(Req, BucketName, BucketConfig)
+            end
+    end.
+
+handle_diag_vbuckets_inner(Req, BucketName, BucketConfig) ->
     Nodes = ns_node_disco:nodes_actual(),
     RawPerNode = misc:parallel_map(fun (Node) ->
                                            diag_vbucket_per_node(BucketName, Node)
