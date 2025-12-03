@@ -31,7 +31,7 @@
          select_auth_infos/1,
          user_exists/1,
          get_roles/1,
-         maybe_substitute_user_roles/1,
+         maybe_substitute_user_roles/2,
          maybe_substitute_roles/1,
          get_user_name/1,
          get_users_version/0,
@@ -1330,19 +1330,25 @@ upgrade_props(?VERSION_76, auth, _Key, AuthProps) ->
                           get_rid_of_plain_key(_)])};
 upgrade_props(?VERSION_79, user, _Key, UserProps) ->
     {ok, functools:chain(UserProps,
-                         [maybe_substitute_user_roles(_)])};
+                         [maybe_substitute_user_roles(_, undefined)])};
 upgrade_props(_Vsn, _RecType, _Key, _Props) ->
     skip.
 
 %% For roles that have been eliminated or changed, substitute in their
-%% replacements.
-maybe_substitute_user_roles(User) ->
+%% replacements. Note: the compat version check was added in 8.0.1 so
+%% the substitution occurs when restoring a backup which was taken while
+%% on 8.0.0. This is acceptable as it's the same "bug" that occurs without
+%% the compat version check.
+maybe_substitute_user_roles(User, undefined) ->
     lists:map(
       fun ({roles, Roles}) ->
               {roles, maybe_substitute_roles(Roles)};
           (Other) ->
               Other
-      end, User).
+      end, User);
+%% So far there's no compat version driven changes needed.
+maybe_substitute_user_roles(User, _CompatVersion) ->
+    User.
 
 %% Replacement roles for ones that have been removed or changed. Only
 %% done for the same releases as supported in our upgrade matrix. These

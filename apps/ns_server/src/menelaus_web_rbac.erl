@@ -2539,7 +2539,7 @@ handle_backup_restore_validated(Req, Params) ->
     CanOverwrite = proplists:get_bool(canOverwrite, Params),
     Admin = proplists:get_value(admin, Backup),
     IsProvisioned = ns_config_auth:is_system_provisioned(),
-    _CompatVersion = proplists:get_value(compat_version, Backup),
+    CompatVersion = proplists:get_value(compat_version, Backup),
     AdminRes =
         case Admin of
             undefined -> undefined;
@@ -2578,7 +2578,8 @@ handle_backup_restore_validated(Req, Params) ->
                       Domain = proplists:get_value(domain, UserProps),
                       Identity = {Id, Domain},
                       UserProps1 =
-                        menelaus_users:maybe_substitute_user_roles(UserProps),
+                        menelaus_users:maybe_substitute_user_roles(
+                          UserProps, CompatVersion),
                       {Identity, [{pass_or_auth, {auth, Auth}} | UserProps1]}
               end, proplists:get_value(users, Backup)),
 

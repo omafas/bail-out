@@ -10,6 +10,7 @@ import testlib
 import json
 import os
 from testsets.users_tests import put_user, delete_user, lock_user, unlock_user
+from copy import deepcopy
 
 
 class UsersBackupTests(testlib.BaseTestSet):
@@ -482,6 +483,73 @@ class UsersBackupTests(testlib.BaseTestSet):
                                    '/settings/rbac/groups/testgroup')
             testlib.ensure_deleted(self.cluster,
                                    '/settings/rbac/groups/externalGroup')
+
+    # Verify backing up and then restoring a role doesn't perform any
+    # substitution as the version of the backup is the same. If the back
+    # is taken on an older release the role substitution might occur.
+    def backup_restore_user_without_substitution_test(self):
+        def get_roles(name):
+            user = testlib.get_succ(self.cluster,
+                                    f"/settings/rbac/users/local/{name}").json()
+            roles = [role['role'] for role in user.get('roles', [])]
+            return roles
+
+        put_user(self.cluster, 'local', 'readonlyadmin',
+                 password=testlib.random_str(8), roles='ro_admin')
+        roles_before = get_roles('readonlyadmin')
+        backup = testlib.get_succ(self.cluster, '/settings/rbac/backup').json()
+        testlib.ensure_deleted(self.cluster,
+                               '/settings/rbac/users/local/readonlyadmin')
+
+        # Simulate an older version by removing the compat info.
+        old_backup = deepcopy(backup)
+        old_backup.pop("compat_version", None)
+        res = testlib.put_succ(self.cluster, '/settings/rbac/backup',
+                               data={'backup': json.dumps(old_backup),
+                                     'canOverwrite': 'false'}, **{}).json()
+        old_backup_roles = get_roles('readonlyadmin')
+        # Ensure the roles were upgraded for backwards compatibility
+        assert old_backup_roles == ['ro_security_admin', 'ro_admin']
+        testlib.ensure_deleted(self.cluster,
+                               '/settings/rbac/users/local/readonlyadmin')
+
+        # Now use the "real" backup containing the compat info.
+        res = testlib.put_succ(self.cluster, '/settings/rbac/backup',
+                               data={'backup': json.dumps(backup),
+                                     'canOverwrite': 'false'}, **{}).json()
+        # Ensure no role changes were made
+        roles_after = get_roles('readonlyadmin')
+        assert roles_after == ['ro_admin']
+        testlib.ensure_deleted(self.cluster,
+                               '/settings/rbac/users/local/readonlyadmin')
+
+        # Set compat version to something "from the future"
+        old_backup["compat_version"] = "12.4"
+        res = testlib.put_fail(self.cluster, '/settings/rbac/backup',
+                               expected_code=400,
+                               data={'backup': json.dumps(old_backup),
+                                     'canOverwrite': 'false'}, **{}).json()
+        assert (res["errors"]["backup"]["compat_version"] ==
+                "Cannot restore a backup with cluster version '12.4' "
+                "as it is greater than what is supported.")
+
+        # Set compat version to garbage
+        old_backup["compat_version"] = "invalid&^%*2"
+        res = testlib.put_fail(self.cluster, '/settings/rbac/backup',
+                               expected_code=400,
+                               data={'backup': json.dumps(old_backup),
+                                     'canOverwrite': 'false'}, **{}).json()
+        assert (res["errors"]["backup"]["compat_version"] ==
+                'Found invalid cluster version: "invalid&^%*2".')
+
+        # Set compat version to an unsupported type (should be string)
+        old_backup["compat_version"] = {"test": 4}
+        res = testlib.put_fail(self.cluster, '/settings/rbac/backup',
+                               expected_code=400,
+                               data={'backup': json.dumps(old_backup),
+                                     'canOverwrite': 'false'}, **{}).json()
+        assert (res["errors"]["backup"]["compat_version"] ==
+                'Value must be json string')
 
 
 def verify_roles(cluster, username, expected_roles):
