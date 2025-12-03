@@ -640,10 +640,8 @@ cluster_info_props(Req) ->
       end},
      {clusterCompatVersion,
       fun (_Cfg) ->
-              [V1 | V2] = lists:map(
-                            integer_to_list(_),
-                            cluster_compat_mode:get_compat_version()),
-              list_to_binary(V1 ++ "." ++ V2)
+              misc:compat_version_to_binary(
+                cluster_compat_mode:get_compat_version())
       end},
      {clientCertAuthState,
       fun (Cfg) ->

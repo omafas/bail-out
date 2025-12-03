@@ -2379,6 +2379,9 @@ handle_backup(Req, Params) ->
                  begin
                     ?yield(object_start),
                     ?yield({kv, {<<"version">>, <<"1">>}}),
+                    ?yield({kv, {<<"compat_version">>,
+                                 misc:compat_version_to_binary(
+                                   cluster_compat_mode:get_compat_version())}}),
                     AdminProducer(?yield()),
                     ?yield({kv_start, <<"users">>}),
                     ?yield(array_start),
@@ -2522,6 +2525,8 @@ handle_backup_restore(Req) ->
                 (Vsn) -> {error, io_lib:format("Unsupported backup version: ~p",
                                                [Vsn])}
             end, version, _),
+          validator:string(compat_version, _),
+          validate_compat_version(_),
           validate_backup_admin(admin, _),
           validate_backup_groups(groups, Req, _),
           validator:default(groups, [], _),
@@ -2534,6 +2539,7 @@ handle_backup_restore_validated(Req, Params) ->
     CanOverwrite = proplists:get_bool(canOverwrite, Params),
     Admin = proplists:get_value(admin, Backup),
     IsProvisioned = ns_config_auth:is_system_provisioned(),
+    _CompatVersion = proplists:get_value(compat_version, Backup),
     AdminRes =
         case Admin of
             undefined -> undefined;
@@ -2685,6 +2691,27 @@ handle_backup_restore_validated(Req, Params) ->
              {usersOverwritten, UsersOverwritten},
              {groupsSkipped, [list_to_binary(G) || G <- GroupsSkipped]},
              {groupsOverwritten, [list_to_binary(G) || G <- GroupsUpdated]}]}).
+
+validate_compat_version(State) ->
+    validator:validate(
+      fun (Version) ->
+              CurCompatVer = cluster_compat_mode:get_compat_version(),
+              try misc:compat_version_from_string(Version) of
+                  Ver when Ver > CurCompatVer ->
+                      ErrorStr = io_lib:format(
+                                   "Cannot restore a backup with cluster "
+                                   "version '~s' as it is greater than what "
+                                   "is supported.", [Version]),
+                      {error, ErrorStr};
+                  Ver ->
+                      {value, Ver}
+              catch
+                  _:_ ->
+                      Err = io_lib:format(
+                              "Found invalid cluster version: ~p.", [Version]),
+                      {error, Err}
+              end
+      end, compat_version, State).
 
 validate_backup_admin(Name, State) ->
     validator:decoded_json(
