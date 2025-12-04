@@ -13,3 +13,4 @@ pyzipper~=0.3.6
 websockets~=14.1
 PyJWT>=2.0.0
 pykmip>=0.10.0
+greenlet~=3.2.4
