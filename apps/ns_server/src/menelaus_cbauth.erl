@@ -292,8 +292,8 @@ maybe_notify_cbauth(#state{workers = Workers,
                   _ ->
                       [menelaus_cbauth_worker:notify(
                          Pid, personalize_info(V, Label, Info)) ||
-                          #worker{label = Label, pid = Pid,
-                                  version = V} <- Workers]
+                       #worker{label = Label, pid = Pid,
+                               version = V} <- Workers, V =:= Ver]
               end
       end, NewInfo),
     State#state{cbauth_info = NewInfo}.
@@ -689,12 +689,14 @@ setup_t() ->
     fake_ns_config:update_snapshot([{rest, [{port, 8091}]},
                                     {rest_creds, placeholder},
                                     {memcached, [{admin_user, "user"},
-                                                 {admin_pass, "pass"}]}]),
+                                                 {admin_pass, "pass"}]},
+                                    {uuid, <<>>}]),
 
     meck:new(menelaus_cbauth_worker, [passthrough]),
 
     {ok, Pid} = menelaus_cbauth:start_link(),
-    start_fake_json_rpc_connection(?LABEL),
+    start_fake_json_rpc_connection(?LABEL, [internal,
+                                            {heartbeat, ?HEARTBEAT_TIME_S}]),
     PidMap#{?MODULE => Pid}.
 
 teardown_t(PidMap) ->
@@ -705,7 +707,7 @@ teardown_t(PidMap) ->
     fake_ns_config:teardown(),
     meck:unload().
 
-start_fake_json_rpc_connection(Label) ->
+start_fake_json_rpc_connection(Label, Params) ->
     Name = list_to_atom("json_rpc_connection-" ++ Label),
     Pid = self(),
     true = erlang:register(Name, Pid),
@@ -713,10 +715,9 @@ start_fake_json_rpc_connection(Label) ->
                 fun (_Label, _Call, _EJsonArg, _Opts) ->
                         {ok, true}
                 end),
-    gen_event:notify(json_rpc_events,
-                     {started, Label, [internal,
-                                       {heartbeat, ?HEARTBEAT_TIME_S}],
-                      self()}),
+    %% Reset meck's history, so that this function can be used multiple times
+    meck:reset(menelaus_cbauth_worker),
+    gen_event:notify(json_rpc_events, {started, Label, Params, Pid}),
     %% Wait for initial notify to be handled, to avoid racy tests
     meck:wait(1, menelaus_cbauth_worker, notify, ['_', '_'], ?LONG_TIMEOUT).
 
@@ -824,6 +825,38 @@ cbauth_many_notify_t() ->
             error(timeout)
     end.
 
+cbauth_notify_multiple_versions_t() ->
+    meck:wait(json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.UpdateDB", '_', '_'], ?LONG_TIMEOUT),
+    %% Start a v1 auth connection, to test the behaviour when both are present
+    start_fake_json_rpc_connection("external-auth",
+                                   [{version, ?VERSION_1},
+                                    {heartbeat, ?HEARTBEAT_TIME_S},
+                                    {type, auth}]),
+    meck:wait(json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.UpdateDBExt", '_', '_'], ?LONG_TIMEOUT),
+    %% Confirm that the payloads are ejson-encodable
+    meck:expect(json_rpc_connection, perform_call,
+                fun (_, "AuthCacheSvc.UpdateDB", {Info}, _) ->
+                        _ = ejson:encode({Info}),
+                        {ok, true};
+                    (_, "AuthCacheSvc.UpdateDBExt", {Info}, _) ->
+                        _ = ejson:encode({Info}),
+                        {ok, true};
+                    (_Label, _Call, _EJsonArg, _Opts) ->
+                        {ok, true}
+                end),
+    %% Trigger a change to both auth info versions
+    meck:expect(menelaus_users, get_auth_version, 0, {1, 0}),
+    gen_event:notify(user_storage_events, event),
+    %% Wait for both notifications to occur, and confirm that the perform_call
+    %% returned, ensuring that the payloads were both encodable by ejson
+    meck:wait(2, menelaus_cbauth_worker, notify, ['_', '_'], ?LONG_TIMEOUT),
+    meck:wait(2, json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.UpdateDB", '_', '_'], ?LONG_TIMEOUT),
+    meck:wait(2, json_rpc_connection, perform_call,
+              ['_', "AuthCacheSvc.UpdateDBExt", '_', '_'], ?LONG_TIMEOUT).
+
 trigger_notification(ns_node_disco_events) ->
     %% To avoid needing to trick ns_node_disco into recognising fake nodes, just
     %% make the node list different by removing the only node.
@@ -877,6 +910,8 @@ cbauth_test_() ->
      [{"cbauth init test", fun cbauth_init_t/0},
       {"cbauth sync test", fun cbauth_sync_t/0},
       {"cbauth stats test", fun cbauth_stats_t/0},
-      {"cbauth many notify test", fun cbauth_many_notify_t/0}
+      {"cbauth many notify test", fun cbauth_many_notify_t/0},
+      {"cbauth notify multiple versions test",
+       fun cbauth_notify_multiple_versions_t/0}
      | cbauth_notify_tests()]}.
 -endif.
