@@ -55,7 +55,6 @@
          is_allowed/2,
          get_roles/1,
          get_compiled_roles/1,
-         get_params_from_permissions/1,
          compile_params/3,
          compile_roles/3,
          validate_roles/1,
@@ -1295,33 +1294,6 @@ get_compiled_roles(#authn_res{identity = Identity,
 get_compiled_roles({_, _} = Identity) ->
     get_compiled_roles(#authn_res{identity = Identity}).
 
--spec get_params_from_permission(rbac_permission_pattern()) ->
-          false | {true, [rbac_permission_pattern_vertex_param(),...]}.
-get_params_from_permission({ObjectPattern, _}) ->
-    case ObjectPattern of
-        [{collection, [B, S, C]}|_] ->
-            {true, [B, S, C]};
-        [{scope, [B, S]}|_]  ->
-            {true, [B, S, any]};
-        [{bucket, B}|_] ->
-            {true, [B, any, any]};
-        [] ->
-            {true, [any, any, any]};
-        _ ->
-            false
-    end.
-
-%% Extract the set of bucket, scope and collection params from the list of roles
-%% in compiled roles. These are iterated over to set memcached privileges.
--spec get_params_from_permissions([rbac_compiled_role()]) ->
-          [[rbac_permission_pattern_vertex_param(),...]].
-get_params_from_permissions(CompiledRoles) ->
-    lists:usort(
-      lists:flatmap(
-        fun(Perms) ->
-                lists:filtermap(get_params_from_permission(_), Perms)
-        end, CompiledRoles)).
-
 build_compiled_roles(#authn_res{identity = Identity} = AuthnRes) ->
     case ns_node_disco:couchdb_node() == node() of
         false ->
@@ -2480,34 +2452,6 @@ roles_pre_79_format_test__() ->
 roles_pre_totoro_format_test__() ->
     validate_test_roles(menelaus_old_roles:roles_pre_totoro()).
 
-params_from_permissions_test__() ->
-    CompiledRoles =
-        [[{[{collection,["ab","_default","_default"]},data,docs],
-           [read,range_scan,sread]},
-          {[{bucket,"ab"},settings],[read]},
-          {[pools],[read]}],
-         [{[{collection,["bc","_system","_mobile"]},data],all},
-          {[{bucket,"bc"},data,docs],
-           [read,insert,delete,upsert,range_scan,sread]},
-          {[{bucket,"bc"},data],all},
-          {[{bucket,"bc"},views],all},
-          {[{bucket,"bc"},n1ql,index],all},
-          {[{bucket,"bc"},n1ql],[execute]},
-          {[{bucket,"bc"}],[read,flush]},
-          {[{bucket,"bc"},settings],[read]},
-          {[admin,memcached,idle],[write]},
-          {[settings,autocompaction],[read]},
-          {[pools],[read]}],
-         [{[{scope,["ab","_system"]},collections],all}]],
-    Expected =
-        [["ab", any, any],
-         ["ab","_default","_default"],
-         ["ab","_system", any],
-         ["bc", any, any],
-         ["bc","_system","_mobile"]],
-
-    ?assertEqual(Expected, get_params_from_permissions(CompiledRoles)).
-
 extended_roles_test__() ->
     MyRoles = [{superman, [],
                 [{name, <<"Superman">>},
@@ -2577,7 +2521,6 @@ default_profile_test_() ->
       fun roles_pre_76_format_test__/0,
       fun roles_pre_79_format_test__/0,
       fun roles_pre_totoro_format_test__/0,
-      fun params_from_permissions_test__/0,
       fun extended_roles_test__/0]}.
 
 analytics_admin_empty_profile_test_() ->

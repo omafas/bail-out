@@ -197,68 +197,65 @@ refresh() ->
 
 -record(priv_object, {privileges, children}).
 
-priv_is_granted(_Privilege, [], _Map) ->
-    false;
-priv_is_granted(Privilege, [Object | Rest], Map) ->
-    case maps:find(Object, Map) of
-        {ok, #priv_object{privileges = Privileges, children = Children}} ->
-            case maps:is_key(Privilege, Privileges) of
-                true ->
-                    true;
-                false ->
-                    priv_is_granted(Privilege, Rest, Children)
-            end;
-        error ->
-            false
-    end.
+priv_set(Privilege, Object, PrivTree) ->
+    priv_set(Privilege, Object, PrivTree, #{}).
 
 %% Note that privileges can be set at the bucket, scope or collection level.
-%% If the same privilege is applied to a parent level, priv_set erases the
-%% privilege from its children (as they inherit the parent's privileges).
+%% If the same privilege is applied to a parent level, priv_set retains the
+%% privilege in its children (as they *do not* inherit the parent's privileges).
 %% For example, specifying:
 %% {[{collection, [bucket1, S, C]}, data, docs], [sread]} and
 %% {[{bucket, bucket1}, data, docs], [sread]}
-%% only sets SystemCollectionLookup at the bucket level.
-priv_set(Privilege, [Object], Map) ->
+%% sets SystemCollectionLookup at both the bucket and collection levels.
+priv_set(Privilege, [Object], PrivTree, ParentPrivileges) ->
     maps:update_with(
       Object,
-      fun (#priv_object{privileges = Privileges, children = Children}) ->
-              #priv_object{privileges = Privileges#{Privilege => true},
-                           children = priv_erase(Privilege, Children)}
+      fun (#priv_object{privileges = Privileges} = PrivObj) ->
+              PrivObj#priv_object{privileges = Privileges#{Privilege => true}}
       end,
-      #priv_object{privileges = #{Privilege => true}, children = #{}},
-      Map);
-priv_set(Privilege, [Object | Rest], Map) ->
-    Map#{Object =>
-             case maps:find(Object, Map) of
-                 {ok, #priv_object{privileges = Privileges,
+      #priv_object{privileges = ParentPrivileges#{Privilege => true},
+                   children = #{}},
+      PrivTree);
+priv_set(Privilege, [Object | Rest], PrivTree, ParentPrivileges) ->
+    PrivTree#{Object =>
+             case maps:find(Object, PrivTree) of
+                 {ok, #priv_object{privileges = NextParentPrivileges,
                                    children = Children} = Old} ->
-                     case maps:is_key(Privilege, Privileges) of
-                         true ->
-                             Old;
-                         false ->
-                             Old#priv_object{
-                               children = priv_set(Privilege, Rest, Children)}
-                     end;
+                     Old#priv_object{
+                       children = priv_set(Privilege, Rest, Children,
+                                           NextParentPrivileges)};
                  error ->
-                     #priv_object{privileges = #{},
-                                  children = priv_set(Privilege, Rest, #{})}
+                     #priv_object{privileges = ParentPrivileges,
+                                  children = priv_set(Privilege, Rest, #{},
+                                                      ParentPrivileges)}
              end}.
 
-priv_erase(Privilege, Map) ->
-    maps:fold(
-      fun (Key, #priv_object{privileges = Privileges, children = Children},
-           Acc) ->
-              case #priv_object{privileges = maps:remove(Privilege, Privileges),
-                                children = priv_erase(Privilege, Children)} of
-                  #priv_object{privileges = P, children = C} when
-                        map_size(P) =:= 0,
-                        map_size(C) =:= 0 ->
-                      Acc;
-                  NotEmpty ->
-                      Acc#{Key => NotEmpty}
-              end
-      end, #{}, Map).
+priv_unset(Privilege, Object, PrivTree) ->
+    priv_unset(Privilege, Object, PrivTree, #{}).
+
+priv_unset(Privilege, [Object], PrivTree, ParentPrivileges) ->
+    maps:update_with(
+      Object,
+      fun (#priv_object{privileges = Privileges} = PrivObj) ->
+              PrivObj#priv_object{privileges = maps:remove(Privilege,
+                  Privileges)}
+      end,
+      #priv_object{privileges = maps:remove(Privilege, ParentPrivileges),
+          children = #{}},
+      PrivTree);
+priv_unset(Privilege, [Object | Rest], PrivTree, ParentPrivileges) ->
+    PrivTree#{Object =>
+             case maps:find(Object, PrivTree) of
+                 {ok, #priv_object{privileges = NextParentPrivileges,
+                                   children = Children} = Old} ->
+                     Old#priv_object{
+                       children = priv_unset(Privilege, Rest, Children,
+                           NextParentPrivileges)};
+                 error ->
+                     #priv_object{privileges = ParentPrivileges,
+                                  children = priv_unset(Privilege, Rest, #{},
+                                      ParentPrivileges)}
+             end}.
 
 bucket_permissions(BucketName, CompiledRoles, Acc) ->
     lists:foldl(
@@ -281,29 +278,25 @@ get_priv_object_key([Bucket | Rest]) ->
 
 %% Params is a collection param [bucket_name, scope_name, collection_name]
 %% where bucket_name cannot be any.
-collection_permissions(Params, CompiledRoles, Acc) ->
-    ToCheck = lists:map(
-                fun (any) ->
-                        all;
-                    (X) ->
-                        X
-                end, menelaus_roles:strip_ids(?RBAC_COLLECTION_PARAMS, Params)),
+collection_permissions({[{collection, Params} | ObjRest], Ops}, PrivTree) ->
+    ToCheck = menelaus_roles:strip_ids(?RBAC_COLLECTION_PARAMS, Params),
+    ObjStripped = [{collection, ToCheck} | ObjRest],
     ToStore = get_priv_object_key(Params),
     lists:foldl(
-      fun ({Permission, MemcachedPrivilege}, Acc1) ->
-              case priv_is_granted(MemcachedPrivilege, ToStore, Acc1) of
-                  true ->
-                      Acc1;
-                  false ->
-                      case menelaus_roles:is_allowed(Permission,
-                                                     CompiledRoles) of
-                          true ->
-                              priv_set(MemcachedPrivilege, ToStore, Acc1);
-                          false ->
-                              Acc1
-                      end
+      fun ({{ObjToCheck, OpToCheck}, MemcachedPrivilege}, Acc1) ->
+              ObjMatches = lists:sublist(ObjToCheck, length(ObjStripped)) =:=
+                  ObjStripped,
+              OpMatches = Ops =:= all orelse
+                        (Ops =/= none andalso lists:member(OpToCheck, Ops)),
+              case {ObjMatches, OpMatches} of
+                  {true, true} ->
+                      priv_set(MemcachedPrivilege, ToStore, Acc1);
+                  {true, false} ->
+                      priv_unset(MemcachedPrivilege, ToStore, Acc1);
+                  _ ->
+                      Acc1
               end
-      end, Acc, collection_permissions_to_check(ToCheck)).
+      end, PrivTree, collection_permissions_to_check(ToCheck)).
 
 global_permissions(CompiledRoles) ->
     lists:usort(
@@ -320,11 +313,22 @@ remove_trailing_any([B, S, any]) ->
 remove_trailing_any([B, S, C]) ->
     [B, S, C].
 
-fixup_collection_params(CollectionParams, Snapshot) ->
+get_params([{bucket, B} | Rest]) ->
+    {[B, any, any], Rest};
+get_params([{scope, [B, S]} | Rest]) ->
+    {[B, S, any], Rest};
+get_params([{collection, [B, S, C]} | Rest]) ->
+    {[B, S, C], Rest};
+get_params(Rest) ->
+    {[any, any, any], Rest}.
+
+expand_collection_params({PermissionObject, Operations}, Snapshot) ->
+    {CollectionParams, ObjRest} = get_params(PermissionObject),
     %% memcached permissions are specified for a [bucket_name, scope uid,
     %% collection uid]. If either scope or collection uid are not specified, the
-    %% permissions apply to all scopes and collections in the bucket (or all
-    %% collections in the scope).
+    %% permissions apply to all otherwise unspecified scopes and collections in
+    %% the bucket (or all collections in the scope). These do not override the
+    %% set of permissions specified at a deeper level.
     %%
     %% CollectionParams is of the form [bucket_name, scope_name,
     %% collection_name] where (bucket|scope|collection)_name may be "any".
@@ -355,9 +359,13 @@ fixup_collection_params(CollectionParams, Snapshot) ->
     case lists:member(any, Params) of
         true ->
             Expanded = split_and_expand_collection_params(Params, Snapshot),
-            lists:map(misc:align_list(_, length(?RBAC_COLLECTION_PARAMS), any),
-                      Expanded);
-        false -> [CollectionParams]
+            lists:map(fun (NewParams) ->
+                {{misc:align_list(NewParams,
+                                  length(?RBAC_COLLECTION_PARAMS),
+                                  any),
+                    ObjRest}, Operations}
+                end, Expanded);
+        false -> [{{CollectionParams, ObjRest}, Operations}]
     end.
 
 split_and_expand_collection_params(CollectionParams, Snapshot) ->
@@ -384,42 +392,72 @@ split_and_expand_collection_params(scope, RemainingParams, Manifest) ->
     [[Scope | Rest] || Scope <- Scopes].
 
 check_permissions(Snapshot, CompiledRoles) ->
-    Params = menelaus_roles:get_params_from_permissions(CompiledRoles),
-    ExpandedParams = lists:flatmap(fixup_collection_params(_, Snapshot),
-                                   Params),
-    FinalParams =
+    CollectionPrivileges =
+        lists:foldl(
+             fun (CompiledRole, Acc) ->
+                     privileges_merge(
+                       Acc,
+                       check_permissions_for_role(Snapshot, CompiledRole))
+             end,
+        #{}, CompiledRoles),
+    {global_permissions(CompiledRoles),
+     CollectionPrivileges}.
+
+check_permissions_for_role(Snapshot, CompiledRole) ->
+    ExpandedPerms = lists:reverse(
+        lists:flatmap(
+            expand_collection_params(_, Snapshot), CompiledRole)),
+    FinalPartialRoles =
         %% TODO: memcached allows specifying a wildcard * for bucket_name but we
         %% don't use it. collection_permissions() doesn't handle bucket "any".
-        lists:usort(lists:flatmap(
-                      fun([any, any, any]) ->
-                              [[B, any, any] ||
+        lists:flatmap(
+                      fun({{[any, any, any], ObjRest}, Ops}) ->
+                              [{{[B, any, any], ObjRest}, Ops} ||
                                   B <- ns_bucket:get_bucket_names(Snapshot)];
-                         (X) -> [X]
-                      end, ExpandedParams)),
+                         (Other) -> [Other]
+                      end, ExpandedPerms),
 
     %% Use compile_params to get uids of scopes/collections (required by
     %% memcached).
-    CollectionParams =
+    Collections =
         lists:filtermap(
-          fun(P) ->
+          fun({{Params, ObjRest}, Ops}) ->
                   %% TODO: The collection need not be found (and isn't checked
                   %% for during compilation of roles nor is it accounted for in
                   %% fixup_collection_params). So compile_params can return
                   %% false. Should probably check (and cache) these while
                   %% compiling roles.
-                  case menelaus_roles:compile_params(?RBAC_COLLECTION_PARAMS, P,
-                                                     Snapshot) of
-                      false -> false;
-                      NewParams -> {true, NewParams}
+                  case menelaus_roles:compile_params(?RBAC_COLLECTION_PARAMS,
+                                                     Params, Snapshot) of
+                      false ->
+                          false;
+                      NewParams ->
+                          %% Convert back to parameterised object, now with
+                          %% uids for comprehension by memcached
+                          {true, {[{collection, NewParams} | ObjRest], Ops}}
                   end
-          end, FinalParams),
+          end, FinalPartialRoles),
 
     BucketPrivileges =
-        lists:foldl(bucket_permissions(_, CompiledRoles, _), #{},
+        lists:foldl(bucket_permissions(_, [CompiledRole], _), #{},
                     ns_bucket:get_bucket_names(Snapshot)),
-    {global_permissions(CompiledRoles),
-     lists:foldl(collection_permissions(_, CompiledRoles, _), BucketPrivileges,
-                 CollectionParams)}.
+    CollectionPrivileges =
+        privileges_merge(BucketPrivileges,
+                         lists:foldl(fun collection_permissions/2, #{},
+                                     Collections)),
+    maps:filter(
+        fun (_, #priv_object{privileges = Privileges, children = Children}) ->
+            map_size(Privileges) > 0 orelse map_size(Children) > 0
+        end, CollectionPrivileges).
+
+privileges_merge(Priv1, Priv2) ->
+    maps:merge_with(
+        fun (_,
+             #priv_object{privileges = Privileges1, children = Children1},
+             #priv_object{privileges = Privileges2, children = Children2}) ->
+            #priv_object{privileges = maps:merge(Privileges1, Privileges2),
+                         children = privileges_merge(Children1, Children2)}
+        end, Priv1, Priv2).
 
 permissions_for_user(Roles, Snapshot, RoleDefinitions) ->
     CompiledRoles = menelaus_roles:compile_roles(Roles, RoleDefinitions,
@@ -443,8 +481,7 @@ jsonify_privs([SectionKey | Rest], Map) ->
         fun (Key, #priv_object{privileges = Privileges, children = Children},
              Acc) ->
                 [{jsonify_key(Key),
-                  {[{privileges, maps:keys(Privileges)} ||
-                       map_size(Privileges) =/= 0] ++
+                  {[{privileges, maps:keys(Privileges)}] ++
                        [jsonify_privs(Rest, Children) ||
                            map_size(Children) =/= 0]}} | Acc]
         end, [], Map)}}.
@@ -566,18 +603,51 @@ flatten_priv_object(Prefix, Acc, Map) ->
                 Children)
       end, Acc, Map).
 
+
+priv_is_granted(Privilege, Key, PrivTree) ->
+    %% Check for whether Privilege is granted for Key in , assuming
+    priv_is_granted(Privilege, Key, PrivTree, false).
+
+%% Privilege is granted if the deepest matching object has that privilege
+%% granted. If the object has undefined privilege, then it inherits the parent
+%% privileges.
+priv_is_granted(Privilege, [Object | Rest], PrivTree, GrantedByParent) ->
+    case maps:find(Object, PrivTree) of
+        {ok, #priv_object{privileges = Privileges, children = Children}} ->
+            GrantedAtThisLevel = maps:is_key(Privilege, Privileges),
+            case Rest of
+                [] ->
+                    %% If privileges are specified at this level, and the
+                    %% object we are looking for is exactly at this level, then
+                    %% the privilege is granted if it is granted at this level
+                    GrantedAtThisLevel;
+                _ ->
+                    %% If privileges are specified at this level, but the object
+                    %% we are looking for is more specific, then we check the
+                    %% next level in case the object matches at a lower level
+                    priv_is_granted(Privilege, Rest, Children,
+                                    GrantedAtThisLevel)
+            end;
+        error ->
+            %% If privileges aren't specified at the specific level, then the
+            %% lowest level determines whether it is granted
+            GrantedByParent
+    end.
 priv_object_test() ->
     PrivObject =
         functools:chain(
           #{},
-          [priv_set(p1, [b1, s1, c1], _),
-           priv_set(p1, [b2], _),
+          [priv_set(p3, [b1], _),
+             priv_set(p1, [b1, s1, c1], _),
            priv_set(p2, [b1, s1, c1], _),
-           priv_set(p2, [b1, s1, c2], _),
-           priv_set(p2, [b1, s2, c3], _),
-           priv_set(p2, [b1, s2], _),
            priv_set(p3, [b1, s1, c1], _),
-           priv_set(p3, [b1], _)]),
+           priv_set(p2, [b1, s1, c2], _),
+           priv_unset(p3, [b1, s1, c2], _),
+           priv_set(p2, [b1, s2], _),
+           priv_unset(p3, [b1, s2], _),
+           priv_set(p2, [b1, s2, c3], _),
+           priv_unset(p3, [b1, s2, c3], _),
+           priv_set(p1, [b2], _)]),
     ?assert(priv_is_granted(p1, [b1, s1, c1], PrivObject)),
     ?assertNot(priv_is_granted(p1, [b1, s1], PrivObject)),
     ?assertNot(priv_is_granted(p1, [b1], PrivObject)),
@@ -586,12 +656,16 @@ priv_object_test() ->
     ?assert(priv_is_granted(p1, [b2], PrivObject)),
     ?assertNot(priv_is_granted(wrong, [b2], PrivObject)),
     ?assertNot(priv_is_granted(p1, [wrong], PrivObject)),
+    ?assert(priv_is_granted(p3, [b1, s1], PrivObject)),
     ?assertListsEqual([{[b1, s1, c1], p1},
                        {[b2], p1},
                        {[b1, s1, c1], p2},
                        {[b1, s1, c2], p2},
+                       {[b1, s2, c3], p2},
                        {[b1, s2], p2},
-                       {[b1], p3}], flatten_priv_object(PrivObject)).
+                       {[b1, s1, c1], p3},
+                       {[b1], p3},
+                       {[b1, s1], p3}], flatten_priv_object(PrivObject)).
 
 fixup_collection_params_test() ->
     Manifest1 =
@@ -622,42 +696,64 @@ fixup_collection_params_test() ->
            {"default", [{uuid, <<"default_id">>}, {collections, Manifest1}]},
            {"abc", [{uuid, <<"abc_id">>}, {collections, Manifest2}]}]),
 
-    ?assertEqual(fixup_collection_params([any, any, any], Snapshot),
-                 [[any, any, any]]),
-    ?assertEqual(fixup_collection_params(["default", any, any], Snapshot),
-                 [["default", any, any]]),
-    ?assertEqual(fixup_collection_params(["default", "def", any], Snapshot),
-                 [["default", "def", any]]),
-    ?assertEqual(fixup_collection_params(["default", "_system", "_mobile"],
-                                        Snapshot),
-                 [["default", "_system", "_mobile"]]),
+    ?assertEqual([{{[any, any, any],
+        []}, op}],
+                 expand_collection_params({[{bucket, any}],
+                                            op}, Snapshot)),
+    ?assertEqual([{{["default", any, any],
+        []}, op}],
+                 expand_collection_params({[{bucket, "default"}],
+                                           op}, Snapshot)),
+    ?assertEqual([{{["default", "def", any],
+        []}, op}],
+                 expand_collection_params({[{scope, ["default", "def"]}],
+                                           op}, Snapshot)),
+    ?assertEqual([{{["default", "_system", "_mobile"],
+        []}, op}],
+                 expand_collection_params(
+                     {[{collection, ["default", "_system", "_mobile"]}], op},
+                     Snapshot)),
 
-    Result1 = [["default", "_system", "_mobile"],
-               ["abc", "_system", "_mobile"]],
-    ?assertEqual(fixup_collection_params([any, "_system", "_mobile"], Snapshot),
-                 Result1),
+    Result1 = [{{["default", "_system", "_mobile"],
+        []}, op},
+               {{["abc", "_system", "_mobile"],
+                   []}, op}],
+    ?assertEqual(Result1,
+                 expand_collection_params({[{collection,
+                     [any, "_system", "_mobile"]}],
+                                           op}, Snapshot)),
 
-    Result2 = [["default", "_system", any],
-               ["abc", "_system", any]],
-    ?assertEqual(fixup_collection_params([any, "_system", any], Snapshot),
-                 Result2),
+    Result2 = [{{["default", "_system", any],
+        []}, op},
+               {{["abc", "_system", any],
+                   []}, op}],
+    ?assertEqual(Result2,
+                 expand_collection_params(
+                     {[{collection, [any, "_system", any]}], op}, Snapshot)),
 
-    Result3 = [["default", "_default", "_mobile"],
-               ["default", "def", "_mobile"],
-               ["default", "_system", "_mobile"]],
-    ?assertEqual(fixup_collection_params(["default", any, "_mobile"], Snapshot),
-                 Result3),
+    Result3 = [{{["default", "_default", "_mobile"],
+        []}, op},
+               {{["default", "def", "_mobile"],
+                   []}, op},
+               {{["default", "_system", "_mobile"],
+                   []}, op}],
+    ?assertEqual(Result3,
+                 expand_collection_params(
+                     {[{collection, ["default", any, "_mobile"]}], op},
+                     Snapshot)),
 
     %% Note the expansion populates all combinations, although _mobile doesn't
     %% exist in any scope other than "_system". Non-existent combinations are
     %% weeded out when compile_params returns false.
-    Result4 = [["default", "_default", "_mobile"],
-               ["default", "def", "_mobile"],
-               ["default", "_system", "_mobile"],
-               ["abc", "_default", "_mobile"],
-               ["abc", "ghi", "_mobile"],
-               ["abc", "_system", "_mobile"]],
-    ?assertEqual(fixup_collection_params([any, any, "_mobile"], Snapshot),
+    Result4 = [{{["default", "_default", "_mobile"], []}, op},
+               {{["default", "def", "_mobile"], []}, op},
+               {{["default", "_system", "_mobile"], []}, op},
+               {{["abc", "_default", "_mobile"], []}, op},
+               {{["abc", "ghi", "_mobile"], []}, op},
+               {{["abc", "_system", "_mobile"], []}, op}],
+    ?assertEqual(expand_collection_params(
+                                {[{collection, [any, any, "_mobile"]}], op},
+        Snapshot),
                  Result4).
 
 permissions_for_user_test_() ->
@@ -665,11 +761,12 @@ permissions_for_user_test_() ->
         [{uid, 2},
          {scopes, [{"s",  [{uid, 1}, {collections, [{"_c",  [{uid, 1}]},
                                                     {"c1", [{uid, 2}]}]}]},
-                   {"s1", [{uid, 2}, {collections, [{"_c",  [{uid, 3}]}]}]},
+                   {"s1", [{uid, 2}, {collections, [{"_c",  [{uid, 3}]},
+                                                    {"c1",  [{uid, 4}]}]}]},
                    {?SYSTEM_SCOPE_NAME, [{uid, 3},
                                          {collections,
-                                          [{"_mobile", [{uid, 4}]},
-                                           {"_query", [{uid, 5}]}]}]}]}],
+                                          [{"_mobile", [{uid, 5}]},
+                                           {"_query", [{uid, 6}]}]}]}]}],
     Snapshot =
         ns_bucket:toy_buckets(
           [{"test", [{uuid, <<"test_id">>}]},
@@ -776,12 +873,16 @@ permissions_for_user_test_() ->
              [{"default", <<"default_id">>}, {"s", 1}, {"_c", 1}]}],
            ['IdleConnection','SystemSettings'],
            [{["default"], ['DcpProducer', 'SystemCollectionLookup']},
-            {["default", 1, 1], DataRead(JustCollections)}]),
+            {["default", 1], ['SystemCollectionLookup']},
+            {["default", 1, 1], ['SystemCollectionLookup' |
+                                 DataRead(JustCollections)]}]),
       Test([{data_dcp_reader,
              [{"default", <<"default_id">>}, {"s", 1}, {"c1", 2}]}],
            ['IdleConnection','SystemSettings'],
            [{["default"], ['DcpProducer', 'SystemCollectionLookup']},
-            {["default", 1, 2], DataRead(JustCollections)}]),
+            {["default", 1], ['SystemCollectionLookup']},
+            {["default", 1, 2], ['SystemCollectionLookup' |
+            DataRead(JustCollections)]}]),
       Test([{data_monitoring,
              [{"default", <<"default_id">>}, {"s", 1}, {"_c", 1}]}],
            ['SystemSettings'],
@@ -803,12 +904,16 @@ permissions_for_user_test_() ->
            ['IdleConnection','SystemSettings'],
            [{["default"],
              AllBucketPermissions -- SysWrite(BucketsPlusCollections)},
-           {["default", 3, 4], ['SystemCollectionMutation']}]),
+            {["default", 3],
+             All(JustCollections) -- SysWrite(JustCollections)},
+            {["default", 3, 5], All(JustCollections)}]),
       Test([{mobile_sync_gateway, [any]}],
            ['IdleConnection','SystemSettings'],
            [{["default"],
              AllBucketPermissions -- SysWrite(BucketsPlusCollections)},
-           {["default", 3, 4], ['SystemCollectionMutation']},
+            {["default", 3],
+             All(JustCollections) -- SysWrite(BucketsPlusCollections)},
+            {["default", 3, 5], All(JustCollections)},
             {["test"],
              AllBucketPermissions -- SysWrite(BucketsPlusCollections)}]),
       Test([{data_writer, [{"test", <<"test_id">>}, any, any]}],
@@ -821,6 +926,7 @@ permissions_for_user_test_() ->
            ['SystemSettings'],
            [{["test"], ['Delete', 'Insert', 'Upsert']},
             {["default", 1], ['Delete', 'Insert', 'Upsert']},
+            {["default", 1, 1], ['Delete', 'Insert', 'Upsert']},
             {["default", 2],
              ['Read', 'RangeScan', 'SystemCollectionLookup']}])]}.
 -endif.
