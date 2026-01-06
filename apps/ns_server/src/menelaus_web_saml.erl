@@ -885,7 +885,7 @@ defaults() ->
      {sign_requests, true},
      {sign_metadata, true},
      {fingerprints_usage, metadataInitialOnly},
-     {trusted_fingerprints, {"", []}},
+     {trusted_fingerprints, {<<>>, []}},
      {entity_id, ""},
      {md_address_family, undefined},
      {md_tls_verify_peer, true},
