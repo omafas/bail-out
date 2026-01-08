@@ -2077,27 +2077,24 @@ deactivate_bucket_data_on_unknown_nodes(BucketName, Nodes) ->
 -spec prepare_fusion_rebalance(binary(), [node()]) ->
           {ok, {list(), {list()}}} | {error, term()}.
 prepare_fusion_rebalance(PlanUUID, KeepNodes) ->
-    Snapshot = chronicle_compat:get_snapshot(
-                 [ns_bucket:fetch_snapshot(all, _, [uuid, props]),
-                  ns_cluster_membership:fetch_snapshot(_)],
-                 #{read_consistency => quorum}),
-
-    KeepKVNodes = ns_cluster_membership:service_nodes(Snapshot, KeepNodes, kv),
+    KeepKVNodes = ns_cluster_membership:service_nodes(KeepNodes, kv),
     Validity = os:system_time(second) + ?FUSION_SNAPSHOT_LIFETIME div 1000,
-    prepare_fusion_rebalance(PlanUUID, KeepKVNodes, Snapshot,
-                             fun generate_fast_forward_map/4, Validity).
+    prepare_fusion_rebalance(PlanUUID, KeepKVNodes, direct,
+                             fun generate_fast_forward_map/4,
+                             fun run_janitor_and_fetch_snapshot/1,
+                             Validity).
 
 
-prepare_fusion_rebalance(PlanUUID, KeepKVNodes, Snapshot, GenerateMapFun,
-                         Validity) ->
-    BucketNames = ns_bucket:get_bucket_names(Snapshot),
+prepare_fusion_rebalance(PlanUUID, KeepKVNodes, Source, GenerateMapFun,
+                         RunJanitorFun, Validity) ->
+    BucketNames = ns_bucket:get_bucket_names(Source),
     try
         RV =
             prepare_fusion_rebalance_massage_result(
               PlanUUID, lists:filtermap(
                           prepare_bucket_fusion_rebalance(
-                            PlanUUID, Snapshot, _, KeepKVNodes,
-                            GenerateMapFun, Validity),
+                            PlanUUID, _, KeepKVNodes, GenerateMapFun,
+                            RunJanitorFun, Validity),
                           BucketNames)),
         ale:info(?USER_LOGGER, "Prepared fusion rebalance for nodes ~p. "
                  "plan uuid: ~p", [KeepKVNodes, PlanUUID]),
@@ -2144,16 +2141,22 @@ prepare_fusion_rebalance_massage_result(PlanUUID, Result) ->
                "Acceleration plan:~n~p", [RebalancePlan, AccelerationPlan]),
     {RebalancePlan, AccelerationPlan}.
 
-prepare_bucket_fusion_rebalance(PlanUUID, Snapshot, Bucket, KeepKVNodes,
-                                GenerateMapFun, Validity) ->
+run_janitor_and_fetch_snapshot(Bucket) ->
+    run_janitor_pre_rebalance(Bucket),
+    ns_bucket:get_snapshot(Bucket, [uuid, props]).
+
+prepare_bucket_fusion_rebalance(PlanUUID, Bucket, KeepKVNodes,
+                                GenerateMapFun, RunJanitorFun, Validity) ->
+    Source = RunJanitorFun(Bucket),
+
     {ok, {BucketConfig, Rev}} =
-        ns_bucket:get_bucket_with_revision(Bucket, Snapshot),
+        ns_bucket:get_bucket_with_revision(Bucket, Source),
     case ns_bucket:is_fusion(BucketConfig) of
         false ->
             false;
         true ->
             case do_prepare_bucket_fusion_rebalance(
-                   PlanUUID, Bucket, ns_bucket:uuid(Bucket, Snapshot),
+                   PlanUUID, Bucket, ns_bucket:uuid(Bucket, Source),
                    BucketConfig, KeepKVNodes, GenerateMapFun, Validity) of
                 {error, _} = Error ->
                     throw(Error);
@@ -2234,6 +2237,7 @@ prepare_rebalance_test_() ->
              ok = meck:new(menelaus_web_node, [passthrough]),
              ok = meck:new(ns_config, [passthrough]),
              ok = meck:new(fusion_uploaders, [passthrough]),
+             ok = meck:new(ns_janitor, [passthrough]),
              ok = meck:expect(
                     fusion_uploaders, get_snapshots,
                     fun (BucketUUID, VBuckets, SnapshotUUID, _, _) ->
@@ -2247,12 +2251,14 @@ prepare_rebalance_test_() ->
              ok = meck:expect(ns_config, get_timeout,
                               fun (_, Default) -> Default end),
              ok = meck:expect(fusion_uploaders, store_snapshots_uuid,
-                              fun (_, _, _) -> ok end)
+                              fun (_, _, _) -> ok end),
+             ok = meck:expect(ns_janitor, cleanup, fun (_, _) -> ok end)
      end,
      fun (_) ->
              ok = meck:unload(menelaus_web_node),
              ok = meck:unload(ns_config),
-             ok = meck:unload(fusion_uploaders)
+             ok = meck:unload(fusion_uploaders),
+             ok = meck:unload(ns_janitor)
      end,
      [{"basic happy path",
        fun () ->
@@ -2262,7 +2268,7 @@ prepare_rebalance_test_() ->
                    end,
                RV = prepare_fusion_rebalance(
                       <<"PlanUUD">>, Servers, Snapshot, GenerateMapFun,
-                      os:system_time(second) + 1000),
+                      fun (_) -> Snapshot end, os:system_time(second) + 1000),
                ?assertMatch({ok, {_, {_}}}, RV),
                {ok, {RebalancePlan, {AccelerationPlan}}} = RV,
                UUID = proplists:get_value(planUUID, RebalancePlan),
