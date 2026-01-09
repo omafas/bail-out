@@ -968,7 +968,7 @@ permissions_for_user_test_() ->
            [{["default", 1, 1], [empty]},
             {["default", 2, 3], All(JustCollections)},
             {["default", 1], All(JustCollections)},
-            {["default"], AllBucketPermissions}]),
+            {["default"], All(JustCollections)}]),
       Test([<<"complex_role_with_mixed_parameterisation">>],
            [],
            [{["default"], ['SimpleStats']},

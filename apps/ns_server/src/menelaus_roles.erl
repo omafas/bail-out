@@ -872,32 +872,12 @@ public_definitions() ->
      {?VERSION_TOTORO, fun menelaus_old_roles:roles_pre_totoro/0},
      {undefined, ?cut(roles() ++ maybe_add_developer_preview_roles())}].
 
--spec object_match(
-        rbac_permission_object(), rbac_permission_pattern_object()) ->
-                          boolean().
-object_match(_, []) ->
-    true;
-object_match([], [_|_]) ->
-    false;
-object_match([Vertex | RestOfObject],
-             [FilterVertex | RestOfObjectPattern]) ->
-    case vertex_match(Vertex, FilterVertex) of
-        true ->
-            object_match(RestOfObject, RestOfObjectPattern);
-        false ->
-            false
-    end;
-object_match(_, _) ->
-    false.
 
-vertex_params_match(Params, FilterParams) ->
-    lists:all(fun vertex_param_match/1, lists:zip(Params, FilterParams)).
-
-vertex_param_match({any, _}) ->
+vertex_param_match(any, _) ->
     true;
-vertex_param_match({_, any}) ->
+vertex_param_match(_, any) ->
     true;
-vertex_param_match({A, B}) ->
+vertex_param_match(A, B) ->
     A =:= B.
 
 is_data_vertex({bucket, _}) ->
@@ -922,27 +902,21 @@ get_vertex_param_list({_, Params}) ->
 get_vertex_param_list(_) ->
     [].
 
-expand_vertex(Vertex, Pad) ->
-    case is_data_vertex(Vertex) of
-        true ->
-            {collection,
-             misc:align_list(get_vertex_param_list(Vertex), 3, Pad)};
-        false ->
-            Vertex
-    end.
+expand_vertex({bucket, B}, Pad) ->
+    [{expanded_bucket, B}, {expanded_scope, Pad}, {expanded_collection, Pad}];
+expand_vertex({scope, [B, S]}, Pad) ->
+    [{expanded_bucket, B}, {expanded_scope, S}, {expanded_collection, Pad}];
+expand_vertex({collection, [B, S, C]}, _) ->
+    [{expanded_bucket, B}, {expanded_scope, S}, {expanded_collection, C}];
+expand_vertex(ExpandedVertex, _) ->
+    [ExpandedVertex].
 
-vertex_match(PermissionVertex, FilterVertex) ->
-    expanded_vertex_match(expand_vertex(PermissionVertex, all),
-                          expand_vertex(FilterVertex, any)).
-
-expanded_vertex_match({credentials, PermId}, {credentials, FilterId}) ->
+vertex_match({credentials, PermId}, {credentials, FilterId}) ->
     credential_match(PermId, FilterId);
-expanded_vertex_match({Same, Params}, {Same, FilterParams}) ->
-    vertex_params_match(Params, FilterParams);
-expanded_vertex_match(Same, Same) ->
-    true;
-expanded_vertex_match(_, _) ->
-    false.
+vertex_match({Vertex, Param}, {Vertex, FilterParam}) ->
+    vertex_param_match(Param, FilterParam);
+vertex_match(Vertex, Filter) ->
+    Vertex =:= Filter.
 
 credential_match(PermId, FilterId) ->
     case FilterId of
@@ -960,22 +934,12 @@ credential_match(PermId, FilterId) ->
             end
     end.
 
--spec get_allowed_operations(
-        rbac_permission_object(), [rbac_permission_pattern()]) ->
-                                    rbac_permission_pattern_operations().
-get_allowed_operations(_Object, []) ->
-    none;
-get_allowed_operations(Object, [{ObjectPattern, AllowedOperations} | Rest]) ->
-    case object_match(Object, ObjectPattern) of
-        true ->
-            AllowedOperations;
-        false ->
-            get_allowed_operations(Object, Rest)
-    end.
+parameterised_by({_, By}, By) -> true;
+parameterised_by(_, _) -> false.
 
 -spec operation_allowed(rbac_operation(),
                         rbac_permission_pattern_operations()) ->
-                               boolean().
+          boolean().
 operation_allowed(_, all) ->
     true;
 operation_allowed(_, none) ->
@@ -984,6 +948,74 @@ operation_allowed(any, _) ->
     true;
 operation_allowed(Operation, AllowedOperations) ->
     lists:member(Operation, AllowedOperations).
+
+permission_granted_by_role(_, _, []) ->
+    false;
+permission_granted_by_role(ExpandedObject, Operation,
+                           [{PermObj, PermOp} | Rest]) ->
+    PermObjExpanded = lists:flatmap(expand_vertex(_, any), PermObj),
+    OpAllowed = operation_allowed(Operation, PermOp),
+    case match_object(ExpandedObject, PermObjExpanded, strict) of
+        {strict, mismatch} ->
+            %% Mismatch is strict, so no other permission can provide this
+            false;
+        {strict, match} ->
+            %% Strict match, so if this permission doesn't give the operation,
+            %% then no other permission can provide this
+            OpAllowed;
+        {loose, mismatch} ->
+            %% Mismatch is loose, so it may be that another permission can
+            %% provide the operation
+            permission_granted_by_role(ExpandedObject, Operation, Rest);
+        {loose, match} ->
+            %% Match is loose, so if this permission doesn't give the operation,
+            %% then another permission may provide it
+            OpAllowed orelse
+                permission_granted_by_role(ExpandedObject, Operation, Rest)
+    end.
+
+match_object(_, [], Strictness) ->
+    {Strictness, match};
+match_object([], _, _) ->
+    {loose, mismatch};
+match_object([Vertex1 | ObjectToCheck], [Vertex2 | ObjectSpecified],
+             Strictness) ->
+    case vertex_match(Vertex1, Vertex2) of
+        true ->
+            %% If wildcard 'any' is used, we want to flag this up as a loose
+            %% match, in case the privilege is provided by another permission
+            WeakMatch = parameterised_by(Vertex1, any) andalso
+                not parameterised_by(Vertex2, any),
+            NewMatch =
+                case Strictness =:= loose orelse WeakMatch of
+                    true ->
+                        loose;
+                    false ->
+                        Strictness
+                end,
+            match_object(ObjectToCheck, ObjectSpecified, NewMatch);
+        false ->
+            %% While the vertex hasn't matched, we need to determine if the
+            %% mismatch is strict, i.e. whether we should ignore other
+            %% permissions that grant the privilege after this one.
+            %% This is the case if the permission being checked uses 'all',
+            %% there wasn't a higher level wildcard 'any', and the rest of the
+            %% permission at least loosely matches
+            NewStrictness =
+                case parameterised_by(Vertex1, all) andalso
+                    Strictness =:= strict of
+                     true ->
+                         Matches = match_object(ObjectToCheck, ObjectSpecified,
+                                                loose),
+                         case Matches of
+                              {loose, mismatch} -> loose;
+                              _ -> strict
+                         end;
+                     false ->
+                         loose
+                 end,
+            {NewStrictness, mismatch}
+    end.
 
 -spec is_allowed(rbac_permission(),
                  #authn_res{} | [rbac_compiled_role()]) -> boolean().
@@ -997,14 +1029,12 @@ is_allowed(Permission, #authn_res{} = AuthnRes) ->
             is_allowed(Permission, Roles)
     end;
 is_allowed({Object, Operation}, Roles) ->
-    lists:any(fun (Role) ->
-                      Operations = get_allowed_operations(Object, Role),
-                      operation_allowed(Operation, Operations)
-              end, Roles).
+    ObjectExpanded = lists:flatmap(expand_vertex(_, all), Object),
+    lists:any(permission_granted_by_role(ObjectExpanded, Operation, _), Roles).
 
 -spec substitute_params([string()],
                         [atom()], [rbac_permission_pattern_raw()]) ->
-                               [rbac_permission_pattern()].
+          [rbac_permission_pattern()].
 substitute_params([], [], Permissions) ->
     Permissions;
 substitute_params(Params, ParamDefinitions, Permissions) ->
@@ -1669,6 +1699,12 @@ filter_out_invalid_roles_test() ->
     Snapshot = ns_bucket:toy_buckets([{"bucket1", [{uuid, <<"id1">>}]}]),
     ?assertEqual([{role1, [{"bucket1", <<"id1">>}]}],
                  filter_out_invalid_roles(Roles, Definitions, Snapshot)).
+
+object_match(Param, Filter) ->
+    {_, Match} = match_object(lists:flatmap(expand_vertex(_, all), Param),
+                              lists:flatmap(expand_vertex(_, any), Filter),
+                              strict),
+    Match =/= mismatch.
 
 %% assertEqual is used instead of assert and assertNot to avoid
 %% dialyzer warnings
@@ -2600,40 +2636,245 @@ extended_roles_test__() ->
     ?assertEqual(true, is_allowed({[ui], read}, Roles2)),
     ?assertEqual(false, is_allowed({[pools], read}, Roles2)).
 
-custom_roles_test__() ->
-    CustomRole = [{[custom, x, y], [z]},
+unexpanded_permission_granted_by_role(Object, Operation, Role) ->
+    ObjectExpanded = lists:flatmap(expand_vertex(_, all), Object),
+    permission_granted_by_role(ObjectExpanded, Operation, Role).
+
+allowed_operations_with_any_test_() ->
+    [?_assertNot(unexpanded_permission_granted_by_role(
+                   [{collection, ["default", "s", any]}],
+                   operation,
+                   [{[{collection, ["default", "s", "c"]}], none}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", "s", any]}],
+                all,
+                [{[{collection, ["default", "s", "c"]}], all}])),
+     ?_assertNot(unexpanded_permission_granted_by_role(
+                   [{collection, ["default", any, any]}],
+                   operation,
+                   [{[{collection, ["default", "s", "c"]}], none}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}],
+                all,
+                [{[{collection, ["default", "s", "c"]}], all}])),
+     ?_assertNot(unexpanded_permission_granted_by_role(
+                   [{collection, ["default", "s", any]}],
+                   operation,
+                   [{[{scope, ["default", "s"]}], none},
+                    {[{bucket, "default"}], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", "s", any]}],
+                all,
+                [{[{scope, ["default", "s"]}], all},
+                 {[{bucket, "default"}], none}])),
+     ?_assertNot(unexpanded_permission_granted_by_role(
+                   [{collection, ["default", "s", any]}, collections],
+                   operation,
+                   [{[{scope, ["default", "s"]}, collections], none},
+                    {[{bucket, "default"}], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", "s", any]}, collections],
+                all,
+                [{[{scope, ["default", "s"]}, collections], all},
+                 {[{bucket, "default"}], none}])),
+     ?_assertNot(unexpanded_permission_granted_by_role(
+                   [{collection, ["default", any, any]}, data, docs],
+                   operation,
+                   [{[{collection, ["default", "s", "c2"]}], none},
+                    {[{scope, ["default", "s"]}, data], none},
+                    {[{bucket, "default"}, data], none},
+                    {[{bucket, "other"}, data], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, data, docs],
+                op1,
+                [{[{collection, ["default", "s", "c2"]}], none},
+                 {[{scope, ["default", "s"]}, data], [op1]},
+                 {[{bucket, "default"}, data], [op2]},
+                 {[{bucket, "other"}, data], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, data, docs],
+                op2,
+                [{[{collection, ["default", "s", "c2"]}], none},
+                 {[{scope, ["default", "s"]}, data], [op1]},
+                 {[{bucket, "default"}, data], [op2]},
+                 {[{bucket, "other"}, data], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, data, docs],
+                all,
+                [{[{collection, ["default", "s", "c2"]}], none},
+                 {[{scope, ["default", "s"]}, data], [op1]},
+                 {[{bucket, "default"}, data], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}],
+                op1,
+                [{[{collection, ["default", "s", "c2"]}], none},
+                 {[{collection, ["default", "s", "c3"]}], [op1]}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, collections],
+                op1,
+                [{[{collection, ["default", "s", "c2"]}], none},
+                 {[{collection, ["default", "s", "c3"]}], [op1]}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", "s", any]}],
+                op1,
+                [{[{collection, ["default", "s", "c2"]}], none},
+                 {[{collection, ["default", "s", "c3"]}], [op1]},
+                 {[{collection, ["default", "s", "c4"]}], [op2]}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", "s", any]}],
+                op2,
+                [{[{collection, ["default", "s", "c2"]}], none},
+                 {[{collection, ["default", "s", "c3"]}], [op1]},
+                 {[{collection, ["default", "s", "c4"]}], [op2]}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", "s", any]}, collections],
+                op1,
+                [{[{collection, ["default", "s", "c2"]}], none},
+                 {[{collection, ["default", "s", "c3"]}], [op1]},
+                 {[{collection, ["default", "s", "c4"]}], [op2]}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", "s", any]}, collections],
+                op2,
+                [{[{collection, ["default", "s", "c2"]}], none},
+                 {[{collection, ["default", "s", "c3"]}], [op1]},
+                 {[{collection, ["default", "s", "c4"]}], [op2]}])),
+     ?_assertNot(unexpanded_permission_granted_by_role(
+                   [{bucket, any}, n1ql],
+                   operation,
+                   [{[{bucket, any}, n1ql], none},
+                    {[], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{bucket, any}, collections],
+                all,
+                [{[{bucket, any}, n1ql], none},
+                 {[], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, collections],
+                all,
+                [{[{collection, ["default", "s1", any]}], all},
+                 {[{collection, ["default", any, any]}], none}])),
+     ?_assertNot(unexpanded_permission_granted_by_role(
+                   [{collection, ["default", any, any]}, collections],
+                   operation,
+                   [{[{collection, ["default", any, any]}], none},
+                    {[], all}])),
+     ?_assertNot(unexpanded_permission_granted_by_role(
+                   [{collection, ["default", any, any]}, data],
+                   operation,
+                   [{[{collection, ["default", any, any]}, data], none},
+                    {[], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, collections],
+                all,
+                [{[{collection, ["default", any, any]}, data], none},
+                 {[], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, collections],
+                all,
+                [{[{collection, ["default", "s", any]}], none},
+                 {[{collection, ["default", "s1", any]}], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, collections],
+                all,
+                [{[{collection, ["default", "s", any]}], none},
+                 {[], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, collections],
+                all,
+                [{[{collection, ["default", any, "c1"]}], none},
+                 {[], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, "c1"]}, collections],
+                all,
+                [{[{collection, ["default", any, "c1"]}], all},
+                 {[{collection, ["default", any, any]}], none}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, collections],
+                all,
+                [{[{collection, ["default", any, "c1"]}], all},
+                 {[{collection, ["default", any, any]}], none}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}, collections], all,
+                [{[{collection, ["default", "s1", any]}], none},
+                 {[{collection, ["default", any, "c1"]}], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, ["default", any, any]}], all,
+                [{[{collection, ["default", any, "c1"]}], none},
+                 {[], all}])),
+     ?_assertNot(unexpanded_permission_granted_by_role(
+                   [{collection, [any, "s", any]}],
+                   operation,
+                   [{[{collection, [any, "s", any]}], none},
+                    {[], all}])),
+     ?_assert(unexpanded_permission_granted_by_role(
+                [{collection, [any, "s", any]}], all,
+                [{[{collection, [any, "s", "c1"]}], none},
+                 {[], all}])),
+     ?_assertNot(unexpanded_permission_granted_by_role(
+                   [{collection, ["b1", "s", all]}], all,
+                   [{[{collection, [any, "s", "c1"]}], none},
+                    {[], all}]))].
+
+simple_custom_roles_test__() ->
+    SimpleRole = [{[custom, x, y], [z]},
                   {[{collection, ["default", "s", "c1"]}], none},
                   {[{collection, ["default", "s", any]}], all},
                   {[{bucket, "default"}, data, dcp], [read]}],
-    ok = set_role({<<"simple_role">>, [], [{mutable, true}], CustomRole}),
+    ok = set_role({<<"simple_role">>, [], [{mutable, true}], SimpleRole}),
     Roles = compile_roles([<<"simple_role">>,
                            <<"wrong_role">>,
                            {scope_admin, ["default", "s1"]}],
                           roles()),
-    ?assertEqual([CustomRole,
+    ?assertEqual([SimpleRole,
                   [{[{collection, ["default", "s1", any]}, collections], all}]],
                  Roles),
     ?assertEqual(true, is_allowed({[custom, x, y], z}, Roles)),
     ?assertEqual(false, is_allowed({[custom, x, y], w}, Roles)),
     ?assertEqual(true, is_allowed({[{collection, ["default", "s", "c2"]}], r},
                                   Roles)),
-    %% Counter-intuitively, the "c1" exclusion matches first (since it is more
-    %% specific), so checking for 'any' is somewhat arbitrary
-    ?assertEqual(false, is_allowed({[{collection, ["default", "s", any]}], r},
+    %% While the "c1" exclusion matches first (since it is more specific), we
+    %% continue checking for a separate privilege giving access, which it does
+    ?assertEqual(true, is_allowed({[{collection, ["default", "s", any]}], r},
+                                  Roles)),
+    ?assertEqual(false, is_allowed({[{collection, ["default", "s", "c1"]}], r},
                                    Roles)),
     ?assertEqual(false, is_allowed({[{collection, ["default", "s", "c1"]}], r},
                                    Roles)),
 
-    %% Despite data.dcp!read not being allowed for default:s:c1, it is still
+    %% Because data.dcp!read is not being allowed for default:s:c1, it is not
     %% allowed at the bucket level
-    ?assertEqual(true, is_allowed({[{bucket, "default"}, data, dcp], read},
-                                  Roles)),
+    ?assertEqual(false, is_allowed({[{bucket, "default"}, data, dcp], read},
+                                   Roles)),
     ?assertEqual(false, is_allowed({[{bucket, "default"}, data, dcp], write},
                                    Roles)),
 
     ?assertEqual({error, not_found}, delete_role(<<"unknown_id">>)),
     ?assertEqual({error, immutable}, delete_role(admin)),
     ?assertEqual(ok, delete_role(<<"simple_role">>)).
+
+complex_custom_roles_test__() ->
+    ComplexRole = [{[{collection, ["default", "s2", "c1"]}], all},
+                   {[{collection, ["default", "s2", any]}], none},
+                   {[{collection, ["default", "s1", "c1"]}], none},
+                   {[{collection, ["default", any, any]}], all}],
+    ok = set_role({<<"complex_role">>, [], [{mutable, true}],
+                   ComplexRole}),
+    Roles = compile_roles([<<"complex_role">>, <<"wrong_role">>], roles()),
+    ?assertEqual([ComplexRole], Roles),
+    ?assertEqual(true, is_allowed({[{collection, ["default", "s2", "c1"]}], r},
+                                  Roles)),
+    ?assertEqual(false, is_allowed({[{collection, ["default", "s2", "c2"]}], r},
+                                   Roles)),
+    ?assertEqual(false, is_allowed({[{collection, ["default", "s2", all]}], r},
+                                   Roles)),
+    ?assertEqual(false, is_allowed({[{collection, ["default", "s1", "c1"]}], r},
+                                   Roles)),
+    ?assertEqual(true, is_allowed({[{collection, ["default", "s1", "c2"]}], r},
+                                  Roles)),
+    ?assertEqual(false, is_allowed({[{collection, ["default", "s1", all]}], r},
+                                   Roles)),
+    ?assertEqual(false, is_allowed({[{collection, ["default", all, all]}], r},
+                                   Roles)).
 
 default_profile_test_setup() ->
     setup_meck(),
@@ -2679,7 +2920,8 @@ default_profile_test_() ->
       fun roles_pre_79_format_test__/0,
       fun roles_pre_totoro_format_test__/0,
       fun extended_roles_test__/0,
-      fun custom_roles_test__/0]}.
+      fun simple_custom_roles_test__/0,
+      fun complex_custom_roles_test__/0]}.
 
 analytics_admin_empty_profile_test_() ->
     %% use "default" explicitly here so that this test passes when run on a
