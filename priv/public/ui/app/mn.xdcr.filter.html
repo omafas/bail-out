@@ -24,7 +24,7 @@ licenses/APL2.txt.
 </ng-template>
 
 <ng-template #binaryDocumentsTemplate>
-  The Filter Binary Documents option is used to specify whether binary documents should be replicated.<br />
+  The binary documents option is used to specify whether binary documents should be replicated.<br />
   If the option is selected, binary documents are not replicated, regardless of whether a filter expression is applied.<br />
   If the option is not selected, the behavior depends on the conditions noted in the
   <a href="https://docs.couchbase.com/server/{{majorMinorVersion | async}}/manage/manage-xdcr/filter-xdcr-replication.html#filtering-binary-documents"
@@ -32,17 +32,15 @@ licenses/APL2.txt.
      rel="noopener noreferrer">documentation</a>.
 </ng-template>
 
-<ng-template #filterBinaryOffTemplate>
-  <span>
-    Binary documents are not replicated.
-  </span>
-</ng-template>
-
-<ng-template #filterBinaryOnTemplate>
+<ng-template #filterBinaryTemplate>
+  <p class="text-smaller">If you select this option, the REST API filterBinary=true, and binary documents will not be replicated
+  (regardless of whether or not you have a filter expression).</p>
+  <p class="text-smaller">If you do not select this option, the REST API filterBinary=false (default), and binary documents may or may not be replicated,
+  based on whether or not a filter expression exists:</p>
   <ul>
-    <li>If a filter expression does <span class="bold">not</span> exist, binary documents are replicated.</li>
-    <li>If a filter expression exists and contains key or xattr only expression, binary documents are checked against the filter expression.</li>
-    <li>If a filter expression exists and contains references to the document body, binary documents are replicated.</li>
+    <li class="text-smaller">If a filter expression does not exist, binary documents are replicated.</li>
+    <li class="text-smaller">If a filter expression exists and contains key or xattrs only expression, binary documents are checked against the filter expression.</li>
+    <li class="text-smaller">If a filter expression exists and contains references to the document body, binary documents are replicated.</li>
   </ul>
 </ng-template>
 
@@ -232,11 +230,11 @@ licenses/APL2.txt.
         id="for-filter-binary"
         formControlName="filterBinary">
       <label for="for-filter-binary" class="margin-right-quarter">
-        Filter Binary Documents
+        Do not replicate binary documents
       </label>
       <span
         class="fa-stack icon-info"
-        [ngbTooltip]="xdcrGroup.get('filterBinary').value ? filterBinaryOnTemplate : filterBinaryOffTemplate"
+        [ngbTooltip]="filterBinaryTemplate"
         placement="right"
         container="body">
         <span class="icon fa-circle-thin fa-stack-2x"></span>
