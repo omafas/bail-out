@@ -459,7 +459,7 @@ can_ds_decrypt_file(Path, DS) ->
 
 -spec is_file_encrypted(string()) -> true | false.
 is_file_encrypted(Path) ->
-    is_valid_encr_header(read_file_header(Path)).
+    is_encrypted_file_header(read_file_header(Path)).
 
 -spec get_file_dek_ids(Path :: string()) ->
           {ok, [cb_deks:dek_id() | undefined]} | {error, _}.
@@ -979,6 +979,22 @@ get_force_encryption_timestamp_test() ->
 %%% Internal functions
 %%%===================================================================
 
+%% Determines if we can classify the file as encrypted based on the
+%% header data. To be classified as encrypted, a file header must have the
+%% magic and at least one byte following it for version, even files with
+%% unsupported versions of header are classified as encrypted for future
+%% compatibility
+is_encrypted_file_header({ok, <<?ENCRYPTED_FILE_MAGIC, Rest/binary>>})
+                                                when byte_size(Rest) >= 1 ->
+    true;
+is_encrypted_file_header({error, enoent}) ->
+    false;
+is_encrypted_file_header(eof) ->
+    false;
+is_encrypted_file_header(_HeaderData) ->
+    false.
+
+%% Checks if the full header is valid
 is_valid_encr_header({ok, HeaderData}) ->
     case parse_header(HeaderData) of
         {ok, _Parsed} ->
