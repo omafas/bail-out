@@ -553,6 +553,14 @@ tls_option_versions(srp_identity) -> ['tlsv1','tlsv1.1','tlsv1.2'];
 tls_option_versions(supported_groups) -> ['tlsv1.3'];
 tls_option_versions(use_ticket) -> ['tlsv1.3'];
 tls_option_versions(user_lookup_fun) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(middlebox_comp_mode) -> ['tlsv1.3'];
+tls_option_versions(signature_algs_cert) -> ['tlsv1.2','tlsv1.3'];
+tls_option_versions(signature_algs ) -> ['tlsv1.2','tlsv1.3'];
+tls_option_versions(client_preferred_next_protocols) ->
+    ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(dh) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(dh_file) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(fallback) -> ['tlsv1','tlsv1.1','tlsv1.2'];
 tls_option_versions(_) -> all.
 
 read_ca_certs(File) ->
