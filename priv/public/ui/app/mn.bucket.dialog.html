@@ -115,52 +115,52 @@ licenses/APL2.txt.
           *ngIf="compatVersion79 | async"
           [hidden]="(storageBackend | async) === 'couchstore'"
         >
-          <label [attr.disabled]="bucket"
-
-          >Number of vBuckets
-            <ng-template #numVBucketTooltip>
-              The number of Magma vBuckets affects performance and memory usage.
-              <ul>
-                <li>
-                  The minimum bucket memory quota allowed for 128 vBuckets is
-                  100 MiB.
-                </li>
-                <li>
-                  The minimum bucket memory quota allowed for 1024 vBuckets is
-                  1 GiB.
-                </li>
-                <li>
-                  To create an XDCR replication from a bucket in Server
-                  version earlier than 8.0, you must choose 1024 vBuckets.
-                </li>
-              </ul>
-            </ng-template>
-            <span
-              class="fa-stack icon-info"
-              [ngbTooltip]="numVBucketTooltip"
-              triggers="click"
-              placement="right"
-            >
-              <span class="icon fa-circle-thin fa-stack-2x"></span>
-              <span class="icon fa-info fa-stack-1x"></span>
-            </span>
-          </label>
-          <input
-            type="radio"
-            formControlName="numVBuckets"
-            value="128"
-            id="for-magma-128"
-            [attr.disabled]="bucket"
-          />
-          <label for="for-magma-128">128</label>
-          <input
-            type="radio"
-            formControlName="numVBuckets"
-            value="1024"
-            id="for-magma-1024"
-            [attr.disabled]="bucket"
-          />
-          <label for="for-magma-1024">1024</label>
+          <label [attr.disabled]="bucket" class="inline">Number of vBuckets</label>
+          <ng-template #numVBucketTooltip>
+            The number of Magma vBuckets affects performance and memory usage.
+            <ul>
+              <li>
+                The minimum bucket memory quota allowed for 128 vBuckets is
+                100 MiB.
+              </li>
+              <li>
+                The minimum bucket memory quota allowed for 1024 vBuckets is
+                1 GiB.
+              </li>
+              <li>
+                If you can allocate at least 1 GiB memory per node to your bucket,
+                you should choose the 1024 vBuckets option for Magma as you’ll get better performance at scale.
+              </li>
+            </ul>
+            To create an XDCR replication from a bucket in Server version earlier than 8.0, you must choose 1024 vBuckets.
+          </ng-template>
+          <span
+            class="fa-stack icon-info"
+            [ngbTooltip]="numVBucketTooltip"
+            triggers="click"
+            placement="right"
+          >
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div>
+            <input
+              type="radio"
+              formControlName="numVBuckets"
+              value="128"
+              id="for-magma-128"
+              [attr.disabled]="bucket"
+            />
+            <label for="for-magma-128">128</label>
+            <input
+              type="radio"
+              formControlName="numVBuckets"
+              value="1024"
+              id="for-magma-1024"
+              [attr.disabled]="bucket"
+            />
+            <label for="for-magma-1024">1024</label>
+          </div>
         </div>
         <div class="error margin-left-1-5" [hidden]="!(httpError | async)?.errors?.numVBuckets">
           {{(httpError | async)?.errors?.numVBuckets}}
