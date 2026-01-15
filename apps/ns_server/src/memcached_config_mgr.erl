@@ -736,12 +736,19 @@ get_ssl_cipher_list([], Params) ->
     {Ciphers12, Ciphers13} =
         case AllConfigured of
             [] ->
+                {C13, C12} = lists:partition(fun ciphers:is_tls13_cipher/1,
+                                             ciphers:high()),
                 %% Backward compatibility
                 %% ssl_cipher_list is obsolete and should not be used in
                 %% new installations
-                {iolist_to_binary(proplists:get_value(ssl_cipher_list, Params,
-                                                      "HIGH")),
-                 format_ciphers(ciphers:all_tls13())};
+                SslCipherList = proplists:get_value(ssl_cipher_list, Params,
+                                                    ""),
+                case SslCipherList of
+                    "" ->
+                        {format_ciphers(C12), format_ciphers(C13)};
+                    S ->
+                        {iolist_to_binary(S), format_ciphers(C13)}
+                end;
             L ->
                 {C13, C12} = lists:partition(fun ciphers:is_tls13_cipher/1, L),
                 {format_ciphers(C12), format_ciphers(C13)}

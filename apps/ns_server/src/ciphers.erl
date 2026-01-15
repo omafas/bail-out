@@ -32,18 +32,45 @@ code(Name) ->
 openssl_name(Name) ->
     maps:get(code(Name), openssl_ciphers(), undefined).
 
+%% Returns TLS cipher suites that we consider to have high security level.
+%%
+%% The list is ordered by high to low priority. The server selects the cipher
+%% with the highest priority that the client also supports.
+%% The list is based on the IANA recommended cipher suites:
+%% https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml
+%% #tls-parameters-4
 high() ->
+    % We list TLS 1.3 ciphers first. TLS 1.3 decouples the key agreement from
+    % the authenticated encryption algorithm in the cipher suite. AES-256 and
+    % CHACHA20 are both 256-bit ciphers. While CHACHA20 is more secure by some
+    % measures (no known non-generic attacks that reduce compute resources),
+    % AES-256 is more well-known so we list it first. AES-128 is a 128-bit
+    % cipher so we list it after CHACHA20. GCM and POLY1305 are both
+    % polynomial-based authenticators.
     [<<"TLS_AES_256_GCM_SHA384">>,
      <<"TLS_CHACHA20_POLY1305_SHA256">>,
      <<"TLS_AES_128_GCM_SHA256">>,
+     % We then list TLS 1.2 cipher suites. There are three main parts:
+     % * Key agreement ([EC]DHE)
+     % * Digital signature (ECDSA/RSA) - matches certificate
+     % * Authenticated encryption (AES-GCM/CHACHA-POLY)
+     % Elliptic Curve (EC) operations are more performant than Finite Field
+     % operations for an equivalent security level, so we list them first.
      <<"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384">>,
+     <<"TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256">>,
      <<"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256">>,
      <<"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384">>,
-     <<"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256">>,
-     <<"TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256">>,
      <<"TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256">>,
-     <<"TLS_DHE_RSA_WITH_AES_128_GCM_SHA256">>,
-     <<"TLS_DHE_RSA_WITH_AES_256_GCM_SHA384">>].
+     <<"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256">>,
+     % We retain Finite Field based key agreement for compatibility with older
+     % TLS stacks. In the future we may remove them to reduce the attack
+     % surface.
+     <<"TLS_DHE_RSA_WITH_AES_256_GCM_SHA384">>,
+     <<"TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256">>,
+     <<"TLS_DHE_RSA_WITH_AES_128_GCM_SHA256">>].
+     % In the future we may want to add hybrid classic/
+     % post-quantum-physics-experiment signature/ key agreement algorithms,
+     % once those are standardised.
 
 medium() ->
     [<<"TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA">>,
