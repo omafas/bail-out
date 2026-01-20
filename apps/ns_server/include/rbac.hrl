@@ -53,7 +53,9 @@
                                     rbac_permission_pattern_operations()}.
 -type rbac_compiled_role() :: [rbac_permission_pattern()].
 
--type rbac_role_props() :: [{name | desc, binary()} | {mutable, boolean()}].
+-type rbac_role_props() :: [{name | desc, binary()} |
+                            {folder, atom()} |
+                            {ce | mutable, boolean()}].
 -type rbac_role_def_param() :: bucket_name | scope_name | collection_name.
 -type rbac_role_def() :: {rbac_role_name(), [rbac_role_def_param()],
                           rbac_role_props(),

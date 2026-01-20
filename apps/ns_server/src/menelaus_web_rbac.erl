@@ -42,8 +42,9 @@
          handle_get_user_uuid_for_cbauth/1,
          handle_get_user_buckets_for_cbauth/1,
          forbidden_response/1,
+         role_to_binary/1,
          role_to_string/1,
-         role_to_atom/1,
+         string_to_role/1,
          validate_cred/2,
          handle_get_password_policy/1,
          handle_post_password_policy/1,
@@ -62,8 +63,12 @@
          handle_get_uiroles/1,
          handle_backup/1,
          handle_backup_restore/1,
-         parse_roles/1
-        ]).
+         parse_role_name/2,
+         parse_roles/1,
+         handle_get_custom_roles/1,
+         handle_get_custom_role/2,
+         handle_put_custom_role/2,
+         handle_delete_custom_role/2]).
 
 -define(MIN_USERS_PAGE_SIZE, 2).
 -define(MAX_USERS_PAGE_SIZE, 100).
@@ -186,7 +191,7 @@ strip_id(P) ->
 strip_ids(Params) ->
     lists:map(fun strip_id/1, Params).
 
-role_to_json(Name) when is_atom(Name) ->
+role_to_json(Name) when is_atom(Name); is_binary(Name) ->
     [{role, Name}];
 role_to_json({Name, Params}) ->
     Definitions = menelaus_roles:get_definitions(public),
@@ -863,8 +868,19 @@ parse_until(Str, Delimeters) ->
                             not lists:member(Char, Delimeters)
                     end, Str).
 
-role_to_atom(Role) ->
-    list_to_existing_atom(string:to_lower(Role)).
+string_to_role(Role) ->
+    list_to_binary(string:to_lower(Role)).
+
+parse_role_name(RoleStr, Definitions) ->
+    RoleBinary = string_to_role(RoleStr),
+    case lists:keyfind(RoleBinary, 1, Definitions) of
+        false ->
+            try binary_to_existing_atom(RoleBinary)
+            catch error:badarg -> {error, RoleStr}
+            end;
+        _ ->
+            RoleBinary
+    end.
 
 get_num_params(Role, Definitions) ->
     case menelaus_roles:get_param_defs(Role, Definitions) of
@@ -875,9 +891,9 @@ get_num_params(Role, Definitions) ->
     end.
 
 adjust_role(Role, Params, Definitions) ->
-    RoleAtom = role_to_atom(Role),
+    RoleName = parse_role_name(Role, Definitions),
     AdjustedParams =
-        case get_num_params(RoleAtom, Definitions) of
+        case get_num_params(RoleName, Definitions) of
             I when is_integer(I),
                    I >= length(Params) ->
                 misc:align_list(Params, I, any);
@@ -886,13 +902,13 @@ adjust_role(Role, Params, Definitions) ->
                 %% in validate_roles
                 Params
         end,
-    {RoleAtom, AdjustedParams}.
+    {RoleName, AdjustedParams}.
 
 parse_role(RoleRaw, Definitions) ->
     try
         case parse_until(RoleRaw, "[") of
             {Role, []} ->
-                role_to_atom(Role);
+                parse_role_name(Role, Definitions);
             {Role, "[*]"} ->
                 adjust_role(Role, [any], Definitions);
             {Role, [$[ | ParamAndBracket]} ->
@@ -922,11 +938,21 @@ params_to_string([any | Rest]) ->
 params_to_string(Params) ->
     lists:flatten(lists:join(":", strip_ids(lists:reverse(Params)))).
 
+role_to_binary(Role) when is_atom(Role) ->
+    atom_to_binary(Role);
+role_to_binary(Role) when is_binary(Role) ->
+    Role;
+role_to_binary({_, _} = Role) ->
+    list_to_binary(role_to_string(Role)).
+
 role_to_string(Role) when is_atom(Role) ->
     atom_to_list(Role);
+role_to_string(Role) when is_binary(Role) ->
+    binary_to_list(Role);
 role_to_string({Role, Params}) ->
-    lists:flatten(io_lib:format(
-                    "~p[~s]",
+    lists:flatten(
+            io_lib:format(
+                    "~s[~s]",
                     [Role, params_to_string(lists:reverse(Params))])).
 
 known_domains() ->
@@ -1542,20 +1568,25 @@ list_to_rbac_atom(List) ->
 parse_permission(RawPermission) ->
     case string:split(RawPermission, "!", all) of
         [Object, Operation] ->
-            case parse_object(Object) of
-                error ->
+            case parse_permission_object(Object) of
+                {error, _} ->
                     error;
-                Parsed ->
+                {ok, Parsed} ->
                     {Parsed, list_to_rbac_atom(Operation)}
             end;
         _ ->
             error
     end.
 
-parse_object("cluster" ++ RawObject) ->
-    parse_vertices(RawObject, []);
-parse_object(_) ->
-    error.
+%% Parse a permission object string, prefixed with "cluster." into a list of
+%% permission object vertices
+parse_permission_object("cluster" ++ RawObject = S) ->
+    case parse_vertices(RawObject, []) of
+        error -> {error, io_lib:format("bad object: '~s'", [S])};
+        P -> {ok, P}
+    end;
+parse_permission_object(S) ->
+    {error, io_lib:format("bad object: '~s'", [S])}.
 
 parse_vertices([], Acc) ->
     lists:reverse(Acc);
@@ -2249,6 +2280,9 @@ build_ui_folder({Key, Name}, Roles) ->
     end.
 
 build_ui_role({Role, Params, Props, _}) ->
+    build_ui_role(Role, Params, Props).
+
+build_ui_role(Role, Params, Props) ->
     {[{role, Role}, {params, Params} | jsonify_props(Props)]}.
 
 build_ui_value(Value, Children) ->
@@ -2383,7 +2417,7 @@ handle_backup(Req, Params) ->
                                ?make_transducer(pipes:foreach(?producer(),
                                                 fun (P) ->
                                                     ?yield({kv_start,
-                                                            <<"admin">>}),
+                                                            admin}),
                                                     ?yield(P),
                                                     ?yield(kv_end)
                                                 end))]);
@@ -2431,8 +2465,7 @@ jsonify_backup_users(IsAdmin) ->
                               [{domain, Domain} || not IsAdmin] ++
                               [{groups, [list_to_binary(G) || G <- Groups]}
                                || Groups /= undefined] ++
-                              [{roles, [list_to_binary(role_to_string(R))
-                                        || R <- Roles]}
+                              [{roles, [role_to_binary(R) || R <- Roles]}
                                || (not IsAdmin) andalso Roles /= undefined] ++
                               [{name, list_to_binary(Name)}
                                || Name /= undefined] ++
@@ -2454,8 +2487,7 @@ jsonify_backup_groups() ->
                      Json = {[{name, list_to_binary(Name)}] ++
                                  [{description, list_to_binary(Descr)}
                                   || Descr /= undefined] ++
-                                 [{roles, [list_to_binary(role_to_string(R))
-                                           || R <- Roles]}
+                                 [{roles, [role_to_binary(R) || R <- Roles]}
                                   || Roles /= undefined] ++
                                  [{ldap_group_ref, list_to_binary(LdapRef)}
                                   || LdapRef /= undefined]},
@@ -2945,6 +2977,353 @@ validator_validate_id(Name, State) ->
                               Error -> {error, Error}
                           end
                       end, Name, State).
+
+handle_get_custom_roles(Req) ->
+    menelaus_util:assert_is_totoro(),
+    menelaus_util:assert_config_profile_flag(custom_roles_enabled),
+    Roles = menelaus_roles:get_all_mutable_roles(),
+
+    Json = lists:map(?cut(custom_role_to_json(_)), Roles),
+    menelaus_util:reply_json(Req, {Json}).
+
+handle_get_custom_role(RoleId, Req) ->
+    menelaus_util:assert_is_totoro(),
+    menelaus_util:assert_config_profile_flag(custom_roles_enabled),
+    case menelaus_roles:get_role(list_to_binary(RoleId)) of
+        undefined ->
+            menelaus_util:reply_not_found(Req);
+        Role ->
+            case menelaus_roles:is_mutable(Role) of
+                true ->
+                    Json = custom_role_to_json(Role),
+                    menelaus_util:reply_json(Req, {[Json]});
+                false ->
+                    menelaus_util:reply_not_found(Req)
+            end
+    end.
+
+handle_put_custom_role(RoleId, Req) ->
+    menelaus_util:assert_is_totoro(),
+    menelaus_util:assert_config_profile_flag(custom_roles_enabled),
+
+    validator:handle(
+      fun (Params) ->
+              Name = list_to_binary(proplists:get_value(name, Params)),
+              Permissions = proplists:get_value(permissions, Params, []),
+              RoleIdBin =  list_to_binary(RoleId),
+              Role = {RoleIdBin, [],
+                      [{name, Name},
+                       {folder, custom_roles},
+                       {mutable, true}] ++
+                          [{desc, list_to_binary(Desc)} ||
+                              Desc <- proplists:get_all_values(description,
+                                                               Params)],
+                      Permissions},
+              case menelaus_roles:set_role(Role) of
+                  ok ->
+                      Json = {[custom_role_to_json(Role)]},
+                      ns_audit:set_custom_role(Req, RoleId, Json),
+                      menelaus_util:reply_json(Req, Json);
+                  {error, immutable} ->
+                      menelaus_util:reply_error(Req, "name",
+                                                "Role is immutable")
+              end
+      end, Req, json,
+      [validator:required(name, _),
+       validator:string(name, _),
+       validator:string(description, _),
+       validate_json_permissions(_),
+       validator:unsupported(_)]).
+
+validate_json_permissions(State) ->
+    validator:validate(fun parse_permissions_json/1, permissions, State).
+
+parse_permissions_json({PermissionsJson}) ->
+    ParsePerm =
+        fun ({Object, Operations}, {value, Acc})
+              when is_binary(Object) ->
+                maybe
+                    {ok, ParsedObject} ?= parse_permission_object(
+                        binary_to_list(Object)),
+                    {ok, ParsedOperations} ?= parse_operations(Operations),
+                    {value, [{ParsedObject, ParsedOperations} | Acc]}
+                else {error, E} ->
+                        {error, iolist_to_binary(
+                                    io_lib:format(
+                                        "Malformed permission: ~s", [E]))}
+                end;
+            (_, {error, _} = E) ->
+                E
+        end,
+    %% Parse the json object of permissions into a list of parsed permissions
+    MaybePerms = lists:foldl(ParsePerm, {value, []}, PermissionsJson),
+    case MaybePerms of
+        {value, DisorderedPerms} ->
+            {value, order_permissions(DisorderedPerms)};
+        {error, _} = E ->
+            E
+    end;
+parse_permissions_json(_) ->
+    {error, "Malformed json map"}.
+
+-ifdef(TEST).
+parse_permissions_json_test_() ->
+    [?_assertEqual({value, []}, parse_permissions_json({[]})),
+    ?_assertEqual({value, [{[v1, v2], none}]},
+                  parse_permissions_json(
+                    {[{<<"cluster.v1.v2">>, []}]})),
+     ?_assertEqual({value, [{[{bucket, any}, v2], all}]},
+                   parse_permissions_json(
+                     {[{<<"cluster.bucket[.].v2">>, <<"all">>}]})),
+    ?_assertEqual({value, [{[{bucket, "b"}, v2], all}]},
+                 parse_permissions_json(
+                     {[{<<"cluster.bucket[b].v2">>, <<"all">>}]})),
+    ?_assertEqual({value, [{[{scope, ["b", any]}, v2], none}]},
+                 parse_permissions_json(
+                     {[{<<"cluster.scope[b:.].v2">>, <<"none">>}]})),
+    ?_assertEqual({value, [{[{scope, ["b", "s"]}, v2], none}]},
+                 parse_permissions_json(
+                     {[{<<"cluster.scope[b:s].v2">>, <<"none">>}]})),
+    ?_assertEqual({value, [{[{collection, ["b", "s", "c"]}, v2], none}]},
+                  parse_permissions_json(
+                    {[{<<"cluster.collection[b:s:c].v2">>, <<"none">>}]}))].
+-endif.
+
+%% Parse a list of raw operations as binary strings, or either "all" or "none"
+parse_operations([]) ->
+    {ok, none};
+parse_operations(Operations) when is_list(Operations) ->
+    lists:foldl(
+      fun (Op, {ok, ParsedOps}) ->
+              case list_to_rbac_atom(binary_to_list(Op)) of
+                  '_unknown_' -> {error, bad_operations};
+                  OpAtom when is_atom(OpAtom) -> {ok, [OpAtom | ParsedOps]}
+              end;
+          (_Op, {error, _} = Err) ->
+              Err
+      end, {ok, []}, Operations);
+parse_operations(Op) when Op =:= <<"all">>; Op =:= <<"none">> ->
+    {ok, binary_to_atom(Op)};
+parse_operations(_) ->
+    {error, bad_operations}.
+
+-ifdef(TEST).
+parse_operations_test_() ->
+    [?_assertEqual({ok, none}, parse_operations([])),
+     ?_assertEqual({ok, none}, parse_operations(<<"none">>)),
+     ?_assertEqual({ok, all}, parse_operations(<<"all">>)),
+     ?_assertEqual({ok, [op]}, parse_operations([<<"op">>])),
+     ?_assertEqual({ok, [op2, op1]}, parse_operations([<<"op1">>, <<"op2">>])),
+     ?_assertEqual({error, bad_operations},
+                   parse_operations([<<"non_existent_atom_for_invalid_op">>])),
+     ?_assertEqual({error, bad_operations},
+                   parse_operations(<<"invalid_ops_format">>))].
+-endif.
+
+expand_vertex({bucket, B}) ->
+    expand_vertex({scope, [B, any]});
+expand_vertex({_, P}) ->
+    case lists:dropwhile(fun(O) -> O =:= any end, lists:reverse(P)) of
+        [] -> [];
+        [B] -> [{bucket, B}];
+        [S, B] -> [{bucket, B}, {scope, S}];
+        [C, S, B] -> [{bucket, B}, {scope, S}, {collection, C}]
+    end;
+expand_vertex(O) ->
+    [O].
+
+compare_permission_objects(O1, O2) ->
+    Specified1 = lists:flatmap(fun expand_vertex/1, O1),
+    Specified2 = lists:flatmap(fun expand_vertex/1, O2),
+    Specified1 >= Specified2.
+
+%% Order the permissions such that any overlapping privileges are ordered with
+%% most specific first. If they were ordered the other way then the more
+%% specific permission would never be checked since the less specific permission
+%% would always match first.
+order_permissions(DisorderedPermissions) ->
+    lists:sort(fun ({O1, _}, {O2, _}) ->
+                       compare_permission_objects(O1, O2)
+               end, DisorderedPermissions).
+
+-ifdef(TEST).
+
+compare_permission_objects_properties_test_() ->
+    {timeout, 600,
+     fun () ->
+             Buckets = [a1, b1, c1],
+             Scopes = [a2, b2, c2],
+             Collections = [a3, b3, c3],
+             Ops = [a4, b4, c4],
+             Opts = [{collection, [B, S, C]} || B <- Buckets,
+                                                S <- Scopes,
+                                                C <- Collections] ++
+                 [{collection, [B, S, any]} || B <- Buckets,
+                                               S <- Scopes] ++
+                 [{collection, [B, any, any]} || B <- Buckets] ++
+                 [{scope, [B, S]} || B <- Buckets, S <- Scopes] ++
+                 [{scope, [B, any]} || B <- Buckets] ++
+                 [{bucket, B} || B <- Buckets] ++
+                 [{bucket, any}],
+
+             OpsOpts = [[]] ++ [[O] || O <- Ops],
+
+             Args = [[A|ATail] || A <- Opts, ATail <- OpsOpts],
+
+             lists:foreach(
+               fun ({X, Y, Z}) ->
+                       case compare_permission_objects(X, Y) andalso
+                           compare_permission_objects(Y, Z) of
+                           true -> ?assert(compare_permission_objects(X, Z));
+                           false -> ok
+                       end
+               end,
+               [{Arg1, Arg2, Arg3} || Arg1 <- Args, Arg2 <- Args, Arg3 <- Args])
+     end}.
+
+compare_permission_objects_test_() ->
+    [?_assert(compare_permission_objects([b], [a])),
+     %% Example demonstrating that this meets the requirements for an ordering
+     %% function, at least for this example (see
+     %% compare_permission_objects_properties_test_ for a more comprehensive
+     %% test):
+     %%
+     %%  a
+     %% / \      b <= a, c <= a
+     %% b  c
+     %%    |     d <= c
+     %%    d
+     %%
+     %% Firstly, confirming the direct relations shown above:
+     ?_assert(compare_permission_objects([a, b], [a])),
+     ?_assert(compare_permission_objects([a, c], [a])),
+     ?_assert(compare_permission_objects([a, c, d], [a, c])),
+     %% Now demonstrating that asymmetry holds by first showing that each vertex
+     %% is in relation with itself:
+     ?_assert(compare_permission_objects([a], [a])),
+     ?_assert(compare_permission_objects([a, b], [a, b])),
+     ?_assert(compare_permission_objects([a, c], [a, c])),
+     ?_assert(compare_permission_objects([a, c, d], [a, c, d])),
+     %% And also that each vertex is not in relation with the vertices that are
+     %% in relation with it:
+     ?_assertNot(compare_permission_objects([a], [a, b])),
+     ?_assertNot(compare_permission_objects([a], [a, c])),
+     ?_assertNot(compare_permission_objects([a, c], [a, c, d])),
+     %% Next we can demonstrate transitivity for d <= c <= a:
+     ?_assert(compare_permission_objects([a, c, d], [a])),
+     %% And transitivity for c <= b <= a (c <= a already shown, so just c <= b):
+     ?_assert(compare_permission_objects([a, c], [a, b])),
+     %% And transitivity for d <= b <= a (d <= a already shown, so just d <= b):
+     ?_assert(compare_permission_objects([a, c, d], [a, b])),
+     %% And finally, the order is total, as all of the relations are covered in
+     %% at least one direction by the above cases.
+
+     %% Order correctly treats 'any' parameterisation as less specific
+     ?_assert(compare_permission_objects(
+              [{collection, ["b", "s", "c"]}],
+              [{collection, ["b", "s", any]}])),
+     %% Per-collection permission takes precedence over more specific per-scope
+     %% privilege
+     ?_assert(compare_permission_objects(
+                [{collection, ["b", "s", "c"]}],
+                [{collection, ["b", "s", any]}, collections])),
+     %% While 'scope' doesn't match 'collection', these should still get ordered
+     %% with the more specific privilege first
+     ?_assert(compare_permission_objects(
+                [{collection, ["b", "s", "c"]}],
+                [{scope, ["b", "s"]}]))].
+
+order_permissions_test_() ->
+    [?_assertEqual([], order_permissions([])),
+     ?_assertEqual([{[b], []}, {[a], []}],
+                   order_permissions([{[b], []}, {[a], []}])),
+     ?_assertEqual([{[a, b], []}, {[a], []}],
+                   order_permissions([{[a, b], []}, {[a], []}])),
+     ?_assertEqual([{[a, b], []}, {[a], []}],
+                   order_permissions([{[a], []}, {[a, b], []}])),
+     ?_assertEqual([{[{bucket, "b"}], []}],
+                   order_permissions(
+                     [{[{bucket, "b"}], []}])),
+     ?_assertEqual([{[{bucket, "b"}], []}],
+                   order_permissions(
+                     [{[{bucket, "b"}], []}])),
+     ?_assertEqual([{[{scope, ["b", "s"]}], []},
+                    {[{bucket, "b"}], []}],
+                   order_permissions(
+                     [{[{bucket, "b"}], []},
+                      {[{scope, ["b", "s"]}], []}])),
+     ?_assertEqual([{[{collection, ["b", "s", "c"]}], []},
+                    {[{scope, ["b", "s"]}], []}],
+                   order_permissions(
+                     [{[{collection, ["b", "s", "c"]}], []},
+                      {[{scope, ["b", "s"]}], []}])),
+     ?_assertEqual([{[{collection, ["b", "s", "c"]}], []},
+                    {[{collection, ["b", "s", any]}], []}],
+                   order_permissions(
+                     [{[{collection, ["b", "s", any]}], []},
+                      {[{collection, ["b", "s", "c"]}], []}])),
+     ?_assertEqual([{[{collection, ["b", "s", "c"]}], []},
+                    {[{collection, ["b", any, any]}], []}],
+                   order_permissions(
+                     [{[{collection, ["b", any, any]}], []},
+                      {[{collection, ["b", "s", "c"]}], []}])),
+     ?_assertEqual([{[{collection, ["b", "s", "c"]}], []},
+                    {[{collection, ["b", any, any]}, v], []}],
+                   order_permissions(
+                     [{[{collection, ["b", any, any]}, v], []},
+                      {[{collection, ["b", "s", "c"]}], []}])),
+     ?_assertEqual([{[{collection, ["b", "s", "c"]}, v], []},
+                    {[{collection, ["b", any, any]}, v], []}],
+                   order_permissions(
+                     [{[{collection, ["b", "s", "c"]}, v], []},
+                      {[{collection, ["b", any, any]}, v], []}])),
+     ?_assertEqual([{[{collection, ["b", "s", "c"]}, v], []},
+                    {[{collection, ["b", "s", "c"]}], []}],
+                   order_permissions(
+                     [{[{collection, ["b", "s", "c"]}, v], []},
+                      {[{collection, ["b", "s", "c"]}], []}])),
+     ?_assertEqual([{[{collection, ["b", "s", "c2"]}, v], []},
+                    {[{collection, ["b", "s", "c1"]}, v], []}],
+                   order_permissions(
+                     [{[{collection, ["b", "s", "c2"]}, v], []},
+                      {[{collection, ["b", "s", "c1"]}, v], []}]))].
+-endif.
+
+handle_delete_custom_role(RoleId, Req) ->
+    menelaus_util:assert_is_totoro(),
+    menelaus_util:assert_config_profile_flag(custom_roles_enabled),
+    case menelaus_roles:delete_role(list_to_binary(RoleId)) of
+        ok ->
+            ns_audit:delete_custom_role(Req, RoleId),
+            menelaus_util:reply_json(Req, <<>>, 200);
+        {error, not_found} ->
+            menelaus_util:reply_not_found(Req)
+    end.
+
+format_permission_json({Object, Operations}) ->
+    FormattedVertices = ["cluster" | [vertex_to_iolist(Vertex) ||
+                                         Vertex <- Object]],
+    FormattedOperations = case is_list(Operations) of
+                              true ->
+                                  lists:map(fun atom_to_binary/1, Operations);
+                              false ->
+                                  atom_to_binary(Operations)
+                          end,
+    [{list_to_binary(lists:join(".", FormattedVertices)), FormattedOperations}].
+
+custom_role_to_json({Name, [], Props, Permissions}) ->
+    PublicParams = lists:filtermap(
+                     fun ({name, _} = Param) ->
+                             {true, Param};
+                         ({desc, Desc}) ->
+                             {true, {description, Desc}};
+                         (_) ->
+                             false
+                     end, Props),
+    {Name, {PublicParams ++ [{permissions,
+                              {lists:flatmap(fun format_permission_json/1,
+                                             Permissions)}}]}}.
+
 
 -ifdef(TEST).
 role_to_string_test() ->

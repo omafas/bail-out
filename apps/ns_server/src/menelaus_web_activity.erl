@@ -90,21 +90,9 @@ type_spec(tracked_groups) ->
                      validator:validate(fun get_groups/1, _, _)],
       formatter => fun (L) -> {value, [list_to_binary(M) || M <- L]} end}.
 
-parse_role(RoleStr, Definitions) ->
-    try
-        RoleName = menelaus_web_rbac:role_to_atom(RoleStr),
-        case lists:keyfind(RoleName, 1, Definitions) of
-            false ->
-                {error, RoleStr};
-            _ -> RoleName
-        end
-    catch
-        error:badarg -> {error, RoleStr}
-    end.
-
 get_roles(RolesRaw) ->
     Definitions = menelaus_roles:get_definitions(public),
-    Roles = [parse_role(string:trim(RoleRaw), Definitions)
+    Roles = [menelaus_web_rbac:parse_role_name(string:trim(RoleRaw), Definitions)
              || RoleRaw <- RolesRaw],
 
     %% Gather erroneous roles

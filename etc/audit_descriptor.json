@@ -2234,6 +2234,45 @@
               },
               "sessionid": ""
           }
+      },
+      {
+          "id": 8298,
+          "name" : "set custom role",
+          "description" : "Custom role was added or updated",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "local" : {"ip" : "", "port" : 1},
+              "role_id" : "",
+              "custom_role" : {}
+          },
+          "optional_fields" : {
+              "authenticated_userid" : {"domain" : "", "user" : ""},
+              "sessionid" : ""
+          }
+      },
+      {
+          "id": 8299,
+          "name" : "delete custom role",
+          "description" : "Custom role was deleted",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "local" : {"ip" : "", "port" : 1},
+              "role_id" : ""
+          },
+          "optional_fields" : {
+              "authenticated_userid" : {"domain" : "", "user" : ""},
+              "sessionid" : ""
+          }
       }
     ]
 }

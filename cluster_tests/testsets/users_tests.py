@@ -16,19 +16,23 @@ from couchbase.cluster import Cluster
 from couchbase.options import ClusterOptions
 from couchbase.exceptions import AuthenticationException
 
+BUCKET_NAME = "test"
+
 
 class UsersTestSet(testlib.BaseTestSet):
 
     @staticmethod
     def requirements():
         return testlib.ClusterRequirements(
+            # Use provisioned profile, to test custom roles
+            edition="Provisioned",
             include_services=[Service.KV,
                               Service.QUERY,
                               Service.CBAS],
             # i.e. wait for service up
             balanced=True,
             num_vbuckets=16,
-            buckets=[{"name": "test",
+            buckets=[{"name": BUCKET_NAME,
                       "ramQuota": 100,
                       "storageBackend": "couchstore"}])
 
@@ -99,8 +103,8 @@ class UsersTestSet(testlib.BaseTestSet):
         session, headers, node = start_ui_session(self.cluster, user, password)
 
         # Use UI session
-        testlib.get_succ(node, '/pools/default/buckets/test', headers=headers,
-                         session=session, auth=None)
+        testlib.get_succ(node, f'/pools/default/buckets/{BUCKET_NAME}',
+                         headers=headers, session=session, auth=None)
 
         # Test query endpoint
         testlib.get_succ(self.cluster, '/admin/vitals', service=Service.QUERY,
@@ -989,6 +993,165 @@ class UsersTestSet(testlib.BaseTestSet):
             # Delete the created user
             delete_user(self.cluster, 'local', user)
 
+    def custom_role_simple_test(self):
+        user = 'custom_admin'
+        try:
+            op_tests = [['read'],
+                        ['read', 'write'],
+                        [],
+                        'none',
+                        'all']
+
+            # Create a custom role with varying ops lists, ending with 'all'
+            for ops in op_tests:
+                testlib.put_succ(self.cluster,
+                                 '/settings/rbac/customRoles/custom_admin',
+                                 json={'name': 'Cluster Admin',
+                                       'description': 'Customised cluster admin',
+                                       'permissions': {
+                                           'cluster.admin': ops
+                                       }})
+
+            # Create a custom admin user
+            name = testlib.random_str(10)
+            password = testlib.random_str(10)
+            put_user(self.cluster, 'local', user, password,
+                     roles='custom_admin', full_name=name,
+                     validate_user_props=True)
+
+            # The custom cluster admin can create a user, unlike the usual
+            # cluster admin
+            data = build_payload(roles='eventing_admin',
+                                 password=testlib.random_str(10),
+                                 full_name=testlib.random_str(10))
+            testlib.put_succ(self.cluster,
+                             '/settings/rbac/users/local/willgetcreated',
+                             data=data, auth=(user, password))
+        finally:
+            # Delete the created users
+            delete_user(self.cluster, 'local', user, expected_code=None)
+            delete_user(self.cluster, 'local', 'willgetcreated',
+                        expected_code=None)
+
+    def custom_role_parameterisation_test(self):
+        user = 'custom_bucket_admin'
+        try:
+            # Create a custom admin role
+            testlib.put_succ(self.cluster,
+                             '/settings/rbac/customRoles/custom_bucket_admin',
+                             json={'name': 'Bucket Admin',
+                                   'description': 'Customised bucket admin',
+                                   'permissions': {
+                                       'cluster.collection[test:.:.]': 'all'
+                                   }})
+
+            # Create a custom admin user
+            name = testlib.random_str(10)
+            password = testlib.random_str(10)
+            put_user(self.cluster, 'local', user, password,
+                     roles='custom_bucket_admin', full_name=name,
+                     validate_user_props=True)
+
+            # The custom bucket admin can create a scope
+            testlib.post_succ(self.cluster,
+                              '/pools/default/buckets/test/scopes',
+                              data={'name': 's1'}, auth=(user, password))
+        finally:
+            # Delete the created user
+            delete_user(self.cluster, 'local', user, expected_code=None)
+            testlib.ensure_deleted(self.cluster,
+                                   '/pools/default/buckets/test/scopes/s1')
+
+    def custom_role_simple_exclusion_test(self):
+        user = 'custom_bucket_user'
+        try:
+            # Create a custom admin role
+            testlib.put_succ(
+                self.cluster,
+                '/settings/rbac/customRoles/custom_bucket_role',
+                json={'name': 'Bucket User',
+                      'description': 'Customised bucket user role',
+                      'permissions': {
+                          'cluster.pools': ['read'],
+                          'cluster.bucket[test]': 'all',
+                          'cluster.collection[test:s1:c1].data': 'none',
+                          'cluster.collection[test:s2:.].data': 'none'
+                      }})
+
+            # Create a custom admin user
+            name = testlib.random_str(10)
+            password = testlib.random_str(10)
+            put_user(self.cluster, 'local', user, password,
+                     roles='custom_bucket_role', full_name=name,
+                     validate_user_props=True)
+
+            # The custom bucket user can create a scope where a collection's
+            # data is being excluded
+            testlib.post_succ(self.cluster,
+                              f'/pools/default/buckets/{BUCKET_NAME}/scopes',
+                              data={'name': 's1'}, auth=(user, password))
+
+            # The custom bucket user can also create a scope without data access
+            # for that scope
+            testlib.post_succ(self.cluster,
+                              f'/pools/default/buckets/{BUCKET_NAME}/scopes',
+                              data={'name': 's2'}, auth=(user, password))
+
+            # The custom bucket user can create collections in the excluded
+            # scope
+            testlib.post_succ(
+                self.cluster,
+                f'/pools/default/buckets/{BUCKET_NAME}/scopes/s2/collections',
+                data={'name': 'c1'}, auth=(user, password))
+
+            # The custom bucket user can create an excluded collection in a
+            # scope that isn't excluded
+            testlib.post_succ(
+                self.cluster,
+                f'/pools/default/buckets/{BUCKET_NAME}/scopes/s1/collections',
+                data={'name': 'c1'}, auth=(user, password))
+
+            # Create more collections to test attempting to write via kv
+            testlib.post_succ(
+                self.cluster,
+                f'/pools/default/buckets/{BUCKET_NAME}/scopes/s1/collections',
+                data={'name': 'c2'})
+
+            test_doc = "test"
+
+            # Start SDK/KV session
+            kv_url = self.cluster.connected_nodes[0].service_url(Service.KV)
+            admin_user_auth = PasswordAuthenticator(*self.cluster.auth)
+            admin_sdk_cluster = assert_sdk_pass(kv_url, admin_user_auth)
+            bucket = admin_sdk_cluster.bucket(BUCKET_NAME)
+
+            custom_user_auth = PasswordAuthenticator(user, password)
+            custom_user_sdk_cluster = assert_sdk_pass(kv_url, custom_user_auth)
+
+            # Test cases expected to pass/fail
+            test_cases = {("s1", "c1"): False,
+                          ("s1", "c2"): True,
+                          ("s2", "c1"): False}
+
+            for (scope_name, coll_name), expected_result in test_cases.items():
+                scope = bucket.scope(scope_name)
+                collection = scope.collection(coll_name)
+                testlib.assert_eq(collection.upsert(test_doc, {}).success, True)
+
+                testlib.assert_eq(test_sdk_kv(custom_user_sdk_cluster,
+                                              scope_and_collection=(scope_name,
+                                                                    coll_name),
+                                              check_document=test_doc),
+                                  expected_result)
+        finally:
+            # Delete the created user
+            delete_user(self.cluster, 'local', user, expected_code=None)
+            # Delete the scopes if they were created
+            testlib.ensure_deleted(
+                self.cluster, f'/pools/default/buckets/{BUCKET_NAME}/scopes/s1')
+            testlib.ensure_deleted(
+                self.cluster, f'/pools/default/buckets/{BUCKET_NAME}/scopes/s2')
+
 
 def build_payload(password=None, roles=None, full_name=None, groups=None,
                   locked=None, temporary_password=None):
@@ -1048,9 +1211,10 @@ def put_user(cluster_or_node, domain, userid, password=None, roles=None,
                f'password_change_date is missing in user props: {r}'
 
 
-def delete_user(cluster_or_node, domain, userid):
+def delete_user(cluster_or_node, domain, userid, expected_code=200):
     testlib.delete_succ(cluster_or_node,
-                        f'/settings/rbac/users/{domain}/{userid}')
+                        f'/settings/rbac/users/{domain}/{userid}',
+                        expected_code=expected_code)
 
 
 def change_user_password(cluster_or_node, user, password, new_password,
@@ -1221,12 +1385,21 @@ def test_sdk(url, auth):
         return False
 
 
-def test_sdk_kv(sdk_cluster: Cluster):
+def test_sdk_kv(sdk_cluster: Cluster, bucket_name=BUCKET_NAME,
+                scope_and_collection=None,
+                check_document=None):
     try:
-        # Simple request just to confirm the connection is usable, we don't need
-        # document "x" to actually exist
-        sdk_cluster.bucket("test").default_collection().exists("x")
-        return True
+        bucket = sdk_cluster.bucket(bucket_name)
+        if scope_and_collection is None:
+            collection = bucket.default_collection()
+        else:
+            scope = bucket.scope(scope_and_collection[0])
+            collection = scope.collection(scope_and_collection[1])
+        # Simple request just to confirm the connection is usable, use
+        # placeholder "x" if we don't care about the result
+        doc_exists = collection.exists("x" if check_document is None
+                                       else check_document)
+        return doc_exists.exists or check_document is None
     except AuthenticationException:
         return False
 

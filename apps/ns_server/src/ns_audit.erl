@@ -98,7 +98,9 @@
          abort_prepared_fusion_rebalance/2,
          upload_mounted_volumes/3,
          credential_event/3,
-         get_identity/1
+         get_identity/1,
+         set_custom_role/3,
+         delete_custom_role/2
         ]).
 
 -export([start_link/0, stats/0]).
@@ -541,8 +543,10 @@ code(update_credential) ->
     8295;
 code(delete_credential) ->
     8296;
-code(consume_credential) ->
-    8297.
+code(set_custom_role) ->
+    8298;
+code(delete_custom_role) ->
+    8299.
 
 send_to_memcached(ParentPID, {Code, EncodedBody, IsSync}) ->
     case (catch ns_memcached_sockets_pool:executing_on_socket(
@@ -1203,8 +1207,18 @@ upload_mounted_volumes(Req, PlanUUID, NodesVolumes) ->
         [{plan_uuid, list_to_binary(PlanUUID)},
          {volumes, {json, {PreparedNodes}}}]).
 
+
 credential_event(Req, EventName, Params) ->
     put(EventName, Req, Params).
+
+set_custom_role(Req, RoleId, Json) ->
+    put(set_custom_role, Req,
+        [{role_id, RoleId},
+         {custom_role, {json, Json}}]).
+
+delete_custom_role(Req, RoleId) ->
+    put(delete_custom_role, Req, [{role_id, RoleId}]).
+
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

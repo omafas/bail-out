@@ -72,6 +72,7 @@
          strip_ids/2,
          chronicle_upgrade_to_totoro/1,
          get_all_mutable_roles/0,
+         is_mutable/1,
          get_role/1,
          set_role/1,
          delete_role/1,

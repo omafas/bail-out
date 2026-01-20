@@ -545,6 +545,12 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {when_79({[admin, users], read},
                              {[admin, security], read}),
                      fun menelaus_web_rbac:handle_backup/1};
+                ["settings", "rbac", "customRoles"] ->
+                    {{[admin, users], read},
+                     fun menelaus_web_rbac:handle_get_custom_roles/1, []};
+                ["settings", "rbac", "customRoles", RoleId] ->
+                    {{[admin, users], read},
+                     fun menelaus_web_rbac:handle_get_custom_role/2, [RoleId]};
                 ["settings", "passwordPolicy"] ->
                     {{[admin, security], read},
                      fun menelaus_web_rbac:handle_get_password_policy/1};
@@ -1335,6 +1341,10 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                              {[admin, security], write}),
                      fun menelaus_web_rbac:handle_delete_profile/2,
                      [{UserId, Domain}]};
+                ["settings", "rbac", "customRoles", RoleId] ->
+                    {{[admin, users], write},
+                     fun menelaus_web_rbac:handle_delete_custom_role/2,
+                     [RoleId]};
                 ["settings", "security" | Keys] ->
                     {{[admin, security], write},
                      fun menelaus_web_settings:handle_delete/3,
@@ -1445,6 +1455,9 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {when_79({[admin, users], write},
                              {[admin, security], write}),
                      fun menelaus_web_rbac:handle_backup_restore/1};
+                ["settings", "rbac", "customRoles", RoleId] ->
+                    {{[admin, users], write},
+                     fun menelaus_web_rbac:handle_put_custom_role/2, [RoleId]};
                 ["settings", "encryptionKeys", SecretId] ->
                     {no_check_disallow_anonymous,
                      fun menelaus_web_secrets:handle_put_secret/2, [SecretId]};
