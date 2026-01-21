@@ -1803,10 +1803,8 @@ additional_bucket_params_validation(Params, Ctx) ->
     lists:append([maybe_validate_replicas_and_durability(Params, Ctx),
                   validate_magma_ram_quota(Params, Ctx),
                   validate_watermarks(Params, Ctx),
-                  validate_cont_backup(Params, Ctx),
                   validate_encr_lifetime_and_rotation_intrvl(
-                    Params, Ctx, BypassAddnlEncrChecks),
-                  validate_fusion_and_continuous_backup(Params, Ctx)]).
+                    Params, Ctx, BypassAddnlEncrChecks)]).
 
 maybe_validate_replicas_and_durability(Params, Ctx) ->
     %% MB-63888: When we fail over a node we set servers in the Bucket config
@@ -1830,25 +1828,6 @@ maybe_validate_replicas_and_durability(Params, Ctx) ->
         true -> [];
         false ->
             validate_replicas_and_durability(Params, Ctx)
-    end.
-
-validate_fusion_and_continuous_backup(Params, Ctx) ->
-    CBEnabled =
-        get_value_from_params_or_bucket(continuous_backup_enabled, Params, Ctx),
-    MagmaState =
-        get_value_from_params_or_bucket(magma_fusion_state, Params, Ctx),
-    case CBEnabled =:= undefined orelse MagmaState =:= undefined of
-        true ->
-            [];
-        false ->
-            case CBEnabled andalso MagmaState =/= disabled of
-                true ->
-                    [{continuousBackupEnabled,
-                      <<"Continuous backup cannot be "
-                        "enabled on fusion bucket">>}];
-                false ->
-                    []
-            end
     end.
 
 validate_replicas_and_durability(Params, Ctx) ->
@@ -1927,26 +1906,6 @@ validate_watermarks(Params, Ctx) ->
                              memory_high_watermark,
                              memoryHighWatermark,
                              less_than).
-
-%% Continuous backup requires Change History to be enabled (history
-%% retention seconds and/or history retention bytes are non-zero).
-validate_cont_backup(Params, Ctx) ->
-    Enabled = get_value_from_params_or_bucket(continuous_backup_enabled, Params,
-                                              Ctx),
-    RetentionSecs = get_value_from_params_or_bucket(history_retention_seconds,
-                                                    Params, Ctx),
-    RetentionBytes = get_value_from_params_or_bucket(history_retention_bytes,
-                                                     Params, Ctx),
-    case Enabled of
-        true when RetentionSecs =:= 0 andalso RetentionBytes =:= 0 ->
-            [{continuousBackupEnabled,
-              <<"Continuous backup cannot be enabled without also enabling "
-                "Change History ('historyRetentionSeconds' and/or "
-                "'historyRetentionBytes' must be set to a non-zero "
-                "value).">>}];
-        _ ->
-            []
-    end.
 
 validate_lifetime_with_rotation_intrvl(undefined, _CurrRotIntrvl, _MaxDeks) ->
     [];
@@ -5094,9 +5053,6 @@ basic_bucket_params_screening_t() ->
                       {"memoryLowWatermark", "-888"},
                       {"memoryHighWatermark", "333"},
                       {"continuousBackupEnabled", "hello"},
-                      {"continuousBackupInterval", "1"},
-                      {"continuousBackupRetentionPeriod", "-1"},
-                      {"continuousBackupLocation", "yahoo://storage/blob"},
                       {"invalidHlcStrategy", "badvalue"}],
                      AllBuckets),
     ?assertEqual([{expiryPagerSleepTime,
@@ -5110,15 +5066,6 @@ basic_bucket_params_screening_t() ->
                      "range 51 to 90 inclusive">>},
                   {continuousBackupEnabled,
                    <<"continuousBackupEnabled must be true or false">>},
-                  {continuousBackupInterval,
-                   <<"The value of continuousBackupInterval (1) must be "
-                     "in the range 2 to 2147483647 inclusive">>},
-                  {continuousBackupLocation,
-                   <<"Must be a valid path or uri writable by "
-                     "'couchbase' user">>},
-                  {continuousBackupRetentionPeriod,
-                   <<"The value of continuousBackupRetentionPeriod (-1) must "
-                     "be in the range 0 to 876000 inclusive">>},
                   {invalidHlcStrategy,
                    <<"Must be one of [error,ignore,replace]">>}],
                  E35),
@@ -5440,47 +5387,7 @@ basic_bucket_params_screening_t() ->
            "range 0 to 18446744073709551615 inclusive">>},
         {dcpBackfillIdleDiskThreshold,
          <<"The value of dcpBackfillIdleDiskThreshold (101) must be in the "
-           "range 0 to 100 inclusive">>}], E60),
-
-    %% Continuous backup requires Change History (history retention
-    %% seconds/bytes cannot both be zero). This is a bucket creation.
-    {_OK61, E61} = basic_bucket_params_screening(
-                    true,
-                    "bucket61",
-                    [{"bucketType", "membase"},
-                     {"ramQuota", "1024"},
-                     {"storageBackend", "magma"},
-                     {"continuousBackupEnabled", "true"}],
-                    AllBuckets),
-    ?assertEqual([{continuousBackupEnabled,
-                   <<"Continuous backup cannot be enabled without also "
-                     "enabling Change History ('historyRetentionSeconds' "
-                     "and/or 'historyRetentionBytes' must be set to a "
-                     "non-zero value).">>}], E61),
-
-    %% Continuous backup requires Change History (history retention
-    %% seconds/bytes cannot both be zero). This is an existing bucket.
-    {_OK62, E62} = basic_bucket_params_screening(
-                     false,
-                     "sixth",
-                     [{"historyRetentionSeconds", "0"},
-                      {"historyRetentionBytes", "0"}],
-                     AllBuckets),
-    ?assertEqual([{continuousBackupEnabled,
-                   <<"Continuous backup cannot be enabled without also "
-                     "enabling Change History ('historyRetentionSeconds' "
-                     "and/or 'historyRetentionBytes' must be set to a "
-                     "non-zero value).">>}], E62),
-
-    %% Continuous backup can be disabled even if Change History is enabled.
-    {OK63, []} = basic_bucket_params_screening(
-                   false,
-                   "sixth",
-                   [{"continuousBackupEnabled", "false"}],
-                   AllBuckets),
-    ?assertEqual(false,
-                 proplists:get_value(continuous_backup_enabled, OK63)).
-
+           "range 0 to 100 inclusive">>}], E60).
 
 basic_bucket_params_screening_test_() ->
     {setup,
