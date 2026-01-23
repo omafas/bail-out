@@ -31,6 +31,8 @@
          parse_validate_number/4,
          parse_validate_boolean_field/3]).
 
+-define(MAX_PURGE_INTERVAL, ?get_param(max_purge_interval, 60)).
+
 
 handle_get_global_settings(Req) ->
     JSON = [{autoCompactionSettings, build_global_settings()},
@@ -323,7 +325,8 @@ parse_validate_purge_interval(Params, _) ->
     do_parse_validate_purge_interval(Params, MinInterval).
 
 do_parse_validate_purge_interval(Params, LowerLimit) ->
-    Fun = mk_number_field_validator(LowerLimit, 60, Params, list_to_float),
+    Fun = mk_number_field_validator(LowerLimit, ?MAX_PURGE_INTERVAL, Params,
+                                    list_to_float),
     case Fun({"purgeInterval", purge_interval, "metadata purge interval"}) of
         [{error, Field, Msg}]->
             [{error, iolist_to_binary(Field), Msg}];
