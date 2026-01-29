@@ -68,6 +68,8 @@ supported_setting_names() ->
      {fusion_sync_rate_limit, fun validate_fusion_rate/1},
      {fusion_num_uploader_threads, {int, 1, 128}},
      {fusion_num_migrator_threads, {int, 1, 128}},
+     {fusion_max_pending_upload_bytes, {int, 0, ?MAX_32BIT_SIGNED_INT}},
+     {fusion_max_pending_upload_bytes_lwm_percentage, {int, 0, 100}},
      {dcp_consumer_max_marker_version, {one_of, ["2.0", "2.2"]}},
      {dcp_snapshot_marker_hps_enabled, bool},
      {dcp_snapshot_marker_purge_seqno_enabled, bool},
