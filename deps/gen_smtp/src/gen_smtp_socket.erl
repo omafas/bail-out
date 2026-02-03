@@ -293,8 +293,8 @@ proplist_merge(PrimaryList, DefaultList) ->
 	),
 	MergedOther = lists:merge(lists:sort(PrimaryOther), lists:sort(DefaultOther)),
 
-	%% remove all the values that don't belong here
-	[Option  || Option = {Key, _} <- MergedTuples, proplists:is_defined(Key, DefaultList)] ++ [Option || Option <- MergedOther, Option == inet6 ].
+	[Option || Option = {Key, _} <- MergedTuples] ++
+	[Option || Option <- MergedOther, Option == inet6 ].
 
 parse_address(Options) ->
 	case proplists:get_value(ip, Options) of
