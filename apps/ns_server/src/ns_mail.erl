@@ -14,6 +14,11 @@
 -include("ns_common.hrl").
 
 -define(SEND_TIMEOUT, 15000).
+%% Versions of erlang starting with 26 changed the default behavior to
+%% verify_peer. If a user wants the old default behavior (verify_none)
+%% then they would use, via /diag/eval
+%%     ns_config:set({ns_mail, disable_verify_peer}, true).
+-define(DISABLE_VERIFY_PEER, ?get_param(disable_verify_peer, false)).
 
 %% API
 
@@ -125,6 +130,7 @@ config_to_options(ServerConfig) ->
     Relay = proplists:get_value(host, ServerConfig),
     Port = proplists:get_value(port, ServerConfig),
     Encrypt = proplists:get_bool(encrypt, ServerConfig),
+    Host = proplists:get_value(host, ServerConfig),
     Options = [{relay, Relay}, {port, Port}],
     Options2 = case Username of
         "" ->
@@ -133,6 +139,20 @@ config_to_options(ServerConfig) ->
             [{username, Username}, {password, Password}] ++ Options
     end,
     case Encrypt of
-        true -> [{tls, always} | Options2];
-        false -> Options2
+        true ->
+            TlsOptions = case ?DISABLE_VERIFY_PEER of
+                             false ->
+                                 [{cacerts, public_key:cacerts_get()},
+                                  {server_name_indication, Host},
+                                  {verify, verify_peer},
+                                  {depth, ?ALLOWED_CERT_CHAIN_LENGTH},
+                                  {reuse_sessions, false}];
+                             true ->
+                                 %% Mimic the pre erlang 26 behavior where
+                                 %% the default was to not verify the peer.
+                                 [{verify, verify_none}]
+                         end,
+            [{tls, always}, {tls_options, TlsOptions} | Options2];
+        false ->
+            Options2
     end.
