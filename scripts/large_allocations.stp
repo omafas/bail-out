@@ -1,0 +1,207 @@
+/*
+ * Systemtap script to print backtraces for erlang processes that cause huge
+ * allocations (mmap and mremap systemcalls are monitored, but not brk).
+ *
+ * Erlang backtraces are very imprecise and mostly just meant for identifying
+ * faulty process.
+ *
+ * Run like this:
+ *
+ * PATH=/opt/otp_r16b03_1_systemtap/lib/erlang/erts-5.10.4/bin/:$PATH \
+ * stap -x 15883 -d /opt/couchbase/lib/erlang/erts-5.10.4/bin/beam.smp \
+ * -d /lib64/libc.so.6 \
+ * -DSTAP_NO_OVERLOAD -DMAXSKIPPED=1000000 -DMAXMAPENTRIES=250000 \
+ * ./large_allocations.stp
+ *
+ */
+
+@define THRESHOLD %( 5 * 1024 * 1024 %)
+@define MAX_CALLS_PER_PROCESS %( 30 %)
+
+global pids;
+
+global initial_call;
+global stack;
+global stack_depth;
+global stack_counter;
+
+probe nd_syscall.mmap
+{
+  if (pid() != target()) {
+    next;
+  }
+
+  handle_alloc(name, argstr, len);
+}
+
+probe nd_syscall.mremap
+{
+  if (pid() != target()) {
+    next;
+  }
+
+  handle_alloc(name, argstr, new_size);
+}
+
+probe process("beam.smp").mark("process-scheduled")
+{
+  if (pid() != target()) {
+    next;
+  }
+
+  pids[tid()] = user_string($arg1);
+}
+
+probe process("beam.smp").mark("process-unscheduled")
+{
+  if (pid() != target()) {
+    next;
+  }
+
+  delete pids[tid()];
+}
+
+probe process("beam.smp").mark("process-spawn")
+{
+  if (pid() != target()) {
+    next;
+  }
+
+  pid = user_string($arg1);
+  mfa = user_string($arg2);
+
+  initial_call[pid] = mfa;
+  stack_counter[pid] = 0;
+}
+
+probe process("beam.smp").mark("process-exit")
+{
+  if (pid () != target()) {
+    next;
+  }
+
+  pid = user_string($arg1);
+  delete initial_call[pid];
+  for (i = 0; i < stack_counter[pid]; i++) {
+    delete stack[pid, i];
+    delete stack_depth[pid, i];
+  }
+  delete stack_counter[pid];
+}
+
+probe process("beam.smp").mark("local-function-entry"),
+  process("beam.smp").mark("global-function-entry")
+{
+  if (pid() != target()) {
+    next;
+  }
+
+  pid = user_string($arg1);
+  mfa = user_string($arg2);
+  depth = $arg3;
+
+  stack_cleanup(pid, depth);
+  stack_push(pid, mfa, depth);
+}
+
+probe process("beam.smp").mark("function-return")
+{
+  if (pid() != target()) {
+    next;
+  }
+
+  pid = user_string($arg1);
+  depth = $arg3;
+
+  stack_cleanup(pid, depth);
+}
+
+probe process("beam.smp").mark("bif-entry"),
+  process("beam.smp").mark("nif-entry")
+{
+  if (pid() != target()) {
+    next;
+  }
+
+  pid = user_string($arg1);
+  mfa = user_string($arg2);
+
+  stack_push(pid, mfa, -1);
+}
+
+probe process("beam.smp").mark("bif-return"),
+  process("beam.smp").mark("nif-return")
+{
+  if (pid() != target()) {
+    next;
+  }
+
+  pid = user_string($arg1);
+
+  stack_pop(pid);
+}
+
+function handle_alloc(name, argstr, size) {
+  if (size > @THRESHOLD) {
+    printf("\n");
+    printf("%s(%s)\n", name, argstr);
+    printf("==========================Erlang calls=========================\n");
+
+    if (tid() in pids) {
+      pid = pids[tid()];
+
+      initial = "<unknown>";
+      if (pid in initial_call) {
+        initial = initial_call[pid];
+      }
+
+      printf("PID: %s\nInitial call: %s\n\n", pid, initial);
+
+      for (i = stack_counter[pid] - 1; i >= 0; i--) {
+        printf("%s %d\n", stack[pid, i], stack_depth[pid, i]);
+      }
+    } else {
+      printf("No erlang process is scheduled on the thread\n")
+    }
+
+    printf("========================Userspace backtrace====================\n");
+    print_usyms(ubacktrace());
+    printf("===============================================================\n");
+  }
+}
+
+function stack_cleanup(pid, depth) {
+  i = stack_counter[pid] - 1;
+
+  while (i >= 0) {
+    if (stack_depth[pid, i] > depth) {
+      delete stack[pid, i];
+      delete stack_depth[pid, i];
+    } else {
+      break;
+    }
+
+    i -= 1;
+  }
+
+  stack_counter[pid] = i + 1;
+}
+
+function stack_push(pid, mfa, depth) {
+  counter = stack_counter[pid];
+
+  if (counter < @MAX_CALLS_PER_PROCESS) {
+    if (counter == 0 || depth == -1 || stack_depth[pid, counter - 1] < depth) {
+      stack[pid, counter] = mfa;
+      stack_depth[pid, counter] = depth;
+      stack_counter[pid] += 1;
+
+    }
+  }
+}
+
+function stack_pop(pid) {
+  counter = --stack_counter[pid];
+  delete stack[pid, counter];
+  delete stack_depth[pid, counter];
+}

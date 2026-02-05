@@ -1,0 +1,72 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="dialog-lg">
+  <div class="panel-header">
+    <h2>Modify Cluster Services</h2>
+  </div>
+  <form
+     novalidate
+     ng-submit="serversModifyServicesCtl.onSubmit(form)"
+     name="servicesForm"
+     class="forms"
+     mn-spinner="serversModifyServicesCtl.viewLoading">
+    <div class="panel-content">
+      <div class="margin-bottom-1 text-small">
+        Note: adjusting the services will trigger a rebalance.
+      </div>
+      <div class="error error-form" ng-if="('isString' | lodash:serversModifyServicesCtl.errors)">
+        Attention: {{serversModifyServicesCtl.errors}}
+      </div>
+      <div class="error error-form" ng-if="('isArray' | lodash:serversModifyServicesCtl.errors)">
+        <div ng-repeat="error in serversModifyServicesCtl.errors track by $index">
+          Attention: {{error}}
+        </div>
+      </div>
+
+      <label class="inline">Nodes</label>
+      <div class="cbui-table">
+        <div class="cbui-table-header">
+            <span class="cbui-table-cell flex-grow-2-5">name</span>
+            <span class="cbui-table-cell flex-grow-1 text-center" ng-repeat="(key, value) in serversModifyServicesCtl.modifyServicesConfig.services.model">
+                {{key}}
+            </span>
+        </div>
+        <div class="cbui-tablerow" ng-repeat="node in serversModifyServicesCtl.nodeServices">
+          <span class="cbui-table-cell flex-grow-2-5 cursor-pointer"
+                ng-attr-title="{{node.name + ((node.status != 'healthy') ? ' - is unhealthy' : '')}}"
+                ng-class="{'warning': node.status != 'healthy'}">
+             {{node.name}}
+          </span>
+          <span class="cbui-table-cell flex-grow-1 text-center" ng-repeat="(key, value) in serversModifyServicesCtl.modifyServicesConfig.services.model">
+            <input
+                type="checkbox"
+                ng-model="node.services[key]"
+                ng-attr-id="{{node.name + '-' + key}}"
+                ng-disabled="key == 'kv' || node.status != 'healthy'"
+                ng-title="key == 'kv' ? 'Data nodes may not be changed.' : ''">
+            <label ng-attr-for="{{node.name + '-' + key}}"></label>
+          </span>
+      </div>
+    </div>
+
+    <div class="text-small" ng-if="serversModifyServicesCtl.newServicesAdded().count > 0">
+        You have added new services to the cluster. Please confirm memory quota settings in the following dialog.
+    </div>
+  </div>
+
+  <div class="panel-footer">
+    <a  ng-click="$dismiss()">Cancel</a>
+    <button class="orange"
+            ng-disabled="servicesForm.$pristine || serversModifyServicesCtl.unhealthyNodes"
+            type="submit">Rebalance and Change Services</button>
+  </div>
+  </form>
+</div>

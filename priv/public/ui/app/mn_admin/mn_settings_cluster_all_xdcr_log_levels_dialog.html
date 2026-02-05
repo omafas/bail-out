@@ -1,0 +1,61 @@
+<!--
+Copyright 2024-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+<div class="dialog-lg">
+  <h2 class="panel-header">
+    XDCR Services Log Levels
+  </h2>
+  <h4 class="padding-1 text-warning">All XDCR Services with current log level and log level to be set on Save</h4>
+  <div>
+    <div class="cbui-table-header padding-1 margin-left-1-5 justify-left">
+      <span class="cbui-table-cell flex-grow-2">
+        <span
+           class="cbui-table-cell flex-grow-2">
+          XDCR service name
+        </span>
+      </span>
+      <span class="cbui-table-cell flex-grow-1">
+        current log level
+      </span>
+      <span class="cbui-table-cell flex-grow-1">
+        log level after Save
+      </span>
+    </div>
+    <div class="padding-1 max-height-500 overflow-scroll">
+      <section
+         ng-repeat="serviceName in allXDCRLogLevelsDialogCtl.XDCRServices"
+         class="padding-top-half padding-bottom-half">
+        <span class="flex flex-items-center">
+          <span class="cbui-table-cell flex-grow-2 margin-left-1-5">
+            {{serviceName}}
+            <span
+               ng-if="serviceName === 'Default'"
+               class="fa-stack icon-info"
+               uib-tooltip-html="'Default covers any log messages that are not<br/>captured by the rest of the listed services.'"
+               tooltip-placement="auto right"
+               tooltip-trigger="mouseenter">
+              <span class="icon fa-circle-thin fa-stack-2x"></span>
+              <span class="icon fa-info fa-stack-1x"></span>
+            </span>
+          </span>
+          <span class="cbui-table-cell flex-grow-1">
+            {{allXDCRLogLevelsDialogCtl.initialLogLevels[serviceName]}}
+          </span>
+          <span class="cbui-table-cell flex-grow-1">
+            {{allXDCRLogLevelsDialogCtl.logLevels[serviceName]}}
+          </span>
+        </span>
+      </section>
+    </div>
+  </div>
+  <div class="panel-footer">
+    <button type="button" ng-click="allXDCRLogLevelsDialogCtl.closeModal()">OK</button>
+  </div>
+</div>
+

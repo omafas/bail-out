@@ -1,0 +1,841 @@
+<!--
+Copyright 2018-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="dialog-med">
+  <div class="panel-header">
+    <h2>{{bucket ? 'Edit Bucket Settings' : 'Add Data Bucket'}}</h2>
+    <a
+      class="ui-dialog-titlebar-close modal-close"
+      (click)="activeModal.dismiss()"
+      >X</a
+    >
+  </div>
+  <form
+    novalidate
+    [formGroup]="form.group"
+    (submit)="form.submit.next()"
+    [mnSpinner]="bucketRam | async"
+  >
+    <div class="forms panel-content">
+      <div class="formrow">
+        <div class="row">
+          <label>Name</label>
+          <ng-template #authorizedUsers>
+            <div *ngIf="!(users | async)" class="loading"></div>
+            <div *ngFor="let user of ((users | async)?.slice(0, 3))">
+              {{user}}
+            </div>
+            <a
+              *ngIf="showUsersLink | async"
+              (click)="activeModal.dismiss()"
+              uiSref="app.admin.security.roles.user"
+            >
+              more ...</a
+            >
+          </ng-template>
+          <span
+            *ngIf="(showAuthorizedUsers | async)"
+            [ngbTooltip]="authorizedUsers"
+            triggers="click"
+            placement="right"
+          >
+            <a class="cursor-pointer">
+              <span class="text-smaller">authorized users</span>
+            </a>
+          </span>
+        </div>
+        <input
+          type="text"
+          formControlName="name"
+          [mnFocus]="focusFieldSubject"
+          autocorrect="off"
+          spellcheck="false"
+          autocapitalize="off"
+        />
+        <div class="error" [hidden]="!(httpError | async)?.errors?.name">
+          {{(httpError | async)?.errors?.name}}
+        </div>
+      </div>
+
+      <div class="formrow">
+        <label>Bucket Type</label>
+        <input
+          type="radio"
+          value="membase"
+          formControlName="bucketType"
+          id="for-bucket-type-membase"
+        />
+        <label for="for-bucket-type-membase">Couchbase</label>
+        <input
+          type="radio"
+          value="ephemeral"
+          formControlName="bucketType"
+          id="for-bucket-type-ephemeral"
+        />
+        <label for="for-bucket-type-ephemeral">Ephemeral</label>
+      </div>
+
+      <div
+        [hidden]="(isNotEnterpriseOrEditAndNotMembase | async) || (bucketType | async) !== 'membase'"
+        class="formrow checkbox-list"
+      >
+        <label>Storage Backend</label>
+        <div class="formrow checkbox-list">
+          <input
+            type="radio"
+            formControlName="storageBackend"
+            value="magma"
+            id="for-storage-backend-magma"
+          />
+          <label for="for-storage-backend-magma">Magma</label>
+          <input
+            type="radio"
+            formControlName="storageBackend"
+            value="couchstore"
+            id="for-storage-backend-couchstore"
+          />
+          <label for="for-storage-backend-couchstore">CouchStore</label>
+
+          <div
+            class="error"
+            [hidden]="!(httpError | async)?.errors?.storageBackend"
+          >
+            {{(httpError | async)?.errors?.storageBackend}}
+          </div>
+        </div>
+        <div
+          class="margin-left-1-5 margin-top-half"
+          *ngIf="compatVersion79 | async"
+          [hidden]="(storageBackend | async) === 'couchstore'"
+        >
+          <label [attr.disabled]="bucket" class="inline">Number of vBuckets</label>
+          <ng-template #numVBucketTooltip>
+            The number of Magma vBuckets affects performance and memory usage.
+            <ul>
+              <li>
+                The minimum bucket memory quota allowed for 128 vBuckets is
+                100 MiB.
+              </li>
+              <li>
+                The minimum bucket memory quota allowed for 1024 vBuckets is
+                1 GiB.
+              </li>
+              <li>
+                If you can allocate at least 1 GiB memory per node to your bucket,
+                you should choose the 1024 vBuckets option for Magma as you’ll get better performance at scale.
+              </li>
+            </ul>
+            To create an XDCR replication from a bucket in Server version earlier than 8.0, you must choose 1024 vBuckets.
+          </ng-template>
+          <span
+            class="fa-stack icon-info"
+            [ngbTooltip]="numVBucketTooltip"
+            triggers="click"
+            placement="right"
+          >
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div>
+            <input
+              type="radio"
+              formControlName="numVBuckets"
+              value="128"
+              id="for-magma-128"
+              [attr.disabled]="bucket"
+            />
+            <label for="for-magma-128">128</label>
+            <input
+              type="radio"
+              formControlName="numVBuckets"
+              value="1024"
+              id="for-magma-1024"
+              [attr.disabled]="bucket"
+            />
+            <label for="for-magma-1024">1024</label>
+          </div>
+        </div>
+        <div class="error margin-left-1-5" [hidden]="!(httpError | async)?.errors?.numVBuckets">
+          {{(httpError | async)?.errors?.numVBuckets}}
+        </div>
+      </div>
+      <div class="formrow">
+        <label>Memory Quota <small>in mebibytes per server node</small></label>
+        <div class="form-inline margin-bottom-1">
+          <input type="number" formControlName="ramQuotaMB" />
+          <abbr>MiB</abbr>
+        </div>
+        <mn-bar-usage
+          class="bar-usages mn-bar-usages bucket-add"
+          [ngClass]="{overcommitted: !!(bucketRam | async)?.topLeft}"
+          [total]="bucketTotalRam"
+          [baseInfo]="bucketRam"
+        >
+        </mn-bar-usage>
+        <div class="error" [hidden]="!(httpError | async)?.errors?.ramQuota">
+          {{(httpError | async)?.errors?.ramQuota}}
+        </div>
+      </div>
+
+      <div class="formrow">
+        <span
+          class="disclosure inline"
+          [ngClass]="{'disclosed': (showAdvancedSettings.state | async)}"
+          (click)="showAdvancedSettings.click.next()"
+        >
+          Advanced bucket settings
+        </span>
+      </div>
+      <div [hidden]="!(showAdvancedSettings.state | async)">
+        <div class="formrow checkbox-list">
+          <label>Replicas</label>
+          <div class="row flex-left">
+            <span class="column">
+              <input
+                type="checkbox"
+                id="for-enable-replicas"
+                formControlName="replicaNumberEnabled"
+              />
+              <label for="for-enable-replicas">Enable</label>
+            </span>
+            <div
+              class="row flex-left width-8"
+              [hidden]="!(replicaNumberEnabled | async)"
+            >
+              <mn-select
+                class="inline margin-right-half fix-width-3-quarters"
+                [values]="[1, 2, 3]"
+                [group]="form.group"
+                mnFormControlName="replicaNumber"
+              >
+              </mn-select>
+              <small>Number of replica (backup) copies</small>
+            </div>
+          </div>
+          <div
+            class="error margin-bottom-half"
+            [hidden]="!(showReplicaNumberError | async)"
+          >
+            {{(showReplicaNumberError | async)}}
+          </div>
+          <div class="formrow" [hidden]="(bucketType | async) !== 'membase'">
+            <input
+              type="checkbox"
+              id="enable-view-replicas"
+              formControlName="replicaIndex"
+            />
+            <label for="enable-view-replicas">Replicate view indexes</label>
+          </div>
+        </div>
+
+        <div class="formrow" [hidden]="!(showMaxTTL | async)">
+          <label class="inline">Bucket Max Time-To-Live</label>
+          <ng-template #bucketMaxTTLTooltip>
+            The maximum time-to-live (TTL) for all documents in this bucket in
+            seconds. If enabled and a document is mutated with no TTL or a TTL
+            greater than the maximum, its TTL will be set to the maximum bucket
+            TTL. The largest TTL allowed is 2147483647.
+          </ng-template>
+          <span
+            class="fa-stack icon-info"
+            [ngbTooltip]="bucketMaxTTLTooltip"
+            triggers="click"
+            placement="top"
+          >
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="row flex-left">
+            <span class="width-3" [formGroup]="form.group">
+              <input
+                type="checkbox"
+                id="enable_bucket_ttl"
+                formControlName="maxTTLEnabled"
+              />
+              <label for="enable_bucket_ttl">Enable</label>
+            </span>
+            <span class="row flex-left width-9">
+              <input
+                type="text"
+                formControlName="maxTTL"
+                class="margin-right-half width-3"
+              />
+              <small> second{{isMaxTTLPlural | async}}</small>
+            </span>
+          </div>
+          <div class="error" [hidden]="!(httpError | async)?.errors?.maxTTL">
+            {{(httpError | async)?.errors?.maxTTL}}
+          </div>
+          <div
+            [hidden]="!(showMaxTTLWarning | async)"
+            class="content-box row margin-top-1"
+          >
+            <p>
+              <strong>NOTE</strong> &nbsp;A non-zero value will result in
+              eventual data loss. You should not, for example, enable Bucket TTL
+              on permanent storage buckets or the metadata buckets for Eventing.
+            </p>
+          </div>
+        </div>
+
+        <div class="formrow" [hidden]="!(showCompressionMode | async)">
+          <label class="inline">Compression Mode</label>
+          <ng-template #compressionModeTooltip>
+            <strong>Off</strong> - compressed documents are accepted but
+            actively decompressed for storage in memory and for streaming. Not
+            advised!<br />
+            <strong>Passive</strong> - compressed documents can be stored and
+            streamed from the server, but the server does not try to actively
+            compress documents (client-initiated)<br />
+            <strong>Active</strong> - the server will try to actively compress
+            documents in memory
+          </ng-template>
+          <span
+            class="fa-stack icon-info"
+            [ngbTooltip]="compressionModeTooltip"
+            triggers="click"
+            placement="right"
+          >
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow checkbox-list">
+            <input
+              type="radio"
+              id="for-comp-mode-off"
+              formControlName="compressionMode"
+              value="off"
+            />
+            <label for="for-comp-mode-off">Off</label>
+            <!--  default value -->
+            <input
+              type="radio"
+              id="for-comp-mode-passive"
+              formControlName="compressionMode"
+              value="passive"
+            />
+            <label for="for-comp-mode-passive">Passive</label>
+            <input
+              type="radio"
+              id="for-comp-mode-active"
+              formControlName="compressionMode"
+              value="active"
+            />
+            <label for="for-comp-mode-active">Active</label>
+          </div>
+        </div>
+
+        <div [hidden]="!(showConflictResolution | async)">
+          <label class="inline">Conflict Resolution</label>
+          <ng-template #conflictResolutionTooltip>
+            Choose the timestamp conflict resolution method if XDCR replications
+            will be set up for this bucket. Attention: timestamp conflict
+            resolution requires additional NTP setup.
+          </ng-template>
+          <span
+            class="fa-stack icon-info"
+            [ngbTooltip]="conflictResolutionTooltip"
+            triggers="click"
+            placement="right"
+          >
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow checkbox-list">
+            <input
+              type="radio"
+              id="for-conflict-resolution-seqno"
+              formControlName="conflictResolutionType"
+              name="conflictResolutionType"
+              value="seqno"
+            />
+            <label for="for-conflict-resolution-seqno">Sequence number</label>
+            <input
+              type="radio"
+              id="for-conflict-resolution-lww"
+              formControlName="conflictResolutionType"
+              name="conflictResolutionType"
+              value="lww"
+            />
+            <label for="for-conflict-resolution-lww">Timestamp</label>
+            <span [hidden]="!(isDeveloperPreview | async)">
+              <input
+                type="radio"
+                id="for-conflict-resolution-custom"
+                formControlName="conflictResolutionType"
+                name="conflictResolutionType"
+                value="custom"
+              />
+              <label for="for-conflict-resolution-custom">Custom</label>
+            </span>
+            <div
+              class="error"
+              [hidden]="!(httpError | async)?.errors?.conflictResolutionType"
+            >
+              {{(httpError | async)?.errors?.conflictResolutionType}}
+            </div>
+            <div
+              class="error"
+              [hidden]="(form.group.get('conflictResolutionType').valueChanges | async) !== 'lww'"
+            >
+              Warning: Timestamp-based conflict resolution requires NTP to be
+              correctly set up on all the nodes in your replication topology to
+              ensure high-quality time synchronization. See
+              <a
+                href="https://docs.couchbase.com/server/{{majorMinorVersion | async}}/install/synchronize-clocks-using-ntp.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Setting Up NTP</a
+              >
+              in the Couchbase documentation.
+            </div>
+          </div>
+        </div>
+
+        <div
+          class="formrow checkbox-list"
+          [hidden]="(bucketType | async) !== 'membase'"
+        >
+          <label class="inline">Ejection Method</label>
+          <ng-template #ejectionMethodTooltip>
+            <strong>Value Ejection:</strong>
+            During ejection, only the value will be ejected (key and metadata
+            will remain in memory).
+            <br /><br />
+            <strong>Full Ejection:</strong> During ejection, everything
+            (including key, metadata, and value) will be ejected. <br /><br />
+            Value Ejection needs more system memory, but provides the best
+            performance. Full Ejection reduces the memory overhead requirement.
+          </ng-template>
+          <span
+            class="fa-stack icon-info"
+            [ngbTooltip]="ejectionMethodTooltip"
+            triggers="click"
+            placement="top"
+          >
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow">
+            <input
+              type="radio"
+              name="evictionPolicy"
+              formControlName="evictionPolicy"
+              value="valueOnly"
+              id="for-metadata-value-eject"
+            />
+            <label for="for-metadata-value-eject">Value-only</label>
+            <input
+              type="radio"
+              formControlName="evictionPolicy"
+              name="evictionPolicy"
+              value="fullEviction"
+              id="for-metadata-full-eject"
+            />
+            <label for="for-metadata-full-eject">Full</label>
+            <div class="formrow checkbox-list margin-bottom-0" *ngIf="compatVersion79 | async">
+              <input type="checkbox" formControlName="noRestart" id="no-restart" />
+              <label for="no-restart" class="margin-right-zero">Don't restart the bucket now; change should be pending effect</label>
+              <ng-template #evictionPolicyNoRestartTooltip>
+                When this option is unchecked, the bucket will restart immediately
+                (which will lead to closing all open connections and some downtime).
+                <br /><br />
+                When this option is checked, the bucket remains available,
+                and the eviction policy for the bucket will be shown as the new value chosen,
+                but the change will be pending effect via either
+                1) a swap rebalance of the data nodes, or 2) a graceful failover, delta recovery, and rebalance of the data nodes.
+                <br /><br />
+                If you are changing storage backend at the same time as eviction policy, however,
+                you must do either option 1 above, or a graceful failover with full recovery and rebalance.
+              </ng-template>
+              <span
+                class="fa-stack icon-info"
+                [ngbTooltip]="evictionPolicyNoRestartTooltip"
+                triggers="click"
+                placement="right"
+              >
+                <span class="icon fa-circle-thin fa-stack-2x"></span>
+                <span class="icon fa-info fa-stack-1x"></span>
+              </span>
+            </div>
+            <div class="error" [hidden]="!(evictionPolicyWarning | async)">
+              {{(evictionPolicyWarning | async)}}
+            </div>
+          </div>
+        </div>
+
+        <div
+          class="formrow checkbox-list"
+          [hidden]="(bucketType | async) !== 'ephemeral'"
+        >
+          <label class="inline">Ejection Policy</label>
+          <ng-template #ejectionMethodEphemeralTooltip>
+            Ejection automatically removes older data from RAM to create space
+            for new data if you reach your bucket quota.
+            <br /><br />
+            Without automatic ejection, Couchbase Server keeps all data until
+            explicitly deleted, but will reject any new data if you reach the
+            quota (dedicated memory) you set for your bucket.
+          </ng-template>
+          <span
+            class="fa-stack icon-info"
+            [ngbTooltip]="ejectionMethodEphemeralTooltip"
+            triggers="click"
+            placement="top"
+          >
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow">
+            <input
+              type="radio"
+              name="evictionPolicyEphemeral"
+              formControlName="evictionPolicyEphemeral"
+              value="noEviction"
+              id="for-metadata-value-eject-ephemeral"
+            />
+            <label for="for-metadata-value-eject-ephemeral">No ejection</label>
+            <input
+              type="radio"
+              name="evictionPolicyEphemeral"
+              formControlName="evictionPolicyEphemeral"
+              value="nruEviction"
+              id="for-metadata-full-eject-ephemeral"
+            />
+            <label for="for-metadata-full-eject-ephemeral"
+              >Eject data when RAM is full</label
+            >
+            <div
+              class="error"
+              [hidden]="!(httpError | async)?.errors?.evictionPolicy"
+            >
+              {{(httpError | async)?.errors?.evictionPolicy}}
+            </div>
+          </div>
+        </div>
+
+        <div class="formrow" [hidden]="(bucketType | async) !== 'ephemeral'">
+          <label class="inline">Metadata Purge Interval</label>
+
+          <ng-template #metadataPurgeIntervalTooltip>
+            Set how frequently a node will purge metadata on deleted items. The
+            available range for is 0.0007 - 60 where 0.0007 = 1m, 0.5 = 12h. If
+            set too high, it may significantly delay the node from reclaiming
+            memory space. If set too low, it may cause data inconsistencies in
+            XDCR or Views.
+          </ng-template>
+          <span
+            [ngbTooltip]="metadataPurgeIntervalTooltip"
+            triggers="click"
+            class="fa-stack icon-info"
+            placement="top"
+          >
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="form-inline">
+            <input
+              type="text"
+              formControlName="purgeInterval"
+              id="metadata-purge-frequency"
+            />
+            <small>Range 0.0007 (1 minute) - 60 days</small>
+          </div>
+          <div
+            class="error"
+            [hidden]="!(httpError | async)?.errors?.purgeInterval"
+          >
+            {{(httpError | async)?.errors?.purgeInterval}}
+          </div>
+        </div>
+
+        <div class="formrow">
+          <div>
+            <label class="inline">Minimum Durability Level</label>
+
+            <ng-template #minDurabilityLevelTooltip>
+              Bucket Minimum Durability Level. The Data Service upgrades any
+              write request to this minimum level of durability if the write
+              level is lower than the minimum level. It will also upgrade an
+              async write to a sync write if the minimum level is higher than
+              none.
+            </ng-template>
+            <span
+              [ngbTooltip]="minDurabilityLevelTooltip"
+              triggers="click"
+              class="fa-stack icon-info"
+              placement="right"
+            >
+              <span class="icon fa-circle-thin fa-stack-2x"></span>
+              <span class="icon fa-info fa-stack-1x"></span>
+            </span>
+          </div>
+          <mn-select
+            mnFormControlName="durabilityMinLevel"
+            [values]="durabilityMinLevelOptions | async"
+            [group]="form.group"
+            class="inline fix-width-3-5"
+          >
+          </mn-select>
+          <div
+            class="error"
+            [hidden]="!(httpError | async)?.errors?.durability_min_level"
+          >
+            {{(httpError | async)?.errors?.durability_min_level}}
+          </div>
+        </div>
+
+        <div class="formrow" [hidden]="(bucketType | async) !== 'membase'">
+          <label class="inline">Auto-Compaction</label>
+
+          <ng-template #autoCompactionTooltip>
+            Auto-Compaction settings trigger the compaction process. The process
+            compacts databases and their respective view indexes.
+          </ng-template>
+          <span
+            [ngbTooltip]="autoCompactionTooltip"
+            triggers="click"
+            class="fa-stack icon-info"
+            placement="right"
+          >
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow checkbox-list">
+            <input
+              formControlName="autoCompactionDefined"
+              type="checkbox"
+              id="for-auto-compaction-override"
+            />
+            <label for="for-auto-compaction-override"
+              >Override the default auto-compaction settings?</label
+            >
+          </div>
+          <div class="formrow" [hidden]="!(autoCompactionDefined | async)">
+            <mn-auto-compaction-form
+              class="margin-bottom-2"
+              [mnGroup]="form.group.get('autoCompactionSettings')"
+              [mnErrors]="httpError"
+              [isBucketSettings]="true"
+              [mnStorage]="autoCompactionMode"
+              [forceDisableFields]="isStorageBackendChangePending || isEvictionPolicyChangePending"
+            >
+            </mn-auto-compaction-form>
+          </div>
+        </div>
+
+        <div
+          class="formrow"
+          *ngIf="secrets !== null"
+          [hidden]="(bucketType | async) !== 'membase'"
+        >
+          <label>Encryption At Rest</label>
+          <div class="formrow checkbox-list">
+            <input
+              formControlName="enableEncryptionAtRest"
+              type="checkbox"
+              id="for-enable-encryption-at-rest"
+            />
+            <label for="for-enable-encryption-at-rest"
+              >Enable Encryption At Rest</label
+            >
+          </div>
+          <div
+            *ngIf="(form.group.get('enableEncryptionAtRest').valueChanges | async)"
+          >
+            <div class="formrow">
+              <label>Available Encryption Keys
+                 <ng-template #autoCompactionTooltip>
+                    Encryption keys are managed on the <em>Security</em> &#8594; <em>Encryption At Rest</em> page.
+                 </ng-template>
+                 <span
+                     [ngbTooltip]="autoCompactionTooltip"
+                     triggers="click"
+                     class="fa-stack icon-info"
+                     placement="right"
+                 >
+                     <span class="icon fa-circle-thin fa-stack-2x"></span>
+                     <span class="icon fa-info fa-stack-1x"></span>
+                  </span>
+              </label>
+               <mn-select
+                   class="inline fix-width-3"
+                   [group]="form.group"
+                   [values]="filteredSecrets"
+                   mnPlaceholder="select key..."
+                   [valuesMapping]="secretsMapping"
+                   mnFormControlName="encryptionAtRestKeyId"
+               >
+               </mn-select>
+              <div
+                 class="error error-form"
+                 [hidden]="!(httpError | async)?.errors['encryptionAtRestKeyId']"
+              >
+                {{(httpError | async)?.errors['encryptionAtRestKeyId']}}
+              </div>
+              <div class="error error-form" [hidden]="form.group.get('encryptionAtRestKeyId').value">
+                To enable encryption, an encryption key is required.
+              </div>
+            </div>
+
+
+            <div class="formrow">
+               <label class="inline">DEK Rotation Interval</label>
+               <span
+                   class="fa-stack icon-info"
+                   [ngbTooltip]="'The interval at which the Data Encryption Key (DEK) is rotated. The DEK is used to encrypt the data on disk.'"
+                   triggers="click"
+                   placement="top"
+               >
+                  <span class="icon fa-circle-thin fa-stack-2x"></span>
+                  <span class="icon fa-info fa-stack-1x"></span>
+               </span>
+               <div class="row flex-left">
+                  <span class="width-3">
+                     <input
+                         type="checkbox"
+                         id="enable_dekRotationInterval"
+                         formControlName="encryptionAtRestDekRotationEnabled"
+                     />
+                     <label for="enable_dekRotationInterval">Enable</label>
+                  </span>
+                  <span class="row flex-left width-9">
+                     <input
+                         type="number"
+                         min="1"
+                         (keydown)="preventMinus($event)"
+                         autocorrect="off"
+                         spellcheck="false"
+                         autocapitalize="off"
+                         formControlName="encryptionAtRestDekRotationInterval"
+                         class="margin-right-half width-3"
+                     />
+                     <small> days</small>
+                  </span>
+               </div>
+               <div
+                   class="error error-form"
+                   [hidden]="!(httpError | async)?.errors['encryptionAtRestDekRotationInterval']"
+               >
+                  {{(httpError | async)?.errors['encryptionAtRestDekRotationInterval']}}
+               </div>
+            </div>
+
+            <div class="formrow">
+               <label class="inline">DEK Lifetime</label>
+               <span
+                   class="fa-stack icon-info"
+                   [ngbTooltip]="'The lifetime of the Data Encryption Key (DEK). The DEK is used to encrypt the data on disk.'"
+                   triggers="click"
+                   placement="top"
+               >
+                  <span class="icon fa-circle-thin fa-stack-2x"></span>
+                  <span class="icon fa-info fa-stack-1x"></span>
+               </span>
+               <div class="row flex-left">
+                  <span class="width-3">
+                     <input
+                         type="checkbox"
+                         id="enable_dekLifetime"
+                         formControlName="encryptionAtRestDekLifetimeEnabled"
+                     />
+                     <label for="enable_dekLifetime">Enable</label>
+                  </span>
+                  <span class="row flex-left width-9">
+                     <input
+                         type="number"
+                         min="1"
+                         (keydown)="preventMinus($event)"
+                         autocorrect="off"
+                         spellcheck="false"
+                         autocapitalize="off"
+                         formControlName="encryptionAtRestDekLifetime"
+                         class="margin-right-half width-3"
+                     />
+                     <small> days</small>
+                  </span>
+               </div>
+               <div
+                   class="error error-form"
+                   [hidden]="!(httpError | async)?.errors['encryptionAtRestDekLifetime']"
+               >
+                  {{(httpError | async)?.errors['encryptionAtRestDekLifetime']}}
+               </div>
+            </div>
+
+
+          </div>
+        </div>
+
+        <div [hidden]="!(isEnterprise | async) || !bucket" *ngIf="compatVersion79 | async">
+          <label class="inline">Enable Cross Cluster Versioning</label>
+          <ng-template #crossClusterVersioningTooltip>
+            <p>The Cross Cluster Versioning setting cannot be disabled after it is enabled.</p>
+            <p>See the documentation for enableCrossClusterVersioning and the dependent features for important details on how to correctly enable this setting.</p>
+          </ng-template>
+          <span
+             [ngbTooltip]="crossClusterVersioningTooltip"
+             triggers="click"
+             class="fa-stack icon-info"
+             placement="right">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+          <div class="formrow checkbox-list">
+            <input
+               formControlName="enableCrossClusterVersioning"
+               type="checkbox"
+               id="for-enable-cross-cluster-versioning">
+            <label for="for-enable-cross-cluster-versioning">Enable</label>
+            <div
+               class="warning text-smaller">
+              Warning: You cannot disable after enabling.
+            </div>
+            <div
+               class="error margin-bottom-half"
+               [hidden]="!(httpError | async)?.errors?.enableCrossClusterVersioning">
+              {{(httpError | async)?.errors?.enableCrossClusterVersioning}}
+            </div>
+          </div>
+        </div>
+
+        <label class="inline">Flush</label>
+        <ng-template #flushTooltip>
+          When flushed, ALL items in the bucket are removed as soon as possible.
+        </ng-template>
+        <span
+          [ngbTooltip]="flushTooltip"
+          triggers="click"
+          class="fa-stack icon-info"
+          placement="right"
+        >
+          <span class="icon fa-circle-thin fa-stack-2x"></span>
+          <span class="icon fa-info fa-stack-1x"></span>
+        </span>
+        <div class="formrow checkbox-list">
+          <input
+            formControlName="flushEnabled"
+            type="checkbox"
+            id="for-enable-flush"
+          />
+          <label for="for-enable-flush">Enable</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-footer">
+      <a (click)="activeModal.dismiss()">Cancel</a>
+      <button type="submit"
+              [disabled]="form.group.invalid || (disableSubmitDueToEncryption$ | async)">
+        <span>{{bucket ? 'Save Changes' : 'Add Bucket'}}</span>
+      </button>
+    </div>
+  </form>
+</div>

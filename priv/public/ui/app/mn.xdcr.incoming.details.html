@@ -1,0 +1,49 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="indent-1 cursor-auto">
+  <h5>Source Cluster Nodes with Data Service</h5>
+  <div *ngIf="(hasSourceNodes | async)">
+    <div
+       *ngFor="let node of (sourceNodes | async)"
+       class="mapping-rule padding-left-0 margin-left-1-5">
+      <span class="break-word">
+        {{ node }}
+      </span>
+    </div>
+  </div>
+  <div *ngIf="!(hasSourceNodes | async)" class="margin-left-1-5 mapping-rule">
+    <span>
+      There are currently no source nodes defined.
+    </span>
+  </div>
+  <h5 *ngIf="hasReplications | async">Replications</h5>
+  <div
+     class="cbui-table"
+     *ngIf="hasReplications | async">
+    <div class="cbui-table-header">
+      <span class="cbui-table-cell">
+        source bucket
+      </span>
+      <span class="cbui-table-cell">
+        destination bucket
+      </span>
+      <span class="cbui-table-cell">
+        replication status
+      </span>
+      <span class="cbui-table-cell">
+        replication details
+      </span>
+    </div>
+    <mn-xdcr-incoming-replication-details
+       *ngFor="let incomingReplication of (replications | async); trackBy: trackByFn;"
+       [item]="incomingReplication"></mn-xdcr-incoming-replication-details>
+  </div>
+</div>

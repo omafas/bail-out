@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+# @author Couchbase <info@couchbase.com>
+# @copyright 2014-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+
+import argparse
+import getpass
+import os
+import gosecrets_client_lib
+import json
+import sys
+
+
+def main():
+    try:
+        args = parse_args()
+        gosecrets_client_lib.set_debug(args.debug)
+        gosecrets_path = None
+        if args.gosecrets is not None:
+            gosecrets_path = args.gosecrets
+
+        password_arg_set, password = args.password
+        if password_arg_set == 1 and password is None:
+            password = getpass.getpass()
+        elif args.stdin_password:
+            password = input()
+
+        if args.bucket_uuid is not None:
+            ids_map = {os.path.join(args.bucket_uuid, "deks", key_id): key_id \
+                                                    for key_id in args.key_ids}
+            key_specs = [{'type': 'keyId',
+                          'kind': 'bucketDek',
+                          'id': key} for key in ids_map]
+        elif args.key_dir is not None:
+            ids_map = {key_id: key_id for key_id in args.key_ids}
+            key_specs = [{'type': 'keyPath',
+                          'path': os.path.join(args.key_dir, key_id),
+                          'id': key_id} for key_id in args.key_ids]
+        else:
+            ids_map = {key_id: key_id for key_id in args.key_ids}
+            key_specs = [{'type': 'searchDekKind',
+                          'kind': 'bucketDek',
+                          'id': key_id} for key_id in args.key_ids]
+
+        res = gosecrets_client_lib.read_keys(
+                key_specs,
+                args.config,
+                gosecrets_path=gosecrets_path,
+                password=password,
+                all_must_succeed=args.all_must_succeed)
+        print(json.dumps({ids_map[k]: res[k] for k in res}))
+    except Exception as e:
+        gosecrets_client_lib.script_exception_handler(e)
+
+
+def parse_args():
+    arg_parser = ArgumentParser(prog='./dump-bucket-deks')
+    arg_parser.add_argument('--config', '-c', type=str,
+                            metavar='<gosecrets_config_path>',
+                            help='path to gosecrets config', required=False)
+    group = arg_parser.add_mutually_exclusive_group()
+    group.add_argument('--key-dir', '-w', type=str,
+                       metavar='<directory_with_keys>',
+                       help='directory to search for bucket keys')
+    group.add_argument('--bucket-uuid', '-u', type=str,
+                       metavar='<bucket_uuid>',
+                       help='bucket uuid')
+    pass_group = arg_parser.add_mutually_exclusive_group(required=False)
+    pass_group.add_argument('--password', '-p', nargs='?',
+                            action=PasswordAction,
+                            metavar='<password>', default=(0, None),
+                            help='couchbase master password (if empty, prompt '\
+                                 'the user for a password without echoing)')
+    pass_group.add_argument('--stdin-password', '-P',
+                            action='store_true',
+                            default=False,
+                            help='read couchbase master password from stdin')
+    arg_parser.add_argument('--gosecrets', '-g', type=str,
+                            metavar='<gosecrets_path>',
+                            help='path to gosecrets executable')
+    arg_parser.add_argument('--debug', '-d', action='store_true',
+                            default=False,
+                            help='show debug information')
+    arg_parser.add_argument('--key-ids', '-k', type=str, nargs='+',
+                            metavar='<key_id>', default=[],
+                            help='list of key ids to be extracted',
+                            required=True)
+    arg_parser.add_argument('--all-must-succeed', '-m',
+                            action='store_true',
+                            default=False,
+                            help='return error if one key extraction fails')
+    return arg_parser.parse_args()
+
+
+class PasswordAction(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        if values is None:
+            setattr(args, self.dest, (1, None))
+        else:
+            setattr(args, self.dest, (1, values))
+
+
+class ArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        self.print_help(sys.stderr)
+        raise gosecrets_client_lib.BadArg(f'{self.prog}: error: {message}')
+
+
+if __name__ == '__main__':
+    main()

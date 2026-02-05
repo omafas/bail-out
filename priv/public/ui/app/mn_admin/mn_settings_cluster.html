@@ -1,0 +1,705 @@
+<!--
+     Copyright 2020-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included
+     in the file licenses/BSL-Couchbase.txt.  As of the Change Date specified
+     in that file, in accordance with the Business Source License, use of this
+     software will be governed by the Apache License, Version 2.0, included in
+     the file licenses/APL2.txt.
+-->
+<mn-main-spinner
+   mn-spinner-value="(settingsClusterCtl.clusterName === undefined) || !settingsClusterCtl.memoryQuotaConfig || (rbac.cluster.settings.indexes.read && !settingsClusterCtl.indexSettings) || (poolDefault.value.isEnterprise && !settingsClusterCtl.certificate)">
+</mn-main-spinner>
+
+<div>
+  <form
+     name="settingsForm"
+     ng-submit="settingsClusterCtl.saveVisualInternalSettings()"
+     class="forms">
+    <div class="row flex-left items-stretch resp-flex-column-med margin-bottom-2">
+      <div class="width-5">
+        <div>
+          <label>Cluster Name</label>
+          <input
+             id="cluster-name-field"
+             type="text"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             maxlength="256"
+             ng-model="settingsClusterCtl.clusterName"
+             ng-disabled="!rbac.cluster.pools.write">
+        </div>
+        <div class="margin-top-1-5">
+          <div class="formrow">
+            <label>Memory Quotas &nbsp;<small>per server node</small></label>
+            <p class="desc">Note: Total Couchbase RAM allocation should be no more than 90% of available memory.</p>
+          </div>
+          <div
+             mn-is-enterprise="adminCtl.poolDefault.isEnterprise"
+             rbac="rbac"
+             mn-memory-quota="settingsClusterCtl.memoryQuotaConfig"
+             errors="settingsClusterCtl.memoryQuotaErrors">
+          </div>
+        </div>
+
+        <div
+           ng-if="rbac.cluster.settings.read"
+           ui-view="notifications"
+           class="margin-top-1-5"></div>
+      </div>
+
+      <div class="vertical-page-splitter resp-hide-med">&nbsp;</div>
+
+      <div class="width-6">
+        <div ng-if="rbac.cluster.settings.read" ui-view="autofailover"></div>
+        <div ng-show="((adminCtl.poolDefault.compat.atLeast65 &&
+                      adminCtl.poolDefault.isEnterprise) ||
+                      adminCtl.poolDefault.compat.atLeast66) && rbac.cluster.settings.read"
+           class="margin-top-1">
+          <label>Rebalance Settings</label>
+          <p
+             class="disclosure"
+             ng-class="{disclosed: settingsClusterCtl.showSettingsRebalance}"
+             ng-click="settingsClusterCtl.showSettingsRebalance = !settingsClusterCtl.showSettingsRebalance">
+            Advanced Rebalance Settings
+          </p>
+          <div
+             ng-show="settingsClusterCtl.showSettingsRebalance"
+             class="indent-1-5">
+            <div ng-if="adminCtl.poolDefault.compat.atLeast65 &&
+                        adminCtl.poolDefault.isEnterprise"
+               class="formrow">
+              <label class="inline">
+                Retry rebalance
+              </label>
+              <span
+                 class="icon-info-warning raised"
+                 uib-tooltip-html="'<p>Do not enable this feature if the cluster is managed by the Couchbase Autonomous Operator or
+                        your own scripts that trigger rebalance automatically upon failure or other conditions.</p>
+                        <p>When this feature is enabled, Couchbase Server will automatically retry a failed rebalance after
+                        the user-specified time period. If a rebalance fails, remember to cancel the pending retry before
+                        atempting to perform any administrative operations on the cluster.</p>'"
+                 tooltip-placement="auto right"
+                 tooltip-trigger="mouseenter">
+                <span class="icon fa-warning"></span>
+              </span>
+              <div class="row flex-left text-medium flex-wrap">
+                <input
+                   type="checkbox"
+                   id="for-retry-rebalance-up-to"
+                   ng-disabled="!rbac.cluster.settings.write"
+                   ng-model="settingsClusterCtl.retryRebalanceCfg.enabled">
+                <label
+                   for="for-retry-rebalance-up-to"
+                   class="line-height-1-5">
+                  Retry rebalance up to
+                </label>
+                <input
+                   type="number"
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   ng-model="settingsClusterCtl.retryRebalanceCfg.maxAttempts"
+                   ng-disabled="!settingsClusterCtl.retryRebalanceCfg.enabled ||
+                         !rbac.cluster.settings.write"
+                   class="input-small input-short-1 margin-right-half">
+                time after
+                <input
+                   type="number"
+                   autocorrect="off"
+                   spellcheck="false"
+                   autocapitalize="off"
+                   ng-model="settingsClusterCtl.retryRebalanceCfg.afterTimePeriod"
+                   ng-disabled="!settingsClusterCtl.retryRebalanceCfg.enabled ||
+                         !rbac.cluster.settings.write"
+                   class="input-small input-short-1 margin-right-half margin-left-half">
+                second{{settingsClusterCtl.retryRebalanceCfg.max_attempts !== 1 ? "s" : ""}}
+              </div>
+
+              <div
+                 class="error"
+                 ng-show="settingsClusterCtl.retryRebalanceErrors.maxAttempts">
+                {{settingsClusterCtl.retryRebalanceErrors.maxAttempts}}
+              </div>
+              <div
+                 class="error"
+                 ng-show="settingsClusterCtl.retryRebalanceErrors.afterTimePeriod">
+                {{settingsClusterCtl.retryRebalanceErrors.afterTimePeriod}}
+              </div>
+            </div>
+            <div
+               class="formrow"
+               ng-if="adminCtl.poolDefault.compat.atLeast66">
+              <label for="max_moves_per_node" class="inline">
+                Max moves per node during rebalance
+              </label>
+              <span
+                 class="icon-info-warning raised"
+                 uib-tooltip="Increasing this value may increase rebalance speed but will also increase memory use and can cause a degradation in KV operation performance."
+                 tooltip-placement="auto right"
+                 tooltip-trigger="mouseenter">
+                <span class="icon fa-warning"></span>
+              </span>
+              <input
+                 type="number"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocapitalize="off"
+                 id="max_moves_per_node"
+                 ng-disabled="!rbac.cluster.settings.write"
+                 ng-model="settingsClusterCtl.settingsRebalance.rebalanceMovesPerNode"
+                 class="max-width-2">
+              <div
+                 class="error error-form"
+                 ng-show="!!settingsClusterCtl.settingsRebalanceErrors.rebalanceMovesPerNode">
+                {{settingsClusterCtl.settingsRebalanceErrors.rebalanceMovesPerNode}}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div ng-if="rbac.cluster.admin.memcached.read" class="margin-top-1">
+          <label>Data Settings</label>
+          <p
+             class="disclosure"
+             ng-class="{disclosed: settingsClusterCtl.showDataService}"
+             ng-click="settingsClusterCtl.showDataService = !settingsClusterCtl.showDataService">
+            Advanced Data Settings
+          </p>
+          <div
+             ng-show="settingsClusterCtl.showDataService"
+             class="indent-1-5">
+
+             <div class="row flex-left text-medium flex-wrap margin-bottom-half">
+                <input
+                    type="checkbox"
+                    id="for-max-storage-percent"
+                    ng-disabled="!rbac.cluster.settings.write"
+                    ng-model="settingsClusterCtl.settingsResource.diskUsage.enabled">
+                <label
+                    for="for-max-storage-percent"
+                    class="line-height-1-5">
+                   Prevent writes to buckets when storage becomes
+                </label>
+                <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    autocorrect="off"
+                    spellcheck="false"
+                    autocapitalize="off"
+                    id="max-storage-percent"
+                    ng-model="settingsClusterCtl.settingsResource.diskUsage.maximum"
+                    ng-disabled="!rbac.cluster.settings.write || !settingsClusterCtl.settingsResource.diskUsage.enabled"
+                    class="input-small input-short-1">
+                % full.
+                <div class="padding-left-half">
+                   <span
+                       class="fa-stack icon-info"
+                       uib-tooltip-html="'When the data disk has reached the percent full value, all writes to the buckets will fail, and the EBucketDiskspace error will be returned.
+Enabling this option reserves disk space for recovery operations like performing rebalances to add a new node.'"
+                       tooltip-placement="auto top"
+                       tooltip-trigger="mouseenter">
+                      <span class="icon fa-circle-thin fa-stack-2x"></span>
+                      <span class="icon fa-info fa-stack-1x"></span>
+                </span>
+                </div>
+                <div
+                    class="error"
+                    ng-show="settingsClusterCtl.settingsResourceErrors['diskUsage.enabled']">
+                   {{settingsClusterCtl.settingsResourceErrors['diskUsage.enabled']}}
+                </div>
+                <div
+                    class="error"
+                    ng-show="settingsClusterCtl.settingsResourceErrors['diskUsage.maximum']">
+                   {{settingsClusterCtl.settingsResourceErrors['diskUsage.maximum']}}
+                </div>
+             </div>
+
+
+             <label class="inline">Reader Thread Settings</label>
+            <span
+               class="fa-stack icon-info"
+               uib-tooltip-html="'<strong>Balanced</strong> The number of threads allocated is set to a balanced value which is reasonable for most workloads.<br>
+                      <strong>Disk i/o optimized</strong> The number of threads allocated is equal to the number of CPU cores for the node.<br>
+                      <strong>Fixed value</strong> The number of threads allocated is equal to the value selected from the pull-down menu.'"
+               tooltip-placement="auto top"
+               tooltip-trigger="mouseenter">
+              <span class="icon fa-circle-thin fa-stack-2x"></span>
+              <span class="icon fa-info fa-stack-1x"></span>
+            </span>
+            <br>
+            <input
+               type="radio"
+               id="for-reader-default"
+               name="reader_thread_options"
+               ng-model="settingsClusterCtl.readerThreads"
+               value="balanced">
+            <label for="for-reader-default">
+              Balanced
+            </label>
+            <br>
+            <input
+               type="radio"
+               id="for-reader-optimized"
+               name="reader_thread_options"
+               ng-model="settingsClusterCtl.readerThreads"
+               value="disk_io_optimized">
+            <label for="for-reader-optimized">
+              Disk i/o optimized
+            </label>
+            <div class="row flex-left">
+              <input
+                 type="radio"
+                 id="for-reader-fixed"
+                 name="reader_thread_options"
+                 ng-model="settingsClusterCtl.readerThreads"
+                 value="fixed">
+              <label for="for-reader-fixed">
+                Fixed value
+              </label>
+              <mn-select
+                 class="fix-width-1"
+                 ng-model="settingsClusterCtl.readerThreadsFixed"
+                 ng-if="settingsClusterCtl.readerThreads == 'fixed'"
+                 values="settingsClusterCtl.itemsSelect">
+              </mn-select>
+            </div>
+            <p class="desc max-width-6" ng-if="settingsClusterCtl.readerThreads == 'fixed'">
+              Higher reader and writer thread counts reduce latency and improve
+              transaction and synchronous write performance. They can also increase
+              CPU and write amplification. Consult
+              <a href="https://docs.couchbase.com/server/current/manage/manage-settings/general-settings.html#data-settings" target="_blank">
+                Couchbase documentation
+              </a>
+              before setting these values.
+            </p>
+            <div
+               class="error"
+               ng-show="settingsClusterCtl.dataServiceSettingsErrors.num_reader_threads">
+              {{settingsClusterCtl.dataServiceSettingsErrors.num_reader_threads}}
+            </div>
+
+            <label class="inline margin-top-half">Writer Thread Settings</label>
+            <span
+               class="fa-stack icon-info"
+               uib-tooltip-html="'<strong>Balanced</strong> The number of threads allocated is set to a balanced value which is reasonable for most workloads.<br>
+                      <strong>Disk i/o optimized</strong> The number of threads allocated is equal to the number of CPU cores for the node.<br>
+                      <strong>Fixed value</strong> The number of threads allocated is equal to the value selected from the pull-down menu.'"
+               tooltip-placement="auto top"
+               tooltip-trigger="mouseenter">
+              <span class="icon fa-circle-thin fa-stack-2x"></span>
+              <span class="icon fa-info fa-stack-1x"></span>
+            </span>
+            <br>
+            <input
+               type="radio"
+               id="for-writer-default"
+               name="writer_thread_options"
+               ng-model="settingsClusterCtl.writerThreads"
+               value="balanced">
+            <label for="for-writer-default">
+              Balanced
+            </label>
+            <br>
+            <input
+               type="radio"
+               id="for-writer-optimized"
+               name="writer_thread_options"
+               ng-model="settingsClusterCtl.writerThreads"
+               value="disk_io_optimized">
+            <label for="for-writer-optimized">
+              Disk i/o optimized
+            </label>
+            <div class="row flex-left">
+              <input
+                 type="radio"
+                 id="for-writer-fixed"
+                 name="writer_thread_options"
+                 ng-model="settingsClusterCtl.writerThreads"
+                 value="fixed">
+              <label for="for-writer-fixed">
+                Fixed value
+              </label>
+              <mn-select
+                 class="fix-width-1"
+                 ng-model="settingsClusterCtl.writerThreadsFixed"
+                 ng-if="settingsClusterCtl.writerThreads == 'fixed'"
+                 values="settingsClusterCtl.itemsSelect">
+              </mn-select>
+            </div>
+            <p class="desc max-width-6" ng-if="settingsClusterCtl.writerThreads == 'fixed'">
+              Higher reader and writer thread counts reduce latency and improve
+              transaction and synchronous write performance. They can also increase
+              CPU and write amplification. Consult
+              <a href="https://docs.couchbase.com/server/current/manage/manage-settings/general-settings.html#data-settings" target="_blank">
+                Couchbase documentation
+              </a>
+              before setting these values.
+            </p>
+            <div
+               class="error"
+               ng-show="settingsClusterCtl.dataServiceSettingsErrors.num_writer_threads">
+              {{settingsClusterCtl.dataServiceSettingsErrors.num_writer_threads}}
+            </div>
+
+            <div ng-if="adminCtl.isDeveloperPreview">
+              <label class="margin-top-half">Storage Engine Thread Settings</label>
+              <input
+                 type="radio"
+                 id="for-storage-default"
+                 name="storage_thread_options"
+                 ng-model="settingsClusterCtl.storageThreads"
+                 value="default">
+              <label for="for-storage-default">
+                Default
+              </label>
+              <div class="row flex-left">
+                <input
+                   type="radio"
+                   id="for-storage-fixed"
+                   name="storage_thread_options"
+                   ng-model="settingsClusterCtl.storageThreads"
+                   value="fixed">
+                <label for="for-storage-fixed">
+                  Fixed value
+                </label>
+                <mn-select
+                   class="fix-width-1"
+                   ng-model="settingsClusterCtl.storageThreadsFixed"
+                   ng-if="settingsClusterCtl.storageThreads == 'fixed'"
+                   values="settingsClusterCtl.itemsSelect">
+                </mn-select>
+              </div>
+              <div
+                 class="error"
+                 ng-show="settingsClusterCtl.dataServiceSettingsErrors.num_storage_threads">
+                {{settingsClusterCtl.dataServiceSettingsErrors.num_storage_threads}}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div ng-if="poolDefault.compat.atLeast55 && rbac.cluster.settings.read" class="margin-top-1">
+
+        <label
+           ng-show="rbac.cluster.settings.indexes.read"
+           class="margin-top-1">
+          Index Storage Mode
+        </label>
+        <div ng-show="rbac.cluster.settings.indexes.read">
+          <div class="formrow">
+            <mn-storage-mode
+               mn-is-enterprise="adminCtl.poolDefault.isEnterprise"
+               mn-model="settingsClusterCtl.indexSettings"
+               mn-errors="settingsClusterCtl.indexSettingsErrors"
+               mn-initial="settingsClusterCtl.initialIndexSettings"
+               mn-permissions="rbac"
+               mn-compat="poolDefault.compat">
+            </mn-storage-mode>
+          </div>
+        </div>
+        <p
+           ng-if="rbac.cluster.settings.read"
+           class="disclosure"
+           ng-class="{disclosed: settingsClusterCtl.showAdvancedSettings}"
+           ng-click="settingsClusterCtl.showAdvancedSettings = !settingsClusterCtl.showAdvancedSettings">
+          Advanced Index Settings
+        </p>
+        <div
+           ng-if="rbac.cluster.settings.read"
+           ng-show="settingsClusterCtl.showAdvancedSettings"
+           class="indent-1-5">
+          <div class="formrow">
+            <label for="index_settings_thread" class="inline">
+              Indexer Threads
+            </label>
+            <span
+               class="fa-stack icon-info"
+               uib-tooltip="Number of dedicated threads the indexer uses. On multi-core machines increasing this number will increase the indexer's CPU utilization. Defaults to 0 which instructs the indexer to use all available machine cores."
+               tooltip-placement="auto right">
+              <span class="icon fa-circle-thin fa-stack-2x"></span>
+              <span class="icon fa-info fa-stack-1x"></span>
+            </span>
+            <input
+               type="number"
+               ng-model="settingsClusterCtl.indexSettings.indexerThreads"
+               ng-disabled="settingsClusterCtl.indexSettings.storageMode === '' || !rbac.cluster.settings.indexes.write"
+               id="index_settings_thread"
+               class="input-small input-short-1">
+            <div class="error error-field" ng-show="settingsClusterCtl.indexSettingsErrors.indexerThreads">
+              {{settingsClusterCtl.indexSettingsErrors.indexerThreads}}
+            </div>
+          </div>
+
+          <div class="formrow"
+             ng-show="adminCtl.poolDefault.compat.atLeast70">
+            <label for="num_replica" class="inline">
+              Num Replica
+            </label>
+            <input
+               type="number"
+               ng-model="settingsClusterCtl.indexSettings.numReplica"
+               ng-disabled="settingsClusterCtl.indexSettings.storageMode === '' || !rbac.cluster.settings.indexes.write"
+               id="num_replica"
+               class="input-small input-short-1">
+            <div
+               class="error error-field"
+               ng-show="settingsClusterCtl.indexSettingsErrors.numReplica">
+              {{settingsClusterCtl.indexSettingsErrors.numReplica}}
+            </div>
+          </div>
+
+          <div class="formrow" ng-hide="adminCtl.poolDefault.isEnterprise">
+            <label for="in_memory_snapshot" class="inline">
+              Max Rollback Points
+            </label>
+            <span
+               class="fa-stack icon-info"
+               uib-tooltip="The maximum number of committed rollback points."
+               tooltip-placement="auto right">
+              <span class="icon fa-circle-thin fa-stack-2x"></span>
+              <span class="icon fa-info fa-stack-1x"></span>
+            </span>
+            <input
+               type="text"
+               ng-model="settingsClusterCtl.indexSettings.maxRollbackPoints"
+               ng-disabled="settingsClusterCtl.indexSettings.storageMode === '' || !rbac.cluster.settings.indexes.write"
+               id="in_memory_snapshot"
+               class="input-small input-short-1">
+            <div class="error error-field" ng-show="settingsClusterCtl.indexSettingsErrors.maxRollbackPoints">
+              {{settingsClusterCtl.indexSettingsErrors.maxRollbackPoints}}
+            </div>
+          </div>
+
+          <div class="formrow"
+             ng-show="adminCtl.poolDefault.isEnterprise && adminCtl.poolDefault.compat.atLeast70">
+            <label for="redistribute_indexes">
+              Indexer Rebalance Settings
+            </label>
+            <input
+               type="checkbox"
+               id="redistribute_indexes"
+               ng-disabled="settingsClusterCtl.indexSettings.storageMode === '' || !rbac.cluster.settings.indexes.write"
+               ng-model="settingsClusterCtl.indexSettings.redistributeIndexes">
+            <label for="redistribute_indexes" class="checkbox">
+              Optimize Index Placement On Rebalance
+            </label>
+            <div
+               class="error error-field"
+               ng-show="settingsClusterCtl.indexSettingsErrors.redistributeIndexes">
+              {{settingsClusterCtl.indexSettingsErrors.redistributeIndexes}}
+            </div>
+          </div>
+
+          <div class="formrow">
+            <label for="indexer_log_level">
+              Indexer Log Level
+            </label>
+            <mn-select
+               id="indexer_log_level"
+               name="logLevel"
+               class="inline fix-width-1-5"
+               ng-model="settingsClusterCtl.indexSettings.logLevel"
+               mn-disabled="settingsClusterCtl.indexSettings.storageMode === '' || !rbac.cluster.settings.indexes.write"
+               values="['silent', 'fatal', 'error', 'warn', 'info', 'verbose', 'timing', 'debug', 'trace']"
+               open-on-top="true">
+            </mn-select>
+            <div class="error error-field" ng-show="settingsClusterCtl.indexSettingsErrors.logLevel">
+              {{settingsClusterCtl.indexSettingsErrors.logLevel}}
+            </div>
+          </div>
+
+          <div
+             class="formrow"
+             ng-show="adminCtl.poolDefault.isEnterprise && adminCtl.poolDefault.compat.atLeast71">
+            <label
+               class="inline"
+               for="enablePageBloomFilter">
+              Bloom Filter
+            </label>
+            <span
+               class="fa-stack icon-info"
+               uib-tooltip="Bloom filters improve performance on indexing key lookups for keys that are absent at the cost of some additional memory."
+               tooltip-placement="auto right">
+              <span class="icon fa-circle-thin fa-stack-2x"></span>
+              <span class="icon fa-info fa-stack-1x"></span>
+            </span>
+            <br>
+            <input
+               type="checkbox"
+               id="enablePageBloomFilter"
+               ng-disabled="!rbac.cluster.settings.write || settingsClusterCtl.indexSettings.storageMode !== 'plasma' || !adminCtl.poolDefault.isEnterprise"
+               ng-model="settingsClusterCtl.indexSettings.enablePageBloomFilter">
+            <label for="enablePageBloomFilter" class="checkbox">
+              Enable Bloom Filter
+            </label>
+            <div
+               class="error error-field"
+               ng-show="settingsClusterCtl.indexSettingsErrors.enablePageBloomFilter">
+              {{settingsClusterCtl.indexSettingsErrors.enablePageBloomFilter}}
+            </div>
+          </div>
+
+          <div
+             class="formrow"
+             ng-show="adminCtl.poolDefault.compat.atLeast76">
+            <label
+               class="inline"
+               for="enableShardAffinity">
+              File Transfer Based Rebalance
+            </label>
+            <br>
+            <input
+               type="checkbox"
+               id="enableShardAffinity"
+               ng-disabled="!rbac.cluster.settings.write"
+               ng-model="settingsClusterCtl.indexSettings.enableShardAffinity">
+            <label for="enableShardAffinity" class="checkbox">
+              Enable File Transfer Based Rebalance
+            </label>
+            <div
+              class="error error-field"
+              ng-show="settingsClusterCtl.initialIndexSettings.enableShardAffinity && !settingsClusterCtl.indexSettings.enableShardAffinity">
+              Warning: disabling this feature will lead to very slow rebalance operation.
+            </div>
+            <div
+               class="error error-field"
+               ng-show="settingsClusterCtl.indexSettingsErrors.enableShardAffinity">
+              {{settingsClusterCtl.indexSettingsErrors.enableShardAffinity}}
+            </div>
+          </div>
+        </div>
+
+        <div class="formrow margin-top-1-5" ng-if="rbac.cluster.xdcr.settings.read">
+          <label>XDCR Settings</label>
+          <div class="flex flex-items-center flex-gap-5">
+            <div class="">XDCR Maximum Processes</div>
+            <input
+               type="text"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off"
+               ng-disabled="!rbac.cluster.settings.write"
+               id="xdcr_maximum_processes"
+               ng-model="settingsClusterCtl.replicationSettings.goMaxProcs"
+               class="input-small input-short-1">
+          </div>
+          <div
+             class="error error-form"
+             ng-show="!!settingsClusterCtl.replicationSettingsErrors.goMaxProcs">
+            {{settingsClusterCtl.replicationSettingsErrors.goMaxProcs}}
+          </div>
+          <div
+             ng-if="rbac.cluster.settings.read"
+             class="disclosure margin-top-half"
+             ng-class="{disclosed: settingsClusterCtl.showXDCRLogLevelSettings}"
+             ng-click="settingsClusterCtl.showXDCRLogLevelSettings = !settingsClusterCtl.showXDCRLogLevelSettings">
+            XDCR Generic Services Log Level
+          </div>
+          <div
+             ng-show="settingsClusterCtl.showXDCRLogLevelSettings"
+             class="indent-1-5">
+            <div class="formrow">
+              <span class="flex flex-items-center flex-gap-5 margin-bottom-half">
+                <span class="text-medium">Select log level for all services </span>
+                <mn-select
+                   class="fix-width-1-5"
+                   ng-model="settingsClusterCtl.replicationSettings.xdcrAllLogLevels"
+                   values="settingsClusterCtl.logValues"
+                   on-select="settingsClusterCtl.onSelectAllXDCRLogLevels(selectedOption)">
+                </mn-select>
+              </span>
+              <div class="cbui-table">
+                <div class="cbui-table-header flex-left">
+                  <span class="cbui-table-cell flex-grow-half min-width-4">
+                    <span
+                       class="cbui-table-cell flex-grow-half min-width-4">
+                      XDCR service name
+                    </span>
+                  </span>
+                  <span class="cbui-table-cell flex-grow-half max-width-3">
+                    log level
+                  </span>
+                </div>
+                <div class="max-height-280 overflow-scroll">
+                  <section
+                     ng-repeat="serviceName in settingsClusterCtl.XDCRServices"
+                     class="padding-top-half padding-bottom-half">
+                    <span class="flex flex-items-center">
+                      <span class="cbui-table-cell flex-grow-half margin-left-1-5 min-width-4">
+                         {{serviceName}}
+                         <span
+                            ng-if="serviceName === 'Default'"
+                            class="fa-stack icon-info"
+                            uib-tooltip-html="'Default covers any log messages that are not<br/>captured by the rest of the listed services.'"
+                            tooltip-placement="auto right"
+                            tooltip-trigger="mouseenter">
+                           <span class="icon fa-circle-thin fa-stack-2x"></span>
+                           <span class="icon fa-info fa-stack-1x"></span>
+                         </span>
+                      </span>
+                      <span class="cbui-table-cell flex-grow-half wrap max-width-3">
+                        <mn-select
+                           ng-model="settingsClusterCtl.replicationSettings.genericServicesLogLevel[serviceName]"
+                           values="settingsClusterCtl.logValues"
+                           open-on-top="$index >= settingsClusterCtl.XDCRServices.length - 4">
+                        </mn-select>
+                      </span>
+                    </span>
+                  </section>
+                </div>
+                <div class="margin-top-1-5">
+                  <a ng-click="settingsClusterCtl.showAllXDCRLogLevels()">View entire log levels list</a>
+                </div>
+                <div
+                   class="error error-form"
+                   ng-show="!!settingsClusterCtl.replicationSettingsErrors.genericServicesLogLevel">
+                  {{settingsClusterCtl.replicationSettingsErrors.genericServicesLogLevel}}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+           ng-if="adminCtl.poolDefault.isEnterprise && adminCtl.poolDefault.compat.atLeast71 && rbac.cluster.settings.read"
+           class="formrow margin-top-1-5 margin-bottom-3">
+          <label
+             class="inline"
+             for="analytics_replicas">Analytics Replicas</label>
+          <p class="desc">Note: Rebalance will need to be run for a change to this value to take effect.</p>
+          <input
+             type="text"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             ng-disabled="!rbac.cluster.settings.write"
+             id="analytics_replicas"
+             ng-model="settingsClusterCtl.settingsAnalytics.numReplicas"
+             class="input-small input-short-1">
+          <div
+             class="error error-form"
+             ng-show="!!settingsClusterCtl.settingsAnalyticsErrors.numReplicas">
+            {{settingsClusterCtl.settingsAnalyticsErrors.numReplicas}}
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <footer
+       class="footer-save"
+       ng-show="rbac.cluster.pools.write || rbac.cluster.settings.indexes.write">
+      <button
+         type="submit"
+         ng-disabled="!!settingsClusterCtl.retryRebalanceErrors || !!settingsClusterCtl.indexSettingsErrors || !!settingsClusterCtl.memoryQuotaErrors || !!settingsClusterCtl.saveAutoFailoverSettingsErrors || !!settingsClusterCtl.postAutoReprovisionSettingsErrors || settingsForm.$pristine"
+         class="margin-right-2">
+        Save
+      </button>
+      <a
+         class="text-medium"
+         ng-click="settingsClusterCtl.reloadState()">Cancel/Reset</a>
+    </footer>
+  </form>
+</div>

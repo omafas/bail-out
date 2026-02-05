@@ -1,0 +1,60 @@
+Couchbase UI needs not just list of design documents (which can be
+fetched as of now via _all_docs with correctly picket {start,end}key)
+but also some additional information about those design documents.
+
+As of now we need to advertise link to compactView controller.
+
+Here's changes:
+
+* bucket details (e.g. /pools/default/buckets/default and elements of
+  /pools/default/buckets) gets extra attribute: ddocs as can be seen
+  in example:
+
+        ],
+        "stats": {
+            "uri": "/pools/default/buckets/default/stats",
+            "directoryURI": "/pools/default/buckets/default/statsDirectory",
+            "nodeStatsListURI": "/pools/default/buckets/default/nodes"
+        },
+        "ddocs": {
+            "uri": "/pools/default/buckets/default/ddocs"
+        },
+        "nodeLocator": "vbucket",
+
+* ddocs.uri field points to list of ddocs
+  (/pools/default/buckets/<bucket-name>/ddocs) that looks like this
+  (at the time of writing):
+
+# wget -q -O- --user=Administrator --password=asdasd http://lh:9000/pools/default/buckets/default/ddocs | json_reformat
+[
+    {
+        "id": "_design/t",
+        "doc": {
+            "_id": "_design/t",
+            "_rev": "1-3b6fdd00",
+            "views": {
+                "t": {
+                    "map": "function (doc) {\n  emit(doc._id, null);\n}"
+                }
+            }
+        },
+        "controllers": {
+            "compact": "/pools/default/buckets/default/ddocs/_design%2Ft/controller/compactView"
+        }
+    },
+    {
+        "id": "_design/dev_t",
+        "doc": {
+            "_id": "_design/dev_t",
+            "_rev": "1-c1039472",
+            "views": {
+                "t": {
+                    "map": "function (doc) {\n  emit(doc._id, null);\n}"
+                }
+            }
+        },
+        "controllers": {
+            "compact": "/pools/default/buckets/default/ddocs/_design%2Fdev_t/controller/compactView"
+        }
+    }
+]

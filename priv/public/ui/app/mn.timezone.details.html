@@ -1,0 +1,14 @@
+<ng-template #timezoneTooltip>
+  <div class="text-smaller">
+    <div>Date-times are displayed in browser's local time: <span><strong>{{localTimezoneLabel}}</strong> {{localGMT}}</span></div>
+    <div class="margin-top-half">Server timezone offset is {{serverGMTOffset | async}}</div>
+  </div>
+</ng-template>
+
+<span
+   class="fa-stack icon-info rasied-med"
+   container="body"
+   [ngbTooltip]="timezoneTooltip">
+  <span class="icon fa-circle-thin fa-stack-2x"></span>
+  <span class="icon fa-info fa-stack-1x"></span>
+</span>

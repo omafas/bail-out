@@ -1,0 +1,36 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div
+   [formGroup]="group"
+   class="filter-input-group">
+  <input
+     type="text"
+     formControlName="value"
+     mnName="{{mnName}}"
+     maxlength="256"
+     [mnFocus]="mnFocus"
+     placeholder="{{mnPlaceholder}}"
+     (blur)="onBlur()"
+     (focus)="onFocus()"
+     (click)="$event.stopPropagation()"
+     [ngClass]="{'selected' : !(currentValue | async)}"
+     class="filter-input">
+  <span
+     class="icon fa-search-minus"
+     [hidden]="(group.get('value').valueChanges | async) || group.get('value').disabled">
+  </span>
+  <span
+     *ngIf="!mnClearDisabled"
+     class="icon fa-times-circle"
+     [hidden]="!(group.get('value').valueChanges | async)"
+     (click)="$event.stopPropagation();group.patchValue({value: ''});">
+  </span>
+</div>

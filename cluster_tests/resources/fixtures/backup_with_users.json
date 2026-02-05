@@ -1,0 +1,110 @@
+{
+  "version": "1",
+  "admin": {
+    "id": "Administrator",
+    "auth": {
+      "hash": {
+        "hashes": [
+          "RBGh5pXGhNou0J+hAisSdax+M+Jmit7tDxgr7loHIis="
+        ],
+        "algorithm": "argon2id",
+        "salt": "ud8m/N9utkkEr1zxz6EYUA==",
+        "parallelism": 1,
+        "time": 3,
+        "memory": 524288
+      },
+      "scram-sha-512": {
+        "salt": "wxPzKlCov5USJNIDHNsMcG3Ld+UZOCIi+/E6lbxvJZdoTINf3QX6eFr/RDbAEAnRKqOq+xOWk6AJfyc6MJVPRQ==",
+        "iterations": 15000,
+        "hashes": [
+          {
+            "stored_key": "NOko8ptZt6i/RMHA2owqgkpDmakdwzzdcy9NQigjIKk0qzfZ8D3ID7uCHOIDnQ63Vsel+2k5FSMyaiJ2nxPg5Q==",
+            "server_key": "nlBBBO4j/e9PcFNR4DPRy0e+oCDrEjl04Q57hGiFVv68STlLtBHio2epL9Je6si2deK133+3VjyCpkaCKQu/sw=="
+          }
+        ]
+      },
+      "scram-sha-256": {
+        "salt": "sb8/5gc4h6kxQbQctm8USCAuASBJxRn0niIaM9WnUis=",
+        "iterations": 15000,
+        "hashes": [
+          {
+            "stored_key": "3LDwaTd8gqIswYilRDCZiP6aR4nBzv4gwS9Rlk9CK7c=",
+            "server_key": "D7aBc96f5Lv91ssAs+sUB+lV5hqVbnxhn5V/zwkVlaU="
+          }
+        ]
+      },
+      "scram-sha-1": {
+        "salt": "Zb8qaCsEBE1yJy+M41hhV3JxGOY=",
+        "iterations": 15000,
+        "hashes": [
+          {
+            "stored_key": "YEIZgPyxcoAOXZe4rEO0oXPKoRM=",
+            "server_key": "6kVuYwSboCcMXiljp+e+P73ZSeA="
+          }
+        ]
+      }
+    }
+  },
+  "users": [
+    {
+      "id": "eventingAdmin",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "eventing_admin"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "J0AyXvISIycRq7sQDQuY0CpjMW3diV4tbX6LyN6dVAo="
+          ],
+          "algorithm": "argon2id",
+          "salt": "/wEn83qtGTsCxWlvdx4KgA==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "Fsa3gRTniXbj9tm4tHFWZIWu2C0LhifNUNpaJnCtvQuEZQJviXM/Kt1c2TIzJH0YT6WosO5JC+T0G08nk+YreA==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "xKLOOr68aWBLypwOqR04wIwGJQwEHKchq6jooIxpD4yOM+c+Q9VTOCmPsmObVP1+/CDQMC72k9jF5hwjmTGJrQ==",
+              "server_key": "F+SmxwUon9iVZgB3jtVihsFphPQKdac2hBa9PWqzcdJ1T9p8CSctSWtlVCvCuJPZo/6X+U7ugYk1fEKfMDi8gA=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "6cD7Xnbq7G51ST8ckuWBSXNSLWr2T4/M0ysR9x/57pc=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "/V1/NvuHIp3Alh5Ce9utuKw6dVKM1Yc1aypRm3yi3ow=",
+              "server_key": "cYhGY1dAwd/tUwISo+gytFRuxKJizfHV9tCoe3/uj3w="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "H69+JQ0ARYe4n4vgsk7LA58DFxQ=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "1GTOmEW5VnB6uVbgIo07XcOZj9w=",
+              "server_key": "habwRHqJkof8eGAVI3amW6lDshM="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "gauss",
+      "domain": "external",
+      "groups": [],
+      "roles": [
+        "eventing_admin"
+      ]
+    }
+  ],
+  "groups": [
+  ]
+}

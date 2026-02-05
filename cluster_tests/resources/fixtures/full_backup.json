@@ -1,0 +1,604 @@
+{
+  "version": "1",
+  "admin": {
+    "id": "Administrator",
+    "auth": {
+      "hash": {
+        "hashes": [
+          "TzY/bZFXAOmy5iIwv/8yRk3Xpr+/Lnv0soCZ6qiOrzs="
+        ],
+        "algorithm": "argon2id",
+        "salt": "cuyMcju4DPtu3WSdNTLTDA==",
+        "parallelism": 1,
+        "time": 3,
+        "memory": 524288
+      },
+      "scram-sha-512": {
+        "salt": "zzsbaCjllmcxsHekDHT1VJK/h/7+AmUnDLSk/kxZ8P1SKiXquQmUF69t/bfdrV0LnVwUTIp9tIBDNErRH3qfOA==",
+        "iterations": 15000,
+        "hashes": [
+          {
+            "stored_key": "hLqN3NMVLkGSLDLfSR8sY5gTlbQsSDavJorPlawdPLHU9aNKv982wiBeP1Cf4mGLhkF+S5OYVyuTfOyGexhwbw==",
+            "server_key": "PxNdZlmChLdguE5fTKOQ6ScmRXbolsXWk82QQOYBnpZTk0zl2esBoF1mSh5LNjxXubgBRfP6wlYshHUrslHTOg=="
+          }
+        ]
+      },
+      "scram-sha-256": {
+        "salt": "zr4KK0ZJLrFPZNSK6ruxmlvEOfQ+ZBHvTmRAIHIByoI=",
+        "iterations": 15000,
+        "hashes": [
+          {
+            "stored_key": "M/9WOakKhdbIY6L+PmnxdVsEFvwiMelBWfpJYw3VRds=",
+            "server_key": "MaIP97+UYkkMelC9Hc5KpBJ13n7Bo0hMkN8PY5/3Gvo="
+          }
+        ]
+      },
+      "scram-sha-1": {
+        "salt": "TIRFRXTp7HdE0O3RjlvsMmML8o4=",
+        "iterations": 15000,
+        "hashes": [
+          {
+            "stored_key": "ZsWhdskHJvg1cSVByh3Tw301NX0=",
+            "server_key": "Jj3GnhKQbtbeBJ9AYjSQ6CQ9ppY="
+          }
+        ]
+      }
+    }
+  },
+  "users": [
+    {
+      "id": "localsecurityadmin76",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "security_admin_local"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "AZqOfyFiM1BIJyxmPqaObcB0SbtgGwu2MlyUHBUCVWY="
+          ],
+          "algorithm": "argon2id",
+          "salt": "K8kvO6AvQtxuSrpQxXObqg==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "ZlfMkgrslMwz4F8IlTAJ1w+d7BeaUu2EJaUNwRIGtHw9hVW1ks3OqRfHEMQc1gKlXZSRTJuCxgZMzMzXv3+xZg==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "FFbQJeX7JLE1cDlSUmerznjgfPtzCsJP6oN3/1DwnGsT6/WoT6fWCiuAEHzEIMEh0+NTgOIXgklufP0vmGCELw==",
+              "server_key": "+kKJOasmqjHEcXcWjEn79lCSTdEehF8Vt0qUArFPEwP6PgMn58Ctoq29XafsTiVLfOQ2I1llqHVneZ3q3m72EA=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "938R7ZWRPgzLekgGzWXvE+jSPcKTFk6GABxzlllnm1w=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "8ttODtsWVvLZuiViA4rALq0mJe5OtChBqPo1UqMIfOo=",
+              "server_key": "lQ35FQvILXZY1vaj4/TV7BD1MJTbPZx8x2tBw8Z79a4="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "p0am7XLvbdmKttQIlVIIuglSwSo=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "fm2+XLwu/xVJDmTg3GlgN9I6vl0=",
+              "server_key": "sVzV0x1jPiBkCLW9r6Vi+m6RvO0="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fulladmin76",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "admin"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "9Nv0/I5HiPIeDoPMKdyPIAzEXMINxLlk372e+U5L8xg="
+          ],
+          "algorithm": "argon2id",
+          "salt": "z4UYVOn9UILznKRVRnK5QA==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "tCfcx3lmBSwPuiMbN9TEttZqQ3+Htzpe3rjn2Z69KYXNOO/uakyW4it5QWkQkB1eXlS0bB9v7tIT6k7eTiwLiA==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "/5gz/XU4LiL8jMQSYvIaAqHsM3sDlC82JmWh8O4NRBxNPkiIwxJ3Tf7bdOqldspaYFlPnP55uce5GFagGgIwwQ==",
+              "server_key": "bmkI2FOSq4EOD+L+jbY5cR+j22K4wn4FDqBgQP1FW9s0sOAJ1OYNC3ZPDpLvG+REjEiqRk40yCFP5Vj3dY+B+A=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "T2Sb5pSwHiMEoNLv1XSMD7k2MFDMHCqRWGLPlaFNxlo=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "jseJmjdIft/NCoaL108tbeWYwVU5XZzcKdElRKHzVmI=",
+              "server_key": "wmTlafYkyqNjt2yuWV9C0HP3zPlb4Rna6nvNGi2f8u4="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "1gwzQR2/lWvvF6wvwYuS4mN6+U8=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "7UxzQs2xbFctfiaYy0i//Div8Is=",
+              "server_key": "n5gVs3lCZQ6cWWow5yssEtx/N+Y="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "localsecurityandbackupadmin76",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "data_backup[*]",
+        "security_admin_local"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "L1NkG2HrJJZJzUJYiSUpPrZS+uc8PrPgaOA+AEIVGr0="
+          ],
+          "algorithm": "argon2id",
+          "salt": "vBiB50Un59qKO/N8/ycLzg==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "FXasbLVkQ03D35gULP82OeRqHR4QsL8BT+Uzp4iZNslqEIh97UaHARSbbQO4Uu8+Gp4yJuaB69s0XSF022U/kQ==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "J6Ned9NONOSGwnfxfhTwUx46QofyplIhtNkmujyy3smjOAiIOKsKpWwq3xurzDm44r5cuMNuUI0V/cnaCwUqcA==",
+              "server_key": "rvEaXn0nvmUQVANeOETnCs/OSeXCT9hR7mTE5iUBEeY62VXadTbL8yoyZufonUWfyHoD8d+GyIBgpiBfSM5jkA=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "r/jAvjkZJEqxpccDVCQnh2uiUHWwsaDyyDRzAOZfDrE=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "4GQTiBO0KROiTxxzLPr8B+i4Zgw0uh3WUOUl6ZZRcy8=",
+              "server_key": "RJUAg4QopD/ZihksRXNoZ+AYULy2PNOmQJbp+IuJ4dY="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "lhrmEphljXadsGE4v4pqvUyhxqA=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "4rI68y3ejfYF0teCO7zZoGhnkWo=",
+              "server_key": "XtZt2p73sCby4S/crYaKNQIFBTo="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "backupadmin76",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "backup_admin"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "O7mn5O6Oxf7JYmZXz/4K7Pncs3rHWbsyFLFTJEY5WL8="
+          ],
+          "algorithm": "argon2id",
+          "salt": "gpnljo49lHzrz9JIQVWsOA==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "byvvnb+4HnvTR9yEhBH7ni6uZhr1rmdvCpMA6TbpxsKY1qisHCw1bBNJrZAg3jmXlTLOKGySN9vdkADIwzbIVQ==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "AVgzhplmoRbip6hi0nGHKGI8x8Nnboa0g3M3ur94vVOKLQ+9lyHZIwIvdv3eiSyyPP+Bqh/+TAosamxoObnPEw==",
+              "server_key": "wT73Z6zPHMHHdksf6tLKEJ136UBEuyT1WyfihRFNbrrIZxocxXrFqOws92W54sXZew1/isqyYVSnik4YtGiH9A=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "NciZVX3C9YGySz8MdCDCJSeWC7g9PdOO+++iW+trGPk=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "JwBPZtpiCiWLzfmh58G4O092j7z4CrR21aHXnyk+yOk=",
+              "server_key": "CXaHnL6ajDpTESePwxQJNfXRG6VF+DtIe6FoGbTViTY="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "aq7aE7thPIX1++rMqHJRL1+4G9I=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "WnYevYWi2jt//wDav4pU1NX6tFg=",
+              "server_key": "UVwhpgqtW3keNKNG1GuDunWeg70="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "clusteradmin76",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "cluster_admin"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "u2iGrSUb26cFs8FLGJNtDz2ZTmSaiNPjgR67OKb8p+4="
+          ],
+          "algorithm": "argon2id",
+          "salt": "l3OpHX6r48D1fMo0iZFj0Q==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "L6/hBLIhTDUkWncD8kp+dfJzPehztDiHMb1mc3hOJ4y2jHJe5mZ89B0mYE4+vGOSRWV40Qy1bEkpz8jLqBlqQg==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "1dY99OXbI79AgvV7OHs9/PppdNcnVgAfZpiFvQlhk5ApY5FTpEyPgHRaCqlmg5bVgdhD1J9Sk0kA4aHEcoEBNA==",
+              "server_key": "wuNuOPZbX9opyChCQch/kVx8p+kydcSQgI9guayM99neUOJBpzVOL9KilaB6axHg91H/A+U76JhMOqI2yhAbrA=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "nVyqmIpHy0/YysYy6i8dKpfPLm7Kw66haN5CIMTpE5Q=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "nL7FNCZKviv0dZUWQi7uj7kIagexA37xwvx7xvFugnI=",
+              "server_key": "X2iXgSMr0iPqVNL1ICBFtDzZLOPAZDY00fgKxLsM5nQ="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "K+V11dQgwl7cYoNVyG4XN7oMAUI=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "6AWo0+/FuDLFtxvdYVZWDPhASI4=",
+              "server_key": "0Rs+6nSLnHflg3xfU/tt0sS9js8="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "viewsadmin76",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "views_admin[*]"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "a0R7LTHMOcU+4W/wJiYjHrLpGelqGVfKZUofTjY1YcY="
+          ],
+          "algorithm": "argon2id",
+          "salt": "YfvQRULakXNRPaVOkyJM+A==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "gel0Nw9//Ca0NP6AhbJ5i5dXETyqpXOQDUsyb4SP1C9rlDxUUkfyrgVuM/YhxaLrMrLnoQv6xvn9vfqBK9/K3Q==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "4TtsMVAzdDJ6yQGGj0MJEP7TcF3SeQzTvFX0yIt4Fl2VRvZ0pqnM+TUJQ9aQl/ds3x+Dmj5NEc3uyFCvSSbFHQ==",
+              "server_key": "JYRL6F3aDW43DQKr+CgOdGVbaJ3jnCkrYL0ipoVftnZ1W4RdiEMz42SZUDV+Uk/lUHX7uRCyjaYjDz/fto2c2g=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "VbvHpYJyBDv91b1G6rtZOAvy3LG7UWOfoVOPKHg7rEk=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "siBSmqImZUOXyx4kvXQDolVVPSckKGJjd9WVK7OQcw0=",
+              "server_key": "EjZLaqOL6K0NICc2JPGQ8k8BCGyTa+6sQ++eXzkcSTg="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "fDmK3FePQzSnPA+6y7VgeMVIHOc=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "CSk63RdlDxdDp/9gszG2b+dJ1TA=",
+              "server_key": "bpRuGYDGqhVRemyy7ZAEZiijKXk="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "externalsecurityadmin76",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "security_admin_external"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "AzYyOxF1lpf0IZ60B9693/XQBnbLNOhVZ5CgGLgb73w="
+          ],
+          "algorithm": "argon2id",
+          "salt": "rGHoGnfnjBTxkp2rItCKEA==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "yFea6wPTPNGDaeFYjQH6BZ2t2ozDSDNhuT5dTzga/V1b02UiPFxh32L8vudowit+tUECQKFncv61zV/wXiVd9A==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "s16vGrAQmZVlTnHllW+906RjENWBft+MoemgOgb4m3TKBxI2h24YuwmFx7Ky30Q3gEAR0owRRdWu2m8a5FvRIg==",
+              "server_key": "8+G5Y+qaRN2BAkZJysyOvEmdqLNxPcG4RW1ELH3XX5AhTItNinYSk7llZ64sojaWDKnanvjqI74ZZPm9bmvlhg=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "Ovr3beqlE1mlKoZGNCTU2263BH6IZfkMezG2o8JLco8=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "TyE1l9GA4mzSDMz+ea8HQkFCor3PuGVFqNu+EcrRy9s=",
+              "server_key": "pqxVrSDobxyC1mOEGqWFu7U3z6HfAXYeOqAIyPRa6dU="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "1w0A38tXXGTSkVZzr4r57tayNvU=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "nDIg9W2vzDu8Bd7LzOKcs5A3dpo=",
+              "server_key": "8F5MzgJ7stmI0xazTU3cj456Odw="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "roadmin76",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "ro_admin"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "Rbfd5fYKgmt/Ds3+NBrgQb6wyjF4yphfTW+F35vnB2c="
+          ],
+          "algorithm": "argon2id",
+          "salt": "H90vKxHY99Ikyve/vUgOIQ==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "A0NyvADg5FtISW004dze9tKu3hGYVWCZRNufYkmXBMZsOu9hUKN3Idbq1rQGPvLWETYZlRpjInzRx5zqTObCvA==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "wINwyOnYDZ+UJuSAjmh61fs/Y3Ly82p02tyG4qIORkNHKxkoN6ibNCIb9Ja4oM7G0X8xyuY+DpnnOmZfOyN8Uw==",
+              "server_key": "6hNp7XPh/RnTrIuhEDAbwYYnYIRPrkp7+LrPJ8lvhBUPNfWVRDGlh9ihpTFZ+jBlE6us1wCgvWe19lZpW0/G6Q=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "wQJdRcAsjEyQRQhOq7MlXJDwzw/2J1F6Jp83mU6BLyQ=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "CM+YzYZXdp6kG1E8xEE4eDwRvWCoNSnsnNpNHLI5flk=",
+              "server_key": "UpbxaKKrPjlnJIAHy5rmC7rZ6TqFubiYhiowCEMIl0Y="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "8ZODDLAzUxIzWIMuNXEbYa5yN88=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "h8HrCInnmL2yA2L2Asof9NSz0Jw=",
+              "server_key": "ovA5RSRQah5+JDIDH6WBTFQDKNk="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "externalstatsreader76",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "external_stats_reader"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "4gYycrP+Gq3pk0ci22bcOEE2L9jAMkWL9l0BtrkeCXU="
+          ],
+          "algorithm": "argon2id",
+          "salt": "gU1j/J39yVwsXUsXAaToVA==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "+cXkh2LS1Avuw2y9rb1lwb7BrXAfgVuVw6J5gAS9V97IkuRCXO8rSvDqjYat7XUUtuuDO64CWH+FJfsqEmOIYQ==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "3di9wxZbFGSzDMz4gevpKFYq6b4nIQdecgAv9R6m30jWoN5khUgNrkgy29u6rrh6Ov/uCQr/5ucpS8lu+HAtUw==",
+              "server_key": "AJaba53Yhi7Gd7tYLjP4jOJYKOebbuqR+AQgN49sHO1ruvYtJvkp/EHFobkDLMz+i0NOCl+GxGkwWw0B9oF4vw=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "68+s4owqMGQkQlTtBEcTjXZb7GBvNOWc5bKR26Kpz/o=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "2+5k+/bOLIE/Zya5zWrhOSw8zmUyWRBIEcp1yP2gMkw=",
+              "server_key": "PJSMx+Q4kDpLaoFiZ1ZT0WqyBeaLxveWEAwb8oUdwLk="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "WmJqWgf8jGgr7vJg5LWjgYv8E88=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "3I+AL6a91rtqLb9OBOVNDliluto=",
+              "server_key": "VivzfrrDU9wyyq0DXY8OfRD8IlA="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "readerwriter",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "data_writer[*]",
+        "data_reader[*]"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "y8ANosb4fkqJ1+kYtxZcOQF653zlZRiYj77aGfQOAIo="
+          ],
+          "algorithm": "argon2id",
+          "salt": "K6qfgh6uK5XJ1UtT44RIRg==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "vlUr0aqAf2KhLIokA2stbW0A0u1ORCYBAEJLORa45kYCPvnP6DP13oZ5z4cjx68aiS/jCGZRlgcGIG/kuukZHg==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "2ZNJKhPapkUpSBX4hSWgrpFyRKg0xEfw5+mcTx9MZpi+9lnXaK+SD0WoeSn3Ax/bLRY2byGRDh8EXiW824UGwQ==",
+              "server_key": "5hGscH7dHK8BsnF5uu8rc6OqGhkQIlleiEvaTrlV9ZlUtbLS42lzNdQEg2voTn3mmKsX6yvsxEujdc4NwTL2Lw=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "TU+fwQ7BI1Prde9mNQZuT3Arm+m/cKsySupeedCkPUc=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "0jQuZ7XVp4yprkw8CGhUo9XMsSA9Cj09vtkJw8DZQoM=",
+              "server_key": "ozRSiYD1c0WudlQsdClahZZ1j7MX2386A9mCGX2XJJY="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "vplVwAcP/fbbIGUM9UL6iS8JeME=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "r40Y9mfsqiksIL5kVg4BD3l5WVk=",
+              "server_key": "JEBY/prks/KCRJ/5qkOM2XQyJuA="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "eventingadmin76",
+      "domain": "local",
+      "groups": [],
+      "roles": [
+        "eventing_admin"
+      ],
+      "auth": {
+        "hash": {
+          "hashes": [
+            "qUVLgYsBFmyJkrf8MmaFtoNEVsS00kLMWJF83PYy8r0="
+          ],
+          "algorithm": "argon2id",
+          "salt": "ObRNHPfTTT3CZhJIMNv1fA==",
+          "parallelism": 1,
+          "time": 3,
+          "memory": 524288
+        },
+        "scram-sha-512": {
+          "salt": "rMW5vJpKhryWmHKksRK3O4dMjVeqh5lNCUT8/y5huYY2j8vcCaLV/PBc7xJ91sBlDDMneJqYST47qLTkCYk7CQ==",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "xwxoQMvsy8rYJ+edHywJnkE7llVTH0VKARjrSNUj0w2vBF7cJLe7la0GGANAkctxu1r8BbeCDF+LW7E6Y+o0WQ==",
+              "server_key": "Om3KG3TxSmRNxVx1EQwkF3RvajMMqxY41LPdGR9FAnmV7TEllUFUmwIGCwx61mXvFqYXlg0zX7I/DZ7dtWaQsQ=="
+            }
+          ]
+        },
+        "scram-sha-256": {
+          "salt": "7edNHszfNecgW1j9QEDgSf9NuSUS9ks3NbRdl+elic4=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "7tfGT7/iAF3QixY0CMdxycuGIG4haipapxoUiiIvfvg=",
+              "server_key": "dGtyxstD+bBlAfy6UniKVOlP8xog7Ms6ikFcsjP1e0w="
+            }
+          ]
+        },
+        "scram-sha-1": {
+          "salt": "yf3msxXpgelCWVgWfO8OmEeVsj4=",
+          "iterations": 15000,
+          "hashes": [
+            {
+              "stored_key": "G1hyaRqLXAiWlPI+cPJgBlEBMnY=",
+              "server_key": "HpL7+x6TzWzoLzDXNlj3XhDmdU4="
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "groups": [
+  ]
+}

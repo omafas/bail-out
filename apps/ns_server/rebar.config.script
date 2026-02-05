@@ -1,0 +1,19 @@
+{erl_opts, ErlOpts} = lists:keyfind(erl_opts, 1, CONFIG),
+
+NewErlOpts0 = case os:getenv("COUCHDB_SRC_DIR") of
+                  false -> [];
+                  [] -> [];
+                  Dir ->
+                      {erl_opts, ErlOpts} = lists:keyfind(erl_opts, 1, CONFIG),
+                      [{i, filename:join(Dir, "src")},
+                       {i, filename:join(Dir, "src/couchdb")} | ErlOpts]
+              end,
+
+NewErlOpts1 = case os:getenv("DEFAULT_PROFILE") of
+                  false -> [];
+                  [] -> [];
+                  Profile ->
+                      [{d, 'DEFAULT_PROFILE_STR', Profile} | NewErlOpts0]
+              end,
+
+lists:keystore(erl_opts, 1, CONFIG, {erl_opts, NewErlOpts1}).

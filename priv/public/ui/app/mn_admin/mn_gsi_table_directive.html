@@ -1,0 +1,152 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="cbui-table" mn-sortable-table>
+  <div class="cbui-table-header">
+    <span class="cbui-table-cell flex-grow-1-5">
+      <span
+         mn-sortable-title="index"
+         sort-by-default="true"
+         class="sorter">
+        index name
+      </span>
+    </span>
+    <span class="cbui-table-cell flex-grow-half resp-hide-xsml">
+      requests/sec
+    </span>
+    <span class="cbui-table-cell flex-grow-half resp-hide-sml">
+      resident ratio
+    </span>
+    <span class="cbui-table-cell flex-grow-half">
+      items
+    </span>
+    <span class="cbui-table-cell flex-grow-half resp-hide-xsml">
+      data size
+    </span>
+    <span class="cbui-table-cell">
+      <span mn-sortable-title="keyspace" class="sorter">
+        keyspace
+      </span>
+    </span>
+    <span class="cbui-table-cell">
+      <span mn-sortable-title="status" class="sorter">
+        status
+      </span>
+    </span>
+  </div>
+  <section
+     ng-repeat="row in mnGsiTableCtl.paginatorPage track by mnGsiTableCtl.generateIndexId(row)"
+     ng-class="[(row.awaitingRemoval ? 'disabled-tag' : ''),
+                (mnGsiTableCtl.isDetailsOpened(mnGsiTableCtl.generateIndexId(row)) ?
+                mnGsiTableCtl.getStatusClass(row) : '')]"
+     ng-click="mnGsiTableCtl.toggleDetails(mnGsiTableCtl.generateIndexId(row))">
+    <div
+       class="cbui-tablerow has-hover"
+       ng-class="[(!mnGsiTableCtl.isDetailsOpened(mnGsiTableCtl.generateIndexId(row)) ?
+              mnGsiTableCtl.getStatusClass(row) : '')]"
+       ng-controller="mnGsiItemController as gsiItemCtl">
+      <span class="cbui-table-cell flex-grow-1-5" ng-attr-title="{{row.index}}">
+        {{row.indexName || row.index}}
+        <span class="flex-inline flex-wrap">
+          <span class="label lt-blue" ng-if="row.partitioned">
+            partitioned
+          </span>
+          <span class="label warning" ng-if="row.stale">
+            stale
+          </span>
+          <span
+             class="label lt-blue" ng-if="row.index.indexOf('(replica') > -1"
+             uib-tooltip="Index replicas are always active and automatically load-balance scan requests."
+             tooltip-append-to-body="true"
+             tooltip-placement="auto top"
+             tooltip-trigger="mouseenter">
+            replica {{row.index.split("(replica ")[1].slice(0,-1)}}
+          </span>
+        </span>
+      </span>
+      <span class="cbui-table-cell flex-grow-half resp-hide-xsml">
+        {{mnGsiTableCtl.isFinite(row.num_requests) ? (row.num_requests | mnFormatQuantity:1000) : "-"}}
+      </span>
+      <span class="cbui-table-cell flex-grow-half resp-hide-sml">
+        {{mnGsiTableCtl.isFinite(row.index_resident_percent)?(row.index_resident_percent|number:0)+"%":"-" }}
+      </span>
+      <span class="cbui-table-cell flex-grow-half">
+        {{mnGsiTableCtl.isFinite(row.items_count) ? (row.items_count | mnFormatQuantity:1000) : "-"}}
+      </span>
+      <span class="cbui-table-cell flex-grow-half resp-hide-xsml">
+        {{mnGsiTableCtl.isFinite(row.data_size) ? (row.data_size | mnFormatQuantity) : "-"}}
+      </span>
+      <span class="cbui-table-cell" ng-attr-title="{{mnGsiTableCtl.getRowKeyspace(row)}}">
+        {{mnGsiTableCtl.getRowKeyspace(row)}}
+      </span>
+      <span class="cbui-table-cell flex-wrap text-smaller">
+        <div
+           ng-show="row.status == 'Building'"
+           uib-tooltip="{{mnGsiTableCtl.getStatusDescription(row)}}"
+           tooltip-append-to-body="true"
+           tooltip-trigger="mouseenter"
+           ng-click="$event.stopPropagation();">
+          building {{row.progress}}%
+        </div>
+        <div
+           ng-show="row.status == 'Graph Building'"
+           uib-tooltip="{{mnGsiTableCtl.getStatusDescription(row)}}"
+           tooltip-append-to-body="true"
+           tooltip-trigger="mouseenter"
+           ng-click="$event.stopPropagation();">
+          building graph {{row.progress}}%
+        </div>
+        <div
+           ng-show="row.status != 'Building' && row.status != 'Graph Building'"
+           uib-tooltip="{{mnGsiTableCtl.getStatusDescription(row)}}"
+           tooltip-append-to-body="true"
+           tooltip-trigger="mouseenter"
+           ng-click="$event.stopPropagation();"
+           class="nocaps">
+          {{row.status}}
+        </div>
+        <div ng-if="mnGsiTableCtl.isFinite(row['num_docs_pending+queued']) &&
+                    row['num_docs_pending+queued'] !== 0"
+           class="label warning">
+          {{row['num_docs_pending+queued'] | mnFormatQuantity:1000}}
+          mutations remaining
+        </div>
+      </span>
+    </div>
+    <mn-gsi-item-details
+       row="row"
+       node-name="{{nodeName}}"
+       rbac="rbac"
+       pools="pools"
+       class="cbui-tablerow-expanded"
+       ng-if="mnGsiTableCtl.isDetailsOpened(mnGsiTableCtl.generateIndexId(row))">
+    </mn-gsi-item-details>
+  </section>
+  <div ng-if="!mnGsiTableCtl.paginatorPage.length" class="zero-content margin-top-1-5">
+    No indexes found for this bucket.scope combination. Try another bucket.scope.
+  </div>
+  <div class="row">
+    <mn-select
+       class="mn-select-small fix-width-3-quarters margin-top-half"
+       ng-model="mnGsiTableCtl.paginatorValues.size"
+       values="[15, 20, 40, 80]"
+       on-select="mnGsiTableCtl.sizeChanged(selectedOption)"
+       open-on-top="true">
+    </mn-select>
+    <div
+       uib-pagination
+       ng-if="list.length"
+       ng-model="mnGsiTableCtl.paginatorValues.page"
+       max-size="5"
+       items-per-page="mnGsiTableCtl.paginatorValues.size"
+       total-items="mnGsiTableCtl.listFiltered.length"
+       ng-change="mnGsiTableCtl.pageChanged()"></div>
+  </div>
+</div>

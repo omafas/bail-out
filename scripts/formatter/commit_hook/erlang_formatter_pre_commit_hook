@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+
+# Copyright 2023-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+
+config=$(git config couchbase.erlangformat)
+
+has_issues() {
+  python3 scripts/formatter/erlang_formatter.py --hook --format-output-mode check --format-mode function
+  if [ $? = 0 ] ; then
+    return 1
+  else
+    return 0
+  fi
+}
+
+has_staged_changes() {
+  git diff --staged --quiet
+  if [ $? = 0 ] ; then
+      return 1
+    else
+      return 0
+  fi
+}
+
+reformat () {
+  if [ ! "$config" = "commit" ] ; then
+    echo -n "Commit rejected. "
+  fi
+  echo "Running erlang formatter to fix style..."
+  files_changed=$( (python3 scripts/formatter/erlang_formatter.py --hook --format-mode function) 2>&1)
+  retval=$?
+  echo "$files_changed"
+  return $retval
+}
+
+add_reformatted_files() {
+  echo "$files_changed" | sed -e 's/^[[:space:]]*//' | tr '\n' '\0' | xargs -0 git add
+}
+
+if has_issues ; then
+  echo "Has issues"
+  case $config in
+    (warn)
+      echo "Format of changes does not conform with erlang_formatter style."
+      exit 1
+      ;;
+    (fix)
+      if reformat ; then
+        echo "Review changes, add, and commit again."
+      fi
+      exit 1
+      ;;
+    (stage)
+      if reformat ; then
+        add_reformatted_files
+      fi
+      exit 1
+      ;;
+    (commit)
+      if reformat ; then
+        echo "Adding reformatted files"
+        add_reformatted_files
+        # Check for staged changes, if we didn't then we could end up with
+        # empty commits if we have no staged changes after the formatter runs
+        if has_staged_changes ; then
+          exit 0
+        fi
+      fi
+      exit 1
+      ;;
+    (*)
+      echo "Need to configure the couchbase.erlangformat option to run the commit hook."
+      echo "Run install_hook.sh -h for more information."
+      echo ""
+      echo "Alternatively, run \"git commit --no-verify\" to skip the hook."
+      exit 1
+      ;;
+  esac
+fi

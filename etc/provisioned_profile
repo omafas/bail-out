@@ -1,0 +1,63 @@
+{name, "provisioned"}.
+%% MB-68878: The enabled flag can only be eliminated in this profile once
+%% upgrade from 7.6 is no longer supported
+{{resource_management, enabled}, true}.
+{{resource_management, configure_promql}, true}.
+{{resource_management, configurables},
+ ["bucket",
+  "coresPerBucket",
+  "diskUsage",
+  "collectionsPerQuota"]}.
+{resource_management,
+ [{[bucket, resident_ratio, enabled], true},
+  {[cores_per_bucket, enabled], true},
+  {[bucket, data_size, enabled], true},
+  {[disk_usage, enabled], true},
+  {[disk_usage, maximum], 96},
+  {[collections_per_quota, enabled], true}]}.
+{{n1ql, sequential_scan_disabled}, true}.
+{allow_hash_migration_during_auth, true}.
+{{memcached, mirror_ssl_port}, 11300}.
+
+%% cgroup support is disabled until all platforms (AWS, GCP, Azure) support
+%% it.
+{cgroup_feature_enabled, false}.
+
+%% The base path where services will be placed (by their name).
+%% Ex: 'kv'   -> ./services/kv
+%%     'cbas' -> ./services/cbas
+{cgroup_base_path,
+    "/sys/fs/cgroup/system.slice/couchbase-server.service"}.
+
+%% NOTE: Only services with an existing concept of a memoryQuota will
+%% actually have their limits set. Otherwise the defaults for any cgroup are
+%% maintained. For example [ns_server, prometheus] do not currently have the
+%% concept of a 'memoryQuota' but it would be pretty easy to add it in the
+%% future.
+%%
+%% To change limit VALUES for services without a memoryQuota, you can use
+%% an override. Overrides take precedance over the memoryQuota (if it exists).
+{cgroups_memory_hard, [n1ql, fts]}.
+{cgroups_memory_soft, [n1ql, fts, prometheus, kv, projector,
+                       ns_server, backup, index, cbas, goxdcr,
+                       eventing, cont_backup]}.
+
+%% These specify the default values for auto failover and are used instead
+%% of the ones within ns_server on a new install. For upgrades, only those
+%% that are new for the release are used (others are ignored).
+{auto_failover,
+    [{auto_failover_cfg,
+        [{enabled,true},
+        {timeout,10},
+        {count,0},
+        {max_count,100},
+        {failover_on_data_disk_non_responsiveness,
+            [{enabled,true},
+             {timePeriod,120}]},
+        {disable_max_count,false},
+        {failover_on_data_disk_issues,
+            [{enabled,true},
+             {timePeriod,10}]},
+        {can_abort_rebalance,true},
+        {failover_preserve_durability_majority,false},
+        {allow_failover_ephemeral_no_replicas,false}]}]}.

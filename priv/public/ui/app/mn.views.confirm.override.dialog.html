@@ -1,0 +1,28 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="dialog-small">
+  <h2 class="panel-header">Confirm Over-Write</h2>
+  <div class="panel-content">
+    <div class="row flex-left">
+      <span class="icon fa-warning fa-2x red-3"></span>
+      <p>
+        Warning: A design document with this name already exists.
+        <br>Overwrite this design document?
+      </p>
+    </div>
+  </div>
+  <div class="panel-footer">
+    <a  (click)="activeModal.dismiss()">Cancel</a>
+    <button
+       type="submit"
+       (click)="form.submit.next()">Overwrite Document</button>
+  </div>
+</div>

@@ -1,0 +1,4 @@
+{name, "default"}.
+{{indexer, disable_shard_affinity}, true}.
+{{resource_management, configurables},
+ ["diskUsage"]}.

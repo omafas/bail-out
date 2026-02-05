@@ -1,0 +1,10 @@
+{erl_opts, ErlOpts} = lists:keyfind(erl_opts, 1, CONFIG),
+
+NewErlOpts1 = case os:getenv("DEFAULT_PROFILE") of
+                  false -> [];
+                  [] -> [];
+                  Profile ->
+                      [{d, 'DEFAULT_PROFILE_STR', Profile} | ErlOpts]
+              end,
+
+lists:keystore(erl_opts, 1, CONFIG, {erl_opts, NewErlOpts1}).

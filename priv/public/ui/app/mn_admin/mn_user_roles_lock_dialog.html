@@ -1,0 +1,38 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="dialog-small">
+  <div class="panel-header">
+    <h2>Confirm Lock User</h2>
+  </div>
+  <form
+    ng-submit="userRolesLockDialogCtl.onSubmit()"
+    mn-spinner="userRolesLockDialogCtl.viewLoading"
+  >
+    <div class="panel-content">
+      <div class="error" ng-show="userRolesLockDialogCtl.errors._">
+        {{userRolesLockDialogCtl.errors._}}
+      </div>
+      <div class="row flex-left">
+        <span class="icon fa-warning fa-2x red-3"></span>
+        <p>
+          Are you sure you want to lock
+          <br />
+          {{userRolesLockDialogCtl.username}}? That will prevent the user from
+          being able to log in to the cluster.
+        </p>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <a ng-click="$dismiss()">Cancel</a>
+      <button type="submit">Lock User</button>
+    </div>
+  </form>
+</div>

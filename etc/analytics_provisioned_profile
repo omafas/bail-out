@@ -1,0 +1,61 @@
+{name, "analytics_provisioned"}.
+{prod, "analytics"}.
+{prod_name, "Enterprise Analytics"}.
+{prod_compat_version, "@COLUMNAR_COMPAT_VERSION@"}.
+{prod_min_supported_version,
+    "@MIN_SUPPORTED_COLUMNAR_PROVISIONED_COMPAT_VERSION@"}.
+{{couchdb, disabled}, true}.
+{{goxdcr, disabled}, true}.
+{{cbas, columnar}, true}.
+{{cbas, enable_blob_storage}, true}.
+{{cbas, skip_blob_storage_validation}, true}.
+{{indexer, projector_disabled}, true}.
+{{kv, cont_backup_disabled}, true}.
+{{cbas, max_storage_partitions}, 1024}.
+{{cbas, extra_settings_version_76},
+    [{blobStorageEndpoint,
+      <<"analytics.settings.blob_storage_endpoint">>,
+      <<"">>},
+     {blobStorageAnonymousAuth,
+      <<"analytics.settings.blob_storage_anonymous_auth">>,
+      false},
+     {numStoragePartitions,
+      <<"analytics.settings.num_storage_partitions">>,
+      128}]}.
+{fixed_services, [kv, cbas]}.
+{max_buckets_supported, 0}.
+{extra_roles, [{analytics_admin, [],
+     [{name, <<"Enterprise Analytics Admin">>},
+      {folder, admin},
+      {desc, <<"Can access Enterprise Analytics administrative APIs (i.e. "
+               "<host>:8095/api/v1/*). This user can assign and modify RBAC "
+               "privileges. This user can read and write all data.">>}],
+      [{[analytics], [manage, access]},
+       {[ui], [read]},
+       {[pools], [read]},
+       {[app_telemetry], [write]}]},
+     {analytics_access, [],
+      [{name, <<"Enterprise Analytics Access">>},
+       {folder, analytics},
+       {desc, <<"Provides access to Enterprise Analytics metadata required "
+                "to use the cluster. This user can access the web console. "
+                "This role does not inherently provide access to data.">>}],
+      [{[analytics], [access]},
+       {[ui], [read]},
+       {[pools], [read]},
+       {[app_telemetry], [write]}]},
+     %% the `analytics_reader` role to be removed in a future release, keeping
+     %% here to avoid requiring control plane updates to grant Capella
+     %% Analytics users the new analytics_access role in the near term.
+     {analytics_reader, [],
+      [{name, <<"Enterprise Analytics Reader">>},
+       {folder, analytics},
+       {desc, <<"Provides access to Enterprise Analytics metadata required "
+                "to use the cluster. This user can access the web console, "
+                "but does not in itself provide access to data.">>}],
+      [{[analytics], [access]},
+       {[ui], [read]},
+       {[pools], [read]},
+       {[app_telemetry], [write]}]}]}.
+{{kv, min_quota}, 100}.
+{{kv, max_quota}, 100}.

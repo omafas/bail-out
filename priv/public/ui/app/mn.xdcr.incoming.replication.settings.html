@@ -1,0 +1,87 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="dialog-med height-85vh">
+  <div class="panel-header">
+    <h2>Replication Settings</h2>
+    <a class="ui-dialog-titlebar-close modal-close" (click)="activeModal.dismiss()">X</a>
+  </div>
+  <form
+     [formGroup]="form.group"
+     (submit)="activeModal.dismiss()" style="height:inherit;">
+    <div style="height:calc(100% - 112px);overflow:auto;" class="show-scrollbar">
+      <div class="panel-content overflow-wrap">
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>Replication Priority:</h5>
+          <span>{{priority | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>Mobile
+            <span
+               class="fa-stack icon-info"
+               ngbTooltip='To use Sync Gateway 4.0+ with bi-directional XDCR, each replication must have the "mobile" option set to "Active".'
+               placement="auto bottom"
+               container="body">
+              <span class="icon fa-circle-thin fa-stack-2x"></span>
+              <span class="icon fa-info fa-stack-1x"></span>
+            </span> :</h5>
+          <span>{{mobile | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>Compression Type:</h5>
+          <span>{{compressionType | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>XDCR Source Nozzles Per Node:</h5>
+          <span>{{sourceNozzles | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>XDCR Target Nozzles Per Node:</h5>
+          <span>{{targetNozzles | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>XDCR Checkpoint Interval:</h5>
+          <span>{{checkpointInterval | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>XDCR Batch Count:</h5>
+          <span>{{batchCount | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>XDCR Batch Size (kB):</h5>
+          <span>{{batchSize | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>XDCR Failure Retry Interval:</h5>
+          <span>{{failureRetry | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>XDCR Optimistic Replication Threshold:</h5>
+          <span>{{optimisticThreshold | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>XDCR Statistics Collection Interval (ms):</h5>
+          <span>{{statsInterval | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>XDCR Network Usage Limit (MiB/sec):</h5>
+          <span>{{networkUsageLimit | async}}</span>
+        </div>
+        <div class="flex flex-items-center flex-gap-5">
+          <h5>XDCR Logging Level:</h5>
+          <span>{{logLevel | async}}</span>
+        </div>
+      </div>
+    </div>
+    <div class="panel-footer scroll-shadow margin-top-quarter">
+      <button type="submit">Close Dialog</button>
+    </div>
+  </form>
+</div>

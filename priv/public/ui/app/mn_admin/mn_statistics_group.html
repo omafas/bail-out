@@ -1,0 +1,53 @@
+<!--
+Copyright 2020-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div class="dialog-small">
+  <div class="panel-header">
+    <h2>New Group</h2>
+  </div>
+  <form
+     ng-submit="groupDialogCtl.submit()"
+     class="forms">
+    <div class="panel-content">
+      <div class="formrow">
+        <label for="for-group-name">
+          Group Name</label>
+        <input
+           type="text"
+           mn-focus=""
+           id="for-group-name"
+           autocorrect="off"
+           spellcheck="false"
+           autocapitalize="off"
+           ng-model="groupDialogCtl.group.name">
+      </div>
+      <!--
+      <div>
+        <label for="for-group-description">
+          Group Description</label>
+        <input
+           type="text"
+           id="for-group-description"
+           autocorrect="off"
+           spellcheck="false"
+           autocapitalize="off"
+           ng-model="groupDialogCtl.group.desc">
+      </div>
+      -->
+    </div>
+    <div class="panel-footer">
+      <a ng-click="$dismiss()">Cancel</a>
+      <button
+         type="submit">
+        Save
+      </button>
+    </div>
+  </form>
+</div>

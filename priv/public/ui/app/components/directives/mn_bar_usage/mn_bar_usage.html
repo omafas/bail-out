@@ -1,0 +1,35 @@
+<!--
+Copyright 2015-Present Couchbase, Inc.
+
+Use of this software is governed by the Business Source License included in
+the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+file, in accordance with the Business Source License, use of this software will
+be governed by the Apache License, Version 2.0, included in the file
+licenses/APL2.txt.
+-->
+
+<div
+   class="usage-label label-top label-top-0 with-square"
+   ng-if="config.topLeft">
+  {{config.topLeft.name}} ({{config.topLeft.value | mnFormatMemSize}})
+</div>
+<div
+   class="usage-label label-top label-top-1"
+   ng-if="config.topRight">
+  {{config.topRight.name}} ({{config.topRight.value | mnFormatMemSize}})
+</div>
+<div class="usage">
+  <div
+     class="item"
+     ng-repeat="item in config.items | orderBy:[]:true"
+     ng-style="{width: item.itemStyle.width}"
+     ng-class="'usage-item-' + $index"></div>
+</div>
+<div class="row">
+  <span
+     class="usage-label label-bottom with-square"
+     ng-repeat="tditem in config.tdItems"
+     ng-class="'label-bottom-' + $index">
+    {{tditem.name}} ({{ tditem.value | mnFormatMemSize }})
+  </span>
+</div>

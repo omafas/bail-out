@@ -1,0 +1,332 @@
+<!--
+  Copyright 2021-Present Couchbase, Inc.
+
+  Use of this software is governed by the Business Source License included in
+  the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+  file, in accordance with the Business Source License, use of this software
+  will be governed by the Apache License, Version 2.0, included in the file
+  licenses/APL2.txt.
+-->
+
+<mn-main-spinner
+   [mnSpinnerValue]="(form.loadingPipe | async)">
+</mn-main-spinner>
+
+<div class="relative">
+  <div class="row flex-right" style="min-height:0;position:absolute;top:0;right:0;z-index:1">
+    <span>
+      <button
+         *ngIf="(taskCollectInfo | async)?.status === 'running'"
+         (click)="stopCollection()"
+         [disabled]="(disableStopCollection | async)"
+         class="outline">
+        Stop Collection
+      </button>
+      <button
+         *ngIf="(taskCollectInfo | async)?.status !== 'idle'"
+         uiSref="app.admin.logs.collectInfo.result"
+         class="outline">
+        Show Current Collection
+      </button>
+    </span>
+  </div>
+</div>
+
+<div>
+  <div class="max-width-11 margin-top-half padding-bottom-6 padding-left-1">
+    <div
+       class="error error-field"
+       *ngIf="(postRequest.error | async)?._">
+      {{(postRequest.error | async)?._}}
+    </div>
+
+    <h4 class="margin-bottom-1">Collect Logs & Diagnostic Information</h4>
+    <form
+       [formGroup]="form.group"
+       (submit)="form.submit.next()"
+       name="collectForm"
+       class="forms">
+      <div
+         class="error error-field"
+         *ngIf="(postRequest.error | async)?.nodes">
+        {{(postRequest.error | async)?.nodes}}
+      </div>
+      <div formGroupName="nodes" class="formrow">
+        <mn-selectable-nodes
+           [mnSelectAll]="true"
+           [mnGroup]="form.group.controls.nodes">
+        </mn-selectable-nodes>
+      </div>
+
+      <div formGroupName="logs">
+        <div
+           class="formrow"
+           *ngIf="(isEnterprise | async) && (compatVersion55 | async)">
+          <label>Redact Logs</label>
+          <input
+             type="radio"
+             value="none"
+             id="redaction_none"
+             formControlName="logRedactionLevel">
+          <label for="redaction_none" class="checkbox">No Redaction</label>
+
+          <input
+             type="radio"
+             value="partial"
+             id="redaction_partial"
+             formControlName="logRedactionLevel">
+          <label for="redaction_partial" class="checkbox margin-right-zero">Partial Redaction</label>
+          <span
+             class="fa-stack icon-info"
+             ngbTooltip="In the log file created through this process, user data such as key/value pairs and usernames will be redacted.
+                    Metadata and system data will not be redacted. The default redaction configuration in Settings remains unchanged by your choice here."
+             placement="auto right"
+             triggers="click"
+             container="body">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+
+          <div
+             class="content-box"
+             *ngIf="(form.group.get('logs.logRedactionLevel').valueChanges | async) === 'partial'">
+            <p>Couchbase Server will collect and save a redacted log file at the location you specify, but also save an unredacted version which could be useful for further troubleshooting.</p>
+            <p>If you use the "Upload to Couchbase" feature below, ONLY the redacted log will be uploaded.</p>
+          </div>
+        </div>
+
+        <div class="formrow fix-width-5">
+          <input
+             type="checkbox"
+             id="for_custom_tmpdir"
+             name="tmpdir"
+             formControlName="enableTmpDir">
+          <label for="for_custom_tmpdir" class="margin-right-zero">Specify custom temp directory</label>
+          <span
+             class="fa-stack icon-info"
+             ngbTooltip="Logs and diagnostics will be combined in this directory during the collection process.
+                    The process takes a significant amount of time and the subsequent file tends to be large, so a temporary
+                    directory can be a good idea in some production environments."
+             placement="auto right"
+             triggers="click"
+             container="body">
+            <span class="icon fa-circle-thin fa-stack-2x"></span>
+            <span class="icon fa-info fa-stack-1x"></span>
+          </span>
+
+          <div *ngIf="form.group.get('logs.enableTmpDir').valueChanges | async">
+            <input
+               type="text"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off"
+               formControlName="tmpDir">
+            <div
+               class="error error-field"
+               *ngIf="(postRequest.error | async)?.tmpDir">
+              {{(postRequest.error | async)?.tmpDir}}
+            </div>
+            <div
+               class="error error-field"
+               *ngIf="form.group.get('logs')?.errors?.tmpDir">
+              Must be an absolute path
+            </div>
+          </div>
+        </div>
+
+        <div class="formrow fix-width-5">
+          <input
+             type="checkbox"
+             id="for_custom_logdir"
+             name="logdir"
+             formControlName="enableLogDir">
+          <label for="for_custom_logdir" class="margin-right-zero">Specify custom destination directory</label>
+          <div *ngIf="form.group.get('logs.enableLogDir').valueChanges | async">
+            <input
+               type="text"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off"
+               formControlName="logDir">
+            <div
+               class="error error-field"
+               *ngIf="(postRequest.error | async)?.logDir">
+              {{(postRequest.error | async)?.logDir}}
+            </div>
+            <div
+               class="error error-field"
+               *ngIf="form.group.get('logs')?.errors?.logDir">
+              Must be an absolute path
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div formGroupName="upload">
+        <div class="formrow checkbox-list">
+          <input
+             type="checkbox"
+             id="js_upload_to_cb"
+             name="upload"
+             formControlName="upload">
+          <label for="js_upload_to_cb">Upload to Couchbase</label>
+          <div
+             class="error error-field"
+             *ngIf="(postRequest.error | async)?.upload">
+            {{(postRequest.error | async)?.upload}}
+          </div>
+        </div>
+
+        <div [hidden]="!(form.group.get('upload.upload').valueChanges | async)">
+          <div class="formrow fix-width-5">
+            <label for="uploadHost_input">Upload to Host</label>
+            <input
+               type="text"
+               id="uploadHost_input"
+               name="uploadHost"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off"
+               formControlName="uploadHost">
+            <div
+               class="error error-field"
+               *ngIf="(postRequest.error | async)?.uploadHost">
+              {{(postRequest.error | async)?.uploadHost}}
+            </div>
+            <div
+               class="error error-field"
+               *ngIf="form.group.get('upload.uploadHost')?.errors?.required">
+              upload host field must be given if upload is selected
+            </div>
+          </div>
+          <div class="formrow fix-width-5">
+            <label>Customer Name</label>
+            <input
+               type="text"
+               id="customer_input"
+               name="customer"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off"
+               formControlName="customer">
+            <div
+               class="error error-field"
+               *ngIf="(postRequest.error | async)?.customer">
+              {{(postRequest.error | async)?.customer}}
+            </div>
+            <div
+               class="error error-field"
+               *ngIf="form.group.get('upload.customer')?.errors?.required">
+              A customer name must be given if upload is selected
+            </div>
+          </div>
+
+          <div class="formrow fix-width-5">
+            <label>Upload Proxy <small>optional</small></label>
+            <input
+               type="text"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off"
+               formControlName="uploadProxy">
+            <div
+               class="error error-field"
+               *ngIf="(postRequest.error | async)?.upload_proxy">
+              {{(postRequest.error | async)?.upload_proxy}}
+            </div>
+            <input
+               type="checkbox"
+               id="bypass_reachability_checks"
+               name="bypassReachabilityChecks"
+               formControlName="bypassReachabilityChecks">
+            <label for="bypass_reachability_checks" class="margin-right-zero">
+              Bypass Reachability Checks
+            </label>
+            <div
+               class="error error-field"
+               *ngIf="(postRequest.error | async)?.bypassReachabilityChecks">
+              {{(postRequest.error | async)?.bypassReachabilityChecks}}
+            </div>
+          </div>
+
+          <div class="formrow fix-width-5">
+            <label>Ticket Number <small>optional</small></label>
+            <input
+               type="text"
+               id="ticket_input"
+               name="ticket"
+               autocorrect="off"
+               spellcheck="false"
+               autocapitalize="off"
+               formControlName="ticket">
+             <div
+                class="error error-field"
+                *ngIf="(postRequest.error | async)?.ticket">
+              {{(postRequest.error | async)?.ticket}}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="formrow fix-width-5" formGroupName="logs" *ngIf="isEnterprise | async">
+        <input
+           type="checkbox"
+           id="enableLogEncryption"
+           name="enableLogEncryption"
+           formControlName="enableLogEncryption">
+        <label for="enableLogEncryption" class="margin-right-zero">Encrypt collected information by AES</label>
+        <p class="text-smaller margin-left-1-2-5">(only unredacted zip will be encrypted)</p>
+        <span *ngIf="!(form.group.get('logs.enableLogEncryption').valueChanges | async) && (isLogEncryptionAtRestEnabled | async)" class="warning text-smaller block margin-left-1-2-5">
+          Warning: Generated logs are not encrypted yet, even though encryption at rest is enabled for configuration or logs.<br/> Check this option and set a password to encrypt the logs.
+        </span>
+      </div>
+      <div *ngIf="form.group.get('logs.enableLogEncryption').valueChanges | async" formGroupName="logs">
+        <div class="formrow fix-width-5">
+          <label>Encryption Password</label>
+          <input
+             type="password"
+             autocomplete="new-password"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             formControlName="encryptionPassword">
+          <div
+             class="error error-field"
+             *ngIf="(postRequest.error | async)?.encryptionPassword">
+            {{(postRequest.error | async)?.encryptionPassword}}
+          </div>
+          <div
+             class="error error-field"
+             *ngIf="form.group.get('logs')?.errors?.encryptionPassword">
+            {{form.group.get('logs')?.errors?.encryptionPassword}}
+          </div>
+        </div>
+        <div class="formrow fix-width-5">
+          <label>Confirm Encryption Password</label>
+          <input
+             type="password"
+             autocorrect="off"
+             spellcheck="false"
+             autocapitalize="off"
+             formControlName="confirmEncryptionPassword">
+          <div
+             class="error error-field"
+             *ngIf="form.group.get('logs')?.errors?.passwordMismatch">
+            Passwords must match
+          </div>
+        </div>
+      </div>
+
+      <footer class="footer-save">
+        <button
+           [disabled]="form.group.invalid"
+           type="submit"
+           class="margin-right-2">
+          Start Collecting
+        </button>
+        <a class="text-medium"
+           (click)="clickGetClusterInfo.next()">Get Cluster Summary</a>
+      </footer>
+    </form>
+  </div>
+</div>

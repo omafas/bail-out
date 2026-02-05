@@ -1,0 +1,296 @@
+<!--
+     Copyright 2020-Present Couchbase, Inc.
+
+     Use of this software is governed by the Business Source License included
+     in the file licenses/BSL-Couchbase.txt.  As of the Change Date specified
+     in that file, in accordance with the Business Source License, use of this
+     software will be governed by the Apache License, Version 2.0, included in
+     the file licenses/APL2.txt.
+-->
+
+<mn-main-spinner
+  mn-spinner-value="!userRolesCtl.state || userRolesCtl.viewLoading"
+>
+</mn-main-spinner>
+
+<div class="margin-top-neg-half margin-left-neg-1">
+  <div class="row resp-sml margin-bottom-half">
+    <div
+      class="row"
+      mn-placeholder="filter by username..."
+      mn-hide-button="true"
+      mn-disabled="!userRolesCtl.filterField && !userRolesCtl.state.users.length"
+      mn-search="userRolesCtl.filterField"
+    ></div>
+    <span class="row">
+      <div
+        class="users-auth-check margin-right-1"
+        ng-if="rolesCtl.isSaslauthdAuthEnabled !== undefined"
+      >
+        <span
+          class="icon margin-right"
+          ng-class="rolesCtl.isSaslauthdAuthEnabled ? 'fa-check success' : 'fa-ban grayblack-3'"
+        >
+        </span>
+        <p
+          uib-tooltip-html="'Use the CLI to change the state of saslauthd authentication.'"
+          tooltip-placement="auto right"
+        >
+          saslauthd authentication is
+          <span ng-show="rolesCtl.isSaslauthdAuthEnabled !== undefined">
+            <span ng-show="!rolesCtl.isSaslauthdAuthEnabled">not</span>
+            enabled</span
+          >
+        </p>
+      </div>
+      <div
+        class="users-auth-check"
+        ng-show="poolDefault.isEnterprise && poolDefault.compat.atLeast65 && (rbac.cluster.admin.security.external.read || rbac.cluster.admin.users.external.read)"
+      >
+        <span
+          class="icon margin-right"
+          ng-class="(rolesCtl.isLdapEnabled || rolesCtl.isSamlEnabled) ? 'fa-check success' : 'fa-ban grayblack-3'"
+        >
+        </span>
+        <p>
+          LDAP{{poolDefault.compat.atLeast76 ? '/SAML' : ''}} is
+          {{(rolesCtl.isLdapEnabled || rolesCtl.isSamlEnabled) ? '' : 'not'}}
+          enabled
+        </p>
+      </div>
+    </span>
+    <span class="pills nowrap">
+      <a
+        ui-sref="app.admin.security.roles.user({pageSize: userRolesCtl.stateParams.pageSize})"
+        ui-sref-active="selected"
+        ng-if="poolDefault.isEnterprise"
+        >Users</a
+      >
+      <a
+        ui-sref="app.admin.security.roles.groups({pageSize: userRolesCtl.stateParams.pageSize})"
+        ui-sref-active="selected"
+        ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast65"
+        >Groups</a
+      >
+    </span>
+  </div>
+  <div class="cbui-table" ng-if="userRolesCtl.state.users.length">
+    <div class="cbui-table-header padding-left">
+      <span class="cbui-table-cell">
+        <span
+          class="sorter"
+          ng-click="userRolesCtl.sortByChanged('id')"
+          ng-class="{'dynamic-active': userRolesCtl.isOrderBy('id'),
+                  'dynamic-inverted': userRolesCtl.isOrderBy('id')
+                  && userRolesCtl.isDesc()}"
+          >username</span
+        >
+      </span>
+      <span
+        class="cbui-table-cell flex-grow-half"
+        ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast79"
+      >
+        <span
+          class="sorter"
+          ng-click="userRolesCtl.sortByChanged('locked')"
+          ng-class="{'dynamic-active': userRolesCtl.isOrderBy('locked'),
+                     'dynamic-inverted': userRolesCtl.isOrderBy('locked') && userRolesCtl.isDesc()}"
+          >locked</span
+        >
+      </span>
+      <span
+        class="cbui-table-cell flex-grow-half"
+        ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast65"
+      >
+        <span>groups</span>
+      </span>
+      <span class="cbui-table-cell flex-grow-3">
+        <span>roles</span>
+      </span>
+      <span class="cbui-table-cell flex-grow-half resp-hide-xsml">
+        <span
+          class="sorter"
+          ng-click="userRolesCtl.sortByChanged('domain')"
+          ng-class="{'dynamic-active': userRolesCtl.isOrderBy('domain'),
+                     'dynamic-inverted': userRolesCtl.isOrderBy('domain')
+                     && userRolesCtl.isDesc()}"
+          >auth domain</span
+        >
+      </span>
+      <span class="cbui-table-cell flex-grow-half resp-hide-sml">
+        <span
+          class="sorter"
+          ng-click="userRolesCtl.sortByChanged('password_change_timestamp')"
+          ng-class="{'dynamic-active': userRolesCtl.isOrderBy('password_change_timestamp'),
+                     'dynamic-inverted': userRolesCtl.isOrderBy('password_change_timestamp')
+                     && userRolesCtl.isDesc()}"
+          >password set</span
+        >
+      </span>
+      <span class="cbui-table-cell flex-grow-1 resp-hide-sml"
+            ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast79">
+        <span
+           class="sorter"
+           ng-click="userRolesCtl.sortByChanged('last_activity_time')"
+           ng-class="{'dynamic-active': userRolesCtl.isOrderBy('last_activity_time'),
+                     'dynamic-inverted': userRolesCtl.isOrderBy('last_activity_time')
+                     && userRolesCtl.isDesc()}"
+          >last activity {{userRolesCtl.localGMTOffset}}
+            <mn-timezone-details-downgrade [server-time]="userRolesCtl.state.users.length ? userRolesCtl.state.users[0].password_change_date_subject : ''"></mn-timezone-details-downgrade>
+        </span
+        >
+      </span>
+    </div>
+    <section
+      class="has-hover"
+      ng-if="userRolesCtl.state.users.length"
+      ng-click="userRolesCtl.toggleDetails(user.id + user.domain)"
+      ng-repeat="user in userRolesCtl.state.users track by (user.id + user.domain)"
+    >
+      <div class="cbui-tablerow padding-left resp-sml">
+        <span class="cbui-table-cell">
+          {{user.id}}
+          <span ng-show="user.passwordless" class="label lt-blue"
+            >no password</span
+          >
+        </span>
+        <span
+          class="cbui-table-cell flex-grow-half wrap"
+          ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast79"
+        >
+          <span
+            class="icon margin-right"
+            ng-class="user.domain === 'external' ? '' : (user.locked ? 'fa-lock' : 'fa-unlock')"
+          >
+          </span>
+        </span>
+        <span
+          class="cbui-table-cell flex-grow-half wrap"
+          ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast65"
+        >
+          {{userRolesCtl.parseGroupNames(user)}}
+        </span>
+        <span class="cbui-table-cell flex-grow-3 wrap">
+          <span
+            class="relative"
+            ng-repeat="role in user.roles track by $index"
+            tooltip-trigger="mouseenter"
+            tooltip-append-to-body="true"
+            tooltip-placement="auto top"
+            ng-click="$event.stopPropagation()"
+            uib-tooltip="{{userRolesCtl.rolesByRole[role.role].desc}}"
+          >
+            <span class="break-word">
+              {{userRolesCtl.rolesByRole[role.role].name}}
+              <span ng-show="userRolesCtl.rolesByRole[role.role].params.length">
+                [{{userRolesCtl.getRoleParams(role)}}]
+              </span>
+              <span ng-show="!$last">,</span>
+            </span>
+          </span>
+        </span>
+        <span class="cbui-table-cell flex-grow-half resp-hide-xsml">
+          {{user.domain === "local" ? "Couchbase" : "External"}}
+        </span>
+        <span
+          ng-if="!poolDefault.compat.atLeast79"
+          class="cbui-table-cell flex-grow-half resp-hide-sml"
+          title="{{:: user.password_change_date}}"
+        >
+          {{user.password_change_date | date:"d MMM, y":'UTC'}}
+        </span>
+        <span
+           ng-if="poolDefault.compat.atLeast79"
+           class="cbui-table-cell flex-grow-half resp-hide-sml"
+           title="{{:: user.password_change_date}}"
+        >
+          {{user.password_change_date | date:"d MMM, y"}}
+        </span>
+        <span
+           class="cbui-table-cell flex-grow-1 resp-hide-sml"
+           ng-if="poolDefault.isEnterprise && poolDefault.compat.atLeast79"
+           title="{{:: user.last_activity_time}}"
+        >
+          {{user.last_activity_time | date:'d MMM, y'}} {{user.last_activity_time | date:'mediumTime'}}
+        </span>
+      </div>
+      <div
+        class="cbui-tablerow-expanded row min-height-4 items-bottom"
+        ng-if="userRolesCtl.isDetailsOpened(user.id + user.domain) && (rbac.cluster.admin.security.write || rbac.cluster.admin.users.write)"
+      >
+        <p class="text-smaller">
+          <span ng-if="user.name">
+            <strong>full name:</strong>
+            {{user.name}}
+          </span>
+        </p>
+        <span>
+          <button class="outline" ng-click="userRolesCtl.deleteUser(user)">
+            Delete
+          </button>
+          <button
+            ng-if="user.domain === 'local' && !user.locked && poolDefault.isEnterprise && poolDefault.compat.atLeast79"
+            class="outline"
+            ng-click="userRolesCtl.lockUser(user)"
+          >
+            Lock
+          </button>
+          <button
+            ng-if="user.domain === 'local' && user.locked && poolDefault.isEnterprise && poolDefault.compat.atLeast79"
+            class="outline"
+            ng-click="userRolesCtl.unlockUser(user)"
+          >
+            Unlock
+          </button>
+          <button
+            class="outline"
+            ng-show="user.domain !== 'external' && user.domain !== 'saslauthd'"
+            ng-click="userRolesCtl.resetUserPassword(user)"
+          >
+            Reset Password
+          </button>
+          <button ng-click="userRolesCtl.editUser(user)">Edit</button>
+        </span>
+      </div>
+    </section>
+  </div>
+  <div class="row pagination" ng-if="userRolesCtl.state.users.length">
+    <mn-select
+      class="inline fix-width-1"
+      ng-change="userRolesCtl.pageSizeChanged()"
+      ng-model="userRolesCtl.pageSize"
+      values="[10, 20, 50, 100]"
+    >
+    </mn-select>
+    <span>
+      <a
+        ui-sref="(userRolesCtl.state.links.prev)"
+        ng-class="{'disabled-link' : !userRolesCtl.state.links.prev}"
+      >
+        &lt; prev
+      </a>
+      <span class="text-smaller grayblack-3">&nbsp; |</span>
+      <a
+        ui-sref="(userRolesCtl.state.links.next)"
+        ng-class="{'disabled-link' : !userRolesCtl.state.links.next}"
+      >
+        next &gt;
+      </a>
+    </span>
+  </div>
+  <div
+    ng-show="!userRolesCtl.filterField && !userRolesCtl.state.users.length"
+    class="zero-content margin-top-1"
+  >
+    You don't have any users to display yet.
+    <span ng-show="rbac.cluster.admin.security.write || rbac.cluster.admin.users.write">
+      Use ADD USER above to create one.
+    </span>
+  </div>
+  <div
+    ng-show="userRolesCtl.filterField && !userRolesCtl.state.users.length"
+    class="zero-content text-left"
+  >
+    no result
+  </div>
+</div>

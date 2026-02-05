@@ -1,0 +1,711 @@
+REST API doc
+-------------
+
+Notation:
+
+We're using quite informal Backus-Naur-like json. With use of round
+braces to show group repeatable/optional stuff. I'm also omiting
+quotes of json object keys.
+
+<someVariable:type> is used to show that "someVariable" is here. type (normally
+string or number) is used to spec what json type this thing is.
+
+I'l mark some fields as private if their use is discouraged. And I'll
+mark some fields as deprecated if their is use is forbidden.
+
+E.g.
+
+{
+  type: ("book" | "library" | "user"), // this means type is always present and is either book or library or user
+  id: <id:string>, // id is always present and is of type string,
+  (name: <name:string>,)? // ? means this piece of optional
+  (<someAdditionalKey:string>: <someAdditionalValue>,)* // this means 0 and more additional k-v pairs can appear here, + is used to show 1 or more appareances,
+}
+
+
+
+=========
+GETs
+=========
+
+GET /versions =>
+{
+ implementationVersion: <implementationVersion:string>,
+ componentsVersion: {(<component:string>: <version:string>,)+}
+}
+
+GET /pools =>
+
+{
+ isAdminCreds: <:bool>, // private: if we're asking pools using admin user-password
+ settings: { // private
+  maxParallelIndexers: <url-for-this-setting:string>,
+  viewUpdateDaemon: <url-for-this-setting:string>
+ },
+ uuid: <:string>, // this contains cluster's uniq id
+ implementationVersion: <implementationVersion:string>,
+ componentsVersion: {(<component:string>: <version:string>,)+}
+ pools: [{ // exactly one pool. But note, it'll be omited completely if cluster is not yet provisioned
+  name: "default",
+  uri: "/pools/default?uuid="<:string>, // url for pool details
+  streamingUri: <:string>
+ }]
+}
+
+GET /pools/default =>
+
+{
+    "storageTotals": { // private. Not deprecated yet, but planned for removal
+        "ram": {
+            "usedByData": 13795200,
+            "total": 134871662592,
+            "quotaTotal": 7969177600,
+            "quotaUsed": 7969177600,
+            "used": 49712103424
+        },
+        "hdd": {
+            "usedByData": 27544534,
+            "total": 2145071923200,
+            "quotaTotal": 2145071923200,
+            "used": 1673156100096,
+            "free": 471915823104
+        }
+    },
+    "name": "default",
+    "alerts": [
+      (<message:string>)* // list of alerts to show to user
+    ],
+    "alertsSilenceURL": "/controller/resetAlerts?"<:string>, // POST here in order to confirm alerts above are seen by user
+    "serverGroupsUri": "/pools/default/serverGroups?v="<:integer>, // GET returns server groups as described below.
+    "nodes": [
+        (<nodeInfo>)+ // contains info on all nodes of this cluster
+    ],
+    "buckets": {
+        "uri": "/pools/default/buckets?v=53787695&uuid=14c408ed8df50823715f47b900bd1b4f"
+    },
+    "remoteClusters": {
+        "uri": "/pools/default/remoteClusters?uuid=14c408ed8df50823715f47b900bd1b4f", // url for defined remote clusters
+        "validateURI": "/pools/default/remoteClusters?just_validate=1"
+    },
+    "controllers": {
+        "addNode": {
+            "uri": "/controller/addNodeV2?uuid=14c408ed8df50823715f47b900bd1b4f"
+        },
+        "rebalance": {
+            "uri": "/controller/rebalance?uuid=14c408ed8df50823715f47b900bd1b4f"
+        },
+        "failOver": {
+            "uri": "/controller/failOver?uuid=14c408ed8df50823715f47b900bd1b4f"
+        },
+        "startGracefulFailover": {
+            "uri": "/controller/startGracefulFailover?uuid=14c408ed8df50823715f47b900bd1b4f"
+        },
+        "reAddNode": {
+            "uri": "/controller/reAddNode?uuid=14c408ed8df50823715f47b900bd1b4f"
+        },
+        "ejectNode": {
+            "uri": "/controller/ejectNode?uuid=14c408ed8df50823715f47b900bd1b4f"
+        },
+        "setRecoveryType": {
+            "uri": "/controller/setRecoveryType?uuid=14c408ed8df50823715f47b900bd1b4f"
+        }
+        "setAutoCompaction": {
+            "uri": "/controller/setAutoCompaction?uuid=14c408ed8df50823715f47b900bd1b4f",
+            "validateURI": "/controller/setAutoCompaction?just_validate=1"
+        },
+        "replication": {
+            "createURI": "/controller/createReplication?uuid=14c408ed8df50823715f47b900bd1b4f", // POST here in order to create xdcr replication
+            "validateURI": "/controller/createReplication?just_validate=1" // private
+        }
+    },
+    "balanced": <:bool>,
+    "failoverWarnings": [
+      (<message:string>)+ // list of messages to show about safety of data (need rebalance, need more nodes, stuff like that)
+    ],
+    "rebalanceStatus": "none", // deprectated. see /pools/default/tasks
+    "rebalanceProgressUri": "/pools/default/rebalanceProgress", // deprectated
+    "stopRebalanceUri": "/controller/stopRebalance?uuid=14c408ed8df50823715f47b900bd1b4f", // POST here in order to stop rebalance
+    "nodeStatusesUri": "/nodeStatuses", // private
+    "autoCompactionSettings": <compactionSettings> = { // cluster-wide auto-compaction settings
+        "parallelDBAndViewCompaction": false,
+        "databaseFragmentationThreshold": {
+            "percentage": 30,
+            "size": "undefined"
+        },
+        "viewFragmentationThreshold": {
+            "percentage": 30,
+            "size": "undefined"
+        }
+    },
+    "tasks": {
+        "uri": "/pools/default/tasks?v=84138772" // pointer to tasks API. Note ?v= thing is changing each time list of tasks (but not their progress) is changed
+                                                 //  thus you can use streaming pool details in order to be up-to-date w.r.t. list of tasks cluster is doing
+    },
+    "stats": { //private. broken
+        "uri": "/pools/default/stats"
+    },
+    "counters": { // private
+        "rebalance_success": 1,
+        "rebalance_start": 1
+    }
+}
+
+<nodeInfo> =>
+
+        {
+            "systemStats": { // private
+                "cpu_utilization_rate": 3.6802030456852792,
+                "swap_total": 0,
+                "swap_used": 0
+            },
+            "interestingStats": { // private
+                "curr_items": 0,
+                "curr_items_tot": 0,
+                "vb_replica_curr_items": 0
+            },
+            "uptime": "2258", //private
+            "memoryTotal": 33717915648, // private, deprecated
+            "memoryFree": 21289889792, // private, deprecated
+            "mcdMemoryReserved": 25724, // private, deprecated
+            "mcdMemoryAllocated": 25724, // private, deprecated
+            "couchApiBase": "http://10.17.20.233:9501/", // base URL used to communicate to CAPI. I.e. views.
+            "couchApiBaseHTTPS": "https://10.17.20.233:19501/", // (INTERNAL and PRIVATE) base URL used to communicate to CAPI. I.e. views.
+            "clusterMembership": ("active" // this node is active part of cluster
+                                  | "inactiveFailed" // node was failed over
+                                  | "inactiveAdded"), // node is just added. Next rebalance is going to make it active and move data into it
+            "recoveryType": ("delta" // delta recovery was requested for the node
+                             | "full" // full recovery was requested for the node (this is what happens by default when node is added back after failover)
+                             | "none"), // the node doesn't require any recovery
+            "status": ("healthy" // node is ok
+                       | "warmup" // at least one of node's buckets is warming up
+                       | "unhealthy"),
+            "hostname": "10.17.20.233:9001", // host:port for management REST API on this node
+            "clusterCompatibility": 131072, // private.
+            "version": "2.0.0r_276_ged5c769",
+            "os": "i486-pc-linux-gnu",
+            "services: ["kv", "n1ql"],
+            "ports": {
+                "proxy": 12003, // moxi port of this node
+                "direct": 12002, // memcached port of this node,
+                "sslProxy": 11998, // private and internal: ssl end of ssl proxy
+                "httpsCAPI": 19501,
+                "httpsMgmt": 19001
+            }
+        }
+
+
+GET /pools/default/certificate =>
+---- BEGIN CERTIFICATE ---.....
+<rest of certificate>
+
+GET /pools/default/buckets/default =>
+
+{
+    "name": "default",
+    "bucketType": ("membase" | "memcached"), // note: membase bucket type is actually couchbase
+    "authType": ("sasl" | "none"),
+    "saslPassword": "",
+    "proxyPort": 0, // per-bucket moxi port if authType is none
+    "replicaIndex": true,
+    "uri": "/pools/default/buckets/default?bucket_uuid=7554c64cd513f87c806b307efeb0a842",
+    "streamingUri": "/pools/default/bucketsStreaming/default?bucket_uuid=7554c64cd513f87c806b307efeb0a842",
+    // very much private
+    "localRandomKeyUri": "/pools/default/buckets/default/localRandomKey",
+    "controllers": {
+        "flush": "/pools/default/buckets/default/controller/doFlush", // POST here to reset all bucket's data
+        "compactAll": "/pools/default/buckets/default/controller/compactBucket", // POST here to initiate compaction of bucket's db and view files
+        "compactDB": "/pools/default/buckets/default/controller/compactDatabases" // POST here to initiate compaction of bucket's db files
+    },
+    "nodes": [
+        (<nodeInfo>+) // NOTE: will only contain active nodes of this bucket.
+    ],
+    "stats": {
+        "uri": "/pools/default/buckets/default/stats",
+        "directoryURI": "/pools/default/buckets/default/statsDirectory",
+        "nodeStatsListURI": "/pools/default/buckets/default/nodes"
+    },
+    "ddocs": {
+        "uri": "/pools/default/buckets/default/ddocs" // GET this in order to get design docs of this bucket
+    },
+    "nodeLocator": ("vbucket" | "ketama"), // ketama is used for memcached buckets, vbucket for membase/couchbase. if vbucket is present you need to use vbucket map below
+    "autoCompactionSettings": (false | <compactionSettings>), // false if bucket inherits cluster-wide compaction settings or own compaction settings info as can be seen in pool details
+    "uuid": "7554c64cd513f87c806b307efeb0a842", // yes bucket has it's own unique id. If bucket is deleted and re-created new bucket instance will have different uuid
+    "vBucketServerMap": { // this will in fact only present for non-memcached buckets
+        "hashAlgorithm": "CRC",
+        "numReplicas": 1,
+        "serverList": [
+            "10.17.20.233:12000", // host:port of _memcached_ vbucket-aware sockets
+            "10.17.20.233:12002",
+            "10.17.20.233:12004",
+            "10.17.20.233:12006"
+        ],
+        "vBucketMap": <vbucketMap>
+    },
+    "replicaNumber": 1,
+    "quota": {
+        "ram": 3984588800, // private, very much
+        "rawRAM": 996147200 // private, very much
+    },
+    "basicStats": { // private, going to become deprecated
+        "quotaPercentUsed": 0.17310694644325658,
+        "opsPerSec": 0.0,
+        "diskFetches": 0.0,
+        "itemCount": 0,
+        "diskUsed": 14808580,
+        "dataUsed": 47872,
+        "memUsed": 6897600
+    },
+    "bucketCapabilitiesVer": "",
+    "bucketCapabilities": [
+        "touch",
+        "couchapi"
+    ]
+}
+
+
+GET /pools/default/tasks =>
+
+[
+    {
+        "type": "rebalance",
+        "status": ("notRunning" | "running") // running rebalance normally has more fields. TBD
+    },
+    ({
+        "type": "xdcr",
+        "cancelURI": "/controller/cancelXDCR/14c408ed8df50823715f47b900bd1b4f%2Fdefault%2Fother", // POST here in order to stop
+        "status": ("running" | "notRunning"), // notRunning if we don't see any stats about this replication doc yet
+        "id": "14c408ed8df50823715f47b900bd1b4f/default/other",
+        "source": "default", // source bucket
+        "target": "/remoteClusters/14c408ed8df50823715f47b900bd1b4f/buckets/other", // target ref. We'll likely have API endpoint for this. But basically /remoteClusters/<remote-cluster-uuid>/buckets/<remoteBucket>
+        "continuous": true, // always true for now
+        "recommendedRefreshPeriod": 2.0, // how often we recommend polling for task progress in seconds
+        "changesLeft": 0,
+        "docsChecked": 0,
+        "docsWritten": 0
+    } | {
+        "type": "clusterLogsCollection", // cluster-wide logs collection/upload task
+        "node": "n_0@127.0.0.1", // node running cluster-wide collection.
+        "perNode": { // status of every node in this collection, keyed by node's otpNode property
+            "n_0@127.0.0.1": {
+                "status": "uploaded",
+                "path": "/home/me/src/altoros/moxi/ns_server/tmp/collectinfo-2014-06-03T21:11:53-n_0@127.0.0.1.zip",
+                "url": "https://s3.amazonaws.com/customers.couchbase.com/alk/7/collectinfo-2014-06-03T21%3A11%3A53-n_0%40127.0.0.1.zip"
+            },
+            "n_1@127.0.0.1": {
+                // possible per-node statuses are:
+                //      starting, started, failed, collected,
+                //      startingUpload, startedUpload, failedUpload, uploaded
+                "status": "uploaded",
+                "path": "/home/me/src/altoros/moxi/ns_server/tmp/collectinfo-2014-06-03T21:11:53-n_1@127.0.0.1.zip",
+                "url": "https://s3.amazonaws.com/customers.couchbase.com/alk/7/collectinfo-2014-06-03T21%3A11%3A53-n_1%40127.0.0.1.zip"
+                // fields (depending on status):
+                //   path - string: node's local path were cbcollect_info is collected/being-collected
+                //   statusCode - integer: if collect phase failed will indicate process exit status from cbcollect_info that failed
+                //   url - string: url we're uploading/uploaded/tried-to-upload
+                //   uploadStatusCode - integer: process exit status from cbcollect_info for upload if it failed
+                //   uploadOutput - string: for failed output will contain output from curl about why it failed
+            }
+        },
+        "ts": "2014-06-03 21:11:53", // Time when collection started (utc and from clock of node given in "node" above)
+        "status": ("completed" | "running" | "cancelled")
+    } | {
+        "type": "bucket_compaction",
+        "bucket": "default",
+        "status": "running",
+        "cancelURI": "/pools/default/buckets/default/controller/cancelBucketCompaction", // POST here in order to stop
+        "recommendedRefreshPeriod": 2.0,
+        "changesDone": 97,
+        "totalChanges": 129,
+        "progress": 75
+    })* // NOTE: we also have "indexer" and "index_compaction" task types TBD
+]
+
+
+GET /pools/default/remoteClusters =>
+
+[
+    ({
+        "name": <:string>,
+        "uri": "/pools/default/remoteClusters/self", // url for updating/deleting
+        "validateURI": "/pools/default/remoteClusters/self?just_validate=1", // private
+        "hostname": "10.17.20.233:9000", // one of nodes of remote cluster we know
+        "username": "Administrator",
+        "uuid": "14c408ed8df50823715f47b900bd1b4f", // uuid of remote cluster
+        "deleted": <:bool>, // just skip deleted remoteClusters
+        "demandEncryption": <bool>, // whether this cluster reference is ssl reference
+        "certificate": <certificate> // pem-encoded certificate of remote cluster. Will be present if demandEncryption is true
+    })*
+]
+
+GET /settings/autoCompaction
+{
+    "autoCompactionSettings": <compactionSettings> = { // cluster-wide auto-compaction settings
+        "parallelDBAndViewCompaction": false,
+        "databaseFragmentationThreshold": {
+            "percentage": 30,
+            "size": "undefined"
+        },
+        "viewFragmentationThreshold": {
+            "percentage": 30,
+            "size": "undefined"
+        }
+    },
+    "purgeInterval": 7 // deletions purge interval in days
+}
+
+
+GET /internalSettings =>
+
+{
+    "indexAwareRebalanceDisabled": <:bool>, // false by default (private!)
+    "rebalanceIndexWaitingDisabled": <:bool>, // false by default (private!)
+    "rebalanceIndexPausingDisabled": <:bool>, // false by default (private!)
+    "rebalanceIgnoreViewCompactions": <:bool>, // false by default
+    "rebalanceMovesPerNode": <:integer>, // 1 by default
+    "rebalanceMovesBeforeCompaction": <:integer>, // 64 by default
+    "maxParallelIndexers": <:integer>,       // 4 by default
+    "maxParallelReplicaIndexers": <:integer>, // 2 by default
+    "maxBucketCount": <:integer>, // 10 by default
+    "xdcrCheckpointInterval": <:integer>, // 1800 by default
+    "xdcrDocBatchSizeKb": <:integer>, // 2048 by default
+    "xdcrFailureRestartInterval": <:integer>, // 30 by default
+    "xdcrMaxConcurrentReps": <:integer>, // 32 by default
+    "xdcrOptimisticReplicationThreshold": <:integer>, // 256 by default
+    "xdcrWorkerBatchSize": <:integer>, // 500 by default
+    "capiRequestLimit": (<:integer> | ""), // unset by default (unlimited)
+    "dropRequestMemoryThresholdMiB": (<:integer> | ""), // unset by default (unlimited)
+    "restRequestLimit": (<:integer> | ""), // unset by default (unlimited)
+    "certUseSha1": <:bool>, // false by default
+}
+
+NOTE: we'll add/remove some fields over time here. All internal
+settings are by definition somewhat implementation-details and may
+change from release to release.
+
+<groupInfo> => // element of groups array of server groups response. See below
+{
+    // every group has unique uri (and uuid)
+    "uri": "/pools/default/serverGroups/"<:uuid-string>, // PUT here updates as described below, DELETE - deletes
+    "name": <:string>,
+    "nodes": [(<nodeInfo>+)]  // array of nodes is same as nods in pool details
+}
+
+GET /pools/default/serverGroups =>
+
+{
+    "uri": "/pools/default/serverGroups?rev="<:integer>, // PUT here is used to re-shuffle group membership as descibed below
+    "groups": [(<groupInfo>)+]
+}
+
+// mcd-settings is list of key-value pairs.
+// current setting values are all numbers
+// list of supported setting names can be seen below.
+//
+// See memcached.json.4 manpage for description of those settings. There
+// are only two settings that ns_server is not mapping directly: maxconn
+// and dedicated_port_maxconn. Those settings represent connections limit
+// on default interface (11210) and 11209 interface respectively.
+//
+// settings which were never set are going to be omitted. For per-node settings
+//  ns_server also implements API to "unset" individual settings.
+<mcd-settings> =>
+{
+  ((maxconn | dedicated_port_maxconn | verbosity | default_reqs_per_event
+     | reqs_per_event_high_priority | reqs_per_event_med_priority | reqs_per_event_low_priority
+     | threads | connection_idle_time | tcp_keepalive_idle | tcp_keepalive_interval
+     | tcp_keepalive_probes | tcp_user_timeout): <number>)*
+  (breakpad_enabled: <bool>)?
+  (breakpad_minidump_dir_path: <string>)?
+  (ssl_cipher_list: <string>)?
+  (connection_limit_mode: "disconnect" | "recycle")?
+  (free_connection_pool_size: <number>)?
+  (max_client_connection_details: <number>)?
+  (fusion_migration_rate_limit: <number>)?
+  (fusion_sync_rate_limit: <number>)?
+  (fusion_num_uploader_threads: <number>)?
+  (fusion_num_migrator_threads: <number>)?
+  (dcp_consumer_max_marker_version: "2.0" | "2.2")?
+  (dcp_snapshot_marker_hps_enabled: <bool>)?
+  (dcp_snapshot_marker_purge_seqno_enabled: <bool>)?
+  (subdoc_multi_max_paths: <number>)?
+  (subdoc_offload_size_threshold: <number>)?
+  (subdoc_offload_paths_threshold: <number>)?
+  (magma_flusher_thread_percentage: <number>)?
+}
+
+
+// ns_server implements per-node and global settings.
+// memcached.json for specific is built from union of global and it's node settings.
+//  with per-node settings taking precedence.
+// APIs below return defined per-node settings and global settings.
+
+GET /pools/default/settings/memcached/node/self =>
+
+<mcd-settings>
+
+GET /pools/default/settings/memcached/node/<otp-node> =>
+
+<mcd-settings>
+
+GET /pools/default/settings/memcached/global =>
+
+<mcd-settings>
+
+// returns memcached settings of this node that are actually in effect
+// for given node.
+GET /pools/default/settings/memcached/effective/(<otp-node>|self) =>
+
+<mcd-settings>
+
+// returns value of specific setting if this setting is set for this node (404 otherwise)
+GET /pools/default/settings/memcached/node/<otp-node>/setting/<setting-name> =>
+
+{value: <value>}
+
+
+======
+POST
+======
+
+// creates remote cluster with given parameters. NOTE: we actually try to reach remote cluster
+POST /pools/default/remoteClusters
+name=<name>&hostname=<hostname>&username=<username>&password=<password>
+
+// creates remote cluster with given parameters. Same as above. Note
+// demandEncryption and certificate parameters used to define SSL cluster reference
+POST /pools/default/remoteClusters
+name=<name>&hostname=<hostname>&username=<username>&password=<password>&demandEncryption=1&certificate=<cert>
+
+POST /controller/createReplication
+fromBucket=<local-bucket-name>&toBucket=<remote-bucket-name>&replicationType=continuous&toCluster=<remote cluster name>(&type=(capi|xmem))?
+
+// empty post here deletes xdcr replication
+POST /controller/cancelXDCR/<:string>
+
+POST /internalSettings
+<setting-name>=<setting-value>(&<setting-name>=<setting-value>)*
+
+See corresponding GET for valid setting-name and setting-value. NOTE:
+subset of settings can be posted. Even single setting may be changed
+by POST. So unknown/ignored fields may be easily omitted and kept on
+default values.
+
+// creates server group with given name
+POST /pools/default/serverGroups
+name=<group name>
+
+// adds node with given hostname to given server group with specified
+// set of services
+//
+// services field is optional and defaults to kv
+POST /pools/default/serverGroups/<group-uuid>/addNode
+hostname=<hostname>&user=Administrator&password=asdasd&services=kv,n1ql
+
+// same as serverGroups addNode endpoint, but for default server group
+POST /controller/addNode
+hostname=<hostname>&user=Administrator&password=asdasd&services=kv,n1ql
+
+// joins _this_ node to cluster which member is given in hostname parameter
+POST /node/controller/doJoinCluster
+hostname=<hostname>&user=Administrator&password=asdasd&services=kv,n1ql
+
+// empty post causes certificate regeneration
+POST /controller/regenerateCertificate
+=>
+(see GET /pools/default/certificate for output format)
+
+// Rebalance the cluster. knownNodes must match the set of nodes that
+// are currently part of the cluster. ejectedNodes specifies the nodes
+// that are to be ejected from the cluster. If delta recovery was
+// requested for any of the nodes, then rebalance will only proceed if
+// the delta recovery is possible for all buckets. If
+// deltaRecoveryBuckets is passed then it'll only try to
+// recover given buckets (and refuse if any of them are not
+// delta-recoverable)
+POST /controller/rebalance
+
+knownNodes=<comma separated list of nodes>&ejectedNodes=<comma separated list of nodes>&deltaRecoveryBuckets=<comma separated list of bucket names> =>
+
+   200 "" // rebalance started successfully
+ | 400 {"empty_known_nodes": 1} // knownNodes was either omitted or empty
+ | 400 {"mismatch": 1} // either knownNodes didn't match the set of nodes
+                       // known to the cluster or ejectedNodes listed an
+                       // unknown node
+ | 400 {"deltaRecoveryNotPossible": 1} // requireDeltaRecovery was set to
+                                       // "true" but delta recovery cannot be performed
+ | 400 "No active nodes left" // all nodes were requested to be ejected
+ | 503 "Cluster is in recovery mode" // cluster is in recovery mode and cannot be
+                                     // rebalanced
+
+Not passing deltaRecoveryBuckets indicates that for nodes that are
+marked for delta recovery, all buckets need to be delta recovered. In
+case any of buckets specified for delta recovery is not delta
+recoverable, you'll get deltaRecoveryNotPossible error and none of
+buckets will be recovered.
+
+
+// Set the type of recovery that should be performed for a node.
+POST /controller/setRecoveryType
+
+otpNode=<node name>&recoveryType=(full|delta) =>
+
+   200 "" // request succeeded
+ | 400 { ("otpNode": <error description>,)?
+         ("recoveryType": <error description)? } // recoveryType and/or otpNode
+                                                 // could not be understood by
+                                                 // the server
+ | 404 "" // the cluster is running in a pre-3.0 compatibility mode and thus
+          // cannot satisfy the request
+
+POST /controller/startGracefulFailover
+
+otpNode=<node name>
+
+Initiates graceful failover. It's progress can be tracked just like
+any rebalance. At the end node is put into failed over state.
+
+POST /controller/startLogsCollection
+
+nodes=(*|<node list>)&uploadHost=s3.amazonaws.com/customers.couchbase.com&customer=alk&ticket=7
+
+pass '*' for "nodes" parameter if you want to collect all nodes. Pass
+comma-separated otpNodes of nodes
+(e.g. ns_1@beta.local,ns_1@chi.local) to collect logs otherwise.
+
+uploadHost, customer and ticket are optional. Will not upload if all
+are empty. Will upload logs when all are given. Will also upload logs
+if all but ticket are given. In all other cases will refuse and return
+error.
+
+   200 "" // request succeeded
+ | 400 { ("_": <non-field specific error (like unable to verify host reachability)>, )?
+         (("nodes" | "uploadHost" | "customer" | "ticket"): <error description>, )* }
+
+POST /controller/cancelLogsCollection
+
+cancels in-progress logs collection.
+
+   200 "" // request have probably succeeded (we're merely best effort on this)
+
+POST /pools/default/settings/memcached/node/<otp-node>
+POST /pools/default/settings/memcached/node/self
+
+<setting-name>=<value>(&<setting-name>=<value>)*
+
+sets per-node settings to given values.
+
+POST /pools/default/settings/memcached/global
+
+<setting-name>=<integer>(&<setting-name>=<integer>)*
+
+sets global settings to given values.
+
+// internal
+POST /validateCredentials
+
+user=<user>&password=<password>
+
+200 {source: "builtin" | "saslauthd",
+     role: "fullAdmin" | "roAdmin"}
+
+
+POST /settings/saslauthdAuth
+
+enabled=(true|false)&(roAdmins=<user-list>)?&(admins=<user-list>)?
+
+200 "" // request succeeded
+
+Updates "ldap" auth settings. "enabled" parameter must be true or
+false. When true ldap auth integration is enabled. Otherwise it is
+disabled.
+
+When enabled, at least one of roAdmins or admins must be given. Both
+may be given too. When roAdmins is given it is new-line separated list
+of usernames. When roAdmins is absent it means that roAdmins is
+"asterisk". I.e. _all_ users recognized via saslauthd but not in
+admins list will be recognized as read-only admins. admins field
+behaves same as roAdmins field, but describes full admins instead of
+read-only admins.
+
+
+====
+PUT
+===
+
+// updates and potentially renamed remote cluster info
+PUT /pools/default/remoteClusters/<name>
+name=<name>&hostname=<hostname>&username=<username>&password=<password>
+
+// renames server group
+PUT /pools/default/serverGroups/<:uuid>
+name=<group name>
+
+// update server's group memberships (all at once). NOTE: input payload is json
+PUT /pools/default/serverGroups?rev=<:number>
+{"groups": [( { ("name": <groupName:string>,)? // group name is optional, if given _must_ match current group name
+                 "uri": "/pools/default/serverGroups/"<:uuid>,  // uri is used to identify group
+                 "nodes": [ ({"otpNode": <node's otp name:string>})* ]
+              } )+]
+}
+// NOTE: this request only allows moving nodes between groups. It does
+// not allow renaming of groups or removal of groups.
+//
+// _All_ nodes must be mentioned. And _all_ groups must be mentioned.
+//
+// Format is compatible to output of corresponding GET. You can PUT exactly what you GET.
+//
+// Expected usage is GET, move nodes between groups, then PUT back. I.e. (ruby):
+//
+//     server_groups = getj! "/pools/default/serverGroups"
+//     group_2 = server_groups["groups"].detect {|g| g["name"] == "group 2"}
+//     group_1 = server_groups["groups"].detect {|g| g["name"] == "Group 1"}
+//
+//     # add group 1 nodes to group 2
+//     group_2["nodes"].concat(group_1["nodes"])
+//     group_1["nodes"] = []
+//
+//     put! server_groups["uri"], server_groups.to_json
+//
+// NOTE: this request is transactional. It either succeeds completely or fails without any effect.
+//
+// NOTE: it's error reporting is pretty basic. If you don't pass all
+// nodes or all groups, or screw up in some other way, you'll get back generic "Bad input" error.
+
+
+===
+DELETE
+===
+
+// deletes remote cluster info
+DELETE /pools/default/remoteClusters/<name>
+
+// deletes server group (must be empty)
+DELETE /pools/default/serverGroups/<:uuid>
+
+// deletes given per-node setting
+DELETE /pools/default/settings/memcached/node/<otp-node>/setting/<setting-name>
+
+
+==== document editing (private and internal!) ====
+
+GET /pools/default/buckets/<bucket-name>/docs =>
+{"total_rows":7,"rows":[
+{"id":"asdasd","key":"asdasd","value":{"rev":"2-00007aa32d9e74ce0000000000000000"},"doc":{"meta":{"id":"asdasd","rev":"2-00007aa32d9e74ce0000000000000000","expiration":0,"flags":0},"json":{"click":"to edit","new in 2.0":"there are no reserved field names"}}},
+{"id":"asdasds1","key":"asdasds1","value":{"rev":"1-00007aa853de14b40000000000000000"},"doc":{"meta":{"id":"asdasds1","rev":"1-00007aa853de14b40000000000000000","expiration":0,"flags":0},"json":{"click":"to edit","new in 2.0":"there are no reserved field names"}}},
+{"id":"asdasds12","key":"asdasds12","value":{"rev":"1-00007aa8c183e1050000000000000000"},"doc":{"meta":{"id":"asdasds12","rev":"1-00007aa8c183e1050000000000000000","expiration":0,"flags":0},"json":{"click":"to edit","new in 2.0":"there are no reserved field names"}}},
+{"id":"asdasds12345","key":"asdasds12345","value":{"rev":"1-00007aaa16c423ee0000000000000000"},"doc":{"meta":{"id":"asdasds12345","rev":"1-00007aaa16c423ee0000000000000000","expiration":0,"flags":0},"json":{"click":"to edit","new in 2.0":"there are no reserved field names"}}},
+{"id":"asdasds123456","key":"asdasds123456","value":{"rev":"1-00007aaa7468da390000000000000000"},"doc":{"meta":{"id":"asdasds123456","rev":"1-00007aaa7468da390000000000000000","expiration":0,"flags":0},"json":{"click":"to edit","new in 2.0":"there are no reserved field names"}}},
+{"id":"asdasds1234567","key":"asdasds1234567","value":{"rev":"1-00007aaadf34a2220000000000000000"},"doc":{"meta":{"id":"asdasds1234567","rev":"1-00007aaadf34a2220000000000000000","expiration":0,"flags":0},"json":{"click":"to edit","new in 2.0":"there are no reserved field names"}}}
+]
+}
+
+GET /pools/default/buckets/<bucket-name>/docs/<doc-id> =>
+{json: <document's-json>, meta: {id: <doc-id>, expiration: _, flags: _, rev: _}}
+
+DELETE /pools/default/buckets/<bucket-name>/docs/<doc-id> =>
+[]
+
+POST /pools/default/buckets/<bucket-name>/docs/<doc-id>
+<document's-json> =>
+[]
+(NOTE: no meta in update payload)

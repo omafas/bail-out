@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+#
+# @author Couchbase <info@couchbase.com>
+# @copyright 2011-Present Couchbase, Inc.
+#
+# Use of this software is governed by the Business Source License included in
+# the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+# file, in accordance with the Business Source License, use of this software
+# will be governed by the Apache License, Version 2.0, included in the file
+# licenses/APL2.txt.
+
+import os
+import os.path
+import sys
+import atexit
+import getopt
+import argparse
+
+currentdir = os.path.dirname(os.path.realpath(__file__))
+pylib = os.path.join(currentdir, "pylib")
+sys.path.append(pylib)
+
+import cluster_run_lib
+
+LOGLEVELS = ["debug", "info", "warn", "error", "critical"]
+
+
+def is_ipv6_setup():
+    return os.getenv("IPV6", "false") == "true"
+
+
+def quote_string_for_erl(s):
+    return cluster_run_lib.quote_string_for_erl(s)
+
+
+def ipv_convertor(ipv_version):
+    """The 'ipv' parameter in cluster_run_lib.start expects a true or false
+    But the --afamily flag expects ipv4 or ipv6"""
+    if ipv_version.lower() not in ("ipv4", "ipv6"):
+        raise argparse.ArgumentTypeError(f"Invalid address family. Only expects"
+                                         f" ('ipv4', 'ipv6')")
+    if ipv_version.lower() == "ipv6":
+        return True
+    return False
+
+
+def argument_parser():
+    # Default padding for the flags is 24 chars, using this lambda function,
+    # means that the help text doesn't start on the next line.
+    arg_parser = argparse.ArgumentParser(
+        formatter_class=lambda prog: argparse.RawTextHelpFormatter(
+            prog,
+            max_help_position=32))
+    arg_parser.add_argument(
+        '--nodes',
+        '-n',
+        type=int,
+        help=f"<number of nodes> (default: 1)",
+        metavar="")
+    # Uses the default=None, because when action='store_true', the default is
+    # set as False, there may be a niche condition where the default value set
+    # for a function is True and a flag is used to set True.
+    arg_parser.add_argument(
+        '--dont-start',
+        action='store_true',
+        default=None,
+        help=f"(don't start ns_server)")
+    arg_parser.add_argument(
+        '--start-index',
+        type=int,
+        help=f"<starting node number> (default: 0)",
+        metavar="")
+    arg_parser.add_argument(
+        '--dont-rename',
+        action='store_true',
+        default=None,
+        help=f"(don't change network address)")
+    arg_parser.add_argument(
+        '--static-cookie',
+        action='store_true',
+        default=None,
+        help=f"(don't reset cookie)")
+    arg_parser.add_argument(
+        '--loglevel',
+        type=str.lower,
+        choices=LOGLEVELS,
+        help=f"<logging level> default: debug",
+        metavar="")
+    arg_parser.add_argument(
+        '--dir',
+        type=str,
+        help=f"<directory> directory of where node's data, logs will be kept;\n"
+             f"default: this script's directory",
+        metavar="")
+    arg_parser.add_argument(
+        '--prepend-extras',
+        action='store_true',
+        default=None,
+        help=f"(extra argmunents)")
+    arg_parser.add_argument(
+        '--pluggable-config',
+        type=(lambda x: [x]),
+        help="<file name> (plug-ins)",
+        metavar="")
+    arg_parser.add_argument(
+        '--disable-autocomplete',
+        action='store_const',
+        const='{disable_autocomplete,true}',
+        help=f"(disable auto-completion in UI)")
+    arg_parser.add_argument(
+        '--pretend-version',
+        type=str,
+        help=
+        f"<version> When setting up a new cluster, spoof different "
+        f"version. Default is to use current version. Can simplify basic "
+        f"mixed-version cluster testing. E.g. (each command in its own "
+        f"terminal): \n\n./cluster_run -n2 --pretend-version 6.5\n"
+        f"./cluster_run -n2 --start-index 2 \n./cluster_connect-n4 -Tkv"
+        f"\n\n(Note the down-version cluster needs to be specified first "
+        f"as you can't add down-version nodes to an up-version cluster.)"
+        f"\nThis will create a four node kv-only cluster with first two "
+        f"nodes running at 6.5, and the other two running the \"trunk\""
+        f"version",
+        metavar="")
+    arg_parser.add_argument(
+        '--product-pretend-version',
+        type=str,
+        help=
+        f"<version> Same as --pretend-version but for product version. "
+        f"E.g. if columnar is being run, this will spoof the columnar version.",
+        metavar="")
+    arg_parser.add_argument(
+        '--community',
+        action='store_true',
+        default=None,
+        help=f"(boot as Community Edition)")
+    arg_parser.add_argument(
+        '--serverless',
+        action='store_true',
+        default=None,
+        help=f"(boot with serverless profile)")
+    arg_parser.add_argument(
+        '--provisioned',
+        action='store_true',
+        default=None,
+        help=f"(boot with provisioned profile)")
+    arg_parser.add_argument(
+        '--dev-preview-default',
+        type=(lambda x: x.lower() == "true"),
+        default=None,
+        help=
+        f"Sets the default value of developer preview enabled mode. "
+        f"This flag only has an effect if the cluster is being set up for the"
+        f"first time and in that case, this option sets the value of the "
+        f"dev preview mode. Otherwise, it doesn't override the dev preview"
+        f" mode setting. Userful when combined with --pretend-version as "
+        f"that option doesn't work with clusters that are defaulted to be "
+        f"in developer preview mode.",
+        metavar="")
+    arg_parser.add_argument(
+        '--afamily', '-p',
+        type=ipv_convertor,
+        default=is_ipv6_setup(),
+        help="<address family> Using ipv4 or ipv6",
+        metavar="")
+    arg_parser.add_argument(
+        '--num_vbuckets',
+        type=int,
+        default=None,
+        help=f"The number of vbuckets created for any bucket (default: 1024)")
+    arg_parser.add_argument(
+        dest="additional_args",
+        nargs="*",
+        help=argparse.SUPPRESS,
+    )
+    arg_parser.add_argument(
+        '--code-watchdog', '-w',
+        action='store_true',
+        default=False,
+        help="Reload ns_server beam files automatically when they are modified")
+    arg_parser.add_argument(
+        '--no-output',
+        action='store_true',
+        default=False,
+        help="Disable logging to stdout/stderr")
+    arg_parser.add_argument(
+        '--wait-for-start',
+        action='store_true',
+        default=False,
+        help="Poll for nodes to start and log when they're up")
+
+    args = arg_parser.parse_args()
+
+    if args.serverless and args.provisioned:
+        sys.exit("Cannot use more than one profile at the same time")
+
+    params = {"num_nodes": args.nodes,
+              "dont_start": args.dont_start,
+              "start_index": args.start_index,
+              "dont_rename": args.dont_rename,
+              "static_cookie": args.static_cookie,
+              "loglevel": args.loglevel,
+              "root_dir": args.dir,
+              "prepend_extras": args.prepend_extras,
+              "pluggable_config": args.pluggable_config,
+              "disable_autocomplete": args.disable_autocomplete,
+              "pretend_version": args.pretend_version,
+              "product_pretend_version": args.product_pretend_version,
+              "dev_preview_default": args.dev_preview_default,
+              "ipv6": args.afamily,
+              "force_community": args.community,
+              "run_serverless": args.serverless,
+              "run_provisioned": args.provisioned,
+              "num_vbuckets": args.num_vbuckets,
+              "args": args.additional_args,
+              "code_watchdog": args.code_watchdog,
+              "nooutput": args.no_output,
+              "wait_for_start": args.wait_for_start}
+
+    # Removes the keys when value is None, therefore start_cluster uses
+    # the default values.
+    return {k: v for k, v in params.items() if v is not None}
+
+
+def main():
+    libpath = os.path.join(currentdir, '..', 'install', 'lib')
+    os.environ[
+        "LD_LIBRARY_PATH"] = f'{libpath}:{os.environ.get("LD_LIBRARY_PATH", "")}'
+    params = argument_parser()
+    nodes = []
+    terminal_attrs = None
+    code_watchdog = params.get("code_watchdog", False)
+    del params["code_watchdog"]
+
+    def kill_nodes():
+        cluster_run_lib.kill_nodes(nodes, terminal_attrs)
+
+    atexit.register(kill_nodes)
+
+    try:
+        import termios
+        terminal_attrs = termios.tcgetattr(sys.stdin)
+    except Exception:
+        pass
+
+    nodes = cluster_run_lib.start_cluster(**params)
+
+    if code_watchdog:
+        observer = cluster_run_lib.start_code_watchdog(
+                       params.get("num_nodes", 1),
+                       params.get("start_index", 0))
+
+    try:
+        for node in nodes:
+            node.wait()
+    finally:
+        if code_watchdog:
+            cluster_run_lib.stop_code_watchdog(observer)
+
+if __name__ == '__main__':
+    main()
