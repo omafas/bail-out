@@ -42,6 +42,8 @@
 -define(MIN_TIMER_INTERVAL, ?get_param(min_timer_interval, 30000)).
 -define(TEST_SECRET_TIMEOUT, ?get_param(secret_test_timeout, 30000)).
 -define(RPC_TIMEOUT, ?get_timeout(rpc_timeout, 5000)).
+-define(TXN_BACKOFF_START_MS, ?get_param(txn_backoff_start, 10)).
+-define(TXN_MAX_BACKOFF_MS, ?get_param(txn_max_backoff_ms, 1000)).
 
 -ifndef(TEST).
 -define(MAX_RECHECK_ROTATION_INTERVAL, ?get_param(rotation_recheck_interval,
@@ -141,6 +143,7 @@
          merge_dek_infos/2,
          format_dek_issues/1,
          chronicle_transaction/2,
+         chronicle_transaction_with_backoff/3,
          get_node_deks_info_quickly/0,
          destroy_deks/2,
          diag_info/0,
@@ -3895,9 +3898,28 @@ extract_dek_info(Kind, #state{deks_info = DeksInfo}) ->
     end.
 
 chronicle_transaction(Keys, Fun) ->
+    chronicle_transaction(Keys, Fun, #{}, 0, 0).
+
+chronicle_transaction_with_backoff(Keys, Fun, Retries) ->
+    %% Ask chronicle to not retry, because we will retry
+    chronicle_transaction(Keys, Fun, #{retries => 0},
+                          Retries, ?TXN_BACKOFF_START_MS).
+
+chronicle_transaction(Keys, Fun, Opts, Retries, SleepBase) ->
     try chronicle_kv:transaction(kv, Keys, Fun) of
         {ok, _Rev} -> ok;
         {ok, _Rev, Res} -> {ok, Res};
+        {error, exceeded_retries} when Retries > 0 ->
+           %% Thanks to random, different nodes will use different sleep time
+           %% This should reduce the chances of transaction conflicts.
+           Sleep = rand:uniform(SleepBase),
+           ?log_warning("Chronicle transaction returned exceeded_retries, "
+                        "will retry (~p retries left, sleeping ~p ms)",
+                        [Retries, Sleep]),
+           timer:sleep(Sleep),
+           NewOpts = Opts#{read_consistency => local},
+           chronicle_transaction(Keys, Fun, NewOpts, Retries - 1,
+                                 min(SleepBase * 2, ?TXN_MAX_BACKOFF_MS));
         Else -> Else
     catch
         exit:timeout ->

@@ -391,7 +391,9 @@ store_deks_reencrypted(Kind, EncMethod, DeksAndKekIds) ->
     end.
 
 increment_dek_encryption_counter(Kind, SecretId) ->
-    cb_cluster_secrets:chronicle_transaction(
+    MovesPerNode = menelaus_web_settings:get_rebalance_moves_per_node(),
+    Retries = max(2 * length(nodes()) * MovesPerNode, 10),
+    cb_cluster_secrets:chronicle_transaction_with_backoff(
       [?CHRONICLE_DEK_COUNTERS_KEY],
       fun (Snapshot) ->
            All = chronicle_compat:get(Snapshot,
@@ -400,7 +402,8 @@ increment_dek_encryption_counter(Kind, SecretId) ->
            NewDEKCounters = increment_dek_encryption_counter(Kind, SecretId,
                                                              All),
            {commit, [{set, ?CHRONICLE_DEK_COUNTERS_KEY, NewDEKCounters}]}
-      end).
+      end,
+      Retries).
 
 -spec increment_dek_encryption_counter(
         dek_kind(),
