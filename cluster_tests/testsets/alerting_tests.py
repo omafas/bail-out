@@ -21,6 +21,8 @@ from testsets.native_encryption_tests import create_secret, \
                                              write_bad_aws_creds_file, \
                                              set_min_timer_interval
 
+from testlib.mock_smtp_server import start_mock_smtp_server
+
 import sys
 sys.path.append(testlib.get_pylib_dir())
 import cluster_run_lib
@@ -45,7 +47,19 @@ class AlertTests(testlib.BaseTestSet):
         testlib.diag_eval(self.cluster,
                           "menelaus_web_alerts_srv ! check_alerts")
 
+        # Set up mock SMTP server for email verification
+        self.mock_smtp_server = self.setup_mock_email_server(
+            smtp_host='127.0.0.1',
+            smtp_port=None,  # auto-assign port
+            sender='alerts_test@example.com',
+            recipients='admin@example.com',
+            enable_alerts=None  # preserve existing/default alerts
+        )
+
     def teardown(self):
+        # Stop mock SMTP server and restore email configuration
+        self.teardown_mock_email_server()
+
         # Set alert check interval back to default 60s
         testlib.diag_eval(self.cluster,
                           "ns_config:delete({timeout,{menelaus_web_alerts_srv,"
@@ -53,6 +67,135 @@ class AlertTests(testlib.BaseTestSet):
 
     def test_teardown(self):
         testlib.diag_eval(self.cluster, "menelaus_web_alerts_srv:reset().")
+        # Clear captured emails after each test to ensure clean state for next
+        # test
+        if hasattr(self, 'mock_smtp_server') and self.mock_smtp_server:
+            try:
+                self.mock_smtp_server.clear_emails()
+            except Exception:
+                pass
+
+    def setup_mock_email_server(self, smtp_host='127.0.0.1', smtp_port=None,
+                                sender='test_sender@example.com',
+                                recipients='test_recipient@example.com',
+                                enable_alerts=None, use_tls=False):
+        """
+        Set up a mock SMTP server and configure the cluster to use it for
+        email alerts.
+
+        Args:
+            smtp_host: Host for the mock SMTP server (default: 127.0.0.1)
+            smtp_port: Port for the mock SMTP server (None for auto-assign)
+            sender: Email sender address (default: test_sender@example.com)
+            recipients: Comma-separated list of email recipients
+            enable_alerts: List of alert types to enable for email (None to
+                           preserve existing)
+            use_tls: Whether to use TLS for SMTP (STARTTLS)
+
+        Returns:
+            SMTPServerRunner instance
+        """
+        # Create log file in cluster directory
+        self.smtp_log_path = os.path.join(self.cluster.get_cluster_path(),
+                                          'logs', 'mock_smtp.log')
+        print(f"SMTP server log will be written to: {self.smtp_log_path}")
+
+        # Start mock SMTP server
+        self.mock_smtp_server = start_mock_smtp_server(
+                                  host=smtp_host,
+                                  port=smtp_port or 0,
+                                  use_tls=use_tls,
+                                  log_file_path=self.smtp_log_path)
+        actual_port = self.mock_smtp_server.port
+
+        # Configure cluster email settings
+        self.configure_email_alerts(
+            enabled=True,
+            sender=sender,
+            recipients=recipients,
+            smtp_host=smtp_host,
+            smtp_port=actual_port,
+            smtp_encrypt=use_tls,
+            enable_alerts=enable_alerts
+        )
+
+        return self.mock_smtp_server
+
+    def teardown_mock_email_server(self):
+        """Stop the mock SMTP server and restore original email
+        configuration."""
+        if hasattr(self, 'mock_smtp_server') and self.mock_smtp_server:
+            try:
+                self.mock_smtp_server.clear_emails()
+            except:
+                pass
+            try:
+                self.mock_smtp_server.stop_server()
+            except:
+                pass
+            self.mock_smtp_server = None
+
+        # Disable email alerts to restore default state
+        self.configure_email_alerts(enabled=False)
+
+    def configure_email_alerts(self, enabled=False,
+                               sender='couchbase@localhost',
+                               recipients='root@localhost',
+                               smtp_host='localhost',
+                               smtp_port=25,
+                               smtp_user='',
+                               smtp_pass='',
+                               smtp_encrypt=False,
+                               enable_alerts=None):
+        """
+        Configure email alert settings on the cluster.
+
+        Args:
+            enabled: Whether email alerts are enabled
+            sender: Email sender address
+            recipients: Comma-separated list of email recipients
+            smtp_host: SMTP server hostname
+            smtp_port: SMTP server port
+            smtp_user: SMTP username
+            smtp_pass: SMTP password
+            smtp_encrypt: Whether to use TLS/SSL for SMTP
+            enable_alerts: List of alert types to enable (None to preserve
+                           existing)
+        """
+        # Get current alert configuration to preserve existing alerts when
+        # not specified
+        if enable_alerts is None:
+            r = testlib.get_succ(self.cluster, '/settings/alerts')
+            current_settings = r.json()
+            enable_alerts = current_settings.get('alerts', [])
+            print(f"Preserving {len(enable_alerts)} existing alert types")
+
+        email_data = {
+            'enabled': 'true' if enabled else 'false',
+            'sender': sender,
+            'recipients': recipients,
+            'emailHost': smtp_host,
+            'emailPort': str(smtp_port),
+            'emailUser': smtp_user,
+            'emailPass': smtp_pass,
+            'emailEncrypt': 'true' if smtp_encrypt else 'false'
+        }
+
+        # Add alerts parameter if we have alerts to enable
+        if enable_alerts is not None and enable_alerts != []:
+            email_data['alerts'] = ','.join(alert for alert in enable_alerts)
+
+        print(f"Configuring email alerts: {email_data}")
+        testlib.post_succ(self.cluster, '/settings/alerts', data=email_data)
+
+        # Verify the settings were applied
+        response = testlib.get_succ(self.cluster, '/settings/alerts').json()
+        assert response['enabled'] == enabled, \
+            "Email alerts not configured correctly"
+        print(f"Email alerts configured: enabled={enabled}, "
+              f"alerts={len(response.get('alerts', []))}, "
+              f"sender={response['sender']}, "
+              f"recipients={response['recipients']}")
 
     def cert_about_to_expire_alert_test(self):
         limits = testlib.get_succ(self.cluster, "/settings/alerts/limits")\
@@ -75,7 +218,9 @@ class AlertTests(testlib.BaseTestSet):
                 r"^Client certificate on node .+ will expire at .+$"
             ]
             testlib.poll_for_condition(
-                lambda: assert_alerts(self.cluster, alert_regexps),
+                lambda: assert_alerts(self.cluster, alert_regexps,
+                                      verify_email=True,
+                                      mock_smtp_server=self.mock_smtp_server),
                 sleep_time=1, timeout=120, verbose=True, retry_on_assert=True,
                 msg="wait for cert expiration alert")
         finally:
@@ -248,7 +393,7 @@ class AlertTests(testlib.BaseTestSet):
             KeyAlertRegex = \
               r'^Encryption-at-Rest key validation event at .+: FAILED ' \
               fr'on node "{bad_node_hostname}" for key "AWS Key"\. ' \
-              r'Error details: "encryption failed: test encryption error"\.$'
+              r'Error details: "encryption failed: test encryption error"\.'
 
             # Wait for alerts to be checked, and make sure no alert is generated
             time.sleep(alert_check_interval_s + 1)
@@ -257,7 +402,9 @@ class AlertTests(testlib.BaseTestSet):
             # Write bad credentials and wait for alert to be generated
             write_bad_aws_creds_file(bad_creds_node)
             testlib.poll_for_condition(
-                lambda: assert_alerts(self.cluster, [KeyAlertRegex]),
+                lambda: assert_alerts(self.cluster, [KeyAlertRegex],
+                                      verify_email=True,
+                                      mock_smtp_server=self.mock_smtp_server),
                 sleep_time=1, timeout=60, verbose=True, retry_on_assert=True,
                 msg='wait for key validation alert')
 
@@ -292,7 +439,8 @@ def get_expiration_for_cert(cert_path):
     return will_expire_in
 
 
-def assert_alerts(cluster, expected_alerts_regexps):
+def assert_alerts(cluster, expected_alerts_regexps, verify_email=False,
+                  mock_smtp_server=None):
     r = testlib.get_succ(cluster, "/pools/default").json()
     alerts = r["alerts"]
     print(f"alerts: {alerts}")
@@ -306,6 +454,41 @@ def assert_alerts(cluster, expected_alerts_regexps):
         has_alert = any(map(present, alerts))
         assert has_alert, \
                f"Alert check failed, expected {expected_regex}, got {alerts}"
+
+    # Verify email alerts were sent if requested
+    if verify_email:
+        if mock_smtp_server is None:
+            raise ValueError("verify_email=True requires mock_smtp_server "
+                             "parameter")
+
+        captured_emails = mock_smtp_server.captured_emails
+        print(f"captured {len(captured_emails)} emails: ")
+        for m in captured_emails:
+            print(f"From: {m.sender}\n"
+                  f"To: {m.recipients}\n"
+                  f"Subject: {m.subject}\n"
+                  f"Body: {m.body}")
+
+        # Fail if fewer emails were captured than expected alert patterns
+        assert len(captured_emails) >= expected_alerts_count, \
+               f"Expected {expected_alerts_count} emails, got " \
+               f"{len(captured_emails)}"
+
+        # Check that emails were sent for each expected alert pattern
+        for expected_regex in expected_alerts_regexps:
+            found_email = False
+            for email in captured_emails:
+                # Check if alert message appears in either subject or body
+                if re.search(expected_regex, email.subject) or \
+                   re.search(expected_regex, email.body):
+                    found_email = True
+                    print(f"Found email matching '{expected_regex}': "
+                          f"{email.subject}")
+                    break
+
+            assert found_email, \
+                   f"Expected email for pattern: {expected_regex}"
+
     return True
 
 

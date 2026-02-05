@@ -16,3 +16,4 @@ pykmip>=0.10.0
 greenlet~=3.2.4
 setuptools
 prometheus_client~=0.24.1
+aiosmtpd~=1.4.6
