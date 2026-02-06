@@ -2011,6 +2011,12 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
                 local_token_creds_fun,
                 index_port),
             make_index_task(
+                "Indexer Metadata store stats are: ",
+                "stats/metadata?store-stats=1",
+                local_token_creds_fun,
+                index_port,
+            ),
+            make_index_task(
                 "MOI allocator stats are: ",
                 "stats/storage/mm",
                 local_token_creds_fun,
