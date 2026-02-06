@@ -22,6 +22,7 @@ from testsets.native_encryption_tests import create_secret, \
                                              set_min_timer_interval
 
 from testlib.mock_smtp_server import start_mock_smtp_server
+from testlib.test_tag_decorator import tag, Tag
 
 import sys
 sys.path.append(testlib.get_pylib_dir())
@@ -234,6 +235,7 @@ class AlertTests(testlib.BaseTestSet):
     def from_node(self):
         return self.cluster._nodes[0]
 
+    @tag(Tag.LowUrgency)
     def xdcr_replications_deleted_alert_test(self):
         def check_xdcr_up():
             r = testlib.get(self.cluster, "/pools/default/replications")
@@ -351,6 +353,7 @@ class AlertTests(testlib.BaseTestSet):
         testlib.poll_for_condition(check_node_reset, sleep_time=5,
                                    timeout=300)
 
+    @tag(Tag.LowUrgency)
     def prometheus_metrics_alerts_test(self):
         eval_string = """lists:map(
   fun(T) -> menelaus_web_alerts_srv:local_alert({T, node()}, <<"test">>) end,
