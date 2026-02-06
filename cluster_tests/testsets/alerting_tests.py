@@ -35,8 +35,12 @@ class AlertTests(testlib.BaseTestSet):
 
     @staticmethod
     def requirements():
-        return testlib.ClusterRequirements(num_nodes=2, num_connected=1,
-                                           afamily="ipv4")
+        return testlib.ClusterRequirements(
+            num_nodes=2,
+            num_connected=1,
+            afamily="ipv4",
+            buckets=[{"name": "A",
+                      "ramQuota": 128}])
 
     def setup(self):
         testlib.diag_eval(self.cluster, "menelaus_web_alerts_srv:reset().")
@@ -67,7 +71,6 @@ class AlertTests(testlib.BaseTestSet):
                           "sample_rate}})")
 
     def test_teardown(self):
-        testlib.diag_eval(self.cluster, "menelaus_web_alerts_srv:reset().")
         # Clear captured emails after each test to ensure clean state for next
         # test
         if hasattr(self, 'mock_smtp_server') and self.mock_smtp_server:
@@ -75,6 +78,36 @@ class AlertTests(testlib.BaseTestSet):
                 self.mock_smtp_server.clear_emails()
             except Exception:
                 pass
+
+        replications = testlib.get_succ(self.from_node(),
+                                        "/pools/default/replications").json()
+        for repl in replications:
+            repl_id: str = repl["id"]
+            repl_id = urllib.parse.quote(repl_id, safe="")
+            try:
+                testlib.delete_succ(
+                    self.from_node(),
+                    f"/controller/cancelXDCR/{repl_id}")
+            except Exception as e:
+                print(f"Failed to delete replication {repl_id}: {e}")
+
+        remotes = testlib.get(self.from_node(),
+                              "/pools/default/remoteClusters").json()
+        for r in remotes:
+            if r["name"] == "n_1":
+                # DELETE /pools/default/remoteClusters/n_1 returns 400
+                # when remote doesn't exist, so can't use ensure_deleted here
+                testlib.delete(self.from_node(),
+                               "/pools/default/remoteClusters/n_1"),
+
+        # Reset to_node cluster if it was initialized
+        r = testlib.get(self.to_node(), "/pools/default")
+        if r.status_code == 200:
+            testlib.post_succ(self.to_node(), "/controller/hardResetNode",
+                              data={})
+            testlib.wait_for_ejected_node(self.to_node())
+
+        testlib.diag_eval(self.cluster, "menelaus_web_alerts_srv:reset().")
 
     def setup_mock_email_server(self, smtp_host='127.0.0.1', smtp_port=None,
                                 sender='test_sender@example.com',
@@ -246,11 +279,6 @@ class AlertTests(testlib.BaseTestSet):
         resp = testlib.get_succ(self.cluster,
                                 "/pools/default/replications").json()
         assert len(resp) == 0
-        protocol = "ipv4"
-        hostname = self.to_node().host
-        testlib.post_succ(self.to_node(), "/nodeInit",
-                          data={"afamily": protocol,
-                                "hostname": hostname})
         data = {"afamily": "ipv4",
                 "nodeEncryption": "off",
                 "memoryQuota": 256,
@@ -267,41 +295,54 @@ class AlertTests(testlib.BaseTestSet):
         testlib.poll_for_condition(check_node_ready, sleep_time=5, timeout=300,
                                    msg="wait for to_node to be ready")
 
-        data = {"name": "A",
-                "ramQuotaMB": 128}
-        testlib.post_succ(self.from_node(), "/pools/default/buckets",
-                          expected_code=202, data=data)
+        # Create bucket on to_node
+        data = {"name": "A", "ramQuotaMB": 128}
         testlib.post_succ(self.to_node(), "/pools/default/buckets",
                           expected_code=202, data=data)
 
-        cluster_run_lib.wait_for_rebalance(
-            f"http://{self.from_node().host}:{self.from_node().port}")
-        cluster_run_lib.wait_for_rebalance(
-            f"http://{self.to_node().host}:{self.to_node().port}")
+        cluster_run_lib.wait_for_rebalance(self.from_node().url)
+        cluster_run_lib.wait_for_rebalance(self.to_node().url)
 
-        testlib.post_succ(self.cluster, "/pools/default/remoteClusters",
+        testlib.post_succ(self.from_node(), "/pools/default/remoteClusters",
                           data={"name": "n_1",
                                 "hostname":
                                 f"{self.to_node().host}:{self.to_node().port}",
-                                "port": self.to_node().port,
                                 "username": "Administrator",
                                 "password": "asdasd"}).json()
 
-        def check_remote_cluster():
-            diag_expr = "chronicle_kv:get(kv, {bucket, \"A\", last_balanced_vbmap})."
-            r = testlib.diag_eval(self.to_node(), diag_expr)
-            return r.text.startswith("{ok,")
+        def check_remote_vbmap():
+            r = testlib.get_succ(self.to_node(), "/pools/default/buckets/A")
+            info = r.json()
+            vbServerMap = info["vBucketServerMap"]
+            print(f"Checking the remote bucket vbmap: {vbServerMap}")
+            return len(vbServerMap["vBucketMap"]) > 0
 
-        testlib.poll_for_condition(check_remote_cluster, sleep_time=1,
+        def get_replications_num():
+            statname = "xdcr_number_of_replications_total"
+            response = testlib.get_succ(
+                self.from_node(),
+                f"/_prometheus/api/v1/query?query={statname}").json()
+            value = response["data"]["result"]
+            if len(value) == 0:
+                print("xdcr_number_of_replications_total doesn't exist")
+                return 0
+
+            count = int(float(value[0]["value"][1]))
+            print(f"xdcr_number_of_replications_total={count}")
+            return count
+
+        original_number_of_replications = get_replications_num()
+
+        testlib.poll_for_condition(check_remote_vbmap, sleep_time=1,
                                    timeout=120)
-        testlib.post_succ(self.cluster, "/controller/createReplication",
+        testlib.post_succ(self.from_node(), "/controller/createReplication",
                           data={"fromBucket": "A",
                                 "replicationType": "continuous",
                                 "toBucket": "A",
                                 "toCluster": "n_1"}).json()
 
         def check_replication_created():
-            r = testlib.get_succ(self.cluster,
+            r = testlib.get_succ(self.from_node(),
                                  "/pools/default/replications").json()
             return len(r) >= 1
 
@@ -309,49 +350,41 @@ class AlertTests(testlib.BaseTestSet):
                                    timeout=120)
 
         # Need to ensure that we've recorded the creation of the replication.
+
         def check_replication_recorded():
-            statname = "xdcr_number_of_replications_total"
-            response = testlib.get_succ(
-                self.from_node(),
-                f"/_prometheus/api/v1/query?query={statname}").json()
-            value = response["data"]["result"]
-            if len(value) == 0:
-                return False
-            repl_count = int(float(value[0]["value"][1]))
-            return repl_count >= 1
+            return get_replications_num() > original_number_of_replications
 
         testlib.poll_for_condition(check_replication_recorded, sleep_time=1,
                                    timeout=60)
-        alerts_json = testlib.get_succ(self.cluster, "/pools/default").json()
-        for alert in alerts_json["alerts"]:
-            assert "XDCR replication deleted on node" not in alert["msg"]
 
-        replications = testlib.get_succ(self.cluster,
+        r = testlib.get_succ(self.to_node(),
+                             '/pools/default/terseClusterInfo')
+        ToClusterUUID = r.json()['clusterUUID']
+        alert_re = (
+            ".+XDCR replication deleted for target cluster UUID: "
+            f"{ToClusterUUID}.*")
+
+        alerts_json = testlib.get_succ(self.from_node(),
+                                       "/pools/default").json()
+        print(f"Pre-existing alerts: {alerts_json['alerts']}")
+        for alert in alerts_json["alerts"]:
+            assert re.match(alert_re, alert["msg"]) is None
+
+        replications = testlib.get_succ(self.from_node(),
                                         "/pools/default/replications").json()
         for repl in replications:
             repl_id: str = repl["id"]
             repl_id = urllib.parse.quote(repl_id, safe="")
             resp = testlib.delete_succ(
-                self.cluster,
+                self.from_node(),
                 f"/controller/cancelXDCR/{repl_id}").json()
 
-        def check_alert():
-            r = testlib.get_succ(self.cluster, "/pools/default").json()
-            for alert in r["alerts"]:
-                if "XDCR replication deleted for target cluster" in alert["msg"]:
-                    return True
-            return False
-
-        testlib.poll_for_condition(check_alert, sleep_time=1, timeout=60,
-                                   msg="waiting for XDCR replication deleted alert")
-        testlib.post_succ(self.to_node(), "/controller/hardResetNode", data={})
-
-        def check_node_reset():
-            r = testlib.get(self.to_node(), "/pools/default")
-            return r.status_code != 200
-
-        testlib.poll_for_condition(check_node_reset, sleep_time=5,
-                                   timeout=300)
+        testlib.poll_for_condition(
+            lambda: assert_alerts(self.from_node(), [alert_re],
+                                  verify_email=True,
+                                  mock_smtp_server=self.mock_smtp_server),
+            sleep_time=1, timeout=60, verbose=True, retry_on_assert=True,
+            msg='wait for key validation alert')
 
     @tag(Tag.LowUrgency)
     def prometheus_metrics_alerts_test(self):
