@@ -828,45 +828,6 @@ add_replication_developer_roles(true) ->
 add_replication_developer_roles(false) ->
     [].
 
-maybe_add_serverless_roles() ->
-    add_serverless_roles(config_profile:is_serverless()).
-
-add_serverless_roles(true) ->
-    [{regulator_access, [],
-      [{name, <<"Regulator Access">>},
-       {folder, admin},
-       {desc, <<"Can access a limited number of REST endpoints.">>}],
-      [{[pools], [read]},
-       {[{bucket, any}, settings], [read]},
-       {[admin, event], all},
-       {[admin, metakv], all},
-       %% Needed for /internalSettings
-       {[admin, settings], [read]}]},
-     %% The query_manage_index_regular role is the same as the
-     %% query_manage_index role with the exception that it cannot manage
-     %% parameterized indexes and cannot alter normal indexes.
-     {query_manage_index_regular, ?RBAC_COLLECTION_PARAMS,
-      [{name, <<"Query Manage Index (Regular)">>},
-       {folder, 'query'},
-       {desc, <<"Can manage (except for altering) indexes for a given bucket, "
-                "scope or collection. Cannot manage parameterized indexes."
-                "This user can access the web console, can read statistics "
-                "for a given bucket, scope or collection. This user cannot "
-                "read data.">>
-       }],
-      [{[{collection, ?RBAC_COLLECTION_PARAMS}, n1ql, index, parameterized],
-        none},
-       {[{collection, ?RBAC_COLLECTION_PARAMS}, n1ql, index],
-        [create, drop, list, build]},
-       {[{collection, ?RBAC_COLLECTION_PARAMS}, collections], [read]},
-       {[{bucket, bucket_name}, settings], [read]},
-       {[{bucket, bucket_name}, stats], [read]},
-       {[settings, indexes], [read]},
-       {[ui], [read]},
-       {[pools], [read]}]}];
-add_serverless_roles(false) ->
-    [].
-
 -spec get_definitions(all | public) -> [rbac_role_def(), ...].
 get_definitions(all) ->
     get_definitions(public) ++ internal_roles();
@@ -889,8 +850,7 @@ public_definitions() ->
     [{?VERSION_76, fun menelaus_old_roles:roles_pre_76/0},
      {?VERSION_79, fun menelaus_old_roles:roles_pre_79/0},
      {?VERSION_TOTORO, fun menelaus_old_roles:roles_pre_totoro/0},
-     {undefined, ?cut(roles() ++ maybe_add_developer_preview_roles()
-                      ++ maybe_add_serverless_roles())}].
+     {undefined, ?cut(roles() ++ maybe_add_developer_preview_roles())}].
 
 -spec object_match(
         rbac_permission_object(), rbac_permission_pattern_object()) ->
@@ -1846,28 +1806,6 @@ user_admin_external_test__() ->
     ?assertEqual(false, is_allowed({[backup], read}, Roles)),
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
-regulator_access_test__() ->
-    Roles = compile_roles([regulator_access],
-                          roles() ++ add_serverless_roles(true)),
-    ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
-    ?assertEqual(false,
-                 is_allowed({[{bucket, "test"}, something], read}, Roles)),
-    ?assertEqual(false,
-                 is_allowed({[{bucket, "test"}, something], write}, Roles)),
-    ?assertEqual(false, is_allowed({[admin, security], write}, Roles)),
-    ?assertEqual(false, is_allowed({[admin, security], read}, Roles)),
-    ?assertEqual(false, is_allowed({[admin, security_info], read}, Roles)),
-    ?assertEqual(true, is_allowed({[admin, event], write}, Roles)),
-    ?assertEqual(true, is_allowed({[admin, event], read}, Roles)),
-    ?assertEqual(true, is_allowed({[admin, metakv], write}, Roles)),
-    ?assertEqual(false, is_allowed({[admin, other], write}, Roles)),
-    ?assertEqual(false, is_allowed({[admin, settings, metrics], write}, Roles)),
-    ?assertEqual(true, is_allowed({[admin, settings, metrics], read}, Roles)),
-    ?assertEqual(false, is_allowed({[settings, metrics], write}, Roles)),
-    ?assertEqual(false, is_allowed({[settings, metrics], read}, Roles)),
-    ?assertEqual(false, is_allowed({[anything], read}, Roles)),
-    ?assertEqual(false, is_allowed({[anything], write}, Roles)).
-
 %% Extracts all the role names and bucket argument (if applicable).
 extract_all_names(Roles) ->
     lists:foldl(
@@ -1894,7 +1832,7 @@ roles_with_admin_event_metakv_permissions() ->
 %% Ensure none of the roles, except those who are granted permission,
 %% have access to the admin event/metakv permission.
 admin_event_metakv_permissions_test__() ->
-    AllRoles = roles() ++ add_serverless_roles(true),
+    AllRoles = roles(),
     AllNames0 = extract_all_names(AllRoles),
     AllNames =
         remove_exempted_names(AllNames0,
@@ -1909,7 +1847,7 @@ roles_bucket_sys_write_permissions() ->
     [admin, eventing_admin, backup_admin, data_backup].
 
 system_collections_write_permissions_test__() ->
-    AllRoles = roles() ++ add_serverless_roles(true),
+    AllRoles = roles(),
     AllNames = extract_all_names(AllRoles),
 
     {SysWrite, NoSysWrite} =
@@ -1950,7 +1888,7 @@ system_collections_write_permissions_test__() ->
                                      data, docs], swrite}, Roles1)).
 
 system_collections_read_permissions_test__() ->
-    AllRoles = roles() ++ add_serverless_roles(true),
+    AllRoles = roles(),
     AllNames = extract_all_names(AllRoles),
 
     %% For now, we're retaining the ability to read from system collections -
@@ -2535,7 +2473,6 @@ default_profile_test_() ->
       fun ro_security_admin_test__/0,
       fun user_admin_local_test__/0,
       fun user_admin_external_test__/0,
-      fun regulator_access_test__/0,
       fun admin_event_metakv_permissions_test__/0,
       fun system_collections_write_permissions_test__/0,
       fun system_collections_read_permissions_test__/0,
