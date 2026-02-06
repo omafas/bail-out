@@ -20,6 +20,10 @@
 %%     ns_config:set({ns_mail, disable_verify_peer}, true).
 -define(DISABLE_VERIFY_PEER, ?get_param(disable_verify_peer, false)).
 
+%% OpenSSL has middlebox compatibility mode on by default. This allows
+%% it to be disabled.
+-define(USE_MIDDLEBOX, ?get_param(use_middlebox, true)).
+
 %% API
 
 send_async(Subject, Body, Config) ->
@@ -145,6 +149,7 @@ config_to_options(ServerConfig) ->
                                   {server_name_indication, Host},
                                   {verify, verify_peer},
                                   {depth, ?ALLOWED_CERT_CHAIN_LENGTH},
+                                  {middlebox_comp_mode, ?USE_MIDDLEBOX},
                                   {reuse_sessions, false}];
                              true ->
                                  %% Mimic the pre erlang 26 behavior where
