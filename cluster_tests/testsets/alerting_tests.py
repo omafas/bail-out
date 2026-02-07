@@ -394,52 +394,24 @@ class AlertTests(testlib.BaseTestSet):
             print(f"Checking the remote bucket vbmap: {vbServerMap}")
             return len(vbServerMap["vBucketMap"]) > 0
 
-        def get_replications_num():
-            statname = "xdcr_number_of_replications_total"
-            response = testlib.get_succ(
-                self.from_node(),
-                f"/_prometheus/api/v1/query?query={statname}").json()
-            value = response["data"]["result"]
-            if len(value) == 0:
-                print("xdcr_number_of_replications_total doesn't exist")
-                return 0
-
-            count = int(float(value[0]["value"][1]))
-            print(f"xdcr_number_of_replications_total={count}")
-            return count
-
-        original_number_of_replications = get_replications_num()
-
         testlib.poll_for_condition(check_remote_vbmap, sleep_time=1,
                                    timeout=120)
-        testlib.post_succ(self.from_node(), "/controller/createReplication",
-                          data={"fromBucket": "A",
-                                "replicationType": "continuous",
-                                "toBucket": "A",
-                                "toCluster": "n_1"}).json()
 
-        def check_replication_created():
-            r = testlib.get_succ(self.from_node(),
-                                 "/pools/default/replications").json()
-            return len(r) >= 1
-
-        testlib.poll_for_condition(check_replication_created, sleep_time=1,
-                                   timeout=120)
-
-        # Need to ensure that we've recorded the creation of the replication.
-
-        def check_replication_recorded():
-            return get_replications_num() > original_number_of_replications
-
-        testlib.poll_for_condition(check_replication_recorded, sleep_time=1,
-                                   timeout=60)
+        r = testlib.post_succ(self.from_node(), "/controller/createReplication",
+                              data={"fromBucket": "A",
+                                    "replicationType": "continuous",
+                                    "toBucket": "A",
+                                    "toCluster": "n_1"}).json()
+        repl_id: str = r["id"]
+        repl_id = urllib.parse.quote(repl_id, safe="")
 
         r = testlib.get_succ(self.to_node(),
                              '/pools/default/terseClusterInfo')
         ToClusterUUID = r.json()['clusterUUID']
         alert_re = (
-            ".+XDCR replication deleted for target cluster UUID: "
-            f"{ToClusterUUID}.*")
+            ".+XDCR replication link between the local bucket A and the "
+            f"remote bucket A on cluster UUID {ToClusterUUID} has been "
+            "removed.*")
 
         alerts_json = testlib.get_succ(self.from_node(),
                                        "/pools/default").json()
@@ -447,14 +419,12 @@ class AlertTests(testlib.BaseTestSet):
         for alert in alerts_json["alerts"]:
             assert re.match(alert_re, alert["msg"]) is None
 
-        replications = testlib.get_succ(self.from_node(),
-                                        "/pools/default/replications").json()
-        for repl in replications:
-            repl_id: str = repl["id"]
-            repl_id = urllib.parse.quote(repl_id, safe="")
-            resp = testlib.delete_succ(
-                self.from_node(),
-                f"/controller/cancelXDCR/{repl_id}").json()
+        testlib.delete_succ(self.from_node(),
+                            f"/controller/cancelXDCR/{repl_id}")
+
+        # Make sure the alert is sent even if the remote ref is removed
+        testlib.delete(self.from_node(),
+                       "/pools/default/remoteClusters/n_1"),
 
         testlib.poll_for_condition(
             lambda: assert_alerts(self.from_node(), [alert_re],

@@ -253,6 +253,10 @@ meck_setup_getters() ->
     meck:expect(ns_config, search_node_with_default,
                 fun(Node, Snapshot, Key, Default) ->
                         fetch_node_with_default(Node, Snapshot, Key, Default)
+                end),
+    meck:expect(ns_config, get_kv_list,
+                fun () ->
+                        get_ets_snapshot()
                 end).
 
 meck_setup_setters() ->

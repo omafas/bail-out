@@ -54,7 +54,8 @@
           history = [],
           opaque = dict:new(),
           checker_pid,
-          change_counter = 0
+          change_counter = 0,
+          xdcr_replications = #{}
          }).
 
 %% Amount of time to wait between state checks (ms)
@@ -265,7 +266,9 @@ errors(indexer_diverging_replicas) ->
     "/pools/default/stats/range/index_partn_is_diverging_replica and "
     "consider dropping and re-creating it to resolve this";
 errors(xdcr_replication_deleted) ->
-    "Warning: ~p XDCR replication deleted for target cluster UUID: ~s";
+    "Warning: The XDCR replication link between the local bucket ~s and the "
+    "remote bucket ~s on cluster UUID ~s has been removed. Data is no longer "
+    "being synchronized to the target.";
 errors(encr_at_rest_errors_total) ->
     "Encryption-at-Rest errors have been detected on node \"~s\". "
     "Please check the logs for more details.";
@@ -347,9 +350,8 @@ init([]) ->
                                               [{type, Type}]})
       end, menelaus_alert:alert_keys_all()),
     ns_pubsub:subscribe_link(ns_config_events,
-                             fun email_config_change_callback/1),
-    {ok, #state{}}.
-
+                             fun config_change_callback/1),
+    {ok, #state{xdcr_replications = init_xdcr_replications()}}.
 
 handle_call({consume_alerts, PassedCounter}, _From, #state{change_counter = Counter}=State) ->
     NewState = case (catch list_to_integer(binary_to_list(PassedCounter))) of
@@ -456,6 +458,11 @@ handle_cast(flush_queued_alerts, #state{history = Hist} = State) ->
                 Hist
         end,
     {noreply, State#state{history = NewHistory}};
+handle_cast({update_config_key,
+             {{metakv, <<"/replicationSpec/", _/binary>>} = Key, Value}},
+            #state{xdcr_replications = Rs} = State) ->
+    NewRs = add_xdcr_replication(Key, Value, Rs),
+    {noreply, State#state{xdcr_replications = NewRs}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -475,23 +482,27 @@ handle_info(check_alerts, #state{checker_pid = Pid} = State) ->
                                                    NewOpaque = do_handle_check_alerts_info(State),
                                                    Self ! {merge_opaque_from_checker, NewOpaque}
                                            end),
-            {noreply, State#state{checker_pid = CheckerPid}}
+            {noreply, State#state{checker_pid = CheckerPid,
+                                  xdcr_replications = #{}}}
     end;
 
 handle_info({merge_opaque_from_checker, NewOpaque},
-            #state{history=History} = State) ->
-    {noreply, State#state{opaque = NewOpaque,
+            #state{history=History, xdcr_replications = NewRs} = State) ->
+    {Rs, NewOpaque2} = dict:take(xdcr_replications, NewOpaque),
+    {noreply, State#state{opaque = NewOpaque2,
+                          xdcr_replications = maps:merge(Rs, NewRs),
                           history = expire_history(History),
                           checker_pid = undefined}};
 
 handle_info(_Info, State) ->
     {noreply, State}.
 
-do_handle_check_alerts_info(#state{history=Hist, opaque=Opaque}) ->
+do_handle_check_alerts_info(#state{history=Hist, opaque=Opaque,
+                                   xdcr_replications=Rs}) ->
     Stats = stats_interface:for_alerts(),
     StatsOrddict = orddict:from_list([{K, orddict:from_list(V)}
                                           || {K, V} <- Stats]),
-    check_alerts(Opaque, Hist, StatsOrddict).
+    check_alerts(dict:store(xdcr_replications, Rs, Opaque), Hist, StatsOrddict).
 
 terminate(_Reason, _State) ->
     ok.
@@ -558,14 +569,17 @@ alert_keys_all() ->
 maybe_send_queued_email() ->
     gen_server:cast(?MODULE, flush_queued_alerts).
 
-email_config_change_callback({email_alerts, AlertCfg}) ->
+config_change_callback({email_alerts, AlertCfg}) ->
     case proplists:get_bool(enabled, AlertCfg) of
         true ->
             maybe_send_queued_email();
         false ->
             ok
     end;
-email_config_change_callback(_) ->
+config_change_callback({{metakv, <<"/replicationSpec/", _/binary>>} = Key,
+                        Value}) when Value /= ?DELETED_MARKER ->
+    gen_server:cast(?MODULE, {update_config_key, {Key, Value}});
+config_change_callback(_) ->
     ok.
 
 %% @doc Remind myself to check the alert status
@@ -1095,20 +1109,25 @@ check(indexer_diverging_replicas, Opaque, _History, Stats) ->
     end,
     Opaque;
 check(xdcr_replication_deleted, Opaque, _History, _Stats) ->
-    case stats_interface:for_replications_deleted() of
-        [{{xdcr_replication_deleted, UUID}, ReplicationsDeleted}] ->
-            case ReplicationsDeleted of
-                NumRemoved when NumRemoved > 0 ->
-                    Msg = fmt_to_bin(errors(xdcr_replication_deleted),
-                                     [ReplicationsDeleted, UUID]),
-                    global_alert(xdcr_replication_deleted, Msg);
-                _ ->
-                    false
-            end;
-        _ ->
-            false
-    end,
-    Opaque;
+    {ok, Rs} = dict:find(xdcr_replications, Opaque),
+    Master = mb_master:master_node(),
+    NewRs = maps:filter(
+              fun ({RepId, IntId}, Value) ->
+                  case ns_config:search(RepId) of
+                      {value, _} ->
+                          true;
+                      false when Master == node() ->
+                          xdcr_replication_deleted_alert(IntId, Value),
+                          false;
+                      false when Master == undefined ->
+                          %% Master is unset, do not update Opaque so we
+                          %% send the alert if we become master
+                          true;
+                      false ->
+                          false
+                  end
+              end, Rs),
+    dict:store(xdcr_replications, NewRs, Opaque);
 check(encr_at_rest, Opaque, _History, Stats) ->
     check_global_stat_increased(Stats, encr_at_rest_errors_total, Opaque).
 
@@ -1556,6 +1575,33 @@ can_listen(Host) ->
             end
     end.
 
+init_xdcr_replications() ->
+    lists:foldl(
+      fun ({K, V}, Acc) ->
+          add_xdcr_replication(K, ns_config:strip_metadata(V), Acc)
+      end, #{}, metakv:iterate_matching(<<"/replicationSpec/">>)).
+
+add_xdcr_replication(_K, ?DELETED_MARKER, Acc) -> Acc;
+add_xdcr_replication(K, V, Acc) ->
+    try json:decode(V) of
+        #{<<"internalId">> := InternalId} = DecodedV ->
+            Acc#{{K, InternalId} => DecodedV};
+        _DecodedV ->
+            ?log_error("Failed to XDCR internal id for replication: ~p", [K]),
+            Acc
+    catch
+        _:E ->
+            ?log_error("XDCR Replication ~p contains invalid json: ~p", [K, E]),
+            Acc
+    end.
+
+xdcr_replication_deleted_alert(IntId, RepProps) ->
+    UUID = maps:get(<<"targetClusterUUID">>, RepProps, <<"(unknown)">>),
+    SourceBucket = maps:get(<<"sourceBucketName">>, RepProps, <<"(unknown)">>),
+    TargetBucket = maps:get(<<"targetBucketName">>, RepProps, <<"(unknown)">>),
+    Msg = fmt_to_bin(errors(xdcr_replication_deleted),
+                     [SourceBucket, TargetBucket, UUID]),
+    global_alert({xdcr_replication_deleted, IntId}, Msg).
 
 %% @doc list of buckets thats measured stats have increased
 -spec stat_increased(dict:dict(), dict:dict()) -> list().
@@ -1763,29 +1809,33 @@ run_basic_test_do() ->
     ?assertMatch({[{{fu, MyNode}, <<"bar">>, _, _}], _}, GlobalAlert).
 
 basic_test_modules() ->
-    [cluster_compat_mode, ns_config].
+    [cluster_compat_mode, ns_rebalance_observer].
 
-basic_test() ->
+all_test_() ->
+    {setup, fun test_setup/0, fun test_teardown/1,
+     [fun basic_test__/0,
+      fun check_kv_rebalance_progress_test__/0,
+      fun check_index_rebalance_progress_test__/0]}.
+
+test_setup() ->
     ok = meck:new(basic_test_modules(), [passthrough]),
     ok = meck:expect(cluster_compat_mode, is_cluster_76,
                      fun () -> true end),
-    meck:expect(ns_config, get_timeout,
-                fun ({menelaus_web_alerts_srv, sample_rate}, Default) ->
-                        Default
-                end),
-
-    {ok, _} = gen_event:start_link({local, ns_config_events}),
-    {ok, Pid} = ?MODULE:start_link(),
-
+    fake_ns_config:setup(),
     %% return empty alerts configuration so that no attempts to send anything
     %% are performed
-    ns_config:test_setup([{email_alerts, []}]),
+    fake_ns_config:update_snapshot(email_alerts, []).
 
+test_teardown(_) ->
+    fake_ns_config:teardown(),
+    ok = meck:unload(basic_test_modules()).
+
+basic_test__() ->
+    {ok, Pid} = ?MODULE:start_link(),
     try
         run_basic_test_do()
     after
-        misc:unlink_terminate_and_wait(Pid, shutdown),
-        ok = meck:unload(basic_test_modules())
+        misc:unlink_terminate_and_wait(Pid, shutdown)
     end.
 
 %% Test that the stuck time is correctly updated based on rebalance progress
@@ -1814,7 +1864,7 @@ test_kv_rebalance_progress(Time, Progress, StuckTime, Opaque0) ->
 test_index_rebalance_progress(Time, Progress, StuckTime, Opaque0) ->
     test_rebalance_progress(index, Time, Progress, StuckTime, Opaque0).
 
-check_kv_rebalance_progress_test() ->
+check_kv_rebalance_progress_test__() ->
     Opaque0 = dict:new(),
     %% Initialisation of rebalance progress:
     %% time = 0, progress = 0,
@@ -1880,10 +1930,9 @@ check_kv_rebalance_progress_test() ->
     _Opaque12 = test_kv_rebalance_progress(
                   10,
                   {<<0>>, []},
-                  10, Opaque11),
-    meck:unload().
+                  10, Opaque11).
 
-check_index_rebalance_progress_test() ->
+check_index_rebalance_progress_test__() ->
     Opaque0 = dict:new(),
     %% Initialisation of rebalance progress:
     %% time = 0, progress = 0,
@@ -1921,6 +1970,5 @@ check_index_rebalance_progress_test() ->
     %% stuck time 4 -> 4 (stuck)
     _Opaque7 = test_index_rebalance_progress(
                 5, {<<>>, 0},
-                4, Opaque6),
-    meck:unload().
+                4, Opaque6).
 -endif.

@@ -21,7 +21,6 @@
          current_items_total/1,
          current_items_total/2,
          failover_safeness_level/1,
-         for_replications_deleted/0,
          latest/2]).
 
 -define(DEFAULT_TIMEOUT, ?get_timeout(default, 5000)).
@@ -238,21 +237,6 @@ for_resource_management(Keys) ->
         fun({{Group, _}, _}) -> Group end,
         fun({{_, Name}, Value}) -> {Name, Value} end,
         Res)).
-
-for_replications_deleted() ->
-    Query = <<"max_over_time(xdcr_number_of_replications_total[1m]) -"
-              "xdcr_number_of_replications_total">>,
-    latest(Query,
-           fun ([]) ->
-                   false;
-               (Props) ->
-                   case proplists:get_value(<<"targetClusterUUID">>, Props) of
-                       undefined ->
-                           false;
-                       UUID  ->
-                           {true, {xdcr_replication_deleted, UUID}}
-                   end
-           end).
 
 -spec total_active_logical_data_size([node()]) -> #{bucket_name() => number()}.
 total_active_logical_data_size(Nodes) ->
