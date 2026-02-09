@@ -44,6 +44,8 @@
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include("ns_test.hrl").
+
+-export([set_role_definitions/0]).
 -endif.
 
 -define(DEFAULT_EXTERNAL_ROLES_POLLING_INTERVAL, 10*60*1000).
@@ -68,15 +70,16 @@
          get_param_defs/2,
          ui_folders/0,
          get_visible_role_definitions/0,
-         strip_ids/2]).
+         strip_ids/2,
+         chronicle_upgrade_to_totoro/1]).
 
 -export([start_compiled_roles_cache/0]).
 
 %% for RPC from ns_couchdb node
 -export([build_compiled_roles/1]).
 
--spec default_roles() -> [rbac_role_def(), ...].
-default_roles() ->
+-spec default_roles_totoro() -> [rbac_role_def(), ...].
+default_roles_totoro() ->
     [{admin, [],
       [{name, <<"Full Admin">>},
        {folder, admin},
@@ -782,20 +785,23 @@ default_roles() ->
        {[pools], [read]}]}
     ].
 
+static_roles() ->
+    chronicle_compat:get(static_role_definitions, #{required => true}).
+
 -spec roles() -> [rbac_role_def(), ...].
 roles() ->
-    DefaultRoles = default_roles(),
+    Roles = static_roles(),
     %% Allow roles to be added / replaced with those from the config profile.
     ConfigRoles = config_profile:get_value(extra_roles, []),
     ConfigNames = lists:map(fun extract_role_name/1, ConfigRoles),
     %% Validate DefaultRoles and filter out any with conflicting names
-    FilteredDefaults = lists:filter(
-                         fun(Role) ->
+    FilteredRoles = lists:filter(
+                      fun(Role) ->
                                  not lists:member(
                                        extract_role_name(Role), ConfigNames)
                          end,
-                         DefaultRoles),
-    FilteredDefaults ++ ConfigRoles.
+                      Roles),
+    FilteredRoles ++ ConfigRoles.
 
 ui_folders() ->
     [{admin, "Administrative"},
@@ -1494,7 +1500,16 @@ extract_role_name(Role) ->
     {Name, _, _, _} = Role,
     Name.
 
+chronicle_upgrade_to_totoro(ChronicleTxn) ->
+    RoleDefinitions = default_roles_totoro(),
+    chronicle_upgrade:set_key(static_role_definitions, RoleDefinitions,
+                              ChronicleTxn).
+
 -ifdef(TEST).
+set_role_definitions() ->
+    fake_chronicle_kv:update_snapshot(
+      #{static_role_definitions => default_roles_totoro()}).
+
 setup_meck() ->
     meck:new(cluster_compat_mode, [passthrough]),
     meck:expect(cluster_compat_mode, is_cluster_76,
@@ -2456,6 +2471,8 @@ extended_roles_test__() ->
 
 default_profile_test_setup() ->
     setup_meck(),
+    fake_chronicle_kv:setup(),
+    set_role_definitions(),
     config_profile:load_default_profile_for_test().
 
 default_profile_test_teardown(_) ->
@@ -2463,6 +2480,7 @@ default_profile_test_teardown(_) ->
 
 default_profile_test_teardown() ->
     config_profile:unload_profile_for_test(),
+    fake_chronicle_kv:teardown(),
     meck:unload().
 
 default_profile_test_() ->
@@ -2501,8 +2519,15 @@ analytics_admin_empty_profile_test_() ->
     %% use "default" explicitly here so that this test passes when run on a
     %% workspace based on enterprise-analytics manifest
     {setup,
-     fun () -> config_profile:load_profile_for_test("default") end,
-     fun (_) -> config_profile:unload_profile_for_test() end,
+     fun () ->
+             fake_chronicle_kv:setup(),
+             set_role_definitions(),
+             config_profile:load_profile_for_test("default")
+     end,
+     fun (_) ->
+             config_profile:unload_profile_for_test(),
+             fake_chronicle_kv:teardown()
+     end,
      [fun () ->
               Roles = compile_roles([analytics_admin], roles()),
               ?assertEqual(true,
@@ -2526,10 +2551,13 @@ analytics_admin_test__() ->
 
 analytics_profile_test_setup() ->
     setup_meck(),
+    fake_chronicle_kv:setup(),
+    set_role_definitions(),
     config_profile:load_profile_for_test(?ANALYTICS_PROFILE_STR).
 
 analytics_profile_test_teardown(_) ->
     config_profile:unload_profile_for_test(),
+    fake_chronicle_kv:teardown(),
     meck:unload().
 
 analytics_profile_test_() ->

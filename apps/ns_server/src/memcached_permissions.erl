@@ -722,9 +722,12 @@ permissions_for_user_test_() ->
              meck:new(ns_bucket, [passthrough]),
              meck:expect(ns_bucket, get_snapshot,
                          fun (_, _) -> Snapshot end),
-             config_profile:load_default_profile_for_test()
+             config_profile:load_default_profile_for_test(),
+             fake_chronicle_kv:setup(),
+             menelaus_roles:set_role_definitions()
      end,
      fun (_) ->
+             fake_chronicle_kv:teardown(),
              meck:unload(),
              config_profile:unload_profile_for_test()
      end,

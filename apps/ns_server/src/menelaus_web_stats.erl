@@ -1217,6 +1217,8 @@ promql_filters_for_roles_test() ->
                  {bucket, Bucket1, uuid} => {UUID1, ChronicleRev},
                  {bucket, Bucket2, uuid} => {UUID2, ChronicleRev}},
 
+    fake_chronicle_kv:setup(),
+    menelaus_roles:set_role_definitions(),
     CompiledRoles = menelaus_roles:compile_roles(
                       _,
                       menelaus_roles:get_definitions(all),
@@ -1301,6 +1303,7 @@ promql_filters_for_roles_test() ->
 
         ok
     after
+        fake_chronicle_kv:teardown(),
         config_profile:unload_profile_for_test(),
         meck:unload(cluster_compat_mode)
     end.
