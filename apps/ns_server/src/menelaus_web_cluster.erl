@@ -38,6 +38,7 @@
          handle_re_add_node/1,
          handle_re_failover/1,
          handle_stop_rebalance/1,
+         handle_stop_op/1,
          handle_set_recovery_type/1,
          get_rebalance_error/0,
          handle_current_rebalance_report/1,
@@ -1069,6 +1070,9 @@ busy_reply(What, Error) ->
             {503, io_lib:format(Str, [What])}
     end.
 
+op_to_string(sync_fusion_log_store) ->
+    "sync fusion log store".
+
 busy_reply_str(rebalance_running) ->
     "Cannot ~s during rebalance";
 busy_reply_str(in_recovery) ->
@@ -1077,6 +1081,8 @@ busy_reply_str(in_bucket_hibernation) ->
     "Cannot ~s when pausing/resuming bucket";
 busy_reply_str(in_buckets_shutdown) ->
     "Cannot ~s during the bucket deletion";
+busy_reply_str({running_op, Op}) ->
+    "Cannot ~s while the operation " ++ op_to_string(Op) ++ " is running";
 busy_reply_str(_) ->
     undefined.
 
@@ -1481,6 +1487,16 @@ handle_stop_rebalance(Req, Params) ->
                        504);
         _ ->
             reply(Req, 200)
+    end.
+
+handle_stop_op(Req) ->
+    case ns_orchestrator:stop_op() of
+        ok ->
+            menelaus_util:reply_json(Req, [], 200);
+        not_running ->
+            menelaus_util:reply_text(Req, <<"Operation is not running.">>, 400);
+        stopping ->
+            menelaus_util:reply_text(Req, <<"Operation is stopping.">>, 400)
     end.
 
 handle_re_add_node(Req) ->

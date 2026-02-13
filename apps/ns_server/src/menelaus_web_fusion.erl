@@ -200,9 +200,6 @@ reply_wrong_state(Req, State, States) ->
              "Fusion should be in one of the following states: ~p"
              " Current state: ~p", [States, State]), 503).
 
--define(JANITOR_TIMEOUT, ?get_timeout(sync_log_store_janitor, 5000)).
--define(SYNC_TIMEOUT, ?get_timeout(sync_log_store_chronicle_sync, 60000)).
-
 reply_other(Req, What, Other) ->
     case menelaus_web_cluster:busy_reply(What, Other) of
         {Code, Msg} ->
@@ -375,34 +372,34 @@ handle_sync_log_store(Req) ->
     menelaus_util:assert_is_enterprise(),
     menelaus_util:assert_is_79(),
 
-    %% quorum read the latest bucket info. This doesn't guarantee
-    %% that the api won't break if the buckets are changed during
-    %% the execution of this code, but we can live with it
-    %% since this is a test only api and the caller can take care
-    %% of buckets not being modified in parallel
-    ok = chronicle_kv:sync(kv, ?SYNC_TIMEOUT),
-    BucketNames = [Name || {Name, _} <- ns_bucket:get_fusion_buckets()],
-    %% run janitor for all fusion buckets to make sure that all
-    %% uploaders are properly started
-    ?log_debug("Ensure janitor runs for ~p.", [BucketNames]),
-    RV =
-        functools:sequence_(
-          [?cut(ns_orchestrator:ensure_janitor_run({bucket, Bucket},
-                                                   ?JANITOR_TIMEOUT)) ||
-              Bucket <- BucketNames] ++
-              %% quorum read whatever changes janitor might have made
-              [?cut(chronicle_kv:sync(kv, ?SYNC_TIMEOUT)),
-               ?cut(?log_debug("Synchronize fusion log store.")),
-               ?cut(janitor_agent:sync_fusion_log_store(BucketNames))]),
-    ?log_debug("Sync log store returned ~p", [RV]),
-    case RV of
-        ok ->
-            menelaus_util:reply_json(Req, [], 200);
-        {failed_nodes, Nodes} ->
-            menelaus_util:reply_text(
-              Req, io_lib:format("Fusion log store sync failed on "
-                                 "following nodes: ~p", [Nodes]),
-              400);
-        Error ->
-            menelaus_web_cluster:busy_reply("sync fusion log store", Error)
-    end.
+    validator:handle(
+      fun (Params) ->
+              RV = ns_orchestrator:sync_fusion_log_store(
+                     proplists:get_value(timeout, Params) * 1000),
+              case RV of
+                  ok ->
+                      menelaus_util:reply_json(Req, [], 200);
+                  {failed_nodes, Nodes} ->
+                      menelaus_util:reply_text(
+                        Req, io_lib:format("Fusion log store sync failed on "
+                                           "following nodes: ~p", [Nodes]),
+                        400);
+                  stopped ->
+                      menelaus_util:reply_text(
+                        Req, <<"Operation was stopped.">>, 409);
+                  timeout ->
+                      menelaus_util:reply_text(
+                        Req, <<"Operation had timed out.">>, 408);
+                  failed_to_run_janitor ->
+                      menelaus_util:reply_text(
+                        Req, <<"Failed to run janitor.">>, 500);
+                  Other ->
+                      {ErrCode, Msg} =
+                          menelaus_web_cluster:busy_reply(
+                            "synchronize fusion log store", Other),
+                      menelaus_util:reply_text(Req, Msg, ErrCode)
+              end
+      end, Req, qs,
+      [validator:integer(timeout, 1, 300000, _),
+       validator:default(timeout, 60, _),
+       validator:unsupported(_)]).

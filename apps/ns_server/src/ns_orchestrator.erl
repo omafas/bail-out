@@ -19,10 +19,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+-type op() :: sync_fusion_log_store.
+
 -type busy() :: rebalance_running |
                 in_recovery |
                 in_bucket_hibernation |
-                in_buckets_shutdown.
+                in_buckets_shutdown |
+                {running_op, op()}.
 
 -export_type([busy/0]).
 
@@ -52,6 +55,14 @@
          op  :: pause_bucket | resume_bucket,
          stop_tref = undefined :: undefined | reference(),
          stop_reason = undefined :: term()}).
+
+%% Shared state for any "running_op"
+-record(op_state,
+        {manager        :: pid(),
+         op             :: op(),
+         reply_to       :: undefined | {pid(), gen_statem:reply_tag()},
+         stop_reply_to  :: undefined | {pid(), gen_statem:reply_tag()},
+         stop_reason    :: term()}).
 
 -record(bucket_shutdown_ctx,
         {from :: {pid(), gen_statem:reply_tag()},
@@ -102,7 +113,9 @@
          rebalance_safety_checks/2,
          validate_rebalance_plan/1,
          has_rebalance_plan/0,
-         fusion_upload_mounted_volumes/2]).
+         fusion_upload_mounted_volumes/2,
+         sync_fusion_log_store/1,
+         stop_op/0]).
 
 -define(SERVER, {via, leader_registry, ?MODULE}).
 
@@ -136,6 +149,7 @@
          rebalancing/2, rebalancing/3,
          recovery/2, recovery/3,
          bucket_hibernation/3,
+         running_op/3,
          buckets_shutdown/3,
          ejecting/2]).
 
@@ -480,6 +494,7 @@ request_janitor_run(Item) ->
                                 ok |
                                 in_recovery |
                                 in_bucket_hibernation |
+                                {running_op, op()} |
                                 rebalance_running |
                                 janitor_failed |
                                 bucket_deleted.
@@ -512,6 +527,7 @@ ensure_janitor_run(Item, Timeout) ->
           nodes_mismatch |
           no_active_nodes_left | in_recovery |
           in_bucket_hibernation |
+          {running_op, op()} |
           in_buckets_shutdown | {nodes_down, [atom()]} |
           delta_recovery_not_possible | no_kv_nodes_left |
           {need_more_space, list()} |
@@ -582,6 +598,7 @@ stop_rebalance() ->
                             unsupported |
                             rebalance_running |
                             in_bucket_hibernation |
+                            {running_op, op()} |
                             not_present |
                             not_needed |
                             {error, {failed_nodes, [node()]}} |
@@ -619,10 +636,19 @@ commit_vbucket(Bucket, UUID, VBucket) ->
     call({commit_vbucket, Bucket, UUID, VBucket}).
 
 -spec stop_recovery(bucket_name(), UUID) -> ok | bad_recovery |
-                                            in_bucket_hibernation
-                                              when UUID :: binary().
+                                            in_bucket_hibernation |
+                                            {running_op, op()}
+              when UUID :: binary().
 stop_recovery(Bucket, UUID) ->
     call({stop_recovery, Bucket, UUID}).
+
+-spec sync_fusion_log_store(integer()) -> ok | stopped | timeout |
+          {failed_nodes, [node()]} | failed_to_run_janitor | busy().
+sync_fusion_log_store(Timeout) ->
+    call({start_op, sync_fusion_log_store, [{timeout, Timeout}]}).
+
+-spec stop_op() -> ok | not_running | stopping.
+stop_op() -> call(stop_op).
 
 -spec is_recovery_running() -> boolean().
 is_recovery_running() ->
@@ -811,6 +837,9 @@ handle_event(info, Event, StateName, StateData)->
     handle_info(Event, StateName, StateData);
 handle_event(cast, Event, StateName, StateData) ->
     ?MODULE:StateName(Event, StateData);
+handle_event({call, From}, stop_op, StateName, _StateData)
+  when StateName =/= running_op ->
+    {keep_state_and_data, {reply, From, not_running}};
 handle_event({call, From}, Event, StateName, StateData) ->
     ?MODULE:StateName(Event, From, StateData);
 
@@ -876,6 +905,36 @@ handle_info(Msg, bucket_hibernation, StateData) ->
 
 handle_info(Msg, buckets_shutdown, StateData) ->
     handle_info_in_buckets_shutdown(Msg, StateData);
+
+handle_info({'EXIT', Manager, Reason},
+            running_op, #op_state{
+                           manager = Manager,
+                           op = Op,
+                           reply_to = ReplyTo,
+                           stop_reason = StopReason,
+                           stop_reply_to = StopReplyTo}) ->
+    ?log_debug("Operation ~p exited with reason ~p", [Op, Reason]),
+    case ReplyTo of
+        undefined ->
+            ok;
+        _ ->
+            Msg =
+                case StopReason of
+                    {try_autofailover, _, _, _} ->
+                        stopped;
+                    undefined ->
+                        case Reason of
+                            {shutdown, RV} ->
+                                RV;
+                            _ -> Reason
+                        end;
+                    _ ->
+                        StopReason
+                end,
+            gen_statem:reply(ReplyTo, Msg)
+    end,
+    StopReplyTo == undefined orelse gen_statem:reply(StopReplyTo, ok),
+    maybe_try_autofailover_in_idle_state(StopReason);
 
 handle_info(Msg, StateName, StateData) ->
     ?log_warning("Got unexpected message ~p in state ~p with data ~p",
@@ -1304,6 +1363,22 @@ idle({fusion_upload_mounted_volumes, PlanUUID, Volumes}, From, _State) ->
         end,
     {keep_state_and_data, [{reply, From, RV}]};
 
+idle({start_op, Op, Params}, From, _State) ->
+    case verify_op(Op, Params) of
+        {ok, ExtraParams} ->
+            Manager =
+                proc_lib:spawn_link(
+                  ?cut(exit({shutdown, handle_op(Op, Params, ExtraParams)}))),
+            ?log_debug("Started operation ~p with params = ~p, manager = ~p",
+                       [Op, Params, Manager]),
+            {next_state, running_op,
+             #op_state{manager = Manager, op = Op, reply_to = From}};
+        Error ->
+            ?log_debug("Operation ~p with params = ~p failed with ~p",
+                       [Error]),
+            {keep_state_and_data, {reply, From, Error}}
+    end;
+
 %% Start Pause/Resume bucket operations.
 idle({{bucket_hibernation_op, {start, Op}},
       {#bucket_hibernation_op_args{bucket = Bucket} = Args,
@@ -1531,6 +1606,25 @@ bucket_hibernation(stop_rebalance, From, _State) ->
     {keep_state_and_data, [{reply, From, not_rebalancing}]};
 bucket_hibernation(_Msg, From, _State) ->
     {keep_state_and_data, [{reply, From, in_bucket_hibernation}]}.
+
+running_op({try_autofailover, Nodes, Options} = Reason, From,
+           State = #op_state{op = Op, manager = Manager}) ->
+    ?log_debug("Stopping operation ~p due to ~p", [Op, Reason]),
+    misc:unlink_terminate_and_wait(Manager, kill),
+    {keep_state, State#op_state{stop_reason =
+                                    {try_autofailover, From, Nodes, Options}}};
+running_op(stop_op, From, State = #op_state{op = Op, manager = Manager,
+                                            stop_reply_to = undefined}) ->
+    ?log_debug("Stopping operation ~p", [Op]),
+    misc:unlink_terminate_and_wait(Manager, kill),
+    {keep_state, State#op_state{stop_reason = stopped,
+                                stop_reply_to = From}};
+running_op(stop_op, From, _State) ->
+    {keep_state_and_data, [{reply, From, stopping}]};
+running_op(stop_rebalance, From, _State) ->
+    {keep_state_and_data, [{reply, From, not_rebalancing}]};
+running_op(_Msg, From, #op_state{op = Op}) ->
+    {keep_state_and_data, [{reply, From, {running_op, Op}}]}.
 
 ejecting(Event, _State) ->
     ?log_info("Ignoring event ~p while leaving the cluster.", [Event]),
@@ -2721,6 +2815,42 @@ handle_delete_bucket(BucketName, From, CurrentState, StateData) ->
         Error ->
             {keep_state_and_data, [{reply, From, Error}]}
     end.
+
+verify_op(sync_fusion_log_store, _Params) ->
+    {ok, [Name || {Name, _} <- ns_bucket:get_fusion_buckets()]};
+%% TODO: remove after there will be actual error returned for some op
+verify_op(for_dialyzer_only, _Params) ->
+    error.
+
+handle_op(sync_fusion_log_store, Props, BucketNames) ->
+    Timeout = proplists:get_value(timeout, Props),
+    RV = async:run_with_timeout(
+           ?cut(handle_sync_fusion_log_store(BucketNames, Timeout)),
+           Timeout),
+    case RV of
+        {ok, R} ->
+            R;
+        {error, timeout} ->
+            timeout
+    end.
+
+handle_sync_fusion_log_store(BucketNames, Timeout) ->
+    ?log_debug("Ensure janitor runs for ~p.", [BucketNames]),
+    functools:sequence_(
+      [fun () ->
+               ?log_debug("Run janitor for bucket ~p", [BucketName]),
+               case ns_rebalancer:run_janitor(BucketName) of
+                   ok ->
+                       ok;
+                   Error ->
+                       ?log_error("Failed to run janitor for bucket ~p, "
+                                  "Error = ~p", [BucketName, Error]),
+                       failed_to_run_janitor
+               end
+       end || BucketName <- BucketNames] ++
+          [?cut(?log_debug("Synchronize fusion log store for buckets ~p.",
+                           [BucketNames])),
+           ?cut(janitor_agent:sync_fusion_log_store(BucketNames, Timeout))]).
 
 -ifdef(TEST).
 needs_rebalance_api_changed_test() ->

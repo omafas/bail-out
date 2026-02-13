@@ -39,7 +39,8 @@
          get_desired_services_nodes/1,
          prepare_fusion_rebalance/2,
          map_to_vbuckets_dict/1,
-         maybe_check_expected_topology/2]).
+         maybe_check_expected_topology/2,
+         run_janitor/1]).
 
 -export([wait_local_buckets_shutdown_complete/0]). % used via rpc:multicall
 
@@ -789,10 +790,14 @@ rebalance_membase_bucket(BucketName, BucketConfig, ProgressFun,
     master_activity_events:note_bucket_rebalance_ended(BucketName),
     verify_replication(BucketName, Servers, NewMap).
 
+run_janitor(BucketName) ->
+    ns_janitor:cleanup(
+      BucketName,
+      [{query_states_timeout, ?REBALANCER_QUERY_STATES_TIMEOUT},
+       {apply_config_timeout, ?REBALANCER_APPLY_CONFIG_TIMEOUT}]).
+
 run_janitor_pre_rebalance(BucketName) ->
-    case ns_janitor:cleanup(BucketName,
-                            [{query_states_timeout, ?REBALANCER_QUERY_STATES_TIMEOUT},
-                             {apply_config_timeout, ?REBALANCER_APPLY_CONFIG_TIMEOUT}]) of
+    case run_janitor(BucketName) of
         ok ->
             ok;
         Error ->

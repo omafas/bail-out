@@ -984,7 +984,7 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {{[pools], write},
                      fun menelaus_web_fusion:handle_upload_mounted_volumes/1};
                 ["controller", "fusion", "syncLogStore"] ->
-                    {{[admin, internal], all},
+                    {{[admin, fusion], write},
                      fun menelaus_web_fusion:handle_sync_log_store/1};
                 ["controller", "rebalance"] ->
                     {{[pools], write}, fun menelaus_web_cluster:handle_rebalance/1};
@@ -1051,6 +1051,9 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["controller", "forceEncryptionAtRest", Type] ->
                     {{[admin, security], write},
                      fun menelaus_web_encr_at_rest:handle_force_encr/2, [Type]};
+                ["controller", "stopOperation"] ->
+                    {{[admin, internal], all},
+                     fun menelaus_web_cluster:handle_stop_op/1};
                 ["fusion", "enable"] ->
                     {{[admin, fusion], write},
                      fun menelaus_web_fusion:handle_enable/1};

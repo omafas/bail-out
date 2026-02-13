@@ -79,7 +79,7 @@
          maybe_stop_fusion_uploaders/2,
          get_active_guest_volumes/2,
          get_fusion_sync_info/2,
-         sync_fusion_log_store/1,
+         sync_fusion_log_store/2,
          get_fusion_uploaders_state/2,
          download_snapshot/5,
          wait_download_snapshot/4,
@@ -452,9 +452,9 @@ get_fusion_sync_info(Bucket, VBucketMap) ->
                           ns_rebalancer:map_to_vbuckets_dict(VBucketMap))],
     call_on_nodes_with_returns(Bucket, NodesCalls, fun servant_call/3).
 
--spec sync_fusion_log_store([ns_bucket:name()]) ->
+-spec sync_fusion_log_store([ns_bucket:name()], integer()) ->
           ok | {failed_nodes, [node()]}.
-sync_fusion_log_store(BucketNames) ->
+sync_fusion_log_store(BucketNames, Timeout) ->
     Replies =
         misc:parallel_map(
           fun (Bucket) ->
@@ -465,11 +465,11 @@ sync_fusion_log_store(BucketNames) ->
                                 maps:update_with(Node, [VB | _], [VB], Acc)
                         end, #{}, misc:enumerate(Uploaders, 0)),
                   NodesCalls =
-                      [{Node, {sync_fusion_log_store, VBuckets}} ||
+                      [{Node, {sync_fusion_log_store, VBuckets, Timeout}} ||
                           {Node, VBuckets} <- maps:to_list(UploadersMap)],
                   {Bucket,
                    call_on_nodes(Bucket, NodesCalls, fun servant_call/3)}
-          end, BucketNames, infinity),
+          end, BucketNames, Timeout),
 
     case [R || {_, RV} = R <- Replies, RV =/= ok] of
         [] ->
@@ -1043,11 +1043,11 @@ do_handle_call({mount_volumes, VBuckets, Volumes} = Call, From,
                       {error, mount_volumes_failed}
               end
       end);
-do_handle_call({sync_fusion_log_store, VBuckets}, From, State) ->
+do_handle_call({sync_fusion_log_store, VBuckets, Timeout}, From, State) ->
     handle_call_via_servant(
       From, State, sync_fusion_log_store,
       fun (sync_fusion_log_store, #state{bucket_name = Bucket}) ->
-              ns_memcached:sync_fusion_log_store(Bucket, VBuckets)
+              ns_memcached:sync_fusion_log_store(Bucket, VBuckets, Timeout)
       end);
 do_handle_call({cleanup_mounted_volumes, NVBuckets}, From, State) ->
     handle_call_via_servant(

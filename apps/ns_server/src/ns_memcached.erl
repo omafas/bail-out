@@ -168,7 +168,7 @@
          maybe_start_fusion_uploaders/2,
          maybe_stop_fusion_uploaders/2,
          get_active_guest_volumes/1,
-         sync_fusion_log_store/2,
+         sync_fusion_log_store/3,
          bucket_metadata_file/1,
          get_fusion_sync_info/2,
          get_fusion_uploaders_state/1,
@@ -2830,9 +2830,9 @@ get_active_guest_volumes(Bucket) ->
               {reply, fetch_fusion_stats(Sock, Bucket, "active_guest_volumes")}
       end, Bucket, [json]).
 
--spec sync_fusion_log_store(ns_bucket:name(), [vbucket_id()]) ->
+-spec sync_fusion_log_store(ns_bucket:name(), [vbucket_id()], integer()) ->
           ok | {errors, [{vbucket_id(), mc_error()}]}.
-sync_fusion_log_store(Bucket, VBuckets) ->
+sync_fusion_log_store(Bucket, VBuckets, Timeout) ->
     PropsJson = ejson:encode({[{reset, false}]}),
     perform_very_long_call(
       fun (Sock) ->
@@ -2840,7 +2840,7 @@ sync_fusion_log_store(Bucket, VBuckets) ->
                   lists:filtermap(
                     fun (VBucket) ->
                             case mc_client_binary:sync_fusion_log_store(
-                                   Sock, VBucket, PropsJson) of
+                                   Sock, VBucket, PropsJson, Timeout) of
                                 ok ->
                                     false;
                                 {memcached_error, internal, undefined} ->
