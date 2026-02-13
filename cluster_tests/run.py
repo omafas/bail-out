@@ -16,6 +16,7 @@ import shutil
 import inspect
 from datetime import datetime, timezone
 from math import floor
+from difflib import get_close_matches
 
 import requests
 import glob
@@ -195,6 +196,54 @@ def list_all_tests():
         print(f"\n{name}:")
         for test in tests:
             print(f"  - {test}")
+
+
+def find_similar_tests(name, available_names, max_suggestions=1, cutoff=0.6,
+                       context='test'):
+    # Create lowercase versions for comparison
+    name_lower = name.lower()
+    available_lower = {n: n.lower() for n in available_names}
+    lower_to_original = {v: k for k, v in available_lower.items()}
+
+    # First try with case-insensitive matching
+    similar_lower = get_close_matches(name_lower,
+                                      list(lower_to_original.keys()),
+                                      n=max_suggestions,
+                                      cutoff=cutoff)
+    if similar_lower:
+        # Map back to original case
+        similar = [lower_to_original[s] for s in similar_lower]
+        return similar
+
+    # Try without common suffixes if no matches found
+    if context == 'testset':
+        suffixes = ['Tests', 'Test']
+    else:  # context == 'test'
+        suffixes = ['_test']
+
+    for suffix in suffixes:
+        if name_lower.endswith(suffix.lower()):
+            return []
+        # User hasn't specified the suffix, try searching among tests without it
+        available_without_suffix = []
+        orig_to_stripped = {}
+
+        for avail_name in available_names:
+            if avail_name.endswith(suffix):
+                stripped = avail_name[:-len(suffix)].lower()
+                available_without_suffix.append(stripped)
+                orig_to_stripped[stripped] = avail_name
+
+        similar_stripped = get_close_matches(name_lower,
+                                             available_without_suffix,
+                                             n=max_suggestions,
+                                             cutoff=cutoff)
+        if similar_stripped:
+            # Map back to original names
+            similar = [orig_to_stripped[s] for s in similar_stripped]
+            return similar
+
+    return []
 
 
 def remove_temp_cluster_directories():
@@ -602,8 +651,15 @@ def get_testsets_by_names(test_names, discovered_list):
     test_list.sort()
     for class_name, test_name in test_names:
         if class_name not in discovered_dict:
-            msg = f"Testset '{class_name}' is not found.\n" \
-                  "Available testsets:\n"
+            msg = f"Testset '{class_name}' is not found."
+            similar = find_similar_tests(class_name, test_list,
+                                         context='testset')
+            if similar:
+                if len(similar) == 1:
+                    msg += f"\n\nDid you mean {similar[0]}?"
+                else:
+                    msg += f"\n\nDid you mean one of: {', '.join(similar)}?"
+            msg += "\n\nAvailable testsets:\n"
             for t in test_list:
                 msg += f"  - {t}\n"
             raise ValueError(msg)
@@ -615,8 +671,14 @@ def get_testsets_by_names(test_names, discovered_list):
             if test_name not in tests:
                 tests.sort()
                 msg = f"Test '{test_name}' is not found " \
-                      f"in testset '{class_name}'.\n" \
-                      f"Available tests in {class_name}:\n"
+                      f"in testset '{class_name}'."
+                similar = find_similar_tests(test_name, tests, context='test')
+                if similar:
+                    if len(similar) == 1:
+                        msg += f"\n\nDid you mean: {similar[0]}?"
+                    else:
+                        msg += f"\n\nDid you mean one of: {', '.join(similar)}?"
+                msg += f"\n\nAvailable tests in {class_name}:\n"
                 for t in tests:
                     msg += f"  - {t}\n"
                 raise ValueError(msg)
