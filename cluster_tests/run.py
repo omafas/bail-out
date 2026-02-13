@@ -108,6 +108,8 @@ Usage: {{program_name}}
     [--tests | -t <test_spec>[, <test_spec> ...]]
         <test_spec> := <test_class>[.test_name]
         Start only specified tests
+    [--list | -l]
+        List all available tests and exit
     [--with-tags <tag>[, <tag> ...]
         Run only tests with at least one of the specified tags
     [--without-tags <tag>[, <tag> ...]
@@ -183,6 +185,18 @@ def warning_exit(msg):
     sys.exit(3)
 
 
+def list_all_tests():
+    testsets = discover_testsets()
+    # Sort testsets alphabetically
+    testsets.sort(key=lambda x: x[0])
+    print("Available testsets and tests:")
+    for name, _, tests, _ in testsets:
+        tests.sort()
+        print(f"\n{name}:")
+        for test in tests:
+            print(f"  - {test}")
+
+
 def remove_temp_cluster_directories():
     for dir in glob.glob(tmp_cluster_dir + "*"):
         testlib.maybe_print(f"Removing cluster dir {dir}...")
@@ -194,10 +208,10 @@ def main():
     if not __debug__:
         raise RuntimeError("Assert statements are disabled")
     try:
-        optlist, args = getopt.gnu_getopt(sys.argv[1:], "hkovc:u:p:n:t:s:",
+        optlist, args = getopt.gnu_getopt(sys.argv[1:], "hkovc:u:p:n:t:s:l",
                                           ["help", "keep-tmp-dirs", "cluster=",
                                            "user=", "password=", "num-nodes=",
-                                           "tests=", 'with-tags=',
+                                           "tests=", 'with-tags=', "list",
                                            'without-tags=',
                                            "dont-intercept-output",
                                            'ignore-unknown-tags',
@@ -311,6 +325,9 @@ def main():
             testlib.config['align_res'] = False
         elif o == '--no-wrap':
             testlib.config['wrap_output'] = False
+        elif o in ('--list', '-l'):
+            list_all_tests()
+            exit(0)
         elif o in ('--help', '-h'):
             usage()
             exit(0)
