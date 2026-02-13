@@ -173,6 +173,7 @@ def bad_args_exit(msg):
 
 
 def error_exit(msg):
+    restore_print()
     print(testlib.red(msg))
     sys.exit(2)
 
@@ -364,8 +365,12 @@ def main():
     testsets_str = ", ".join([c for c, _, _, _ in discovered_tests])
     testlib.maybe_print(f"Discovered testsets: {testsets_str}")
 
-    testsets_to_run = find_tests(tests, discovered_tests, with_tags,
-                                 without_tags)
+    try:
+        testsets_to_run = find_tests(tests, discovered_tests, with_tags,
+                                     without_tags)
+    except ValueError as e:
+        error_exit(str(e))
+
     if not testsets_to_run:
         warning_exit("No tests matched the specified test/tag filters")
 
@@ -579,16 +584,25 @@ def get_testsets_by_names(test_names, discovered_list):
     test_list = list(discovered_dict.keys())
     test_list.sort()
     for class_name, test_name in test_names:
-        assert class_name in discovered_dict, \
-            f"Testset {class_name} is not found. "\
-            f"Available testsets: {test_list}"
+        if class_name not in discovered_dict:
+            msg = f"Testset '{class_name}' is not found.\n" \
+                  "Available testsets:\n"
+            for t in test_list:
+                msg += f"  - {t}\n"
+            raise ValueError(msg)
+
         testset, tests, configurations = discovered_dict[class_name]
         if test_name == '*':
             results[class_name] = (testset, tests, configurations)
         else:
-            assert test_name in tests, \
-                f"Test {test_name} is not found in {class_name}. "\
-                f"Available tests: {tests})"
+            if test_name not in tests:
+                tests.sort()
+                msg = f"Test '{test_name}' is not found " \
+                      f"in testset '{class_name}'.\n" \
+                      f"Available tests in {class_name}:\n"
+                for t in tests:
+                    msg += f"  - {t}\n"
+                raise ValueError(msg)
 
             if class_name in results:
                 testlist = results[class_name][1]
