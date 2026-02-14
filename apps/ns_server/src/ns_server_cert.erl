@@ -457,7 +457,8 @@ verify_signature(Msg, DigestType, Signature, DerCert) ->
 
 split_certs(PEMCerts) ->
     Begin = <<"-----BEGIN">>,
-    [<<>> | Parts0] = binary:split(PEMCerts, Begin, [global]),
+    %% There can be metadata before -----BEGIN. We don't need it.
+    [_ | Parts0] = binary:split(PEMCerts, Begin, [global]),
     [<<Begin/binary,P/binary>> || P <- Parts0].
 
 extract_cert_and_pkey(Output) ->
