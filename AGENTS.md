@@ -6,11 +6,18 @@ ns_server is the cluster manager for Couchbase Server, written primarily in Erla
 
 ## Running Tests
 
+### Detect Build System
+Before building anything - t?wo build systems are used by Couchbase Server, make and ninja. If ninja is being used, a `build.ninja` file will be present in the `build` directory:
+```bash
+ls ../build/build.ninja 2>/dev/null && echo "ninja" || echo "make"
+```
+
 ### Dialyzer Static Analysis
 
 Run Dialyzer to perform static analysis and detect type discrepancies. Only relevant for Erlang changes:
 ```bash
 make dialyzer
+ninja -C ../build ns_dialyzer
 ```
 
 ### EUnit Tests
@@ -18,16 +25,19 @@ make dialyzer
 Run all eunit tests:
 ```bash
 make test_eunit
+ninja -C ../build ns_test
 ```
 
 Run tests for a specific module:
 ```bash
 T_WILDCARD=<module_name> make test_eunit
+T_WILDCARD=<module_name> ninja -C ../build ns_test
 ```
 
 Example:
 ```bash
 T_WILDCARD=menelaus_web_rbac make test_eunit
+T_WILDCARD=menelaus_web_rbac ninja -C ../build ns_test
 ```
 
 ### Other Test Targets
