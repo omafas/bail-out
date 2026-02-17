@@ -144,6 +144,7 @@ get_cbauth_services({bucketDek, _}) ->
     %% index %% uncomment to pass bucket keys to index
     %% cbas %% uncomment to pass bucket keys to cbas
     %% eventing %% uncomment to pass bucket keys to eventing
+     cbcontbk
     ];
 %% This is a fake kind just to trick dialyzer that this function can return
 %% a non-empty list. To be removed once we have real services that use
@@ -154,7 +155,11 @@ get_cbauth_services(_) -> error(invalid_dek_kind).
 get_cbauth_labels(Kind, Snapshot) ->
     Services = get_cbauth_services(Kind),
     NodeServices = ns_cluster_membership:node_services(Snapshot, node()),
-    TargetServices = [P || P <- Services, lists:member(P, NodeServices)],
+    AllNodeServices = case lists:member(kv, NodeServices) of
+                          true -> NodeServices ++ [cbcontbk];
+                          false -> NodeServices
+                      end,
+    TargetServices = [P || P <- Services, lists:member(P, AllNodeServices)],
     [menelaus_cbauth:service_to_label(P) || P <- TargetServices].
 
 cbauth_call(Func, Params, Kind, CbauthLabels) ->
