@@ -268,6 +268,13 @@ meck_setup_setters() ->
                         ok
                 end),
 
+    meck:expect(ns_config, update,
+                fun(Fun) ->
+                        Snapshot = get_ets_snapshot(),
+                        NewSnapshot = apply_update_fun(Snapshot, Fun),
+                        update_snapshot(NewSnapshot),
+                        ok
+                end),
 
     meck:expect(ns_config, set,
                 fun(Key, Value) ->
@@ -354,3 +361,17 @@ fetch_prop(Snapshot, Key, SubKey, DefaultSubVal) ->
         false ->
             DefaultSubVal
     end.
+
+apply_update_fun(Snapshot, Fun) ->
+    UpdateFun =
+        fun({Key, Value}, Acc) ->
+                case Fun({Key, Value}) of
+                    delete ->
+                        lists:keydelete(Key, 1, Acc);
+                    skip ->
+                        Acc;
+                    NewValue ->
+                        lists:keystore(Key, 1, Acc, {Key, NewValue})
+                end
+        end,
+    lists:foldl(UpdateFun, Snapshot, Snapshot).

@@ -195,6 +195,8 @@ chronicle(PidMap) ->
     meck:new(?FUNCTION_NAME),
     meck:expect(?FUNCTION_NAME, acquire_lock, fun() -> {ok, self()} end),
     meck:expect(?FUNCTION_NAME, set_peer_roles, fun(_,_) -> ok end),
+    meck:expect(?FUNCTION_NAME, remove_peer, fun(_,_) -> ok end),
+    meck:expect(?FUNCTION_NAME, get_system_state, fun() -> provisioned end),
 
     PidMap#{?FUNCTION_NAME => mocked}.
 
@@ -451,6 +453,13 @@ get_counter_value(Counter) ->
 -define(POLL_FOR_COUNTER_DEFAULT_TIMEOUT, 10000).
 %% 100ms
 -define(POLL_FOR_COUNTER_DEFAULT_PERIOD, 100).
+
+ns_cluster(PidMap) ->
+    meck:new(?FUNCTION_NAME),
+    meck:expect(?FUNCTION_NAME, leave, fun(_) -> ok end),
+    meck:expect(?FUNCTION_NAME, counter_inc, 1, meck:passthrough()),
+    meck:expect(?FUNCTION_NAME, counter_inc, 2, meck:passthrough()),
+    PidMap#{?FUNCTION_NAME => mocked}.
 
 -spec poll_for_counter_value(atom(), any()) -> boolean().
 poll_for_counter_value(Counter, Value) ->

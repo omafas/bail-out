@@ -49,6 +49,28 @@ rebalance_in_test_() ->
                           {Name, ?_test(TestFun(T, R))}
                   end} || {Name, TestFun} <- Tests]}.
 
+rebalance_out_test_() ->
+    NodesBothActive = #{
+              node() => {active, [kv]},
+              'b' => {active, [kv]}
+             },
+    SetupArgs =
+        #{nodes => NodesBothActive,
+          buckets => ["default"]},
+
+    Tests = [
+             {"Eject node",
+              fun eject_node_t/2}
+            ],
+
+    %% foreachx here to let us pass parameters to setup.
+    {foreachx,
+     fun rebalance_test_setup/1,
+     fun rebalance_test_teardown/2,
+     [{SetupArgs, fun(T, R) ->
+                      {Name, ?_test(TestFun(T, R))}
+                  end} || {Name, TestFun} <- Tests]}.
+
 rebalance_test_setup(SetupConfig) ->
     config_profile:load_default_profile_for_test(),
     fake_ns_config:setup(),
@@ -96,7 +118,8 @@ rebalance_test_setup(SetupConfig) ->
                               ns_storage_conf,
                               ns_node_disco_events,
                               rebalance_quirks,
-                              ns_orchestrator], #{}).
+                              ns_orchestrator,
+                              ns_cluster], #{}).
 
 rebalance_test_teardown(_, PidMap) ->
     mock_helpers:shutdown_processes(PidMap),
@@ -238,3 +261,13 @@ interruptible_backfill_t(_SetupConfig, _) ->
 
     expect_rebalance_failure(Params, ?REBALANCE_POLL_TIMEOUT,
                              ?REBALANCE_POLL_PERIOD).
+
+eject_node_t(_SetupConfig, _) ->
+    Params = #{known_nodes => ns_node_disco:nodes_wanted(),
+               eject_nodes => ['b'],
+               services => all,
+               desired_services_nodes => #{},
+               delta_recovery_buckets => []
+              },
+
+    expect_rebalance_success(Params).
