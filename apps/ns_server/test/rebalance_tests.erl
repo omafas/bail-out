@@ -19,7 +19,7 @@
 -define(REBALANCE_POLL_TIMEOUT, 10000).
 -define(REBALANCE_POLL_PERIOD, 100).
 
-rebalance_test_() ->
+rebalance_in_test_() ->
     Nodes = #{
               node() => {active, [kv]},
               'b' => {inactiveAdded, [kv]}
