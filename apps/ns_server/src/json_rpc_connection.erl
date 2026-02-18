@@ -15,7 +15,7 @@
 
 -export([start_link/3,
          perform_call/3, perform_call/4,
-         reannounce/1]).
+         reannounce/1, get_pid/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -51,6 +51,9 @@ perform_call(Label, Name, EJsonArg) ->
 
 reannounce(Pid) when is_pid(Pid) ->
     gen_server:cast(Pid, reannounce).
+
+get_pid(Label) ->
+    whereis(label_to_name(Label)).
 
 init({Label, Params, GetSocket}) ->
     proc_lib:init_ack({ok, self()}),

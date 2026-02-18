@@ -25,7 +25,8 @@
          get_dek_ids_in_use/2,
          initiate_drop_deks/3,
          synchronize_deks/2,
-         fetch_chronicle_keys_in_txn/2]).
+         fetch_chronicle_keys_in_txn/2,
+         dek_consumers/2]).
 
 -spec get_encryption_method(cb_deks:dek_kind(), cluster | node,
                             cb_cluster_secrets:chronicle_snapshot()) ->
@@ -37,6 +38,11 @@ get_encryption_method(_Kind, Scope, Snapshot) ->
                   cb_cluster_secrets:chronicle_snapshot()) -> ok | {error, _}.
 update_deks(_Kind, _Snapshot) ->
     force_config_encryption_keys().
+
+-spec dek_consumers(cb_deks:dek_kind(),
+                    cb_cluster_secrets:chronicle_snapshot()) -> [term()].
+dek_consumers(_Kind, _Snapshot) ->
+    [].
 
 -spec get_required_usage(cb_deks:dek_kind()) -> cb_cluster_secrets:secret_usage().
 get_required_usage(_Kind) ->

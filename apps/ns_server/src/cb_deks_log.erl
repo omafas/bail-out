@@ -26,7 +26,8 @@
          initiate_drop_deks/3,
          synchronize_deks/2,
          fetch_chronicle_keys_in_txn/2,
-         try_drop_dek_work/2]).
+         try_drop_dek_work/2,
+         dek_consumers/2]).
 
 %% exported for rpc calls
 -export([handle_ale_log_dek_update/1]).
@@ -90,6 +91,11 @@ update_deks(logDek = Kind, Snapshot) ->
         {badrpc, _} = Error ->
             {error, Error}
     end.
+
+-spec dek_consumers(cb_deks:dek_kind(),
+                    cb_cluster_secrets:chronicle_snapshot()) -> [term()].
+dek_consumers(Kind, Snapshot) ->
+    cb_deks_cbauth:dek_consumers(Kind, Snapshot).
 
 -spec get_required_usage(cb_deks:dek_kind()) -> cb_cluster_secrets:secret_usage().
 get_required_usage(_Kind) ->

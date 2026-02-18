@@ -255,7 +255,8 @@
                        last_deks_gc_datetime := undefined | calendar:datetime(),
                        last_drop_timestamp := undefined | non_neg_integer(),
                        statuses := #{node_job() := ok | retry | {error, _}},
-                       prev_deks_hash := integer() | undefined}.
+                       prev_deks_update_hash := {integer(), integer()} |
+                                                undefined}.
 
 -type external_dek_info() :: #{data_status := dek_info_data_status(),
                                issues := [dek_issue()],
@@ -2013,7 +2014,8 @@ call_set_active_cb(Kind, Snapshot, #state{deks_info = DeksInfo} = State) ->
     #{Kind := #{active_id := ActiveId,
                 deks := Keys,
                 is_enabled := IsEnabled,
-                prev_deks_hash := PrevHash} = KindDeks} = DeksInfo,
+                prev_deks_update_hash := PrevUpdateHash} = KindDeks} =
+        DeksInfo,
     NewActiveKey =
         case IsEnabled of
             true ->
@@ -2023,11 +2025,17 @@ call_set_active_cb(Kind, Snapshot, #state{deks_info = DeksInfo} = State) ->
                 ActiveKey;
             false -> undefined
         end,
+    DEKConsumers = cb_deks:call_dek_callback(dek_consumers, Kind, [Snapshot]),
     NewHash = deks_hash(IsEnabled, ActiveId, Keys),
+    %% Note: If there are new services on the node, we should call update_deks
+    %% even if DEKs hasn't changed. If services restart, we should also call
+    %% update_deks for such services. DEKConsumers must change in both of those
+    %% cases.
+    NewUpdateHash = {NewHash, erlang:phash2(DEKConsumers, ?MAX_PHASH2_RANGE)},
     case NewActiveKey of
         ?DEK_ERROR_PATTERN(_, _) ->
             {error, State, active_key_not_available};
-        _ when NewHash == PrevHash ->
+        _ when NewUpdateHash == PrevUpdateHash ->
             ?log_debug("No changes in ~p deks, skipping calling "
                        "update_deks", [Kind]),
             {ok, State};
@@ -2039,7 +2047,8 @@ call_set_active_cb(Kind, Snapshot, #state{deks_info = DeksInfo} = State) ->
                                                    [Snapshot],
                                                    #{verbose => true}) of
                         {succ, ok} ->
-                            NewKindDeks = KindDeks#{prev_deks_hash => NewHash},
+                            NewKindDeks = KindDeks#{prev_deks_update_hash =>
+                                                        NewUpdateHash},
                             NewDeksInfo = DeksInfo#{Kind => NewKindDeks},
                             NewState = State#state{deks_info = NewDeksInfo},
                             {ok, maybe_garbage_collect_deks(Kind, true,
@@ -2290,7 +2299,7 @@ new_dek_info(Kind, ActiveId, Keys, IsEnabled) ->
       has_unencrypted_data => undefined,
       last_deks_gc_datetime => undefined,
       statuses => #{},
-      prev_deks_hash => undefined}.
+      prev_deks_update_hash => undefined}.
 
 create_dek_info_if_does_not_exist(Kind, #state{deks_info = CurDeks} = State) ->
     case maps:find(Kind, CurDeks) of

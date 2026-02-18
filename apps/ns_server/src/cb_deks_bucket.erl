@@ -25,7 +25,8 @@
          get_dek_ids_in_use/2,
          initiate_drop_deks/3,
          synchronize_deks/2,
-         fetch_chronicle_keys_in_txn/2]).
+         fetch_chronicle_keys_in_txn/2,
+         dek_consumers/2]).
 
 -spec get_encryption_method(cb_deks:dek_kind(), cluster | node,
                             cb_cluster_secrets:chronicle_snapshot()) ->
@@ -92,6 +93,11 @@ update_deks({bucketDek, BucketUUID} = Kind, Snapshot) ->
         ok ?= cb_deks_cbauth:update_deks(Kind, Snapshot),
         ok
     end.
+
+-spec dek_consumers(cb_deks:dek_kind(),
+                    cb_cluster_secrets:chronicle_snapshot()) -> [term()].
+dek_consumers(Kind, Snapshot) ->
+    cb_deks_cbauth:dek_consumers(Kind, Snapshot).
 
 -spec get_required_usage(cb_deks:dek_kind()) ->
           cb_cluster_secrets:secret_usage().

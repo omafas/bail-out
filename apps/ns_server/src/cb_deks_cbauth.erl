@@ -23,7 +23,8 @@
          fetch_chronicle_keys_in_txn/2,
          cbauth_key_type_to_dek_kind/2,
          does_any_service_use_dek/2,
-         get_kinds_for_label/1]).
+         get_kinds_for_label/1,
+         dek_consumers/2]).
 
 -define(CBAUTH_RPC_TIMEOUT, ?get_timeout(cbauth_rpc_timeout, 60000)).
 
@@ -48,6 +49,12 @@ update_deks(Kind, Snapshot) ->
         {ok, _} ?= cbauth_call("UpdateKeysDB", Params, Kind, CbauthLabels),
         ok
     end.
+
+-spec dek_consumers(cb_deks:dek_kind(),
+                    cb_cluster_secrets:chronicle_snapshot()) -> [term()].
+dek_consumers(Kind, Snapshot) ->
+    CbauthLabels = get_cbauth_labels(Kind, Snapshot),
+    [json_rpc_connection:get_pid(L) || L <- CbauthLabels].
 
 -spec get_key_ids_in_use(cb_deks:dek_kind(),
                          cb_cluster_secrets:chronicle_snapshot()) ->

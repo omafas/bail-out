@@ -53,6 +53,14 @@
                       cb_cluster_secrets:chronicle_snapshot()) ->
               ok | {error, _}.
 
+%% Called before update_deks() to identify DEK consumers. If DEKs haven't
+%% changed and DEK consumers haven't changed since previous update,
+%% update_deks will not be called.
+%% DEK consumers should change when new services are added, or when
+%% services restart and reconnect to ns_server.
+-callback dek_consumers(dek_kind(),
+                        cb_cluster_secrets:chronicle_snapshot()) -> [term()].
+
 %% The usage (in cb_cluster_secrets sense) that a secret must have in order to
 %% be allowed to encrypt this kind of deks.
 -callback get_required_usage(dek_kind()) -> cb_cluster_secrets:secret_usage().
@@ -448,6 +456,7 @@ call_dek_callback(CallbackName, Kind, Args) ->
 
 -spec call_dek_callback(get_encryption_method |
                         update_deks |
+                        dek_consumers |
                         get_required_usage |
                         get_deks_lifetime |
                         get_deks_rotation_interval |

@@ -25,7 +25,8 @@
          get_dek_ids_in_use/2,
          initiate_drop_deks/3,
          synchronize_deks/2,
-         fetch_chronicle_keys_in_txn/2]).
+         fetch_chronicle_keys_in_txn/2,
+         dek_consumers/2]).
 
 -spec get_encryption_method(cb_deks:dek_kind(), cluster | node,
                             cb_cluster_secrets:chronicle_snapshot()) ->
@@ -41,6 +42,11 @@ update_deks(auditDek = Kind, _Snapshot) ->
         ok ?= cb_crypto:active_key_ok(DeksSnapshot),
         ns_memcached:set_active_dek("@audit", DeksSnapshot)
     end.
+
+-spec dek_consumers(cb_deks:dek_kind(),
+                    cb_cluster_secrets:chronicle_snapshot()) -> [term()].
+dek_consumers(_Kind, _Snapshot) ->
+    [].
 
 -spec get_required_usage(cb_deks:dek_kind()) ->
           cb_cluster_secrets:secret_usage().
