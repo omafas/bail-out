@@ -242,6 +242,7 @@ handle_cast({Msg, Label, Params, ConnectionPid},
         end,
     menelaus_cbauth_worker:notify(WorkerPid,
                                   personalize_info(Version, Label, Info)),
+    cb_cluster_secrets:notify_cbauth(Label),
     {noreply, State#state{workers = NewWorkers, cbauth_info = NewCBAuthInfo}}.
 
 handle_info({ssl_service_event, client_cert_changed}, State) ->

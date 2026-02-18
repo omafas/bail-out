@@ -22,7 +22,8 @@
          synchronize_deks/2,
          fetch_chronicle_keys_in_txn/2,
          cbauth_key_type_to_dek_kind/2,
-         does_any_service_use_dek/2]).
+         does_any_service_use_dek/2,
+         get_kinds_for_label/1]).
 
 -define(CBAUTH_RPC_TIMEOUT, ?get_timeout(cbauth_rpc_timeout, 60000)).
 
@@ -101,6 +102,21 @@ fetch_chronicle_keys_in_txn(_Kind, Txn) ->
           boolean().
 does_any_service_use_dek(DekKind, Snapshot) ->
     length(get_cbauth_labels(DekKind, Snapshot)) > 0.
+
+-spec get_kinds_for_label(string()) -> [cb_deks:dek_kind()].
+get_kinds_for_label(Label) ->
+    Snapshot = chronicle_compat:get_snapshot(
+                 [fun cb_cluster_secrets:fetch_snapshot_in_txn/1], #{}),
+    Kinds = cb_deks:dek_kinds_list_existing_on_node(Snapshot),
+    lists:filter(
+        fun (Kind) ->
+            try
+                Labels = get_cbauth_labels(Kind, Snapshot),
+                lists:member(Label, Labels)
+            catch
+                error:invalid_dek_kind -> false
+            end
+        end, Kinds).
 
 %% This function defines which services use which encr-at-rest keys.
 %% Currently returns [] for all supported kinds, but structure is in place

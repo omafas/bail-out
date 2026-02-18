@@ -159,7 +159,8 @@
          get_latest_test_results/0,
          alert_keys_added_in_totoro/0,
          alert_keys_default/0,
-         alert_keys_all/0]).
+         alert_keys_all/0,
+         notify_cbauth/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -288,6 +289,15 @@ start_link_node_monitor() ->
 start_link_master_monitor() ->
     misc:start_singleton(gen_server, start_link,
                          [?MASTER_MONITOR_NAME, ?MODULE, [?MASTER_PROC], []]).
+
+-spec notify_cbauth(string()) -> ok.
+notify_cbauth(Label) ->
+    %% That's ok if the process doesn't exist. The update_deks will be called
+    %% when the process is started then.
+    case whereis(?MODULE) of
+        undefined -> ok;
+        Pid -> Pid ! {notify_cbauth, Label}, ok
+    end.
 
 -spec get_all() -> [secret_props()].
 get_all() -> get_all(direct).
@@ -1299,6 +1309,18 @@ handle_info(calculate_dek_info, #state{proc_type = ?NODE_PROC} = State) ->
     ?log_debug("DEK info update"),
     {_Res, NewState} = calculate_dek_info(State),
     {noreply, restart_dek_info_update_timer(false, NewState)};
+
+handle_info({notify_cbauth, Label}, #state{proc_type = ?NODE_PROC} = State) ->
+    Kinds = cb_deks_cbauth:get_kinds_for_label(Label),
+    ?log_debug("Received notify_cbauth ~p, will update DEKs: ~p",
+               [Label, Kinds]),
+    NewState =
+        case Kinds of
+            [] -> State;
+            [_|_] ->
+                add_and_run_jobs([{maybe_update_deks, K} || K <- Kinds], State)
+        end,
+    {noreply, NewState};
 
 handle_info(Info, State) ->
     ?log_warning("Unhandled info: ~p", [Info]),
