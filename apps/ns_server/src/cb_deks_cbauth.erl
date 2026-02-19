@@ -175,10 +175,10 @@ cbauth_call(Func, Params, Kind, [CbauthLabel | Tail], Acc) ->
                        [Func, CbauthLabel, Kind, Reason]),
             {error, {cbauth_call_failed, Reason}}
     catch exit:{noproc, _} ->
-            ?log_error("Failed to call ~s at ~s for ~p: process is not running "
+            ?log_debug("Failed to call ~s at ~s for ~p: process is not running "
                        "or there is no cbauth connection yet",
                        [Func, CbauthLabel, Kind]),
-            {error, not_running}
+            {error, retry}
     end.
 
 dek_kind_to_json(Kind) ->
