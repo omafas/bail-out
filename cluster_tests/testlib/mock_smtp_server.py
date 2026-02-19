@@ -152,31 +152,31 @@ class SMTPServerWrapper:
         # Configure aiosmtpd logging level
         smtp_logger = logging.getLogger('mail.log')
         smtp_logger.setLevel(self.log_level)
+        # Clear existing handlers and prevent propagation to root logger
+        smtp_logger.handlers = []
+        smtp_logger.propagate = False
 
         # Configure file handler if log_file_path is specified
         if self.log_file_path:
-            # Set logger to INFO level to capture INFO and ERROR messages
-
-            # Clear existing handlers and prevent propagation to root logger
-            smtp_logger.handlers = []
-            smtp_logger.propagate = False
-
             # Add file handler
-            file_handler = logging.FileHandler(self.log_file_path)
-            file_handler.setLevel(self.log_level)
-            file_formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            file_handler.setFormatter(file_formatter)
-            smtp_logger.addHandler(file_handler)
+            log_handler = logging.FileHandler(self.log_file_path)
+        else:
+            # No log file specified, use console handler
+            log_handler = logging.StreamHandler()
+        log_handler.setLevel(self.log_level)
+        log_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        log_handler.setFormatter(log_formatter)
+        smtp_logger.addHandler(log_handler)
 
-            # Also configure aiosmtpd's internal loggers to prevent console
-            # output
-            for logger_name in ['aiosmtpd.smtp', 'aiosmtpd.server']:
-                aiosmtpd_logger = logging.getLogger(logger_name)
-                aiosmtpd_logger.setLevel(self.log_level)
-                aiosmtpd_logger.handlers = []
-                aiosmtpd_logger.propagate = False
-                aiosmtpd_logger.addHandler(file_handler)
+        # Also configure aiosmtpd's internal loggers to prevent console
+        # output
+        for logger_name in ['aiosmtpd.smtp', 'aiosmtpd.server']:
+            aiosmtpd_logger = logging.getLogger(logger_name)
+            aiosmtpd_logger.setLevel(self.log_level)
+            aiosmtpd_logger.handlers = []
+            aiosmtpd_logger.propagate = False
+            aiosmtpd_logger.addHandler(log_handler)
 
         # Prepare TLS context if use_tls is enabled
         tls_context = None
