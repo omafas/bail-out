@@ -204,7 +204,11 @@ encode_response(Value) ->
 
 handle_settings(Method, Req) ->
     try
-        menelaus_util:assert_is_dev_preview(),
+        %% Remove `jwt_enabled` in Totoro, as it is no longer needed
+        case config_profile:get_bool(jwt_enabled) of
+            true -> ok;
+            false -> menelaus_util:assert_is_dev_preview()
+        end,
         menelaus_util:assert_is_enterprise(),
         menelaus_util:assert_is_79(),
         case Method of

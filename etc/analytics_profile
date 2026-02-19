@@ -35,3 +35,5 @@
        {[app_telemetry], [write]}]}]}.
 {{kv, min_quota}, 100}.
 {{kv, max_quota}, 100}.
+%% remove in Totoro, where JWT is generally available
+{jwt_enabled, true}.
