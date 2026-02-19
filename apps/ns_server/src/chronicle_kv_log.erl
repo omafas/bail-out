@@ -105,12 +105,14 @@ sanitize_log(Name, Command) ->
 
 prepare_value(K, VFun, State) ->
     V = VFun(),
-    case ns_bucket:sub_key_match(K) of
-        {true, _Bucket, props} ->
+    case {ns_bucket:sub_key_match(K), K} of
+        {{true, _Bucket, props}, _} ->
             calculate_diff(K, V, fun ns_config_log:compute_bucket_diff/2,
                            State);
-        {true, _Bucket, collections} ->
+        {{true, _Bucket, collections}, _} ->
             calculate_diff(K, V, fun collections:diff_manifests/2, State);
+        {false, role_definitions} ->
+            calculate_diff(K, V, fun menelaus_roles:diff_roles/2, State);
         _ ->
             {sanitize(K, V), State}
     end.

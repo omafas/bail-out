@@ -74,7 +74,8 @@
          get_all_mutable_roles/0,
          get_role/1,
          set_role/1,
-         delete_role/1]).
+         delete_role/1,
+         diff_roles/2]).
 
 -export([start_compiled_roles_cache/0]).
 
@@ -1595,7 +1596,45 @@ delete_role(RoleId) ->
         {error, _} = Err -> Err
     end.
 
+diff_roles(NewRoles, OldRoles) ->
+    [{added_role, Role} || {Name, _, _, _} = Role <- NewRoles,
+                           not lists:keymember(Name, 1, OldRoles)] ++
+        [{deleted_role, Role} || {Name, _, _, _} = Role <- OldRoles,
+                                 not lists:keymember(Name, 1, NewRoles)] ++
+        [{updated_role, NewRole} ||
+            {Name, _, _, _} = NewRole <- NewRoles,
+            lists:keymember(Name, 1, OldRoles),
+            lists:keyfind(Name, 1, OldRoles) =/= NewRole].
+
 -ifdef(TEST).
+
+diff_roles_test() ->
+    RoleA_0 = {<<"role_a">>, [], [], []},
+    RoleB_0 = {<<"role_b">>, [], [], []},
+    RoleB_1 = {<<"role_b">>, [], [{desc, "added desc"}], []},
+    RoleC_0 = {<<"role_c">>, [], [], []},
+    ?assertEqual([],
+                 diff_roles([RoleC_0, RoleB_0, RoleA_0],
+                            [RoleA_0, RoleB_0, RoleC_0])),
+    ?assertEqual([{added_role, RoleC_0}],
+                 diff_roles([RoleC_0, RoleB_0, RoleA_0],
+                            [RoleA_0, RoleB_0])),
+    ?assertEqual([{deleted_role, RoleC_0}],
+                 diff_roles([RoleB_0, RoleA_0],
+                            [RoleA_0, RoleB_0, RoleC_0])),
+    ?assertEqual([{updated_role, RoleB_1}],
+                 diff_roles([RoleC_0, RoleB_1, RoleA_0],
+                            [RoleA_0, RoleB_0, RoleC_0])),
+    ?assertEqual([{added_role, RoleB_0}, {deleted_role, RoleC_0}],
+                 diff_roles([RoleB_0, RoleA_0],
+                            [RoleA_0, RoleC_0])),
+    ?assertEqual([{added_role, RoleC_0},
+                  {deleted_role, RoleA_0},
+                  {updated_role, RoleB_1}],
+                 diff_roles([RoleC_0, RoleB_1],
+                            [RoleA_0, RoleB_0])).
+
+
 set_role_definitions() ->
     fake_chronicle_kv:update_snapshot(
       #{role_definitions => default_roles_totoro()}).
