@@ -325,7 +325,16 @@ parse_validate_purge_interval(Params, _) ->
     do_parse_validate_purge_interval(Params, MinInterval).
 
 do_parse_validate_purge_interval(Params, LowerLimit) ->
-    Fun = mk_number_field_validator(LowerLimit, ?MAX_PURGE_INTERVAL, Params,
+    MaxInterval = case cluster_compat_mode:is_cluster_totoro() of
+                      false ->
+                          %% Prior to totoro the maximum was 60 but could
+                          %% be changed via /diag/eval
+                          ?MAX_PURGE_INTERVAL;
+                      true ->
+                          %% Effectively no limit
+                          ?MAX_32BIT_SIGNED_INT
+                  end,
+    Fun = mk_number_field_validator(LowerLimit, MaxInterval, Params,
                                     list_to_float),
     case Fun({"purgeInterval", purge_interval, "metadata purge interval"}) of
         [{error, Field, Msg}]->
