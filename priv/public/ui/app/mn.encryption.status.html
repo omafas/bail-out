@@ -38,7 +38,7 @@ licenses/APL2.txt.
     <li *ngIf="(hasIssues | async)">Encryption Issues</li>
     <span *ngIf="(hasIssues | async)">
       <span
-         class="block margin-left-half padding-bottom-half padding-top-half text-smaller"
+         class="block margin-left-half padding-bottom-half text-smaller"
          [ngStyle]="{'border-bottom': i < ((currentEncryptionInfo | async).issues.length - 1) ? '1px solid #ececec' : 'none'}"
          *ngFor="let issue of (currentEncryptionInfo | async).issues; index as i">
         {{issue}}
@@ -50,7 +50,7 @@ licenses/APL2.txt.
 <div class="row flex-left">
    <strong>Encryption At Rest:</strong>&nbsp;{{isEncryptionEnabled ? 'Enabled' : 'Disabled'}}
 </div>
-<div *ngIf="(shouldShowIcon | async) && !(hasIssues | async)" class="row margin-left-half flex-left margin-top-0 margin-bottom-quarter line-height-1">
+<div *ngIf="(shouldShowIcon | async)" class="row margin-left-half flex-left margin-top-0 margin-bottom-quarter line-height-1">
    <strong>Data Status:</strong>
    <span class="orange--1 text-smaller cursor-pointer margin-left-quarter"
          [ngbTooltip]="tooltipTemplate"

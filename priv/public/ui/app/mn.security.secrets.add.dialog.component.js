@@ -26,6 +26,20 @@ import {MnHelperService} from "./mn.helper.service.js";
 
 import {MnPermissions} from './ajs.upgraded.providers.js';
 
+function normalizeErrorStream(errorStream, isEditMode, isTestStream = false) {
+  return errorStream.pipe(map(error => {
+    if (!error) return null;
+    if (error.errors && error.errors._) return error;
+    if (error.status === 500 || error.status === 503) {
+      return {
+        ...error,
+        errors: {_: error.error || error[0]}
+      }
+    }
+    return error;
+  }));
+}
+
 export {MnSecuritySecretsAddDialogComponent};
 
 class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
@@ -128,6 +142,7 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
       })
       .setPackPipe(map(this.packData.bind(this)))
       .setPostRequest(this.item ? this.mnSecuritySecretsService.stream.putSecret : this.mnSecuritySecretsService.stream.postSecret)
+      .showGlobalSpinner()
       .setReset(this.uiRouter.stateService.reload)
       .successMessage(this.item ? "Encryption key updated successfully!" : "Encryption key created successfully!")
       .success(() => {
@@ -141,10 +156,18 @@ class MnSecuritySecretsAddDialogComponent extends MnLifeCycleHooksToStream {
       return secret.usage.find(u => this.item?.id !== secret.id && u.includes('KEK-encryption'));
     });
 
-    this.httpError = this.item ?
-      this.mnSecuritySecretsService.stream.putSecret.error : this.mnSecuritySecretsService.stream.postSecret.error;
-    this.testHttpError = this.item ?
-      this.mnSecuritySecretsService.stream.testPutSecret.error : this.mnSecuritySecretsService.stream.testPostSecret.error;
+    this.httpError = normalizeErrorStream(
+      this.item ?
+        this.mnSecuritySecretsService.stream.putSecret.error : this.mnSecuritySecretsService.stream.postSecret.error,
+      !!this.item,
+      false
+    );
+    this.testHttpError = normalizeErrorStream(
+      this.item ?
+        this.mnSecuritySecretsService.stream.testPutSecret.error : this.mnSecuritySecretsService.stream.testPostSecret.error,
+      !!this.item,
+      true
+    );
     this.error = merge(this.httpError, this.testHttpError);
 
     let testAddResponse = this.mnSecuritySecretsService.stream.testPostSecret.response;
