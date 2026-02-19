@@ -43,6 +43,7 @@
          handle_settings_rebalance/1,
          handle_settings_rebalance_post/1,
          get_rebalance_moves_per_node/0,
+         get_data_service_file_based_rebalance_moves_per_node/0,
 
          handle_settings_auto_reprovision/1,
          handle_settings_auto_reprovision_post/1,
@@ -792,7 +793,11 @@ conf(internal) ->
                 [{data_service_file_based_rebalance_enabled,
                   dataServiceFileBasedRebalanceEnabled,
                   ?DATA_SERVICE_FILE_BASED_BACKFILL_DEFAULT,
-                  fun get_bool/1}];
+                  fun get_bool/1},
+                 {data_service_file_based_rebalance_moves_per_node,
+                  dataServiceFileBasedRebalanceMovesPerNode,
+                  ?DEFAULT_MAX_MOVES_PER_NODE,
+                  get_number(1, 1024)}];
             false ->
                 []
         end;
@@ -1822,6 +1827,10 @@ handle_reset_ciphers_suites(Req) ->
 
 get_rebalance_moves_per_node() ->
     ns_config:read_key_fast(rebalance_moves_per_node,
+                            ?DEFAULT_MAX_MOVES_PER_NODE).
+
+get_data_service_file_based_rebalance_moves_per_node() ->
+    ns_config:read_key_fast(data_service_file_based_rebalance_moves_per_node,
                             ?DEFAULT_MAX_MOVES_PER_NODE).
 
 handle_settings_rebalance(Req) ->

@@ -145,14 +145,15 @@ init({Bucket, BucketConfig, Nodes, OldMap, NewMap, ProgressCallback,
     ets:new(workers, [named_table, private, set]),
 
     Quirks = rebalance_quirks:get_quirks(Nodes, project_intact),
+    FileBasedEnabled = ns_bucket:is_data_service_file_based_rebalance_enabled(
+                         BucketConfig),
     Options =
         [{fusion_use_snapshot, true} || RebalancePlan =/= undefined] ++
-        [{data_service_file_based_rebalance_enabled, true} ||
-            ns_bucket:is_data_service_file_based_rebalance_enabled(
-              BucketConfig)],
+        [{data_service_file_based_rebalance_enabled, true} || FileBasedEnabled],
+    BackfillsLimit = get_backfills_per_node(FileBasedEnabled),
     SchedulerState = vbucket_move_scheduler:prepare(
                        OldMap, NewMap, Quirks,
-                       menelaus_web_settings:get_rebalance_moves_per_node(),
+                       BackfillsLimit,
                        ?MOVES_BEFORE_COMPACTION,
                        ?MAX_INFLIGHT_MOVES_PER_NODE, Options),
 
@@ -508,6 +509,11 @@ take_worker(Pid) ->
 
 get_all_workers() ->
     ets:tab2list(workers).
+
+get_backfills_per_node(false = _IsFileBasedRebalance) ->
+    menelaus_web_settings:get_rebalance_moves_per_node();
+get_backfills_per_node(true = _IsFileBasedRebalance) ->
+    menelaus_web_settings:get_data_service_file_based_rebalance_moves_per_node().
 
 -ifdef(TEST).
 is_swap_rebalance_test() ->
