@@ -271,7 +271,11 @@ default(Vsn) ->
        {subdoc_offload_size_threshold, 1024 * 1024},
        {subdoc_offload_paths_threshold, 16},
        %% Default of 0 denotes no throttling.
-       {snapshot_download_throttle_bytes, 0}]},
+       {snapshot_download_throttle_bytes, 0},
+       {throttle_enabled, false},
+       {read_unit_size, 4096},
+       {write_unit_size, 1024},
+       {node_capacity, ?MAX_64BIT_UNSIGNED_INT}]},
 
      %% Memcached config
      {{node, node(), memcached},
@@ -375,7 +379,11 @@ default(Vsn) ->
         {subdoc_multi_max_paths, subdoc_multi_max_paths},
         {subdoc_offload_size_threshold, subdoc_offload_size_threshold},
         {subdoc_offload_paths_threshold, subdoc_offload_paths_threshold},
-        {snapshot_download_throttle_bytes, snapshot_download_throttle_bytes}
+        {snapshot_download_throttle_bytes, snapshot_download_throttle_bytes},
+        {throttle_enabled, throttle_enabled},
+        {read_unit_size, read_unit_size},
+        {write_unit_size, write_unit_size},
+        {node_capacity, node_capacity}
        ]}},
 
      {memory_quota, KvQuota},
