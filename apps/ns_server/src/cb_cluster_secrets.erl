@@ -503,19 +503,35 @@ delete_secret(Id, IsSecretWritableFun) ->
 -spec delete_secret_internal(secret_id(),
                              {M :: atom(), F :: atom(), A :: [term()]}) ->
           {ok, string()} | {error, not_found | secret_in_use() | forbidden |
-                                   inconsistent_graph() | no_quorum}.
+                                   inconsistent_graph() | no_quorum |
+                                   {deks_sync_failed, [{node(), term()}]}}.
 delete_secret_internal(Id, IsSecretWritableMFA) ->
     %% Make sure we have most recent information about which secrets are in use
     maybe_reset_deks_counters(),
+    maybe
+        {ok, Snapshot} ?=
+            try
+                {ok, chronicle_compat:get_snapshot(
+                                        [fun fetch_snapshot_in_txn/1],
+                                        #{read_consistency => quorum})}
+            catch
+                exit:timeout -> {error, no_quorum}
+            end,
+        {ok, _} ?= pre_delete_checks(Id, IsSecretWritableMFA, Snapshot),
+        KindsToSync = cb_deks:dek_cluster_kinds_list(Snapshot),
+        %% We don't want to call sync without doing basic checks first,
+        %% because sync is huge: it affects all services for all nodes.
+        ok ?= synchronize_deks_on_all_nodes(KindsToSync),
+        delete_secret_internal_without_sync(Id, IsSecretWritableMFA)
+    end.
+
+delete_secret_internal_without_sync(Id, IsSecretWritableFun) ->
     RV = chronicle_compat_txn(
            fun (Txn) ->
                maybe
                    Snapshot = fetch_snapshot_in_txn(Txn),
-                   {ok, #{id := Id,
-                          name := Name} = Props} ?= get_secret(Id, Snapshot),
-                   true ?= call_is_writable_mfa(IsSecretWritableMFA,
-                                                [Props, Snapshot]),
-                   ok ?= can_delete_secret(Props, Snapshot),
+                   {ok, Name} ?= pre_delete_checks(Id, IsSecretWritableFun,
+                                                   Snapshot),
                    CurSecrets = get_all(Snapshot),
                    NewSecrets = lists:filter(
                                   fun (#{id := Id2}) -> Id2 /= Id end,
@@ -524,7 +540,6 @@ delete_secret_internal(Id, IsSecretWritableMFA) ->
                    ok ?= validate_secrets_consistency(NewSecrets),
                    {commit, [{set, ?CHRONICLE_SECRETS_KEY, NewSecrets}], Name}
                else
-                   false -> {abort, {error, forbidden}};
                    {error, _} = Error -> {abort, Error}
                end
            end),
@@ -538,6 +553,18 @@ delete_secret_internal(Id, IsSecretWritableMFA) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+pre_delete_checks(Id, IsSecretWritableMFA, Snapshot) ->
+    maybe
+        {ok, #{id := Id, name := Name} = Props} ?= get_secret(Id, Snapshot),
+        true ?= call_is_writable_mfa(IsSecretWritableMFA, [Props, Snapshot]),
+        ok ?= can_delete_secret(Props, Snapshot),
+        {ok, Name}
+    else
+        false -> {error, forbidden};
+        {error, _} = E -> E
+    end.
+
 
 -spec delete_historical_key(secret_id(), key_id(),
                             {M :: atom(), F :: atom(), A :: [term()]}) ->
