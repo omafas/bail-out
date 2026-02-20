@@ -15,7 +15,7 @@ licenses/APL2.txt.
      mn-tab-bar-name="securityTab">
     <a
        ui-sref="app.admin.security.roles.user"
-       ng-show="rbac.cluster.admin.users.write || !poolDefault.compat.atLeast79"
+       ng-show="rbac.cluster.admin.users.read || !poolDefault.compat.atLeast79"
        ng-class="{selected: ('app.admin.security.roles.user' | includedByState) ||
                 ('app.admin.security.roles.groups' | includedByState)}">
       Users <span ng-show="pools.isEnterprise">&amp; Groups</span>
