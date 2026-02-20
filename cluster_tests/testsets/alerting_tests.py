@@ -52,12 +52,19 @@ class AlertTests(testlib.BaseTestSet):
         testlib.diag_eval(self.cluster,
                           "menelaus_web_alerts_srv ! check_alerts")
 
+        # Disable certificate verification for self-signed certs when TLS
+        # is enabled
+        testlib.diag_eval(
+            self.cluster,
+            "ns_config:set({ns_mail, disable_verify_peer}, true).")
+
         # Set up mock SMTP server for email verification
         self.mock_smtp_server = self.setup_mock_email_server(
             smtp_host='127.0.0.1',
             smtp_port=None,  # auto-assign port
             sender='alerts_test@example.com',
             recipients='admin@example.com',
+            use_tls=True,
             enable_alerts=None  # preserve existing/default alerts
         )
 
@@ -139,6 +146,7 @@ class AlertTests(testlib.BaseTestSet):
                                   host=smtp_host,
                                   port=smtp_port or 0,
                                   use_tls=use_tls,
+                                  require_starttls=use_tls,
                                   log_file_path=self.smtp_log_path)
         actual_port = self.mock_smtp_server.port
 
@@ -168,6 +176,11 @@ class AlertTests(testlib.BaseTestSet):
             except:
                 pass
             self.mock_smtp_server = None
+
+        # Restore certificate verification setting
+        testlib.diag_eval(
+            self.cluster,
+            "ns_config:delete({ns_mail, disable_verify_peer}).")
 
         # Disable email alerts to restore default state
         self.configure_email_alerts(enabled=False)

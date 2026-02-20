@@ -3,6 +3,11 @@ import threading
 import logging
 import socket
 import time
+import ssl
+import shutil
+import subprocess
+import tempfile
+import os
 from email import message_from_string
 from email.header import decode_header
 from aiosmtpd.controller import Controller
@@ -89,6 +94,32 @@ class MockSMTPHandler:
             self.captured_emails.clear()
 
 
+def _generate_self_signed_cert(temp_dir):
+    """
+    Generate a self-signed certificate and key using openssl.
+    Returns (cert_path, key_path) or raises RuntimeError.
+    """
+    cert_path = os.path.join(temp_dir, 'cert.pem')
+    key_path = os.path.join(temp_dir, 'key.pem')
+
+    openssl_path = shutil.which('openssl')
+    if not openssl_path:
+        raise RuntimeError("openssl not found in PATH; cannot generate "
+                           "self-signed certificate")
+
+    cmd = [
+        openssl_path, 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+        '-keyout', key_path, '-out', cert_path,
+        '-subj', '/CN=localhost', '-days', '1'
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to generate self-signed cert: "
+                           f"{e.stderr.decode()}")
+    return cert_path, key_path
+
+
 class SMTPServerWrapper:
     """
     Wrapper for aiosmtpd server with thread-based API compatible with smtpd
@@ -96,16 +127,23 @@ class SMTPServerWrapper:
     """
 
     def __init__(self, handler, host='127.0.0.1', port=0,
-                 log_level=logging.DEBUG, log_file_path=None):
+                 log_level=logging.DEBUG, log_file_path=None,
+                 use_tls=False, require_starttls=None,
+                 cert_file=None, key_file=None):
         self.handler = handler
         self.host = host
         self.port = port
         self.log_level = log_level
         self.log_file_path = log_file_path
+        self.use_tls = use_tls
+        self.require_starttls = require_starttls
+        self.cert_file = cert_file
+        self.key_file = key_file
         self.loop = None
         self.server = None
         self.thread = None
         self._stop_event = threading.Event()
+        self._temp_cert_dir = None
 
     def start(self):
         """Start the SMTP server."""
@@ -140,6 +178,29 @@ class SMTPServerWrapper:
                 aiosmtpd_logger.propagate = False
                 aiosmtpd_logger.addHandler(file_handler)
 
+        # Prepare TLS context if use_tls is enabled
+        tls_context = None
+        if self.use_tls:
+            cert_file = self.cert_file
+            key_file = self.key_file
+
+            # If no cert/key provided, generate self-signed or use fallback
+            if not cert_file or not key_file:
+                try:
+                    self._temp_cert_dir = tempfile.mkdtemp(
+                        prefix='mock_smtp_tls_')
+                    cert_file, key_file = _generate_self_signed_cert(
+                        self._temp_cert_dir)
+                    print(f"Generated temporary self-signed certificate in "
+                          f"{self._temp_cert_dir}")
+                except RuntimeError as e:
+                    raise RuntimeError(
+                        f"Cannot enable TLS: {e}; fallback certs not found"
+                    )
+
+            tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            tls_context.load_cert_chain(cert_file, key_file)
+
         def start_server():
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
@@ -151,14 +212,25 @@ class SMTPServerWrapper:
                 self.port = s.getsockname()[1]
                 s.close()
 
-            self.server = Controller(
-                self.handler,
-                hostname=self.host,
-                port=self.port
-            )
+            # Build Controller kwargs
+            controller_kwargs = {
+                'hostname': self.host,
+                'port': self.port,
+            }
+            if tls_context:
+                controller_kwargs['tls_context'] = tls_context
+                # Determine require_starttls value
+                req_tls = self.require_starttls
+                if req_tls is None:
+                    req_tls = True  # Default to require STARTTLS when TLS on
+                controller_kwargs['require_starttls'] = req_tls
+
+            self.server = Controller(self.handler, **controller_kwargs)
             self.server.start()
 
-            print(f"Mock SMTP server started on {self.host}:{self.port}")
+            tls_msg = " (STARTTLS enabled)" if tls_context else ""
+            print(f"Mock SMTP server started on "
+                  f"{self.host}:{self.port}{tls_msg}")
 
             # Run until stop event
             try:
@@ -223,6 +295,13 @@ class SMTPServerWrapper:
         if self.thread:
             self.thread.join(timeout=5)
 
+        # Clean up temporary certificate directory if created
+        if self._temp_cert_dir and os.path.exists(self._temp_cert_dir):
+            try:
+                shutil.rmtree(self._temp_cert_dir)
+            except Exception:
+                pass
+
         print(f"Mock SMTP server stopped")
 
 
@@ -246,14 +325,15 @@ class SMTPServerRunner(threading.Thread):
         print("WARNING: SMTPServerRunner.run() should not be called directly. "
               "Use start_server() instead.")
 
-    def start_server(self, use_tls=False):
+    def start_server(self, use_tls=False, require_starttls=None,
+                     cert_file=None, key_file=None):
         """Start the SMTP server."""
-        if use_tls:
-            print("WARNING: TLS support not yet implemented")
-
         self.handler = MockSMTPHandler()
-        self.wrapper = SMTPServerWrapper(self.handler, self.host, self.port,
-                                         self.log_level, self.log_file_path)
+        self.wrapper = SMTPServerWrapper(
+            self.handler, self.host, self.port,
+            self.log_level, self.log_file_path,
+            use_tls=use_tls, require_starttls=require_starttls,
+            cert_file=cert_file, key_file=key_file)
         self.wrapper.start()
         self.port = self.wrapper.port
         return self.port
@@ -280,21 +360,30 @@ class SMTPServerRunner(threading.Thread):
 
 
 def start_mock_smtp_server(host='127.0.0.1', port=0, use_tls=False,
-                           log_level=logging.DEBUG, log_file_path=None):
+                           log_level=logging.DEBUG, log_file_path=None,
+                           require_starttls=None, cert_file=None,
+                           key_file=None):
     """
     Convenience function to start a mock SMTP server.
 
     Args:
         host: Host to bind to (default: 127.0.0.1)
         port: Port to bind to (0 for ephemeral port)
-        use_tls: Whether to support STARTTLS (not yet implemented)
+        use_tls: Whether to support STARTTLS
         log_level: Logging level (default: logging.DEBUG)
         log_file_path: Path to file for writing logs (optional)
+        require_starttls: If True, require clients to use STARTTLS before
+                          mail commands. Defaults to True when use_tls=True.
+        cert_file: Path to TLS certificate file (optional; auto-generated if
+                   not provided and use_tls=True)
+        key_file: Path to TLS private key file (optional; auto-generated if
+                  not provided and use_tls=True)
 
     Returns:
         SMTPServerRunner instance
     """
     runner = SMTPServerRunner(host=host, port=port, log_level=log_level,
                               log_file_path=log_file_path)
-    runner.start_server(use_tls=use_tls)
+    runner.start_server(use_tls=use_tls, require_starttls=require_starttls,
+                        cert_file=cert_file, key_file=key_file)
     return runner
