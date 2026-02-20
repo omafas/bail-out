@@ -8,12 +8,12 @@ SET (GET_PIP_CMD "${CMAKE_COMMAND}"
 
 ADD_CUSTOM_TARGET(cluster_tests_python_requirements
         COMMAND ${GET_PIP_CMD}
-        COMMAND ${PYTHON_EXE} ${GET_PIP_PY_FILE}
-        COMMAND ${PYTHON_EXE} -m pip
+        COMMAND python3 ${GET_PIP_PY_FILE}
+        COMMAND python3 -m pip
         install -r ${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt)
 SEPARATE_ARGUMENTS(cluster_test_args NATIVE_COMMAND $ENV{CLUSTER_TESTS_ARGS})
 ADD_CUSTOM_TARGET(cluster_tests
-        COMMAND JAVA_HOME=${Java_JAVA_HOME} ${PYTHON_EXE}
+        COMMAND JAVA_HOME=${Java_JAVA_HOME} python3
         ${CMAKE_CURRENT_SOURCE_DIR}/run.py ${cluster_test_args}
         DEPENDS cluster_tests_python_requirements
         COMMAND_EXPAND_LISTS)
