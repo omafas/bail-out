@@ -244,6 +244,63 @@ class AlertTests(testlib.BaseTestSet):
               f"sender={response['sender']}, "
               f"recipients={response['recipients']}")
 
+    def send_test_email_test(self):
+        """Test sending a test email via /settings/alerts/testEmail."""
+        # Clear any previously captured emails
+        self.mock_smtp_server.clear_emails()
+
+        # Get current email settings to get host/port
+        settings = testlib.get_succ(self.cluster, '/settings/alerts').json()
+
+        # Use new sender and multiple recipients
+        test_sender = f'{testlib.random_str(10)}@example.com'
+        test_recipients = ['recipient1@example.com',
+                           'recipient2@example.com',
+                           'recipient3@example.com']
+
+        # Send test email - use real host/port but new sender/recipients
+        test_data = {
+            'subject': 'Test Email Subject',
+            'body': 'This is a test email body',
+            'enabled': 'true',
+            'sender': test_sender,
+            'recipients': ','.join(test_recipients),
+            'emailHost': settings['emailServer']['host'],
+            'emailPort': str(settings['emailServer']['port']),
+            'emailUser': settings['emailServer']['user'],
+            'emailPass': '',
+            'emailEncrypt': 'true' if settings['emailServer']['encrypt']
+                            else 'false'
+        }
+
+        testlib.post_succ(self.cluster, '/settings/alerts/testEmail',
+                          data=test_data)
+
+        # Wait for the email to be captured by the mock SMTP server
+        def check_test_email_received():
+            emails = self.mock_smtp_server.captured_emails
+            for email in emails:
+                if 'Test Email Subject' in email.subject:
+                    print(f"Test email received: {email}")
+                    # Verify sender
+                    assert email.sender == test_sender, \
+                        f"Sender mismatch: expected {test_sender}, " \
+                        f"got {email.sender}"
+                    # Verify body
+                    assert 'This is a test email body' in email.body, \
+                        f"Email body mismatch: {email.body}"
+                    for recipient in test_recipients:
+                        assert recipient in email.recipients, \
+                            f"Recipient {recipient} did not receive the " \
+                            f"email. Actual recipients: {test_email.recipients}"
+                        print(f"  - {recipient}: OK")
+                    return True
+            return False
+
+        testlib.poll_for_condition(check_test_email_received, sleep_time=1,
+                                   timeout=30,
+                                   msg='wait for test email to be received')
+
     def cert_about_to_expire_alert_test(self):
         limits = testlib.get_succ(self.cluster, "/settings/alerts/limits")\
             .json()
