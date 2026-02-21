@@ -1331,6 +1331,9 @@ upgrade_props(?VERSION_76, auth, _Key, AuthProps) ->
 upgrade_props(?VERSION_79, user, _Key, UserProps) ->
     {ok, functools:chain(UserProps,
                          [maybe_substitute_user_roles(_, undefined)])};
+upgrade_props(?VERSION_79, group, _Key, GroupProps) ->
+    {ok, functools:chain(GroupProps,
+                         [maybe_substitute_user_roles(_, undefined)])};
 upgrade_props(_Vsn, _RecType, _Key, _Props) ->
     skip.
 
@@ -1363,16 +1366,17 @@ maybe_substitute_roles(Roles) ->
     end.
 
 maybe_substitute_roles_helper(Roles) ->
-    lists:flatmap(
-      fun (security_admin_local) ->
-              [security_admin, user_admin_local];
-          (security_admin_external) ->
-              [security_admin, user_admin_external];
-          (ro_admin) ->
-              [ro_admin, ro_security_admin];
-          (Role) ->
-              [Role]
-      end, Roles).
+    NewRoles = lists:flatmap(
+                 fun (security_admin_local) ->
+                         [security_admin, user_admin_local];
+                     (security_admin_external) ->
+                         [security_admin, user_admin_external];
+                     (ro_admin) ->
+                         [ro_admin, ro_security_admin];
+                     (Role) ->
+                         [Role]
+                 end, Roles),
+    lists:usort(NewRoles).
 
 get_rid_of_plain_key(Auth) ->
     lists:map(
