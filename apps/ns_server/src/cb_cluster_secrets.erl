@@ -504,7 +504,8 @@ delete_secret(Id, IsSecretWritableFun) ->
                              {M :: atom(), F :: atom(), A :: [term()]}) ->
           {ok, string()} | {error, not_found | secret_in_use() | forbidden |
                                    inconsistent_graph() | no_quorum |
-                                   {deks_sync_failed, [{node(), term()}]}}.
+                                   {deks_sync_failed, [{node(), term()}]} |
+                                   rebalance_running}.
 delete_secret_internal(Id, IsSecretWritableMFA) ->
     %% Make sure we have most recent information about which secrets are in use
     maybe_reset_deks_counters(),
@@ -559,6 +560,7 @@ pre_delete_checks(Id, IsSecretWritableMFA, Snapshot) ->
         {ok, #{id := Id, name := Name} = Props} ?= get_secret(Id, Snapshot),
         true ?= call_is_writable_mfa(IsSecretWritableMFA, [Props, Snapshot]),
         ok ?= can_delete_secret(Props, Snapshot),
+        ok ?= ensure_rebalance_not_running(Snapshot),
         {ok, Name}
     else
         false -> {error, forbidden};
@@ -581,7 +583,8 @@ delete_historical_key(SecretId, HistKeyId, IsSecretWritableFun) ->
           {error, not_found | {unsafe, secret_in_use() | forbidden |
                                        inconsistent_graph() | no_quorum |
                                        active_key |
-                                       {deks_sync_failed, [{node(), term()}]}}}.
+                                       {deks_sync_failed, [{node(), term()}]}} |
+                                       rebalance_running}.
 delete_historical_key_internal(SecretId, HistKeyId, IsSecretWritableMFA) ->
     %% It is important to get the counters before we start dek info aggregation
     Snapshot = chronicle_compat:get_snapshot(
@@ -610,21 +613,23 @@ delete_historical_key_internal(SecretId, HistKeyId, IsSecretWritableMFA) ->
 delete_historical_keys_internal(KeysToRemove, IsSecretWritableFun,
                                 AllNodesDekInfo, CountersRev, Snapshot,
                                 IsAutomatic) ->
-    KindsToSync = cb_deks:dek_cluster_kinds_list(Snapshot),
-    case synchronize_deks_on_all_nodes(KindsToSync) of
-        ok ->
-            lists:map(
-                fun ({SecretId, SecretName, KeyId}) ->
-                    delete_historical_key_without_sync(
-                      SecretId, SecretName, KeyId, IsSecretWritableFun,
-                      AllNodesDekInfo, CountersRev, IsAutomatic)
-                end, KeysToRemove);
-        {error, SyncError} ->
+    maybe
+        ok ?= ensure_rebalance_not_running(Snapshot),
+        KindsToSync = cb_deks:dek_cluster_kinds_list(Snapshot),
+        ok ?= synchronize_deks_on_all_nodes(KindsToSync),
+        lists:map(
+            fun ({SecretId, SecretName, KeyId}) ->
+                delete_historical_key_without_sync(
+                    SecretId, SecretName, KeyId, IsSecretWritableFun,
+                    AllNodesDekInfo, CountersRev, IsAutomatic)
+            end, KeysToRemove)
+    else
+        {error, Error} ->
             lists:map(
               fun ({SecretId, SecretName, KeyId}) ->
                   log_unsucc_hist_key_removal(SecretId, SecretName, KeyId,
-                                              SyncError, IsAutomatic),
-                  {error, SyncError}
+                                              Error, IsAutomatic),
+                  {error, Error}
               end, KeysToRemove)
     end.
 
@@ -1646,6 +1651,12 @@ garbage_collect_keks() ->
             Error;
         no_change ->
             ok
+    end.
+
+ensure_rebalance_not_running(Snapshot) ->
+    case rebalance:running(Snapshot) of
+        false -> ok;
+        true -> {error, rebalance_running}
     end.
 
 -spec synchronize_deks_on_all_nodes([cb_deks:dek_kind()]) ->
@@ -3667,7 +3678,8 @@ fetch_snapshot_in_txn(Txn) ->
                         [?CHRONICLE_SECRETS_KEY,
                          ?CHRONICLE_DEK_COUNTERS_KEY,
                          ?CHRONICLE_DEK_COUNTERS_TIME_KEY,
-                         ?CHRONICLE_NEXT_ID_KEY],
+                         ?CHRONICLE_NEXT_ID_KEY,
+                         rebalancer_pid],
                         Txn),
     maps:merge(DeksRelatedSnapshot, SecretsSnapshot).
 
@@ -4011,6 +4023,7 @@ delete_historical_key_txn(SecretId, HistKeyId, IsSecretWritableFun, Snapshot) ->
         {_, true} ?= {writable, IsSecretWritableFun(Props, Snapshot)},
         SecretIds = get_secrets_encrypted_by_key_id(HistKeyId, Snapshot),
         {_, []} ?= {in_use, SecretIds},
+        ok ?= ensure_rebalance_not_running(Snapshot),
         {ok, NewProps} ?= remove_historical_key_from_props(Props, HistKeyId),
         %% Update secret list
         CurSecrets = get_all(Snapshot),

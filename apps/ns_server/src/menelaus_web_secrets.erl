@@ -1319,6 +1319,8 @@ format_error({read_key_file_error, ErrorMsg}) ->
     io_lib:format("Failed to read DEK file: ~s", [ErrorMsg]);
 format_error(kind_not_found) ->
     "Key type does not exist on this node";
+format_error(rebalance_running) ->
+    "Cannot remove encryption keys while rebalance is in progress";
 format_error(Reason) ->
     lists:flatten(io_lib:format("~p", [Reason])).
 
