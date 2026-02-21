@@ -700,56 +700,59 @@ cache_lookup_test() ->
 
     StartTime = erlang:monotonic_time(millisecond),
 
-    {ok, _Pid} = jwt_cache:start_link(),
+    try
+        {ok, _Pid} = jwt_cache:start_link(),
 
-    {ok, JWK} = get_jwk(IssuerProps, <<"key1">>),
-    ?assert(is_tuple(JWK)),
-    ?assertEqual(jose_jwk, element(1, JWK)),
-    [{_, #jwks_cache_entry{kid_to_jwk = KidToJWKMap,
-                           fetch_time = FetchTime,
-                           expiry = Expiry}}] = ets:lookup(?MODULE, "test1"),
-    ?assert(is_map(KidToJWKMap)),
-    ?assertEqual(2, maps:size(KidToJWKMap)),
-    ?assert(Expiry > FetchTime),
+        {ok, JWK} = get_jwk(IssuerProps, <<"key1">>),
+        ?assert(is_tuple(JWK)),
+        ?assertEqual(jose_jwk, element(1, JWK)),
+        [{_, #jwks_cache_entry{kid_to_jwk = KidToJWKMap,
+                               fetch_time = FetchTime,
+                               expiry = Expiry}}] = ets:lookup(?MODULE,
+                                                               "test1"),
+        ?assert(is_map(KidToJWKMap)),
+        ?assertEqual(2, maps:size(KidToJWKMap)),
+        ?assert(Expiry > FetchTime),
 
-    %% First lookup should fetch
-    {ok, JWK1} = get_jwk(IssuerProps, <<"key1">>),
-    ?assertEqual(meck:num_calls(rest_utils, request, ['_', '_', '_', '_', '_',
-                                                      '_', '_']), 1),
+        %% First lookup should fetch
+        {ok, JWK1} = get_jwk(IssuerProps, <<"key1">>),
+        ?assertEqual(meck:num_calls(rest_utils, request, ['_', '_', '_', '_',
+                                                          '_', '_', '_']), 1),
 
-    %% Set the cache entry to expired
-    ExpiredEntry = {"test1", #jwks_cache_entry{kid_to_jwk = KidToJWKMap,
-                                               fetch_time = FetchTime,
-                                               expiry = StartTime}},
-    ets:insert(?MODULE, ExpiredEntry),
+        %% Set the cache entry to expired
+        ExpiredEntry = {"test1", #jwks_cache_entry{kid_to_jwk = KidToJWKMap,
+                                                   fetch_time = FetchTime,
+                                                   expiry = StartTime - 1}},
+        ets:insert(?MODULE, ExpiredEntry),
 
-    %% Cooldown period is not met, should not fetch
-    {error, _} = get_jwk(IssuerProps, <<"key2">>),
-    ?assertEqual(meck:num_calls(rest_utils, request, ['_', '_', '_', '_', '_',
-                                                      '_', '_']), 1),
+        %% Cooldown period is not met, should not fetch
+        {error, _} = get_jwk(IssuerProps, <<"key2">>),
+        ?assertEqual(meck:num_calls(rest_utils, request, ['_', '_', '_', '_',
+                                                          '_', '_', '_']), 1),
 
-    %% Invalidate the cache and wait until it is handled
-    jwt_cache ! settings_update,
-    gen_server:call(jwt_cache, sync, 1000),
-    ?assertEqual(0, ets:info(?MODULE, size)),
+        %% Invalidate the cache and wait until it is handled
+        jwt_cache ! settings_update,
+        gen_server:call(jwt_cache, sync, 1000),
+        ?assertEqual(0, ets:info(?MODULE, size)),
 
-    %% Should trigger fetch
-    {ok, JWK2} = get_jwk(IssuerProps, <<"key2">>),
-    ?assertEqual(meck:num_calls(rest_utils, request, ['_', '_', '_', '_', '_',
-                                                      '_', '_']), 2),
+        %% Should trigger fetch
+        {ok, JWK2} = get_jwk(IssuerProps, <<"key2">>),
+        ?assertEqual(meck:num_calls(rest_utils, request, ['_', '_', '_', '_',
+                                                          '_', '_', '_']), 2),
 
-    %% Cache hits, should not fetch
-    {ok, JWK2} = get_jwk(IssuerProps, <<"key2">>),
-    {ok, JWK1} = get_jwk(IssuerProps, <<"key1">>),
-    ?assertEqual(meck:num_calls(rest_utils, request, ['_', '_', '_', '_', '_',
-                                                      '_', '_']), 2),
-
-    meck:unload(jwt_issuer),
-    meck:unload(chronicle_kv),
-    meck:unload(chronicle_compat_events),
-    meck:unload(rest_utils),
-    meck:unload(ns_config),
-    gen_server:stop(jwt_cache).
+        %% Cache hits, should not fetch
+        {ok, JWK2} = get_jwk(IssuerProps, <<"key2">>),
+        {ok, JWK1} = get_jwk(IssuerProps, <<"key1">>),
+        ?assertEqual(meck:num_calls(rest_utils, request, ['_', '_', '_', '_',
+                                                          '_', '_', '_']), 2)
+    after
+        meck:unload(jwt_issuer),
+        meck:unload(chronicle_kv),
+        meck:unload(chronicle_compat_events),
+        meck:unload(rest_utils),
+        meck:unload(ns_config),
+        catch gen_server:stop(jwt_cache)
+    end.
 
 cache_refresh_failure_test() ->
     meck:new(chronicle_compat_events, [passthrough]),
@@ -841,54 +844,58 @@ cache_refresh_failure_test() ->
                               TestJWKS}}
                 end),
 
-    {ok, Pid} = jwt_cache:start_link(),
+    try
+        {ok, Pid} = jwt_cache:start_link(),
 
-    {ok, JWK1} = get_jwk(Issuer1Props#{name => Issuer1}, <<"key1">>),
-    {ok, JWK2} = get_jwk(Issuer2Props#{name => Issuer2}, <<"key1">>),
-    ?assert(is_tuple(JWK1)),
-    ?assert(is_tuple(JWK2)),
+        {ok, JWK1} = get_jwk(Issuer1Props#{name => Issuer1}, <<"key1">>),
+        {ok, JWK2} = get_jwk(Issuer2Props#{name => Issuer2}, <<"key1">>),
+        ?assert(is_tuple(JWK1)),
+        ?assert(is_tuple(JWK2)),
 
-    [{_, Issuer1Entry}] = ets:lookup(?MODULE, Issuer1),
-    [{_, Issuer2Entry}] = ets:lookup(?MODULE, Issuer2),
+        [{_, Issuer1Entry}] = ets:lookup(?MODULE, Issuer1),
+        [{_, Issuer2Entry}] = ets:lookup(?MODULE, Issuer2),
 
-    %% Simulate failures during refresh
-    meck:expect(rest_utils, request,
-                fun(<<"jwks">>, "https://example.com/jwks1", "GET", [], <<>>,
-                    5000, _) ->
-                        {error, econnrefused};
-                   (<<"jwks">>, "https://example.com/jwks2", "GET", [], <<>>,
-                    5000, _) ->
-                        {ok, {{200, []}, [{"cache-control", "max-age=21600"}],
-                              InvalidJWKS}}
-                end),
+        %% Simulate failures during refresh
+        meck:expect(rest_utils, request,
+                    fun(<<"jwks">>, "https://example.com/jwks1", "GET", [],
+                        <<>>, 5000, _) ->
+                            {error, econnrefused};
+                       (<<"jwks">>, "https://example.com/jwks2", "GET", [],
+                        <<>>, 5000, _) ->
+                            {ok, {{200, []}, [{"cache-control",
+                                               "max-age=21600"}],
+                                  InvalidJWKS}}
+                    end),
 
-    Pid ! periodic_refresh,
+        Pid ! periodic_refresh,
 
-    %% Ensures that gen_server has processed all messages in its mailbox
-    gen_server:call(?MODULE, sync, 1000),
+        %% Ensures that gen_server has processed all messages in its mailbox
+        gen_server:call(?MODULE, sync, 1000),
 
-    %% Verify the cache entries are unchanged
-    [{_, Issuer1EntryAfter}] = ets:lookup(?MODULE, Issuer1),
-    [{_, Issuer2EntryAfter}] = ets:lookup(?MODULE, Issuer2),
+        %% Verify the cache entries are unchanged
+        [{_, Issuer1EntryAfter}] = ets:lookup(?MODULE, Issuer1),
+        [{_, Issuer2EntryAfter}] = ets:lookup(?MODULE, Issuer2),
 
-    ?assertEqual(Issuer1Entry#jwks_cache_entry.kid_to_jwk,
-                 Issuer1EntryAfter#jwks_cache_entry.kid_to_jwk),
-    ?assertEqual(Issuer2Entry#jwks_cache_entry.kid_to_jwk,
-                 Issuer2EntryAfter#jwks_cache_entry.kid_to_jwk),
+        ?assertEqual(Issuer1Entry#jwks_cache_entry.kid_to_jwk,
+                     Issuer1EntryAfter#jwks_cache_entry.kid_to_jwk),
+        ?assertEqual(Issuer2Entry#jwks_cache_entry.kid_to_jwk,
+                     Issuer2EntryAfter#jwks_cache_entry.kid_to_jwk),
 
-    %% Verify we can still use the cached keys
-    {ok, JWK1After} = get_jwk(Issuer1Props#{name => Issuer1}, <<"key1">>),
-    {ok, JWK2After} = get_jwk(Issuer2Props#{name => Issuer2}, <<"key1">>),
-    ?assertEqual(JWK1, JWK1After),
-    ?assertEqual(JWK2, JWK2After),
+        %% Verify we can still use the cached keys
+        {ok, JWK1After} = get_jwk(Issuer1Props#{name => Issuer1}, <<"key1">>),
+        {ok, JWK2After} = get_jwk(Issuer2Props#{name => Issuer2}, <<"key1">>),
+        ?assertEqual(JWK1, JWK1After),
+        ?assertEqual(JWK2, JWK2After)
 
-    meck:unload(jwt_issuer),
-    meck:unload(chronicle_kv),
-    meck:unload(chronicle_compat_events),
-    meck:unload(rest_utils),
-    meck:unload(ns_config),
-    meck:unload(menelaus_web_jwt_key),
-    gen_server:stop(jwt_cache).
+    after
+        meck:unload(jwt_issuer),
+        meck:unload(chronicle_kv),
+        meck:unload(chronicle_compat_events),
+        meck:unload(rest_utils),
+        meck:unload(ns_config),
+        meck:unload(menelaus_web_jwt_key),
+        catch gen_server:stop(jwt_cache)
+    end.
 
 pem_cache_test() ->
     meck:new(chronicle_compat_events, [passthrough]),
@@ -917,55 +924,58 @@ pem_cache_test() ->
                         meck:passthrough()
                 end),
 
-    {ok, Pid} = jwt_cache:start_link(),
+    try
+        {ok, _Pid} = jwt_cache:start_link(),
 
-    %% Verify ETS is empty (empty issuers shouldn't populate cache)
-    ?assertEqual(0, ets:info(?MODULE, size)),
+        %% Verify ETS is empty (empty issuers shouldn't populate cache)
+        ?assertEqual(0, ets:info(?MODULE, size)),
 
-    %% Perform direct lookup (bypassing cache)
-    IssuerPropsWithName = maps:merge(IssuerProps, #{name => TestIssuer}),
-    {ok, DirectJWK} = get_jwk(IssuerPropsWithName, undefined),
-    ?assert(is_tuple(DirectJWK)),
-    ?assertEqual(jose_jwk, element(1, DirectJWK)),
+        %% Perform direct lookup (bypassing cache)
+        IssuerPropsWithName = maps:merge(IssuerProps, #{name => TestIssuer}),
+        {ok, DirectJWK} = get_jwk(IssuerPropsWithName, undefined),
+        ?assert(is_tuple(DirectJWK)),
+        ?assertEqual(jose_jwk, element(1, DirectJWK)),
 
-    %% Verify ETS is still empty (direct lookup doesn't populate cache)
-    ?assertEqual(0, ets:info(?MODULE, size)),
+        %% Verify ETS is still empty (direct lookup doesn't populate cache)
+        ?assertEqual(0, ets:info(?MODULE, size)),
 
-    %% Now update mocks to return our test issuer
-    meck:expect(chronicle_kv, get,
-                fun(kv, jwt_settings) ->
-                        {ok, {#{
-                                enabled => true,
-                                issuers => #{TestIssuer => IssuerProps}
-                               }, '_'}};
-                   (_, _) ->
-                        meck:passthrough()
-                end),
+        %% Now update mocks to return our test issuer
+        meck:expect(chronicle_kv, get,
+                    fun(kv, jwt_settings) ->
+                            {ok, {#{
+                                    enabled => true,
+                                    issuers => #{TestIssuer => IssuerProps}
+                                   }, '_'}};
+                       (_, _) ->
+                            meck:passthrough()
+                    end),
 
-    %% Trigger settings update to populate cache
-    jwt_cache ! settings_update,
+        %% Trigger settings update to populate cache
+        jwt_cache ! settings_update,
 
-    %% Ensures that gen_server has processed all messages in its mailbox
-    gen_server:call(?MODULE, sync, 1000),
+        %% Ensures that gen_server has processed all messages in its mailbox
+        gen_server:call(?MODULE, sync, 1000),
 
-    %% Verify cache is now populated
-    ?assertEqual(1, ets:info(?MODULE, size)),
+        %% Verify cache is now populated
+        ?assertEqual(1, ets:info(?MODULE, size)),
 
-    %% Verify key can be retrieved from cache
-    {ok, CachedJWK} = get_jwk(IssuerPropsWithName, undefined),
-    ?assert(is_tuple(CachedJWK)),
-    ?assertEqual(jose_jwk, element(1, CachedJWK)),
+        %% Verify key can be retrieved from cache
+        {ok, CachedJWK} = get_jwk(IssuerPropsWithName, undefined),
+        ?assert(is_tuple(CachedJWK)),
+        ?assertEqual(jose_jwk, element(1, CachedJWK)),
 
-    %% Verify the cache entry exists with expected content
-    [{_, #jwks_cache_entry{kid_to_jwk = KidToJWKMap}}] =
-        ets:lookup(?MODULE, TestIssuer),
-    ?assert(maps:is_key(undefined, KidToJWKMap)),
-    ?assert(is_tuple(maps:get(undefined, KidToJWKMap))),
+        %% Verify the cache entry exists with expected content
+        [{_, #jwks_cache_entry{kid_to_jwk = KidToJWKMap}}] =
+            ets:lookup(?MODULE, TestIssuer),
+        ?assert(maps:is_key(undefined, KidToJWKMap)),
+        ?assert(is_tuple(maps:get(undefined, KidToJWKMap)))
 
-    gen_server:stop(Pid),
-    meck:unload(jwt_issuer),
-    meck:unload(chronicle_kv),
-    meck:unload(chronicle_compat_events).
+    after
+        catch gen_server:stop(jwt_cache),
+        meck:unload(jwt_issuer),
+        meck:unload(chronicle_kv),
+        meck:unload(chronicle_compat_events)
+    end.
 
 static_jwks_cache_test() ->
     meck:new(chronicle_compat_events, [passthrough]),
@@ -1000,61 +1010,64 @@ static_jwks_cache_test() ->
                         meck:passthrough()
                 end),
 
-    {ok, Pid} = jwt_cache:start_link(),
+    try
+        {ok, _Pid} = jwt_cache:start_link(),
 
-    %% Verify ETS is empty (empty issuers shouldn't populate cache)
-    ?assertEqual(0, ets:info(?MODULE, size)),
+        %% Verify ETS is empty (empty issuers shouldn't populate cache)
+        ?assertEqual(0, ets:info(?MODULE, size)),
 
-    %% Perform direct lookups (bypassing cache)
-    IssuerPropsWithName = maps:merge(IssuerProps, #{name => TestIssuer}),
-    {ok, DirectJWK1} = get_jwk(IssuerPropsWithName, Kid1),
-    {ok, DirectJWK2} = get_jwk(IssuerPropsWithName, Kid2),
-    ?assert(is_tuple(DirectJWK1)),
-    ?assert(is_tuple(DirectJWK2)),
-    ?assertEqual(jose_jwk, element(1, DirectJWK1)),
-    ?assertEqual(jose_jwk, element(1, DirectJWK2)),
+        %% Perform direct lookups (bypassing cache)
+        IssuerPropsWithName = maps:merge(IssuerProps, #{name => TestIssuer}),
+        {ok, DirectJWK1} = get_jwk(IssuerPropsWithName, Kid1),
+        {ok, DirectJWK2} = get_jwk(IssuerPropsWithName, Kid2),
+        ?assert(is_tuple(DirectJWK1)),
+        ?assert(is_tuple(DirectJWK2)),
+        ?assertEqual(jose_jwk, element(1, DirectJWK1)),
+        ?assertEqual(jose_jwk, element(1, DirectJWK2)),
 
-    %% Verify ETS is still empty (direct lookup doesn't populate cache)
-    ?assertEqual(0, ets:info(?MODULE, size)),
+        %% Verify ETS is still empty (direct lookup doesn't populate cache)
+        ?assertEqual(0, ets:info(?MODULE, size)),
 
-    %% Now update mocks to return our test issuer
-    meck:expect(chronicle_kv, get,
-                fun(kv, jwt_settings) ->
-                        {ok, {#{
-                                enabled => true,
-                                issuers => #{TestIssuer => IssuerProps}
-                               }, '_'}};
-                   (_, _) ->
-                        meck:passthrough()
-                end),
+        %% Now update mocks to return our test issuer
+        meck:expect(chronicle_kv, get,
+                    fun(kv, jwt_settings) ->
+                            {ok, {#{
+                                    enabled => true,
+                                    issuers => #{TestIssuer => IssuerProps}
+                                   }, '_'}};
+                       (_, _) ->
+                            meck:passthrough()
+                    end),
 
-    %% Trigger settings update to populate cache
-    jwt_cache ! settings_update,
+        %% Trigger settings update to populate cache
+        jwt_cache ! settings_update,
 
-    %% Ensures that gen_server has processed all messages in its mailbox
-    gen_server:call(?MODULE, sync, 1000),
+        %% Ensures that gen_server has processed all messages in its mailbox
+        gen_server:call(?MODULE, sync, 1000),
 
-    %% Verify cache is now populated
-    ?assertEqual(1, ets:info(?MODULE, size)),
+        %% Verify cache is now populated
+        ?assertEqual(1, ets:info(?MODULE, size)),
 
-    %% Verify keys can be retrieved from cache
-    {ok, CachedJWK1} = get_jwk(IssuerPropsWithName, Kid1),
-    {ok, CachedJWK2} = get_jwk(IssuerPropsWithName, Kid2),
-    ?assert(is_tuple(CachedJWK1)),
-    ?assert(is_tuple(CachedJWK2)),
-    ?assertEqual(jose_jwk, element(1, CachedJWK1)),
-    ?assertEqual(jose_jwk, element(1, CachedJWK2)),
+        %% Verify keys can be retrieved from cache
+        {ok, CachedJWK1} = get_jwk(IssuerPropsWithName, Kid1),
+        {ok, CachedJWK2} = get_jwk(IssuerPropsWithName, Kid2),
+        ?assert(is_tuple(CachedJWK1)),
+        ?assert(is_tuple(CachedJWK2)),
+        ?assertEqual(jose_jwk, element(1, CachedJWK1)),
+        ?assertEqual(jose_jwk, element(1, CachedJWK2)),
 
-    %% Verify the cache entry exists with expected content
-    [{_, #jwks_cache_entry{kid_to_jwk = CachedMap}}] =
-        ets:lookup(?MODULE, TestIssuer),
-    ?assertEqual(2, maps:size(CachedMap)),
-    ?assert(maps:is_key(Kid1, CachedMap)),
-    ?assert(maps:is_key(Kid2, CachedMap)),
+        %% Verify the cache entry exists with expected content
+        [{_, #jwks_cache_entry{kid_to_jwk = CachedMap}}] =
+            ets:lookup(?MODULE, TestIssuer),
+        ?assertEqual(2, maps:size(CachedMap)),
+        ?assert(maps:is_key(Kid1, CachedMap)),
+        ?assert(maps:is_key(Kid2, CachedMap))
 
-    gen_server:stop(Pid),
-    meck:unload(jwt_issuer),
-    meck:unload(chronicle_kv),
-    meck:unload(chronicle_compat_events).
+    after
+        catch gen_server:stop(jwt_cache),
+        meck:unload(jwt_issuer),
+        meck:unload(chronicle_kv),
+        meck:unload(chronicle_compat_events)
+    end.
 
 -endif.
