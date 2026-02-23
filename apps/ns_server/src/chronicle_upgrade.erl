@@ -136,4 +136,7 @@ upgrade_to(?VERSION_79, UpgradeTxn) ->
     {?VERSION_80, UpgradeTxn};
 
 upgrade_to(?VERSION_80, UpgradeTxn) ->
-    {?VERSION_TOTORO, UpgradeTxn}.
+    {?VERSION_TOTORO,
+     functools:chain(
+       UpgradeTxn,
+       [ns_bucket:chronicle_upgrade_to_totoro(_)])}.

@@ -196,6 +196,7 @@
          deactivate_bucket_data_on_this_node/1,
          chronicle_upgrade_to_76/1,
          chronicle_upgrade_to_79/1,
+         chronicle_upgrade_to_totoro/1,
          config_upgrade_to_80/1,
          extract_bucket_props/1,
          build_bucket_props_json/1,
@@ -3043,7 +3044,21 @@ props_to_add_for_79(BucketConfig) ->
             end
     end.
 
-chronicle_upgrade_bucket_props_to_79(BucketName, ChronicleTxn) ->
+props_to_add_for_totoro(BucketConfig) ->
+    case bucket_type(BucketConfig) of
+        memcached ->
+            [];
+        membase ->
+            case ns_bucket:is_magma(BucketConfig) of
+                true ->
+                    [{continuous_backup_retention_period,
+                      attribute_default(continuous_backup_retention_period)}];
+                false ->
+                    []
+            end
+    end.
+
+chronicle_update_bucket_props(BucketName, ChronicleTxn, NewPropsFn) ->
     PropsKey = sub_key(BucketName, props),
     {ok, BucketConfig0} = chronicle_upgrade:get_key(PropsKey, ChronicleTxn),
     BucketConfig =
@@ -3051,7 +3066,7 @@ chronicle_upgrade_bucket_props_to_79(BucketName, ChronicleTxn) ->
           fun ({Key, _Value}) ->
                   not lists:member(Key, removed_bucket_settings())
           end, BucketConfig0),
-    case props_to_add_for_79(BucketConfig) of
+    case NewPropsFn(BucketConfig) of
         [] ->
             ChronicleTxn;
         AddProps ->
@@ -3060,6 +3075,14 @@ chronicle_upgrade_bucket_props_to_79(BucketName, ChronicleTxn) ->
             chronicle_upgrade:set_key(PropsKey, NewBucketConfig,
                                       ChronicleTxn)
     end.
+
+chronicle_upgrade_bucket_props_to_79(BucketName, ChronicleTxn) ->
+    chronicle_update_bucket_props(BucketName, ChronicleTxn,
+                                  fun props_to_add_for_79/1).
+
+chronicle_upgrade_bucket_props_to_totoro(BucketName, ChronicleTxn) ->
+    chronicle_update_bucket_props(BucketName, ChronicleTxn,
+                                  fun props_to_add_for_totoro/1).
 
 %% To enable the case where the user, under the guidance from Couchbase
 %% support, has preset "new" settings in the bucket config with values
@@ -3089,6 +3112,15 @@ chronicle_upgrade_to_79(ChronicleTxn) ->
               Txn,
               [chronicle_upgrade_bucket_props_to_79(Name, _),
                chronicle_add_uuid2bucket_mapping_upgrade_to_79(Name, _)])
+        end, BucketNames, ChronicleTxn).
+
+chronicle_upgrade_to_totoro(ChronicleTxn) ->
+    {ok, BucketNames} = chronicle_upgrade:get_key(root(), ChronicleTxn),
+    chronicle_upgrade_bucket(
+        fun (Name, Txn) ->
+            functools:chain(
+              Txn,
+              [chronicle_upgrade_bucket_props_to_totoro(Name, _)])
         end, BucketNames, ChronicleTxn).
 
 default_76_enterprise_props(true = _IsEnterprise) ->
@@ -3161,6 +3193,7 @@ extract_bucket_props(Props) ->
                          continuous_backup_enabled,
                          continuous_backup_interval,
                          continuous_backup_location,
+                         continuous_backup_retention_period,
                          dcp_connections_between_nodes,
                          dcp_backfill_idle_limit_seconds,
                          dcp_backfill_idle_disk_threshold,
@@ -4084,6 +4117,37 @@ upgrade_to_79_test() ->
 
     meck:unload().
 
+upgrade_to_totoro_test() ->
+    meck:new(cluster_compat_mode, [passthrough]),
+    meck:expect(cluster_compat_mode, is_cluster_totoro, fun () -> true end),
+    meck:expect(cluster_compat_mode, is_enterprise, fun () -> true end),
+
+    %% Normal upgrade
+    BC1 = [{type, membase},
+           {num_vbuckets, 16},
+           {servers, [node1, node2]},
+           {ram_quota, 100 * ?MIB},
+           {storage_mode, magma}],
+    AddProps1 = props_to_add_for_totoro(BC1),
+    NewBC1 = check_for_preset_bucket_settings(AddProps1, BC1),
+    ?assertEqual(attribute_default(continuous_backup_retention_period),
+                 proplists:get_value(continuous_backup_retention_period,
+                                     NewBC1)),
+
+    %% Bucket with preset values.
+    BC2 = [{type, membase},
+           {num_vbuckets, 16},
+           {servers, [node1, node2]},
+           {ram_quota, 100 * ?MIB},
+           {storage_mode, magma},
+           %% Preset values
+           {continuous_backup_retention_period, 147}],
+    AddProps2 = props_to_add_for_totoro(BC2),
+    NewBC2 = check_for_preset_bucket_settings(AddProps2, BC2),
+    ?assertEqual(147, proplists:get_value(continuous_backup_retention_period,
+                                          NewBC2)),
+
+    meck:unload().
 -endif.
 
 is_encryption_enabled(BucketConfig) ->
