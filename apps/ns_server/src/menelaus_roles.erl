@@ -146,7 +146,7 @@ default_roles() ->
        {desc, <<"Can view all cluster statistics. Can read security related "
                 "settings but cannot change them. "
                 "This user cannot read data.">>}],
-      [{[admin, security, admin], none},
+      [{[admin, security, admin], [read]},
        {[admin, security], [read]},
        {[admin, security_info], [read]},
        {[admin, users], [read]},
@@ -2324,7 +2324,7 @@ produce_roles_by_permission_test__() ->
        Test([admin, security_admin, ro_security_admin],
             {[admin, security], any})},
       {"admin security permission (read)",
-       Test([admin],
+       Test([admin, ro_security_admin],
             {[admin, security, admin], read})},
       {"admin security permission (write)",
        Test([admin],
