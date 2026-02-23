@@ -308,22 +308,27 @@ build_bucket_info(Id, Ctx, InfoLevel, SkipMap) ->
              build_vp_window_hrs(BucketConfig),
              build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx),
              build_encryption_at_rest_bucket_info(BucketConfig)])),
-    %% Collect additional parameters from memcached.
-    ExtraParams = maps:from_list(
-                    build_extra_params_bucket_info(Id, BucketConfig)),
-    %% Keys that are present in both BucketInfo and ExtraParams.
-    ConflictMap = maps:intersect(BucketInfo, ExtraParams),
-    case maps:size(ConflictMap) of
-        0 -> ok;
-        _ ->
-            %% Shouldn't happen - this would mean that the param is public in
-            %% the KV config and implemented in the ns_server REST API.
-            erlang:exit(conflicting_override_params)
-    end,
-    %% Merge the extra params into the bucket info, but keep the bucket info
-    %% props if there is a confict (which will be logged as an error above).
-    {proplists:from_map(maps:merge(ExtraParams, BucketInfo))}.
-
+    case cluster_compat_mode:is_cluster_totoro() of
+        true ->
+            %% Collect additional parameters from memcached.
+            ExtraParams = maps:from_list(
+                            build_extra_params_bucket_info(Id, BucketConfig)),
+            %% Keys that are present in both BucketInfo and ExtraParams.
+            ConflictMap = maps:intersect(BucketInfo, ExtraParams),
+            case maps:size(ConflictMap) of
+                0 -> ok;
+                _ ->
+                    %% Shouldn't happen - this would mean that the param is
+                    %% public in the KV config and implemented in the ns_server
+                    %% REST API.
+                    erlang:exit(conflicting_override_params)
+            end,
+            %% Merge the extra params into the bucket info, but keep the bucket
+            %% info props if there is a confict (which will be logged as an
+            %% error above).
+            {proplists:from_map(maps:merge(ExtraParams, BucketInfo))};
+        false -> {proplists:from_map(BucketInfo)}
+    end.
 
 get_internal_default(Key, Default) ->
     ns_config:read_key_fast(Key, Default).
