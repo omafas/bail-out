@@ -7,7 +7,7 @@ ns_server is the cluster manager for Couchbase Server, written primarily in Erla
 ## Running Tests
 
 ### Detect Build System
-Before building anything - t?wo build systems are used by Couchbase Server, make and ninja. If ninja is being used, a `build.ninja` file will be present in the `build` directory:
+Before building anything - two build systems are used by Couchbase Server, make and ninja. If ninja is being used, a `build.ninja` file will be present in the `build` directory:
 ```bash
 ls ../build/build.ninja 2>/dev/null && echo "ninja" || echo "make"
 ```
