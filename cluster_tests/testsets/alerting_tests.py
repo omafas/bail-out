@@ -269,10 +269,17 @@ class AlertTests(testlib.BaseTestSet):
             'emailPort': str(settings['emailServer']['port']),
             'emailUser': settings['emailServer']['user'],
             'emailPass': '',
-            'emailEncrypt': 'true' if settings['emailServer']['encrypt']
-                            else 'false'
+            'emailEncrypt': 'false'
         }
 
+        # SMTP expects us to use STARTTLS
+        r = testlib.post_fail(self.cluster, '/settings/alerts/testEmail',
+                              data=test_data, expected_code=400).json()
+        assert "530 Must issue a STARTTLS command first" in r["error"], \
+               f"unexpected error message: {r['error']}"
+
+        # Enable STARTTLS and try again
+        test_data['emailEncrypt'] = 'true'
         testlib.post_succ(self.cluster, '/settings/alerts/testEmail',
                           data=test_data)
 
