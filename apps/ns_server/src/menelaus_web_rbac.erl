@@ -1858,7 +1858,8 @@ handle_put_group(GroupId, Req) ->
         true ->
             validator:handle(
               fun (Values) ->
-                      reply(do_store_group(GroupId, Values, true, false, Req),
+                      reply(maybe_store_group_check_ldap_restore(
+                              GroupId, Values, true, false, CompatVer, Req),
                             Req)
               end, Req, form, put_group_validators(Req,
                                                    fun (_) -> GroupId end,
@@ -1898,7 +1899,8 @@ validate_ldap_ref(Name, State) ->
               end
       end, Name, State).
 
-do_store_group(GroupId, Props, CanOverwrite, DoingRestore, Req) ->
+maybe_store_group_check_ldap_restore(GroupId, Props, CanOverwrite,
+                                     DoingRestore, CompatVer, Req) ->
     ContainsLdapGroup =
         proplists:get_value(ldap_group_ref, Props) =/= undefined,
     HasWritePerms = menelaus_auth:has_permission(?EXTERNAL_WRITE, Req),
@@ -1906,13 +1908,31 @@ do_store_group(GroupId, Props, CanOverwrite, DoingRestore, Req) ->
         true ->
             {error, insufficient_perms};
         false ->
-            do_store_group_inner(GroupId, Props, CanOverwrite, Req)
+            maybe_store_group_check_security_role(
+              GroupId, Props, CanOverwrite, CompatVer, Req)
     end.
 
-do_store_group_inner(GroupId, Props, CanOverwrite, Req) ->
-    Description = proplists:get_value(description, Props),
+maybe_store_group_check_security_role(GroupId, Props, CanOverwrite, CompatVer,
+                                      Req) ->
     Roles = proplists:get_value(roles, Props),
-    UniqueRoles = lists:usort(Roles),
+    UserProps = [{roles, Roles}],
+    [{roles, NewRoles}] =
+        menelaus_users:maybe_upgrade_roles_for_restore(UserProps, CompatVer),
+    UniqueRoles = lists:usort(NewRoles),
+    %% Ensure the request has permission to restore all the roles in
+    %% the group
+    HasSecurityRole = overlap(UniqueRoles, get_security_roles()),
+    HasWriteAuth = menelaus_auth:has_permission(?SECURITY_WRITE, Req),
+    case {HasSecurityRole, HasWriteAuth} of
+        {true, false} ->
+            {error, insufficient_perms};
+        _ ->
+            maybe_store_group_check_existence(
+              GroupId, Props, CanOverwrite, UniqueRoles, Req)
+    end.
+
+maybe_store_group_check_existence(GroupId, Props, CanOverwrite, Roles, Req) ->
+    Description = proplists:get_value(description, Props),
     LDAPGroup = proplists:get_value(ldap_group_ref, Props),
     Reason = case menelaus_users:group_exists(GroupId) of
                  true -> updated;
@@ -1922,11 +1942,11 @@ do_store_group_inner(GroupId, Props, CanOverwrite, Req) ->
         true ->
             {error, already_exists};
         false ->
-            case menelaus_users:store_group(GroupId, Description, UniqueRoles,
+            case menelaus_users:store_group(GroupId, Description, Roles,
                                             LDAPGroup) of
                 ok ->
                     ns_audit:set_user_group(
-                      Req, GroupId, UniqueRoles, Description, LDAPGroup,
+                      Req, GroupId, Roles, Description, LDAPGroup,
                       Reason),
                     {_, SanitizedGroupId} =
                         ns_config_log:sanitize_value(GroupId, [mask]),
@@ -2534,6 +2554,7 @@ handle_backup_restore_validated(Req, Params) ->
     CanOverwrite = proplists:get_bool(canOverwrite, Params),
     Admin = proplists:get_value(admin, Backup),
     IsProvisioned = ns_config_auth:is_system_provisioned(),
+    %% This will be 'undefined' for a backup taken on a version prior to 8.0.1
     VersionFromRestoredData = proplists:get_value(compat_version, Backup),
     AdminRes =
         case Admin of
@@ -2556,9 +2577,9 @@ handle_backup_restore_validated(Req, Params) ->
         lists:foldl(
           fun ({GroupProps}, {SAcc, OAcc}) ->
                   GroupId = proplists:get_value(name, GroupProps),
-                  case do_store_group(GroupId,
-                                      proplists:delete(name, GroupProps),
-                                      CanOverwrite, true, Req) of
+                  case maybe_store_group_check_ldap_restore(
+                         GroupId, proplists:delete(name, GroupProps),
+                         CanOverwrite, true, VersionFromRestoredData, Req) of
                       added -> {SAcc, OAcc};
                       updated -> {SAcc, [GroupId | OAcc]};
                       {error, insufficient_perms} -> {[GroupId | SAcc], OAcc};

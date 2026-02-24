@@ -600,5 +600,26 @@
     }
   ],
   "groups": [
+      {
+          "name": "groupWithSecurityRoles",
+          "description": "",
+          "roles": [
+              "security_admin_local",
+              "security_admin_external",
+              "ro_admin",
+              "eventing_admin",
+              "cluster_admin",
+              "backup_admin"
+          ]
+      },
+      {
+          "name": "groupWithoutSecurityRoles",
+          "description": "",
+          "roles": [
+              "eventing_admin",
+              "cluster_admin",
+              "backup_admin"
+          ]
+      }
   ]
 }

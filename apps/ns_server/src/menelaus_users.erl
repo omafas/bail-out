@@ -1373,7 +1373,8 @@ upgrade_props(?VERSION_76, auth, AuthProps) ->
     {ok, functools:chain(AuthProps,
                          [scram_sha:fix_pre_76_auth_info(_),
                           get_rid_of_plain_key(_)])};
-upgrade_props(?VERSION_79, user, UserProps) ->
+upgrade_props(?VERSION_79, UserOrGroup, UserProps)
+  when UserOrGroup == user; UserOrGroup == group ->
     {ok, functools:chain(UserProps,
                          [maybe_substitute_7_9_user_roles(_)])};
 upgrade_props(?VERSION_TOTORO, UserOrGroup, Props)
@@ -1424,16 +1425,17 @@ maybe_substitute_7_9_roles(Roles) ->
     end.
 
 maybe_substitute_7_9_roles_helper(Roles) ->
-    lists:flatmap(
-      fun (security_admin_local) ->
-              [security_admin, user_admin_local];
-          (security_admin_external) ->
-              [security_admin, user_admin_external];
-          (ro_admin) ->
-              [ro_admin, ro_security_admin];
-          (Role) ->
-              [Role]
-      end, Roles).
+    NewRoles = lists:flatmap(
+                 fun (security_admin_local) ->
+                         [security_admin, user_admin_local];
+                     (security_admin_external) ->
+                         [security_admin, user_admin_external];
+                     (ro_admin) ->
+                         [ro_admin, ro_security_admin];
+                     (Role) ->
+                         [Role]
+                 end, Roles),
+    lists:usort(NewRoles).
 
 get_rid_of_plain_key(Auth) ->
     lists:map(

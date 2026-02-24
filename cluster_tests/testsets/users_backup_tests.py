@@ -249,7 +249,7 @@ class UsersBackupTests(testlib.BaseTestSet):
                     expected_counters={'usersCreated': 11,
                                        # Skip 'Administrator'
                                        'usersSkipped': 1,
-                                       'groupsCreated': 0,
+                                       'groupsCreated': 2,
                                        'groupsSkipped': 0},
                     auth_user=(user, password))
 
@@ -276,6 +276,15 @@ class UsersBackupTests(testlib.BaseTestSet):
                          ['data_backup', 'security_admin', 'user_admin_local',
                           'ui_access'])
 
+            verify_group_roles(self.cluster, 'groupWithSecurityRoles',
+                               ['user_admin_local', 'user_admin_external',
+                                'security_admin', 'ro_security_admin',
+                                'ro_admin', 'eventing_admin', 'cluster_admin',
+                                'backup_admin'])
+            verify_group_roles(self.cluster, 'groupWithoutSecurityRoles',
+                               ['eventing_admin', 'cluster_admin',
+                                'backup_admin'])
+
             # We now have a mixture of security and non-security roles. Do
             # a backup from a non-security role and ensure none of the security
             # roles get backed up.
@@ -300,6 +309,11 @@ class UsersBackupTests(testlib.BaseTestSet):
 
             assert len(users2) == 7
 
+            groups2 = [group["name"] for group in backup2.get("groups", [])]
+            assert len(groups2) == 1
+            assert 'groupWithSecurityRoles' not in groups2
+            assert 'groupWithoutSecurityRoles' in groups2
+
         finally:
             # Cleanup the users created by the restore
             users = [user["id"] for user in backup.get("users", [])]
@@ -307,11 +321,17 @@ class UsersBackupTests(testlib.BaseTestSet):
                 testlib.ensure_deleted(
                     self.cluster, f'/settings/rbac/users/local/{u}')
 
-            # Cleanup the users created by this test
+            # Cleanup the users/groups created by this test
             testlib.ensure_deleted(
                     self.cluster, f'/settings/rbac/users/local/{user}')
             testlib.ensure_deleted(
                     self.cluster, f'/settings/rbac/users/local/{user2}')
+            testlib.ensure_deleted(
+                    self.cluster,
+                    f'/settings/rbac/groups/groupWithSecurityRoles')
+            testlib.ensure_deleted(
+                    self.cluster,
+                    f'/settings/rbac/groups/groupWithoutSecurityRoles')
 
     # Restore a backup taken on a 7.6.x system containing roles that
     # are security roles. This is done by a user without a security role
@@ -335,16 +355,20 @@ class UsersBackupTests(testlib.BaseTestSet):
             restore(self.cluster, backup, can_overwrite=False,
                     expected_counters={'usersCreated': 6,
                                        'usersSkipped': 6,
-                                       'groupsCreated': 0,
-                                       'groupsSkipped': 0},
+                                       'groupsCreated': 1,
+                                       'groupsSkipped': 1},
                     auth_user=(user, password))
 
         finally:
-            # Cleanup the users created by the restore
+            # Cleanup the users/group created by the restore
             users = [user["id"] for user in backup.get("users", [])]
             for u in users:
                 testlib.ensure_deleted(
                         self.cluster, f'/settings/rbac/users/local/{u}')
+
+            testlib.ensure_deleted(
+                    self.cluster,
+                    f'/settings/rbac/groups/groupWithoutSecurityRoles')
 
             # Cleanup the admin created by this test
             testlib.ensure_deleted(
@@ -585,7 +609,17 @@ class UsersBackupTests(testlib.BaseTestSet):
 def verify_roles(cluster, username, expected_roles):
     path = f'/settings/rbac/users/local/{username}'
     user_info = testlib.get_succ(cluster, path).json()
-    user_roles = [role["role"] for role in user_info.get("roles", [])]
+    verify_expected_roles(user_info, expected_roles)
+
+
+def verify_group_roles(cluster, groupname, expected_roles):
+    path = f'/settings/rbac/groups/{groupname}'
+    group_info = testlib.get_succ(cluster, path).json()
+    verify_expected_roles(group_info, expected_roles)
+
+
+def verify_expected_roles(user_or_group_info, expected_roles):
+    user_roles = [role["role"] for role in user_or_group_info.get("roles", [])]
 
     for r in expected_roles:
         assert r in user_roles, f"Missing {r} in {user_roles}"
