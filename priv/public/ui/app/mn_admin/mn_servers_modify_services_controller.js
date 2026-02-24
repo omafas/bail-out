@@ -40,6 +40,7 @@ function mnServersModifyServicesController($scope, $rootScope, $q, $uibModal, $o
   }
   vm.onSubmit = onSubmit;
   vm.newServicesAdded = newServicesAdded;
+  vm.removalMayCauseProblems = removalMayCauseProblems;
 
   vm.isNodesAvailable = !!nodes;
   if (vm.isNodesAvailable) {
@@ -80,6 +81,19 @@ function mnServersModifyServicesController($scope, $rootScope, $q, $uibModal, $o
     return services;
   }
 
+  // Count the number of instances of each service across nodes
+  function countServices(nodeServices) {
+    let serviceCounts = {};
+    nodeServices.forEach(node => {
+      for (let service in node.services) {
+        if (node.services[service]) {
+          serviceCounts[service] = (serviceCounts[service] || 0) + 1;
+        }
+      }
+    });
+    return serviceCounts;
+  }
+
   // Determine if the user is adding services that were not present before,
   function newServicesAdded() {
     let oldServices = flattenServices(vm.nodeServicesOriginal);
@@ -89,6 +103,49 @@ function mnServersModifyServicesController($scope, $rootScope, $q, $uibModal, $o
     let firstTimeAddedServices = {count: addedServiceArray.length};
     addedServiceArray.forEach(service => firstTimeAddedServices[service] = true);
     return firstTimeAddedServices;
+  }
+
+  // Determine if removing services could cause problems, and a warning message should be shown
+  function removalMayCauseProblems() {
+    const oldServices = countServices(vm.nodeServicesOriginal);
+    const newServices = countServices(vm.nodeServices);
+    const warnings = {};
+
+    // warnings if reducing number of index nodes
+    if (oldServices?.index && !newServices?.index) {
+      warnings.noIndexService = true;
+      warnings.lastIndexNode = true;
+    }
+    else if (oldServices?.index > newServices?.index) {
+      warnings.reducedIndexReplicas = true;
+      warnings.reducedIndexNodes = true;
+    }
+
+    // warnings if removing the last service nodes
+    if (oldServices?.fts && !newServices?.fts) {
+      warnings.noFtsService = true;
+      warnings.lastFtsNode = true;
+    }
+
+    if (oldServices?.n1ql && !newServices?.n1ql) {
+      warnings.lastN1qlNode = true;
+    }
+
+    if (oldServices?.backup && !newServices?.backup) {
+      warnings.lastBackupNode = true;
+    }
+
+    if (oldServices?.cbas && !newServices?.cbas) {
+      warnings.noCbasData = true;
+      warnings.lastCbasNode = true;
+    }
+
+    if (oldServices?.eventing && !newServices?.eventing) {
+      warnings.noEventingFunctions = true;
+      warnings.lastEventingNode = true;
+    }
+
+    return warnings;
   }
 
   function activate() {

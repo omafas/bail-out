@@ -60,6 +60,24 @@ licenses/APL2.txt.
     <div class="text-small" ng-if="serversModifyServicesCtl.newServicesAdded().count > 0">
         You have added new services to the cluster. Please confirm memory quota settings in the following dialog.
     </div>
+
+    <div class="error text-small" ng-if="serversModifyServicesCtl.removalMayCauseProblems()">
+       Warning:
+       <ul class="margin-left-1 margin-bottom0" ng-messages="serversModifyServicesCtl.removalMayCauseProblems()" ng-messages-multiple>
+          <li ng-message="noIndexService">This will remove all GSI indexes from the cluster, and may cause queries to fail.</li>
+          <li ng-message="lastIndexNode">This will remove the last Index service from the cluster so indexes can't be created.</li>
+          <li ng-message="reducedIndexReplicas">This may cause some replica indexes to be lost.</li>
+          <li ng-message="reducedIndexNodes">This will remove indexes from the cluster and may cause queries to fail if there are no replica indexes.</li>
+          <li ng-message="noFtsService">This will remove all Search indexes from the cluster and may cause queries to fail.</li>
+          <li ng-message="lastFtsNode">This will remove the last Search service from the cluster so search indexes can't be created.</li>
+          <li ng-message="lastN1qlNode">This will remove the last Query service from the cluster so queries can't be run.</li>
+          <li ng-message="lastBackupNode">This will remove the last Backup service from the cluster so backups can't be run.</li>
+          <li ng-message="noCbasData">This will remove all Analytics data and metadata.</li>
+          <li ng-message="lastCbasNode">This will remove the last Analytics service from the cluster so analytics can't be run.</li>
+          <li ng-message="noEventingFunctions">This will remove all Eventing functions from the cluster.</li>
+          <li ng-message="lastEventingNode">This will remove the last Eventing service from the cluster so eventing can't be run.</li>
+       </ul>
+    </div>
   </div>
 
   <div class="panel-footer">
