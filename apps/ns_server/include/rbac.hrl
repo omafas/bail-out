@@ -63,7 +63,8 @@
 -type rbac_permission_vertex() ::
         atom() | {bucket, rbac_permission_vertex_param()} |
         {scope, [rbac_permission_vertex_param()]} |
-        {collection, [rbac_permission_vertex_param()]}.
+        {collection, [rbac_permission_vertex_param()]} |
+        {credentials, rbac_permission_vertex_param()}.
 -type rbac_permission_object() :: [rbac_permission_vertex(), ...].
 -type rbac_permission() ::
         {rbac_permission_object(), rbac_operation()}.

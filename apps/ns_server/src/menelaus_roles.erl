@@ -118,9 +118,9 @@ default_roles_totoro() ->
      {security_admin, [],
       [{name, <<"Security Admin">>},
        {folder, admin},
-       {desc, <<"Can view all cluster statistics, manage certificates, and "
-                "manage security related settings. "
-                "This user cannot read data.">>}],
+       {desc, <<"Can view all cluster statistics, manage certificates, manage "
+                "credentials and security related settings. This user cannot "
+                "read data. This user cannot use stored credentials.">>}],
       [{[admin, security, admin], none},
        {[admin, security], all},
        {[admin, security_info], all},
@@ -135,6 +135,7 @@ default_roles_totoro() ->
        {[{bucket, any}, fts], none},
        {[{bucket, any}, analytics], none},
        {[{bucket, any}], [read]},
+       {[credentials, any], [read, write, list]},
        {[analytics], none},
        {[backup], none},
        {[eventing], none},
@@ -147,7 +148,7 @@ default_roles_totoro() ->
       [{name, <<"Read-Only Security Admin">>},
        {folder, admin},
        {desc, <<"Can view all cluster statistics. Can read security related "
-                "settings but cannot change them. "
+                "settings and credentials (metadata) but cannot change them. "
                 "This user cannot read data.">>}],
       [{[admin, security, admin], [read]},
        {[admin, security], [read]},
@@ -163,6 +164,7 @@ default_roles_totoro() ->
        {[{bucket, any}, fts], none},
        {[{bucket, any}, analytics], none},
        {[{bucket, any}], [read]},
+       {[credentials, any], [read, list]},
        {[analytics], none},
        {[backup], none},
        {[eventing], none},
@@ -231,6 +233,12 @@ default_roles_totoro() ->
        {[settings, metrics], none},
        {[ui], none},
        {[], [read, list]}]},
+     {credential_consumer, [credential_id],
+      [{name, <<"Credential Consumer">>},
+       {folder, admin},
+       {desc, <<"Can read, consume (use) specific external credentials or "
+                "those matching a pattern.">>}],
+      [{[{credentials, credential_id}], [consume]}]},
      {cluster_admin, [],
       [{name, <<"Cluster Admin">>},
        {folder, admin},
@@ -895,6 +903,12 @@ is_data_vertex({collection, _}) ->
 is_data_vertex(_) ->
     false.
 
+is_credential_prefix(CredId) ->
+    case lists:reverse(CredId) of
+        "*" ++ Rest -> {true, lists:reverse(Rest)};
+        _ -> false
+    end.
+
 get_vertex_param_list({bucket, B}) ->
     [B];
 get_vertex_param_list({_, Params}) ->
@@ -915,12 +929,30 @@ vertex_match(PermissionVertex, FilterVertex) ->
     expanded_vertex_match(expand_vertex(PermissionVertex, all),
                           expand_vertex(FilterVertex, any)).
 
+expanded_vertex_match({credentials, PermId}, {credentials, FilterId}) ->
+    credential_match(PermId, FilterId);
 expanded_vertex_match({Same, Params}, {Same, FilterParams}) ->
     vertex_params_match(Params, FilterParams);
 expanded_vertex_match(Same, Same) ->
     true;
 expanded_vertex_match(_, _) ->
     false.
+
+credential_match(PermId, FilterId) ->
+    case FilterId of
+        any ->
+            true;
+        _ ->
+            case is_credential_prefix(FilterId) of
+                {true, Prefix} ->
+                    case string:slice(PermId, 0, length(Prefix)) of
+                        Prefix -> true;
+                        _ -> false
+                    end;
+                false ->
+                    PermId =:= FilterId
+            end
+    end.
 
 -spec get_allowed_operations(
         rbac_permission_object(), [rbac_permission_pattern()]) ->
@@ -1017,7 +1049,8 @@ compile_param(scope_name, Name, Manifest) ->
                         end
                 end);
 compile_param(collection_name, Name, Scope) ->
-    find_object(Name, ?cut(maybe_add_id(collections:get_collection(_, Scope)))).
+    find_object(Name, ?cut(maybe_add_id(collections:get_collection(_, Scope))));
+compile_param(credential_id, Name, Ctx) -> {Name, Ctx}.
 
 maybe_add_id(undefined) ->
     undefined;
@@ -1342,7 +1375,8 @@ calculate_possible_param_values(Snapshot, Combination, Permission) ->
       end, RawParams).
 
 all_params_combinations() ->
-    [[], [bucket_name], ?RBAC_SCOPE_PARAMS, ?RBAC_COLLECTION_PARAMS].
+    [[], [bucket_name], ?RBAC_SCOPE_PARAMS, ?RBAC_COLLECTION_PARAMS,
+     [credential_id]].
 
 -spec calculate_possible_param_values(map(), undefined | rbac_permission()) ->
                                              rbac_all_param_values().
@@ -1406,6 +1440,8 @@ strip_id(_, {P, _Id}) ->
     P;
 strip_id(bucket_name, P) ->
     %% to be removed as part of MB-38411
+    P;
+strip_id(credential_id, P) ->
     P.
 
 -spec strip_ids([rbac_role_def_param()], [rbac_role_param()]) ->
@@ -1586,6 +1622,33 @@ object_match_with_collections_test() ->
                                     [{collection, ["b", any, any]}])),
     ?assertEqual(false, object_match([{bucket, "b"}],
                                      [{collection, ["b1", any, any]}])).
+
+credential_match_test() ->
+    ?assertEqual(true, credential_match("backup/prod/s3", "backup/prod/s3")),
+    ?assertEqual(true, credential_match("backup/dev/test", "backup/*")),
+    ?assertEqual(false, credential_match("other/key", "backup/*")),
+    ?assertEqual(true, credential_match("anything", any)),
+    ?assertEqual(false, credential_match("something", "other")),
+    ?assertEqual(true, credential_match("backup/prod/s3/deep",
+                                        "backup/prod/s3/*")),
+    ?assertEqual(false, credential_match("backup/prod", "backup/prod/s3")),
+    ?assertEqual(false, credential_match("other/test", "backup/prod/*")).
+
+object_match_with_credentials_test() ->
+    ?assertEqual(true, object_match([{credentials, "backup/prod/s3"}],
+                                    [{credentials, "backup/prod/s3"}])),
+    ?assertEqual(false, object_match([{credentials, "backup/prod/s3"}],
+                                     [{credentials, "other/key"}])),
+    ?assertEqual(true, object_match([{credentials, "backup/prod/s3"}],
+                                    [{credentials, any}])),
+    ?assertEqual(true, object_match([{credentials, "backup/dev/test"}],
+                                    [{credentials, "backup/*"}])),
+    ?assertEqual(false, object_match([{credentials, "other/key"}],
+                                     [{credentials, "backup/*"}])),
+    ?assertEqual(true, object_match([{credentials, "backup/prod/s3/deep"}],
+                                    [{credentials, "backup/prod/s3/*"}])),
+    ?assertEqual(false, object_match([], [{credentials, "backup/prod/s3"}])),
+    ?assertEqual(true, object_match([{credentials, "backup/prod/s3"}], [])).
 
 toy_buckets_props() ->
     [{"test", [{uuid, <<"test_id">>}, {props, toy_props()}]},
@@ -1828,6 +1891,8 @@ extract_all_names(Roles) ->
               [{Name, []} | AccIn];
           ({Name, [bucket_name], _Description, _Filters}, AccIn) ->
               [{Name, ["default"]} | AccIn];
+          ({Name, [credential_id], _Description, _Filters}, AccIn) ->
+              [{Name, ["default_credential"]} | AccIn];
           ({Name, ?RBAC_SCOPE_PARAMS, _Description, _Filters}, AccIn) ->
               [{Name, ["default", "s"]} | AccIn];
           ({Name, ?RBAC_COLLECTION_PARAMS, _Description, _Filters},
