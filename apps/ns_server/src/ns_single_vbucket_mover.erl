@@ -795,9 +795,13 @@ on_move_done_body(RebalancerPid, WorkerPid, Bucket, VBucket, OldChain,
                 undefined ->
                     ok;
                 OldUploader ->
+                    ?log_debug("Stopping uploader ~p on bucket ~p, vbucket ~p.",
+                               [OldUploader, Bucket, VBucket]),
                     janitor_agent:maybe_stop_fusion_uploaders(
                       OldUploader, Bucket, [VBucket])
             end,
+            ?log_debug("Starting uploader ~p on bucket ~p, vbucket ~p with "
+                       "term ~p", [Node, Bucket, VBucket, Term]),
             janitor_agent:maybe_start_fusion_uploaders(
               Node, Bucket, [{VBucket, Term}])
     end,
