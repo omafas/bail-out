@@ -868,12 +868,14 @@ garbage_collect_keys(Kind, InUseKeyIds) ->
                           ok ->
                               ns_server_stats:notify_counter(
                                 {<<"encr_at_rest_retire_key_events">>,
-                                 [{type, cb_deks:kind2bin(Kind)}]}),
+                                 [{type,
+                                   cb_deks:kind2bin(Kind, <<"unknown">>)}]}),
                               false;
                           {error, Reason} ->
                               ns_server_stats:notify_counter(
                                 {<<"encr_at_rest_retire_key_failures">>,
-                                 [{type, cb_deks:kind2bin(Kind)}]}),
+                                 [{type,
+                                   cb_deks:kind2bin(Kind, <<"unknown">>)}]}),
                               {true, {Filename, Reason}}
                       end
                   end, ToRetire),
