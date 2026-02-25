@@ -245,6 +245,7 @@
 -define(DCP_OSO_SNAPSHOT,          16#65).
 -define(DCP_CACHED_VALUE,          16#66).
 -define(DCP_CACHED_KEY_META,       16#67).
+-define(DCP_CACHE_TRANSFER_END,    16#68).
 
 %% Snapshot commands (For file based rebalance)
 -define(PREPARE_SNAPSHOT, 16#e0).
