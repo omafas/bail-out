@@ -280,10 +280,10 @@ class UsersBackupTests(testlib.BaseTestSet):
                                ['user_admin_local', 'user_admin_external',
                                 'security_admin', 'ro_security_admin',
                                 'ro_admin', 'eventing_admin', 'cluster_admin',
-                                'backup_admin'])
+                                'backup_admin', 'ui_access'])
             verify_group_roles(self.cluster, 'groupWithoutSecurityRoles',
                                ['eventing_admin', 'cluster_admin',
-                                'backup_admin'])
+                                'backup_admin', 'ui_access'])
 
             # We now have a mixture of security and non-security roles. Do
             # a backup from a non-security role and ensure none of the security
