@@ -78,10 +78,20 @@ resume_bucket(Pid, Id, Args, DryRun) ->
     perform_service_manager_call(
       Pid, "Resume", resume_req(Id, Args, DryRun)).
 
-validate_bucket_config(Pid, BucketConfig, Options) ->
+validate_bucket_config(Pid, BucketConfig, ServiceOptions) ->
+    %% justReturnParams is used on the frequent GET/read path. We can silence
+    %% this logging as it's noisy, like the HealthCheck logging. We should
+    %% continue to log on the less frequent POST/write path though, this is
+    %% new code and we want the information for debugging purposes.
+    ConnectionOptions = case maps:find(justReturnParams, ServiceOptions) of
+                            {ok, true} -> #{silent => true};
+                            _ -> #{}
+                        end,
+
     perform_service_manager_call(Pid, "ValidateBucketConfig",
                                  {[{config, list_to_binary(BucketConfig)}] ++
-                                      maps:to_list(Options)}).
+                                      maps:to_list(ServiceOptions)},
+                                 ConnectionOptions).
 
 health_check(Service) ->
     try perform_call(
@@ -114,7 +124,11 @@ get_label(Service) when is_atom(Service) ->
 
 %% internal
 perform_service_manager_call(PidOrLabel, Name, Arg) ->
-    case perform_call(PidOrLabel, Name, Arg, #{timeout => ?RPC_TIMEOUT}) of
+    perform_service_manager_call(PidOrLabel, Name, Arg, #{}).
+
+perform_service_manager_call(PidOrLabel, Name, Arg, Opts) ->
+    AllOpts = Opts#{timeout => ?RPC_TIMEOUT},
+    case perform_call(PidOrLabel, Name, Arg, AllOpts) of
         {error, Error} when is_binary(Error) ->
             {error, map_service_manager_error(Error)};
         {error, _} = Error ->
