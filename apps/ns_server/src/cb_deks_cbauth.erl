@@ -46,7 +46,8 @@ update_deks(Kind, Snapshot) ->
                {path, DekPath} |
                KeyStoreJsonProps]},
     maybe
-        {ok, _} ?= cbauth_call("UpdateKeysDB", Params, Kind, CbauthLabels),
+        {ok, _} ?= cbauth_call("UpdateKeysDB", Params, Kind, CbauthLabels,
+                               #{ignore_missing_connection => true}),
         ok
     end.
 
@@ -157,19 +158,22 @@ get_cbauth_labels(Kind, Snapshot) ->
     [menelaus_cbauth:service_to_label(P) || P <- TargetServices].
 
 cbauth_call(Func, Params, Kind, CbauthLabels) ->
-    cbauth_call(Func, Params, Kind, CbauthLabels, []).
+    cbauth_call(Func, Params, Kind, CbauthLabels, #{}).
 
-cbauth_call(_Func, _Params, _Kind, [], Res) ->
+cbauth_call(Func, Params, Kind, CbauthLabels, Opts) ->
+    cbauth_call(Func, Params, Kind, CbauthLabels, Opts, []).
+
+cbauth_call(_Func, _Params, _Kind, [], _Opts, Res) ->
     {ok, lists:reverse(Res)};
-cbauth_call(Func, Params, Kind, [CbauthLabel | Tail], Acc) ->
+cbauth_call(Func, Params, Kind, [CbauthLabel | Tail], Opts, Acc) ->
     ?log_debug("Calling ~s for ~s for ~p", [Func, CbauthLabel, Kind]),
-    Opts = #{silent => false, timeout => ?CBAUTH_RPC_TIMEOUT},
+    RpcOpts = #{silent => false, timeout => ?CBAUTH_RPC_TIMEOUT},
     try json_rpc_connection:perform_call(CbauthLabel,
                                          "AuthCacheSvc." ++ Func,
-                                         Params, Opts) of
+                                         Params, RpcOpts) of
         {ok, Res} ->
             ?log_debug("~s at ~s returned ok", [Func, CbauthLabel]),
-            cbauth_call(Func, Params, Kind, Tail, [Res | Acc]);
+            cbauth_call(Func, Params, Kind, Tail, Opts, [Res | Acc]);
         {error, Reason} ->
             ?log_error("Failed to call ~s at ~s for ~p: ~p",
                        [Func, CbauthLabel, Kind, Reason]),
@@ -178,7 +182,13 @@ cbauth_call(Func, Params, Kind, [CbauthLabel | Tail], Acc) ->
             ?log_debug("Failed to call ~s at ~s for ~p: process is not running "
                        "or there is no cbauth connection yet",
                        [Func, CbauthLabel, Kind]),
-            {error, retry}
+            case maps:get(ignore_missing_connection, Opts, false) of
+                true ->
+                    Res = {ok, undefined},
+                    cbauth_call(Func, Params, Kind, Tail, Opts, [Res | Acc]);
+                false ->
+                    {error, retry}
+            end
     end.
 
 dek_kind_to_json(Kind) ->
