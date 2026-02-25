@@ -77,6 +77,7 @@ rebalance_test_setup(SetupConfig) ->
     fake_chronicle_kv:setup(),
 
     fake_ns_config:setup_cluster_compat_version(?LATEST_VERSION_NUM),
+    fake_ns_config:update_snapshot(rebalance_out_delay_seconds, 0),
     fake_chronicle_kv:setup_cluster_compat_version(?LATEST_VERSION_NUM),
 
     fake_config_helpers:setup_cluster_config(maps:get(nodes, SetupConfig)),
