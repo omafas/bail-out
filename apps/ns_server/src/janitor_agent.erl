@@ -1667,7 +1667,7 @@ wait_for_stat(Bucket, VBucket, StatFun, CheckFun, LogStr, Iterations) ->
             Itr = case Iterations of
                       300 ->
                           ?rebalance_debug(
-                              "Still waiting for ~p for bucket ~p "
+                              "Still waiting for ~s for bucket ~p "
                               "partition ~p",
                               [LogStr, Bucket, VBucket]),
                           0;
