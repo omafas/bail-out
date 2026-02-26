@@ -791,10 +791,13 @@ rebalance_membase_bucket(BucketName, BucketConfig, ProgressFun,
     verify_replication(BucketName, Servers, NewMap).
 
 run_janitor(BucketName) ->
-    ns_janitor:cleanup(
-      BucketName,
-      [{query_states_timeout, ?REBALANCER_QUERY_STATES_TIMEOUT},
-       {apply_config_timeout, ?REBALANCER_APPLY_CONFIG_TIMEOUT}]).
+    ?log_debug("Run janitor for ~p", [BucketName]),
+    RV = ns_janitor:cleanup(
+           BucketName,
+           [{query_states_timeout, ?REBALANCER_QUERY_STATES_TIMEOUT},
+            {apply_config_timeout, ?REBALANCER_APPLY_CONFIG_TIMEOUT}]),
+    ?log_debug("Janitor returned ~p", [RV]),
+    RV.
 
 run_janitor_pre_rebalance(BucketName) ->
     case run_janitor(BucketName) of
