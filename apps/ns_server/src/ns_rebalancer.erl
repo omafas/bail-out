@@ -2142,19 +2142,23 @@ prepare_fusion_rebalance_massage_result(PlanUUID, Result) ->
     {RebalancePlan, AccelerationPlan}.
 
 run_janitor_and_fetch_snapshot(Bucket) ->
-    run_janitor_pre_rebalance(Bucket),
-    ns_bucket:get_snapshot(Bucket, [uuid, props]).
+    {ok, BucketConfig} = ns_bucket:get_bucket(Bucket),
+    case ns_bucket:is_fusion(BucketConfig) of
+        false ->
+            undefined;
+        true ->
+            run_janitor_pre_rebalance(Bucket),
+            ns_bucket:get_snapshot(Bucket, [uuid, props])
+    end.
 
 prepare_bucket_fusion_rebalance(PlanUUID, Bucket, KeepKVNodes,
                                 GenerateMapFun, RunJanitorFun, Validity) ->
-    Source = RunJanitorFun(Bucket),
-
-    {ok, {BucketConfig, Rev}} =
-        ns_bucket:get_bucket_with_revision(Bucket, Source),
-    case ns_bucket:is_fusion(BucketConfig) of
-        false ->
+    case RunJanitorFun(Bucket) of
+        undefined ->
             false;
-        true ->
+        Source ->
+            {ok, {BucketConfig, Rev}} =
+                ns_bucket:get_bucket_with_revision(Bucket, Source),
             case do_prepare_bucket_fusion_rebalance(
                    PlanUUID, Bucket, ns_bucket:uuid(Bucket, Source),
                    BucketConfig, KeepKVNodes, GenerateMapFun, Validity) of
@@ -2268,7 +2272,16 @@ prepare_rebalance_test_() ->
                    end,
                RV = prepare_fusion_rebalance(
                       <<"PlanUUD">>, Servers, Snapshot, GenerateMapFun,
-                      fun (_) -> Snapshot end, os:system_time(second) + 1000),
+                      fun (Bucket) ->
+                              {ok, BucketConfig} =
+                                  ns_bucket:get_bucket(Bucket, Snapshot),
+                              case ns_bucket:is_fusion(BucketConfig) of
+                                  false ->
+                                      undefined;
+                                  true ->
+                                      Snapshot
+                              end
+                      end, os:system_time(second) + 1000),
                ?assertMatch({ok, {_, {_}}}, RV),
                {ok, {RebalancePlan, {AccelerationPlan}}} = RV,
                UUID = proplists:get_value(planUUID, RebalancePlan),
