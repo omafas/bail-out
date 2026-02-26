@@ -89,6 +89,16 @@ bucket_exists_on_node(BucketUUID, Snapshot) ->
                   cb_cluster_secrets:chronicle_snapshot()) -> ok | {error, _}.
 update_deks({bucketDek, BucketUUID} = Kind, Snapshot) ->
     maybe
+        %% Push keys to backup first to avoid a theoretical
+        %% race when memcached already knows a new key, but
+        %% backup haven't received it yet.
+        ok ?= case ns_ports_setup:should_run(cont_backup, Snapshot) of
+                  true ->
+                      cb_deks_cbauth:call_update_keys_db(Kind,
+                                                         ["cbcontbk-cbauth"]);
+                  false ->
+                      ok
+              end,
         ok ?= ns_memcached:set_active_dek_for_bucket_uuid(BucketUUID),
         ok ?= cb_deks_cbauth:update_deks(Kind, Snapshot),
         ok

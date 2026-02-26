@@ -24,7 +24,8 @@
          cbauth_key_type_to_dek_kind/2,
          does_any_service_use_dek/2,
          get_kinds_for_label/1,
-         dek_consumers/2]).
+         dek_consumers/2,
+         call_update_keys_db/2]).
 
 -define(CBAUTH_RPC_TIMEOUT, ?get_timeout(cbauth_rpc_timeout, 60000)).
 
@@ -32,6 +33,12 @@
                   cb_cluster_secrets:chronicle_snapshot()) -> ok | {error, _}.
 update_deks(Kind, Snapshot) ->
     CbauthLabels = get_cbauth_labels(Kind, Snapshot),
+    call_update_keys_db(Kind, CbauthLabels, true).
+
+call_update_keys_db(Kind, CbauthLabels) ->
+    call_update_keys_db(Kind, CbauthLabels, false).
+
+call_update_keys_db(Kind, CbauthLabels, IgnoreMissing) ->
     {ok, DS} = cb_crypto:fetch_deks_snapshot(Kind),
     {ActiveDek, AllDeks} = cb_crypto:get_all_deks(DS),
     {KeyStoreJsonProps} = memcached_bucket_config:format_mcd_keys(ActiveDek,
@@ -47,7 +54,7 @@ update_deks(Kind, Snapshot) ->
                KeyStoreJsonProps]},
     maybe
         {ok, _} ?= cbauth_call("UpdateKeysDB", Params, Kind, CbauthLabels,
-                               #{ignore_missing_connection => true}),
+                               #{ignore_missing_connection => IgnoreMissing}),
         ok
     end.
 
@@ -144,7 +151,6 @@ get_cbauth_services({bucketDek, _}) ->
     %% index %% uncomment to pass bucket keys to index
     %% cbas %% uncomment to pass bucket keys to cbas
     %% eventing %% uncomment to pass bucket keys to eventing
-     cbcontbk
     ];
 %% This is a fake kind just to trick dialyzer that this function can return
 %% a non-empty list. To be removed once we have real services that use
@@ -155,11 +161,7 @@ get_cbauth_services(_) -> error(invalid_dek_kind).
 get_cbauth_labels(Kind, Snapshot) ->
     Services = get_cbauth_services(Kind),
     NodeServices = ns_cluster_membership:node_services(Snapshot, node()),
-    AllNodeServices = case lists:member(kv, NodeServices) of
-                          true -> NodeServices ++ [cbcontbk];
-                          false -> NodeServices
-                      end,
-    TargetServices = [P || P <- Services, lists:member(P, AllNodeServices)],
+    TargetServices = [P || P <- Services, lists:member(P, NodeServices)],
     [menelaus_cbauth:service_to_label(P) || P <- TargetServices].
 
 cbauth_call(Func, Params, Kind, CbauthLabels) ->
