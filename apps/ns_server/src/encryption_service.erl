@@ -123,9 +123,14 @@ store_kek(Id, Key, KekIdToEncrypt, CreationDT, CanBeCached, TestOnly) ->
                                                  CanBeCached, false)),
               TestOnly).
 
-store_dek({bucketDek, BucketUUID}, Id, Key, KekIdToEncrypt, CreationDT, Imported) ->
-    store_dek(bucketDek, bucket_dek_id(BucketUUID, Id), Key, KekIdToEncrypt,
-              CreationDT, Imported);
+store_dek({bucketDek, BucketUUID}, Id, Key, KekIdToEncrypt,
+          CreationDT, Imported) ->
+    store_dek(bucketDek, bucket_dek_id(BucketUUID, Id),
+              Key, KekIdToEncrypt, CreationDT, Imported);
+store_dek({serviceBucketDek, BucketUUID}, Id, Key,
+          KekIdToEncrypt, CreationDT, Imported) ->
+    store_dek(serviceBucketDek, bucket_dek_id(BucketUUID, Id),
+              Key, KekIdToEncrypt, CreationDT, Imported);
 store_dek(Kind, Id, Key, KekIdToEncrypt, CreationDT, Imported) ->
     store_key(Kind, Id, 'raw-aes-gcm', CreationDT,
               ejson:encode(format_aes_key_params(Key, KekIdToEncrypt, false,
@@ -228,12 +233,17 @@ format_encryption_key_name(undefined) -> <<"encryptionService">>;
 format_encryption_key_name(KekIdToEncrypt) -> KekIdToEncrypt.
 
 read_dek(Kind, DekId) ->
-    {NewId, NewKind} = case Kind of
-                           {bucketDek, BucketUUID} ->
-                               {bucket_dek_id(BucketUUID, DekId), bucketDek};
-                           _ ->
-                               {DekId, Kind}
-                       end,
+    {NewId, NewKind} =
+        case Kind of
+            {bucketDek, BucketUUID} ->
+                {bucket_dek_id(BucketUUID, DekId),
+                 bucketDek};
+            {serviceBucketDek, BucketUUID} ->
+                {bucket_dek_id(BucketUUID, DekId),
+                 serviceBucketDek};
+            _ ->
+                {DekId, Kind}
+        end,
     case ?wrap_error_msg(
            cb_gosecrets_runner:read_key(?RUNNER, NewKind, NewId),
            read_key_error, [{kind, cb_deks:kind2bin(NewKind, <<"unknown">>)},
@@ -364,6 +374,14 @@ info_props_to_kind(InfoProps) ->
                         {ok, {{bucketDek, BucketUUIDBin}, DekIdBin}};
                     _ ->
                         {error, invalid_bucket_dek_name}
+                end;
+            <<"serviceBucketDek">> ->
+                case string:split(NameBin, "/deks/") of
+                    [BucketUUIDBin, DekIdBin] when BucketUUIDBin =/= <<>>,
+                                                   DekIdBin =/= <<>> ->
+                        {ok, {{serviceBucketDek, BucketUUIDBin}, DekIdBin}};
+                    _ ->
+                        {error, invalid_service_bucket_dek_name}
                 end;
             _ ->
                 case lists:keyfind(KindBin, 1, KindBinToKind) of
@@ -879,6 +897,7 @@ garbage_collect_keys(Kind, InUseKeyIds) ->
                               {true, {Filename, Reason}}
                       end
                   end, ToRetire),
+            maybe_cleanup_empty_dek_dir(Kind, KeyDir),
             revalidate_key_cache(),
             case FailedList of
                 [] -> ok;
@@ -888,6 +907,34 @@ garbage_collect_keys(Kind, InUseKeyIds) ->
                     {error, FailedList}
             end
     end.
+
+%% For serviceBucketDek the key directory is service_bucket_deks/<UUID>/deks.
+%% When all keys are retired the directory becomes empty and we should
+%% clean up the <UUID> parent dir to avoid accumulating empty directories
+%% as buckets are created and removed.
+%% NOTE: This function must only be called from the cb_cluster_secrets
+%% node process to avoid races with creation of dek files in the
+%% directory being removed.
+maybe_cleanup_empty_dek_dir({serviceBucketDek, BucketUUID} = Kind, KeyDir) ->
+    maybe
+        {ok, []} ?= file:list_dir(KeyDir), %% No key files
+        UUIDDir = filename:dirname(KeyDir),
+        ExpectedUUID = iolist_to_binary(filename:basename(UUIDDir)),
+        {expected_dir, BucketUUID} = {expected_dir, ExpectedUUID},
+        ok ?= file:del_dir(KeyDir),
+        ok ?= file:del_dir(UUIDDir),
+        ?log_debug("Removed empty service bucket dek dir ~s", [UUIDDir]),
+        ok
+    else
+        {ok, [_ | _]} -> %% There are still keys in the dir
+            ok;
+        {error, Error} ->
+            ?log_error("Failed to cleanup dir for ~p ~s: ~p",
+                       [Kind, KeyDir, Error]),
+            ok
+    end;
+maybe_cleanup_empty_dek_dir(_Kind, _KeyDir) ->
+    ok.
 
 select_files_to_retire(Dir, KeyIdsInUse, {ok, FileList}) ->
     KeyIdsInUseSet = maps:from_keys(KeyIdsInUse, true),
@@ -1114,6 +1161,14 @@ select_files_to_retire_test() ->
 
 key_path({bucketDek, BucketUUID}) ->
     case key_path(bucketDek) of
+        undefined ->
+            undefined;
+        PathToDeks ->
+            iolist_to_binary(
+              filename:join([PathToDeks, binary_to_list(BucketUUID), "deks"]))
+    end;
+key_path({serviceBucketDek, BucketUUID}) ->
+    case key_path(serviceBucketDek) of
         undefined ->
             undefined;
         PathToDeks ->

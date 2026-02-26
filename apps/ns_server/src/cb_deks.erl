@@ -136,7 +136,8 @@
                              disabled.
 -type dek_id() :: cb_cluster_secrets:key_id().
 -type dek_kind() :: configDek | logDek | auditDek |
-                    {bucketDek, BucketUUID :: binary()}.
+                    {bucketDek, BucketUUID :: binary()} |
+                    {serviceBucketDek, BucketUUID :: binary()}.
 -type good_dek(Type, Info) :: #{id := dek_id(), type := Type, info := Info}.
 -type aes_dek_info() :: #{key := ?HIDDEN_DATA(binary()),
                           encryption_key_id := cb_cluster_secrets:key_id(),
@@ -438,7 +439,8 @@ dek_chronicle_keys_filter(Key) ->
                 not_present -> %% Deleted?
                     check_for_deleted_keys;
                 UUID when is_binary(UUID) ->
-                    {dek_settings_updated, [{bucketDek, UUID}]}
+                    {dek_settings_updated,
+                     [{bucketDek, UUID}, {serviceBucketDek, UUID}]}
             end;
         {true, _Bucket, _} -> ignore;
         false ->
@@ -498,7 +500,8 @@ call_dek_callback_unsafe(CallbackName, Kind, Args) ->
 dek_user_impl(configDek) -> cb_deks_config;
 dek_user_impl(logDek) -> cb_deks_log;
 dek_user_impl(auditDek) -> cb_deks_audit;
-dek_user_impl({bucketDek, _}) -> cb_deks_bucket.
+dek_user_impl({bucketDek, _}) -> cb_deks_bucket;
+dek_user_impl({serviceBucketDek, _}) -> cb_deks_cbauth.
 
 %% Returns all possible deks kinds for this cluster.
 %% The list was supposed to be static if not buckets. Buckets can be created and
@@ -509,7 +512,8 @@ dek_cluster_kinds_list() ->
 dek_cluster_kinds_list(Snapshot) ->
     Buckets = ns_bucket:uuids(Snapshot),
     ?DEK_KIND_LIST_STATIC ++
-    [{bucketDek, UUID} || {_, UUID} <- Buckets].
+    [{bucketDek, UUID} || {_, UUID} <- Buckets] ++
+    [{serviceBucketDek, UUID} || {_, UUID} <- Buckets].
 
 dek_kinds_list_existing_on_node(Snapshot) ->
     AllKinds = dek_cluster_kinds_list(Snapshot),
@@ -528,6 +532,11 @@ kind2bin({bucketDek, UUID}) ->
         {ok, BucketName} -> iolist_to_binary(["bucketDek_", BucketName]);
         {error, not_found} -> erlang:error(not_found)
     end;
+kind2bin({serviceBucketDek, UUID}) ->
+    case ns_bucket:uuid2bucket(UUID) of
+        {ok, BucketName} -> iolist_to_binary(["serviceBucketDek_", BucketName]);
+        {error, not_found} -> erlang:error(not_found)
+    end;
 kind2bin(K) -> atom_to_binary(K).
 
 kind2bin(K, Default) ->
@@ -542,7 +551,13 @@ kind2datatype({bucketDek, UUID}) ->
         {ok, BucketName} -> iolist_to_binary(["bucket_", BucketName]);
         {error, not_found} -> erlang:error(not_found)
     end;
+kind2datatype({serviceBucketDek, UUID}) ->
+    case ns_bucket:uuid2bucket(UUID) of
+        {ok, BucketName} -> iolist_to_binary(["service_bucket_", BucketName]);
+        {error, not_found} -> erlang:error(not_found)
+    end;
 kind2datatype(bucketDek) -> <<"bucket_data">>;
+kind2datatype(serviceBucketDek) -> <<"service_bucket_data">>;
 kind2datatype(kek) -> <<"keys">>;
 kind2datatype(configDek) -> <<"config">>;
 kind2datatype(logDek) -> <<"logs">>;
@@ -564,6 +579,8 @@ dek_user_impl_exists_test() ->
                       Module = dek_user_impl(K),
                       ?assert(is_atom(Module)),
                       Module:module_info()
-                  end, [{bucketDek, <<"123">>} | ?DEK_KIND_LIST_STATIC]).
+                  end, [{bucketDek, <<"123">>},
+                        {serviceBucketDek, <<"123">>} |
+                        ?DEK_KIND_LIST_STATIC]).
 
 -endif.

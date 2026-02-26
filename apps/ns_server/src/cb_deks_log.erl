@@ -148,7 +148,7 @@ get_dek_ids_in_use(Kind, Snapshot) ->
 
         {ok, InUseEventLogs} ?= event_log_server:get_in_use_deks(),
 
-        {ok, InUseCbauth} ?= cb_deks_cbauth:get_key_ids_in_use(Kind, Snapshot),
+        {ok, InUseCbauth} ?= cb_deks_cbauth:get_dek_ids_in_use(Kind, Snapshot),
 
         AllInUse = lists:map(
                       fun(undefined) ->

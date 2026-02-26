@@ -1020,7 +1020,11 @@ nodes_with_encryption_at_rest(Nodes) ->
 -spec max_local_dek_num(cb_deks:dek_kind()) -> pos_integer().
 max_local_dek_num(Kind) ->
     Default = case Kind of
-                  {bucketDek, _} -> ?get_param({max_dek_num, bucketDek}, 50);
+                  {bucketDek, _} ->
+                      ?get_param({max_dek_num, bucketDek}, 50);
+                  {serviceBucketDek, _} ->
+                      ?get_param({max_dek_num,
+                                  serviceBucketDek}, 50);
                   _ -> 50
               end,
     ?get_param({max_dek_num, Kind}, Default).
@@ -1029,7 +1033,12 @@ max_local_dek_num(Kind) ->
 max_total_dek_num(Kind) ->
     Default =
         case Kind of
-            {bucketDek, _} -> ?get_param({max_total_dek_num, bucketDek}, 1000);
+            {bucketDek, _} ->
+                ?get_param({max_total_dek_num,
+                            bucketDek}, 1000);
+            {serviceBucketDek, _} ->
+                ?get_param({max_total_dek_num,
+                            serviceBucketDek}, 1000);
             _ -> 1000
         end,
     ?get_param({max_total_dek_num, Kind}, Default).

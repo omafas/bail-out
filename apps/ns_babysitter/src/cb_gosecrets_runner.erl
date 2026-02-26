@@ -659,13 +659,26 @@ cfg_to_json(Props) ->
                    {encryptByKind, kek}]}
              end,
     Kinds = ?KEY_KIND_LIST_STATIC,
-    DeksStoreConfig = case key_path(bucketDek, Props) of
-                          undefined -> [];
-                          DeksPath -> [{[{kind, bucketDek},
-                                         {path, DeksPath},
-                                         {encryptByKind, kek}]}]
-                      end,
-    StoredKeysJson = {storedKeys, [KeyCfg(K) || K <- Kinds] ++ DeksStoreConfig},
+    BucketDeksStoreConfig =
+        case key_path(bucketDek, Props) of
+            undefined -> [];
+            DeksPath -> [{[{kind, bucketDek},
+                           {path, DeksPath},
+                           {encryptByKind, kek}]}]
+        end,
+    ServiceBucketDeksStoreConfig =
+        case key_path(serviceBucketDek, Props) of
+            undefined -> [];
+            SvcDeksPath ->
+                [{[{kind, serviceBucketDek},
+                   {path, SvcDeksPath},
+                   {encryptByKind, kek}]}]
+        end,
+    StoredKeysJson =
+        {storedKeys,
+         [KeyCfg(K) || K <- Kinds] ++
+         BucketDeksStoreConfig ++
+         ServiceBucketDeksStoreConfig},
 
     case Extract(es_key_storage_type) of
         file ->
@@ -731,7 +744,9 @@ key_path(bucketDek, Cfg) ->
     case proplists:get_value(Key, Cfg) of
         undefined -> proplists:get_value(Key, defaults(), undefined);
         P -> iolist_to_binary(P)
-    end.
+    end;
+key_path(serviceBucketDek, _Cfg) ->
+    proplists:get_value(service_bucket_dek_path, defaults(), undefined).
 
 defaults() ->
     ConfigDir = path_config:component_path(data, "config"),
@@ -743,7 +758,9 @@ defaults() ->
      {kek_path, iolist_to_binary(filename:join(ConfigDir, "keks"))},
      {config_dek_path, iolist_to_binary(filename:join(ConfigDir, "deks"))},
      {audit_dek_path, iolist_to_binary(filename:join(ConfigDir, "audit_deks"))},
-     {log_dek_path, iolist_to_binary(filename:join(ConfigDir, "logs_deks"))}].
+     {log_dek_path, iolist_to_binary(filename:join(ConfigDir, "logs_deks"))},
+     {service_bucket_dek_path,
+      iolist_to_binary(filename:join(ConfigDir, "service_bucket_deks"))}].
 
 format_error({write_failed, CfgPath, Error}) ->
     io_lib:format("Could not write file '~s': ~s (~p)",

@@ -10,24 +10,62 @@
 
 -module(cb_deks_cbauth).
 
+-behaviour(cb_deks).
+
 -include("ns_common.hrl").
 -include("cb_cluster_secrets.hrl").
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--export([update_deks/2,
-         get_key_ids_in_use/2,
+-export([get_encryption_method/3,
+         update_deks/2,
+         get_required_usage/1,
+         get_deks_lifetime/2,
+         get_deks_rotation_interval/2,
+         get_drop_deks_timestamp/2,
+         get_force_encryption_timestamp/2,
+         get_dek_ids_in_use/2,
          initiate_drop_deks/3,
          synchronize_deks/2,
          fetch_chronicle_keys_in_txn/2,
-         cbauth_key_type_to_dek_kind/2,
-         does_any_service_use_dek/2,
+         dek_consumers/2]).
+
+-export([cbauth_key_type_to_dek_kind/2,
          get_kinds_for_label/1,
-         dek_consumers/2,
          call_update_keys_db/2]).
 
 -define(CBAUTH_RPC_TIMEOUT, ?get_timeout(cbauth_rpc_timeout, 60000)).
+
+%% cb_deks callbacks for {serviceBucketDek, _}
+
+-spec get_encryption_method(cb_deks:dek_kind(), cluster | node,
+                            cb_cluster_secrets:chronicle_snapshot()) ->
+              {ok, cb_deks:encryption_method()} | {error, not_found}.
+get_encryption_method({serviceBucketDek, BucketUUID} = Kind,
+                      Scope, Snapshot)
+                          when Scope == cluster;
+                               Scope == node ->
+    maybe
+        {ok, BucketName} ?= ns_bucket:uuid2bucket(BucketUUID, Snapshot),
+        {ok, BucketConfig} ?= ns_bucket:get_bucket(BucketName, Snapshot),
+        case (Scope == cluster) orelse
+             does_any_service_use_dek(Kind, Snapshot) of
+            true ->
+                case proplists:get_value(encryption_secret_id, BucketConfig,
+                                         ?SECRET_ID_NOT_SET) of
+                    ?SECRET_ID_NOT_SET -> {ok, disabled};
+                    Id -> {ok, {secret, Id}}
+                end;
+            false ->
+                {error, not_found}
+        end
+    else
+        not_present ->
+            {error, not_found};
+        {error, R} ->
+            {error, R}
+    end.
 
 -spec update_deks(cb_deks:dek_kind(),
                   cb_cluster_secrets:chronicle_snapshot()) -> ok | {error, _}.
@@ -64,10 +102,10 @@ dek_consumers(Kind, Snapshot) ->
     CbauthLabels = get_cbauth_labels(Kind, Snapshot),
     [json_rpc_connection:get_pid(L) || L <- CbauthLabels].
 
--spec get_key_ids_in_use(cb_deks:dek_kind(),
+-spec get_dek_ids_in_use(cb_deks:dek_kind(),
                          cb_cluster_secrets:chronicle_snapshot()) ->
           {ok, [cb_deks:dek_id()]} | {error, _}.
-get_key_ids_in_use(Kind, Snapshot) ->
+get_dek_ids_in_use(Kind, Snapshot) ->
     CbauthLabels = get_cbauth_labels(Kind, Snapshot),
     Params = dek_kind_to_json(Kind),
     maybe
@@ -105,8 +143,44 @@ synchronize_deks(Kind, Snapshot) ->
         ok
     end.
 
--spec fetch_chronicle_keys_in_txn(cb_deks:dek_kind(), Txn :: term()) ->
+-spec get_required_usage(cb_deks:dek_kind()) ->
+          cb_cluster_secrets:secret_usage().
+get_required_usage({serviceBucketDek, BucketUUID}) ->
+    cb_deks_bucket:get_required_usage({bucketDek, BucketUUID}).
+
+-spec get_deks_lifetime(cb_deks:dek_kind(),
+                        cb_cluster_secrets:chronicle_snapshot()) ->
+          {ok, undefined | pos_integer()} | {error, not_found}.
+get_deks_lifetime({serviceBucketDek, BucketUUID}, Snapshot) ->
+    cb_deks_bucket:get_deks_lifetime({bucketDek, BucketUUID}, Snapshot).
+
+-spec get_deks_rotation_interval(
+        cb_deks:dek_kind(),
+        cb_cluster_secrets:chronicle_snapshot()) ->
+          {ok, undefined | pos_integer()} | {error, not_found}.
+get_deks_rotation_interval({serviceBucketDek, BucketUUID}, Snapshot) ->
+    cb_deks_bucket:get_deks_rotation_interval({bucketDek, BucketUUID},
+                                              Snapshot).
+
+-spec get_drop_deks_timestamp(cb_deks:dek_kind(),
+                              cb_cluster_secrets:chronicle_snapshot()) ->
+          {ok, undefined | calendar:datetime()} | {error, not_found}.
+get_drop_deks_timestamp({serviceBucketDek, BucketUUID}, Snapshot) ->
+    cb_deks_bucket:get_drop_deks_timestamp({bucketDek, BucketUUID}, Snapshot).
+
+-spec get_force_encryption_timestamp(cb_deks:dek_kind(),
+                                     cb_cluster_secrets:chronicle_snapshot()) ->
+          {ok, undefined | calendar:datetime()} | {error, not_found}.
+get_force_encryption_timestamp({serviceBucketDek, BucketUUID}, Snapshot) ->
+    cb_deks_bucket:get_force_encryption_timestamp({bucketDek, BucketUUID},
+                                                  Snapshot).
+
+-spec fetch_chronicle_keys_in_txn(cb_deks:dek_kind(),
+                                  Txn :: term()) ->
           cb_cluster_secrets:chronicle_snapshot().
+fetch_chronicle_keys_in_txn({serviceBucketDek, BucketUUID}, Txn) ->
+    %% assuming that node_membership_keys will be added by cb_deks_bucket
+    cb_deks_bucket:fetch_chronicle_keys_in_txn({bucketDek, BucketUUID}, Txn);
 fetch_chronicle_keys_in_txn(_Kind, Txn) ->
     chronicle_compat:txn_get_many(
       ns_cluster_membership:node_membership_keys(node()),
@@ -144,13 +218,13 @@ get_cbauth_services(logDek) ->
     %% cbas %% uncomment to pass log keys to cbas
     %% eventing %% uncomment to pass log keys to eventing
     ];
-get_cbauth_services({bucketDek, _}) ->
+get_cbauth_services({serviceBucketDek, _}) ->
     [
-    %% n1ql %% uncomment to pass bucket keys to n1ql
-    %% fts %% uncomment to pass bucket keys to fts
-    %% index %% uncomment to pass bucket keys to index
-    %% cbas %% uncomment to pass bucket keys to cbas
-    %% eventing %% uncomment to pass bucket keys to eventing
+    %% n1ql %% uncomment to pass service bucket keys to n1ql
+    %% fts %% uncomment to pass service bucket keys to fts
+    %% index %% uncomment to pass service bucket keys to index
+    %% cbas %% uncomment to pass service bucket keys to cbas
+    %% eventing %% uncomment to pass service bucket keys to eventing
     ];
 %% This is a fake kind just to trick dialyzer that this function can return
 %% a non-empty list. To be removed once we have real services that use
@@ -202,6 +276,7 @@ dek_kind_to_json(Kind) ->
     {TypeName, BucketUUID} =
         case Kind of
             {bucketDek, UUID} -> {<<"bucket">>, UUID};
+            {serviceBucketDek, UUID} -> {<<"service_bucket">>, UUID};
             logDek -> {<<"log">>, <<>>}
             %% Other kinds are not supported used by any service currently,
             %% so we don't need to support them here (dialyzer complains about
@@ -218,6 +293,12 @@ cbauth_key_type_to_dek_kind("bucket", "") ->
     {error, "bucketUUID is required for bucketDek"};
 cbauth_key_type_to_dek_kind("bucket", BucketUUID) ->
     {ok, {bucketDek, iolist_to_binary(BucketUUID)}};
+cbauth_key_type_to_dek_kind("service_bucket", undefined) ->
+    {error, "bucketUUID is required for serviceBucketDek"};
+cbauth_key_type_to_dek_kind("service_bucket", "") ->
+    {error, "bucketUUID is required for serviceBucketDek"};
+cbauth_key_type_to_dek_kind("service_bucket", BucketUUID) ->
+    {ok, {serviceBucketDek, iolist_to_binary(BucketUUID)}};
 cbauth_key_type_to_dek_kind("log", _) ->
     {ok, logDek};
 cbauth_key_type_to_dek_kind("config", _) ->
@@ -245,16 +326,29 @@ cbauth_key_type_to_dek_kind_test() ->
 
     ?assertEqual([], ?DEK_KIND_LIST_STATIC -- HandledKinds),
 
-    ?assertEqual({error, "bucketUUID is required for bucketDek"},
-                 cbauth_key_type_to_dek_kind("bucket", undefined)),
-    ?assertEqual({error, "bucketUUID is required for bucketDek"},
-                 cbauth_key_type_to_dek_kind("bucket", "")),
-    ?assertEqual({error, "invalid type: \"unknown\""},
-                 cbauth_key_type_to_dek_kind("unknown", undefined)),
-    ?assertEqual({error, "invalid type: \"unknown\""},
-                 cbauth_key_type_to_dek_kind("unknown", "")),
-    ?assertEqual({error, "invalid type: \"unknown\""},
-                 cbauth_key_type_to_dek_kind("unknown", "123")).
-
+    ?assertEqual(
+       {error, "bucketUUID is required for bucketDek"},
+       cbauth_key_type_to_dek_kind("bucket", undefined)),
+    ?assertEqual(
+       {error, "bucketUUID is required for bucketDek"},
+       cbauth_key_type_to_dek_kind("bucket", "")),
+    ?assertEqual(
+       {error, "bucketUUID is required for serviceBucketDek"},
+       cbauth_key_type_to_dek_kind("service_bucket", undefined)),
+    ?assertEqual(
+       {error, "bucketUUID is required for serviceBucketDek"},
+       cbauth_key_type_to_dek_kind("service_bucket", "")),
+    ?assertEqual(
+       {ok, {serviceBucketDek, <<"test-uuid">>}},
+       cbauth_key_type_to_dek_kind("service_bucket", "test-uuid")),
+    ?assertEqual(
+       {error, "invalid type: \"unknown\""},
+       cbauth_key_type_to_dek_kind("unknown", undefined)),
+    ?assertEqual(
+       {error, "invalid type: \"unknown\""},
+       cbauth_key_type_to_dek_kind("unknown", "")),
+    ?assertEqual(
+       {error, "invalid type: \"unknown\""},
+       cbauth_key_type_to_dek_kind("unknown", "123")).
 
 -endif.

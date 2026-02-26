@@ -481,8 +481,9 @@ format_secrets_used_by_list_to_json(UsedBy) ->
                        DescrBin = iolist_to_binary("key \"" ++ S ++ "\""),
                        MakeRes(UsageBin, DescrBin)
                    end,
-
-    lists:filtermap(FormatKind, lists:uniq(Kinds)) ++
+    %% Outer uniq() is needed because {bucketDek, _} and {serviceBucketDek, _}
+    %% map to the same "usage".
+    lists:uniq(lists:filtermap(FormatKind, lists:uniq(Kinds))) ++
     lists:map(FormatSecret, lists:uniq(Secrets)).
 
 usage_to_json({bucket_encryption, <<"*">>}) ->

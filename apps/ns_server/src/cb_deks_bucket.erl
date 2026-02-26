@@ -31,22 +31,19 @@
 -spec get_encryption_method(cb_deks:dek_kind(), cluster | node,
                             cb_cluster_secrets:chronicle_snapshot()) ->
               {ok, cb_deks:encryption_method()} | {error, not_found}.
-get_encryption_method({bucketDek, BucketUUID} = Kind, Scope, Snapshot)
+get_encryption_method({bucketDek, BucketUUID}, Scope, Snapshot)
                                             when Scope == cluster;
                                                  Scope == node ->
     maybe
         {ok, BucketName} ?= ns_bucket:uuid2bucket(BucketUUID, Snapshot),
         {ok, BucketConfig} ?= ns_bucket:get_bucket(BucketName, Snapshot),
-        AnyBucketServices = cb_deks_cbauth:does_any_service_use_dek(Kind,
-                                                                    Snapshot),
         %% Meaning of Scope:
         %% When Scope == cluster, we check if encryption for this bucket is
         %% enabled in general.
         %% When Scope == node, we check if this bucket is encrypted on this
         %% node (this node should have DEKs for this bucket)
         case (Scope == cluster) orelse
-             bucket_exists_on_node(BucketUUID, Snapshot) orelse
-             AnyBucketServices of
+             bucket_exists_on_node(BucketUUID, Snapshot) of
             true ->
                 case proplists:get_value(encryption_secret_id, BucketConfig,
                                          ?SECRET_ID_NOT_SET) of
@@ -100,14 +97,13 @@ update_deks({bucketDek, BucketUUID} = Kind, Snapshot) ->
                       ok
               end,
         ok ?= ns_memcached:set_active_dek_for_bucket_uuid(BucketUUID),
-        ok ?= cb_deks_cbauth:update_deks(Kind, Snapshot),
         ok
     end.
 
 -spec dek_consumers(cb_deks:dek_kind(),
                     cb_cluster_secrets:chronicle_snapshot()) -> [term()].
-dek_consumers(Kind, Snapshot) ->
-    cb_deks_cbauth:dek_consumers(Kind, Snapshot).
+dek_consumers(_Kind, _Snapshot) ->
+    [].
 
 -spec get_required_usage(cb_deks:dek_kind()) ->
           cb_cluster_secrets:secret_usage().
@@ -141,63 +137,46 @@ get_force_encryption_timestamp({bucketDek, BucketUUID}, Snapshot) ->
 -spec get_dek_ids_in_use(cb_deks:dek_kind(),
                          cb_cluster_secrets:chronicle_snapshot()) ->
           {ok, [cb_deks:dek_id()]} | {error, _}.
-get_dek_ids_in_use({bucketDek, BucketUUID} = Kind, Snapshot) ->
-    maybe
-        {ok, Ids1} ?=
-            case ns_memcached:get_dek_ids_in_use(BucketUUID) of
-                {ok, Ids} -> {ok, Ids};
-                {error, not_found} ->
-                    %% We could not get it from memcached but it is
-                    %% possible that we have data encrypted on disk.
-                    %% If so, we should not assume there are no deks in use.
-                    case bucket_exists_on_node(BucketUUID, Snapshot) of
-                        true -> {error, not_found};
-                        false -> {ok, []}
-                    end
-            end,
-        {ok, Ids2} ?= cb_deks_cbauth:get_key_ids_in_use(Kind, Snapshot),
-        {ok, lists:uniq(Ids1 ++ Ids2)}
+get_dek_ids_in_use({bucketDek, BucketUUID}, Snapshot) ->
+    case ns_memcached:get_dek_ids_in_use(BucketUUID) of
+        {ok, Ids} ->
+            {ok, Ids};
+        {error, not_found} ->
+            case bucket_exists_on_node(BucketUUID,
+                                       Snapshot) of
+                true -> {error, not_found};
+                false -> {ok, []}
+            end
     end.
 
 -spec initiate_drop_deks(cb_deks:dek_kind(), [cb_deks:dek_id()],
                          cb_cluster_secrets:chronicle_snapshot()) ->
           {ok, done | started} | {error, not_found | retry | _}.
-initiate_drop_deks({bucketDek, BucketUUID} = Kind, DekIds, Snapshot) ->
+initiate_drop_deks({bucketDek, BucketUUID},
+                   DekIds, Snapshot) ->
     Continuation = fun (_) ->
                        cb_cluster_secrets:dek_drop_complete(
                            {bucketDek, BucketUUID}, ok)
                    end,
-    maybe
-        {ok, started} ?=
-            case bucket_exists_on_node(BucketUUID, Snapshot) of
-                true ->
-                    ns_memcached:drop_deks(BucketUUID, DekIds,
-                                        cb_cluster_secrets,
-                                        Continuation);
-                false ->
-                    {ok, started}
-            end,
-        {ok, started} ?= cb_deks_cbauth:initiate_drop_deks(Kind, DekIds,
-                                                           Snapshot),
-        {ok, started}
+    case bucket_exists_on_node(BucketUUID, Snapshot) of
+        true ->
+            ns_memcached:drop_deks(BucketUUID, DekIds, cb_cluster_secrets,
+                                   Continuation);
+        false ->
+            {error, not_found}
     end.
 
 -spec synchronize_deks(cb_deks:dek_kind(),
                       cb_cluster_secrets:chronicle_snapshot()) ->
           ok | {error, _}.
-synchronize_deks(Kind, Snapshot) ->
-    maybe
-        ok ?= cb_deks_cbauth:synchronize_deks(Kind, Snapshot),
-        ok
-    end.
+synchronize_deks(_Kind, _Snapshot) ->
+    ok.
 
 -spec fetch_chronicle_keys_in_txn(cb_deks:dek_kind(), Txn :: term()) ->
           cb_cluster_secrets:chronicle_snapshot().
-fetch_chronicle_keys_in_txn({bucketDek, BucketUUID} = Kind, Txn) ->
+fetch_chronicle_keys_in_txn({bucketDek, BucketUUID}, Txn) ->
     BucketKeys = ns_bucket:all_keys_by_uuid([BucketUUID],
                                             [props, encr_at_rest, uuid], Txn),
-    BucketSnapshot = chronicle_compat:txn_get_many(
-                       [ns_bucket:root() | BucketKeys] ++
-                       ns_cluster_membership:node_membership_keys(node()), Txn),
-    CbauthSnapshot = cb_deks_cbauth:fetch_chronicle_keys_in_txn(Kind, Txn),
-    maps:merge(BucketSnapshot, CbauthSnapshot).
+    chronicle_compat:txn_get_many(
+      [ns_bucket:root() | BucketKeys] ++
+      ns_cluster_membership:node_membership_keys(node()), Txn).

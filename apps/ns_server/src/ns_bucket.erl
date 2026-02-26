@@ -3334,15 +3334,8 @@ get_encryption(BucketUUID, Scope, Snapshot) when Scope == cluster;
         ExistsOnDisk = filelib:is_dir(Dir),
         Services = ns_cluster_membership:node_services(Snapshot, node()),
         IsKVNode = lists:member(kv, Services),
-        AnyBucketServices = cb_deks_cbauth:does_any_service_use_dek(
-                              {bucketDek, BucketUUID}, Snapshot),
-        %% Meaning of Scope:
-        %% When Scope == cluster, we check if encryption for this bucket is
-        %% enabled in general.
-        %% When Scope == node, we check if this bucket is encrypted on this
-        %% node (this node should have DEKs for this bucket)
         case (Scope == cluster) orelse IsNodeInServers orelse
-             (IsKVNode andalso ExistsOnDisk) orelse AnyBucketServices of
+             (IsKVNode andalso ExistsOnDisk) of
             true ->
                 case proplists:get_value(encryption_secret_id, BucketConfig,
                                             ?SECRET_ID_NOT_SET) of
