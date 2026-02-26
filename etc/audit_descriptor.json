@@ -1991,6 +1991,37 @@
               },
               "sessionid": ""
           }
+      },
+      {
+          "id" : 8291,
+          "name" : "modify credential store settings",
+          "description" : "Credential store settings were modified",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields": {
+              "timestamp": "",
+              "real_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "remote": {
+                  "ip": "",
+                  "port": 1
+              },
+              "local": {
+                  "ip": "",
+                  "port": 1
+              },
+              "settings" : ""
+          },
+          "optional_fields": {
+              "authenticated_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "sessionid": ""
+          }
       }
     ]
 }

@@ -526,7 +526,9 @@ code(prepare_fusion_rebalance) ->
 code(abort_prepared_fusion_rebalance) ->
     8289;
 code(upload_mounted_volumes) ->
-    8290.
+    8290;
+code(modify_credential_store_settings) ->
+    8291.
 
 send_to_memcached(ParentPID, {Code, EncodedBody, IsSync}) ->
     case (catch ns_memcached_sockets_pool:executing_on_socket(
