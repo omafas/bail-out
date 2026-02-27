@@ -900,52 +900,56 @@ do_handle_call({release_file_based_rebalance_snapshots, Bucket}, _From,
               ok = ns_memcached:release_snapshot(Bucket, VBucket)
       end, Statuses),
     {reply, ok, State};
-do_handle_call({release_file_based_rebalance_snapshot, VBucket}, From,
+do_handle_call({release_file_based_rebalance_snapshot, VBucket} = Call, From,
                #state{bucket_name = Bucket} = State) ->
     spawn_rebalance_subprocess(
-      State, From,
+      Call, State, From,
       ?cut(ns_memcached:release_snapshot(Bucket, VBucket)));
-do_handle_call({import_snapshot_deks, VBucket}, From,
+do_handle_call({import_snapshot_deks, VBucket} = Call, From,
                #state{bucket_name = Bucket} = State) ->
     spawn_rebalance_subprocess(
-      State, From,
+      Call, State, From,
       ?cut(import_snapshot_deks(Bucket, VBucket)));
-do_handle_call({wait_index_updated, VBucket}, From,
+do_handle_call({wait_index_updated, VBucket} = Call, From,
                #state{bucket_name = Bucket} = State) ->
     spawn_rebalance_subprocess(
-      State, From, ?cut(ns_couchdb_api:wait_index_updated(Bucket, VBucket)));
-do_handle_call({download_snapshot, MasterNode, VBucket}, From,
+      Call, State, From,
+      ?cut(ns_couchdb_api:wait_index_updated(Bucket, VBucket)));
+do_handle_call({download_snapshot, MasterNode, VBucket} = Call, From,
                #state{bucket_name = Bucket} = State) ->
-    spawn_rebalance_subprocess(State, From,
+    spawn_rebalance_subprocess(Call, State, From,
                                ?cut(ns_memcached:download_snapshot(Bucket,
                                                                    MasterNode,
                                                                    VBucket)));
-do_handle_call({wait_download_snapshot, VBucket}, From,
+do_handle_call({wait_download_snapshot, VBucket} = Call, From,
                #state{bucket_name = Bucket} = State) ->
-    spawn_rebalance_subprocess(State, From,
+    spawn_rebalance_subprocess(Call, State, From,
                                ?cut(wait_download_snapshot(Bucket, VBucket)));
-do_handle_call({wait_snapshot_ready, VBucket}, From,
+do_handle_call({wait_snapshot_ready, VBucket} = Call, From,
                #state{bucket_name = Bucket} = State) ->
-    spawn_rebalance_subprocess(State, From,
+    spawn_rebalance_subprocess(Call, State, From,
                                ?cut(wait_snapshot_ready(Bucket, VBucket)));
-do_handle_call({wait_dcp_data_move, ReplicaNodes, VBucket}, From,
+do_handle_call({wait_dcp_data_move, ReplicaNodes, VBucket} = Call, From,
                #state{bucket_name = Bucket} = State) ->
     spawn_rebalance_subprocess(
-      State, From, ?cut(dcp_replicator:wait_for_data_move(ReplicaNodes, Bucket,
-                                                          VBucket)));
-do_handle_call({dcp_takeover, OldMasterNode, VBucket}, From,
+      Call, State, From,
+      ?cut(dcp_replicator:wait_for_data_move(ReplicaNodes, Bucket,
+                                             VBucket)));
+do_handle_call({dcp_takeover, OldMasterNode, VBucket} = Call, From,
                #state{bucket_name = Bucket} = State) ->
     spawn_rebalance_subprocess(
-      State, From, ?cut(replication_manager:dcp_takeover(Bucket, OldMasterNode,
-                                                         VBucket)));
-do_handle_call(initiate_indexing, From, #state{bucket_name = Bucket} = State) ->
+      Call, State, From,
+      ?cut(replication_manager:dcp_takeover(Bucket, OldMasterNode,
+                                            VBucket)));
+do_handle_call(initiate_indexing = Call,
+               From, #state{bucket_name = Bucket} = State) ->
     spawn_rebalance_subprocess(
-      State, From, ?cut(ok = ns_couchdb_api:initiate_indexing(Bucket)));
-do_handle_call({wait_seqno_persisted, VBucket, SeqNo},
+      Call, State, From, ?cut(ok = ns_couchdb_api:initiate_indexing(Bucket)));
+do_handle_call({wait_seqno_persisted, VBucket, SeqNo} = Call,
                From,
                #state{bucket_name = Bucket} = State) ->
     spawn_rebalance_subprocess(
-      State, From,
+      Call, State, From,
       fun () ->
               ?rebalance_debug(
                  "Going to wait for persistence of seqno ~B in vbucket ~B",
@@ -961,17 +965,17 @@ do_handle_call({wait_seqno_persisted, VBucket, SeqNo},
                  [SeqNo, VBucket]),
               ok
       end);
-do_handle_call({inhibit_view_compaction, Pid},
+do_handle_call({inhibit_view_compaction, Pid} = Call,
                From,
                #state{bucket_name = Bucket} = State) ->
     spawn_rebalance_subprocess(
-      State, From,
+      Call, State, From,
       ?cut(compaction_daemon:inhibit_view_compaction(Bucket, Pid)));
-do_handle_call({uninhibit_view_compaction, Ref},
+do_handle_call({uninhibit_view_compaction, Ref} = Call,
                From,
                #state{bucket_name = Bucket} = State) ->
     spawn_rebalance_subprocess(
-      State, From,
+      Call, State, From,
       ?cut(compaction_daemon:uninhibit_view_compaction(Bucket, Ref)));
 do_handle_call({get_vbucket_high_seqno, VBucket},
                _From,
@@ -998,12 +1002,12 @@ do_handle_call({mark_warmed, DataIngress}, _From,
     RV = ns_memcached:mark_warmed(Bucket, DataIngress),
     ok = ns_bucket:activate_bucket_data_on_this_node(Bucket),
     {reply, RV, State};
-do_handle_call({mount_volumes, VBuckets, Volumes}, From,
+do_handle_call({mount_volumes, VBuckets, Volumes} = Call, From,
                #state{bucket_name = Bucket} = State) ->
     ?log_debug("Mounting volumes ~p for bucket ~p vbuckets ~p",
                [Volumes, Bucket, VBuckets]),
     spawn_rebalance_subprocess(
-      State, From,
+      Call, State, From,
       fun () ->
               RV =
                   [{VB,
@@ -1214,11 +1218,14 @@ cleanup_rebalance_artifacts(Call, State) ->
     set_rebalance_mref(Call, undefined, State).
 
 spawn_rebalance_subprocess(
-  #state{rebalance_subprocesses = Subprocesses,
-         rebalance_subprocesses_registry = RegistryPid} = State, From, Fun) ->
+  Call, #state{rebalance_subprocesses = Subprocesses,
+               rebalance_subprocesses_registry = RegistryPid} = State,
+  From, Fun) ->
     Parent = self(),
     Pid = proc_lib:spawn_link(
             fun () ->
+                    ?log_debug("Starting subprocess for ~p, Parent = ~p",
+                               [Call, Parent]),
                     ns_process_registry:register_pid(RegistryPid,
                                                      erlang:make_ref(), self()),
                     RV = Fun(),
