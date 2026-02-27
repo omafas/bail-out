@@ -41,6 +41,7 @@ function mnServersModifyServicesController($scope, $rootScope, $q, $uibModal, $o
   vm.onSubmit = onSubmit;
   vm.newServicesAdded = newServicesAdded;
   vm.removalMayCauseProblems = removalMayCauseProblems;
+  vm.removalProblems = removalProblems;
 
   vm.isNodesAvailable = !!nodes;
   if (vm.isNodesAvailable) {
@@ -103,6 +104,10 @@ function mnServersModifyServicesController($scope, $rootScope, $q, $uibModal, $o
     let firstTimeAddedServices = {count: addedServiceArray.length};
     addedServiceArray.forEach(service => firstTimeAddedServices[service] = true);
     return firstTimeAddedServices;
+  }
+
+  function removalProblems() {
+    return Object.keys(removalMayCauseProblems()).length > 0;
   }
 
   // Determine if removing services could cause problems, and a warning message should be shown

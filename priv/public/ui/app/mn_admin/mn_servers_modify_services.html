@@ -61,7 +61,7 @@ licenses/APL2.txt.
         You have added new services to the cluster. Please confirm memory quota settings in the following dialog.
     </div>
 
-    <div class="error text-small" ng-if="serversModifyServicesCtl.removalMayCauseProblems()">
+    <div class="error text-small" ng-if="serversModifyServicesCtl.removalProblems()">
        Warning:
        <ul class="margin-left-1 margin-bottom0" ng-messages="serversModifyServicesCtl.removalMayCauseProblems()" ng-messages-multiple>
           <li ng-message="noIndexService">This will remove all GSI indexes from the cluster, and may cause queries to fail.</li>
