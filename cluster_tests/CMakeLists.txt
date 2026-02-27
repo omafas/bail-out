@@ -1,21 +1,9 @@
-SET(GET_PIP_PY_FILE ${CMAKE_CURRENT_BINARY_DIR}/get-pip.py)
-
-# We call this with a cmake call so that we can download the file at build time,
-# rather than configure time, which avoids downloading the file needlessly
-SET (GET_PIP_CMD "${CMAKE_COMMAND}"
-    -D "GET_PIP_PY_FILE=${GET_PIP_PY_FILE}"
-    -P "${CMAKE_CURRENT_SOURCE_DIR}/get_pip.cmake")
-
-ADD_CUSTOM_TARGET(cluster_tests_python_requirements
-        COMMAND ${GET_PIP_CMD}
-        COMMAND python3 ${GET_PIP_PY_FILE}
-        COMMAND python3 -m pip
-        install -r ${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt)
-SEPARATE_ARGUMENTS(cluster_test_args NATIVE_COMMAND $ENV{CLUSTER_TESTS_ARGS})
+# The CV containers are the main users of the build target. They have `uv`
+# which can manage python versions and our pip requirements for us.
 ADD_CUSTOM_TARGET(cluster_tests
-        COMMAND JAVA_HOME=${Java_JAVA_HOME} python3
+        COMMAND JAVA_HOME=${Java_JAVA_HOME} uv run --python 3.9.22
+        --with-requirements ${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt
         ${CMAKE_CURRENT_SOURCE_DIR}/run.py ${cluster_test_args}
-        DEPENDS cluster_tests_python_requirements
         COMMAND_EXPAND_LISTS)
 # Retain old name as an alias to allow the existing jenkins jobs to work
 ADD_CUSTOM_TARGET(api_test DEPENDS cluster_tests)
