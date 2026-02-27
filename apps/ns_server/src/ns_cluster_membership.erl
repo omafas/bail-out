@@ -51,6 +51,7 @@
          remove_nodes/2,
          prepare_to_join/2,
          is_newly_added_node/1,
+         is_newly_added_node/2,
          get_node_uuids/2,
          attach_node_uuids/2,
          fetch_snapshot/1,
@@ -243,8 +244,11 @@ update_membership(Nodes, Type, Transaction) ->
     Transaction(fun (_) -> {commit, Sets} end).
 
 is_newly_added_node(Node) ->
-    get_cluster_membership(Node) =:= inactiveAdded andalso
-        get_recovery_type(direct, Node) =:= none.
+    is_newly_added_node(Node, direct).
+
+is_newly_added_node(Node, Snapshot) ->
+    get_cluster_membership(Node, Snapshot) =:= inactiveAdded andalso
+        get_recovery_type(Snapshot, Node) =:= none.
 
 is_balanced() ->
     not ns_orchestrator:needs_rebalance().

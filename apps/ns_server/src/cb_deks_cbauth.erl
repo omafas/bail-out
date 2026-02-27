@@ -233,10 +233,16 @@ get_cbauth_services(unknown_kind) -> [unknown_service];
 get_cbauth_services(_) -> error(invalid_dek_kind).
 
 get_cbauth_labels(Kind, Snapshot) ->
-    Services = get_cbauth_services(Kind),
-    NodeServices = ns_cluster_membership:node_services(Snapshot, node()),
-    TargetServices = [P || P <- Services, lists:member(P, NodeServices)],
-    [menelaus_cbauth:service_to_label(P) || P <- TargetServices].
+    Node = node(),
+    case ns_cluster_membership:is_newly_added_node(Node, Snapshot) of
+        true -> [];
+        false ->
+            Services = get_cbauth_services(Kind),
+            NodeServices = ns_cluster_membership:node_services(Snapshot, Node),
+            TargetServices = [P || P <- Services,
+                                   lists:member(P, NodeServices)],
+            [menelaus_cbauth:service_to_label(P) || P <- TargetServices]
+    end.
 
 cbauth_call(Func, Params, Kind, CbauthLabels) ->
     cbauth_call(Func, Params, Kind, CbauthLabels, #{}).
