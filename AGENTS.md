@@ -90,5 +90,6 @@ Available test sets include: `BasicBucketTestSet`, `MultiNodeBucketTestSet`, `Cr
 - Follow existing Erlang conventions in the codebase
 - Tests are located alongside source files or in `test/` directories within each app
 - Include `-include_lib("eunit/include/eunit.hrl").` for modules with eunit tests
-- For all Erlang, Python, and Go files, max line length is strictly 80 characters
+- For all Erlang, Python, and Go files, max line length is strictly 80 characters. Use the full 80 columns; do not wrap lines shorter than 80 characters just to make them narrow
 - Trailing spaces and tabs are not allowed in any Erlang, Python, or Go files
+- Keep changes minimal: only modify code that is directly related to the task. Do not reformat, restyle, or rewrite existing code unless it is necessary for the change or there is a strong reason (e.g. fixing a bug, resolving a conflict with the new code). Avoid cosmetic-only diffs.
