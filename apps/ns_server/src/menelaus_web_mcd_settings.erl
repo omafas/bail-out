@@ -73,7 +73,8 @@ supported_setting_names() ->
      {dcp_snapshot_marker_purge_seqno_enabled, bool},
      {subdoc_multi_max_paths, {int, 16, ?MAX_32BIT_SIGNED_INT}},
      {subdoc_offload_size_threshold, {int, 0, ?MAX_32BIT_SIGNED_INT}},
-     {subdoc_offload_paths_threshold, {int, 0, ?MAX_32BIT_SIGNED_INT}}]
+     {subdoc_offload_paths_threshold, {int, 0, ?MAX_32BIT_SIGNED_INT}},
+     {snapshot_download_throttle_bytes, {int, 0, ?MAX_64BIT_UNSIGNED_INT}}]
         ++
         %% KV stopped supporting this is 7.6, they just ignore it, but we
         %% should probably support it in mixed mode. Even though we "support" it

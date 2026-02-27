@@ -267,7 +267,9 @@ default(Vsn) ->
        {dcp_snapshot_marker_purge_seqno_enabled, true},
        {subdoc_multi_max_paths, 16},
        {subdoc_offload_size_threshold, 1024 * 1024},
-       {subdoc_offload_paths_threshold, 16}]},
+       {subdoc_offload_paths_threshold, 16},
+       %% Default of 0 denotes no throttling.
+       {snapshot_download_throttle_bytes, 0}]},
 
      %% Memcached config
      {{node, node(), memcached},
@@ -367,7 +369,8 @@ default(Vsn) ->
          dcp_snapshot_marker_purge_seqno_enabled},
         {subdoc_multi_max_paths, subdoc_multi_max_paths},
         {subdoc_offload_size_threshold, subdoc_offload_size_threshold},
-        {subdoc_offload_paths_threshold, subdoc_offload_paths_threshold}
+        {subdoc_offload_paths_threshold, subdoc_offload_paths_threshold},
+        {snapshot_download_throttle_bytes, snapshot_download_throttle_bytes}
        ]}},
 
      {memory_quota, KvQuota},
