@@ -40,18 +40,13 @@
         ]).
 
 -define(REST_TO_STORAGE,
-        maps:from_list([{snake_to_camel_atom(Key), Key} ||
+        maps:from_list([{misc:snake_to_camel_atom(Key), Key} ||
                            {Key, _} <- ?PARAMS_WITH_FORMATTERS])).
 
 -define(STORAGE_TO_REST,
-        maps:from_list([{Key, {snake_to_camel_atom(Key), Format}} ||
+        maps:from_list([{Key, {misc:snake_to_camel_atom(Key), Format}} ||
                            {Key, Format} <- ?PARAMS_WITH_FORMATTERS])).
 
-snake_to_camel_atom(Atom) when is_atom(Atom) ->
-    Parts = string:split(atom_to_list(Atom), "_", all),
-    [First | Rest] = Parts,
-    Camel = [First | [string:titlecase(Part) || Part <- Rest]],
-    list_to_atom(lists:concat(Camel)).
 
 encode_response(Value) ->
     try

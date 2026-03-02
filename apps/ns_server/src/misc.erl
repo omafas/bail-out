@@ -4057,3 +4057,20 @@ compat_version_test() ->
     ?assertEqual([8, 0], compat_version_from_binary(VerBin)),
     ?assertEqual([8, 0], compat_version_from_string("8.0")).
 -endif.
+
+snake_to_camel_atom(Atom) when is_atom(Atom) ->
+    Parts = string:split(atom_to_list(Atom), "_", all),
+    [First | Rest] = Parts,
+    Camel = [First | [string:titlecase(Part) || Part <- Rest]],
+    list_to_atom(lists:concat(Camel)).
+
+-ifdef(TEST).
+snake_to_camel_test_() ->
+    [
+     ?_assertEqual('audClaim', misc:snake_to_camel_atom(aud_claim)),
+     ?_assertEqual('jwksUriHttpTimeoutMs',
+                   misc:snake_to_camel_atom(jwks_uri_http_timeout_ms)),
+     ?_assertEqual('simple', misc:snake_to_camel_atom(simple))
+    ].
+
+-endif.

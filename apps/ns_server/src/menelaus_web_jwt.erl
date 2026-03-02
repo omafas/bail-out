@@ -98,11 +98,11 @@
         ]).
 
 -define(MAIN_REST_TO_STORAGE,
-        maps:from_list([{snake_to_camel_atom(Key), Key} ||
+        maps:from_list([{misc:snake_to_camel_atom(Key), Key} ||
                            {Key, _} <- ?MAIN_PARAMS_WITH_FORMATTERS])).
 
 -define(MAIN_STORAGE_TO_REST,
-        maps:from_list([{Key, {snake_to_camel_atom(Key), Format}} ||
+        maps:from_list([{Key, {misc:snake_to_camel_atom(Key), Format}} ||
                            {Key, Format} <- ?MAIN_PARAMS_WITH_FORMATTERS])).
 
 %% @doc Issuer parameters and their descriptions:
@@ -168,12 +168,12 @@
 
 %% REST to storage mapping (camelCase atom -> snake_case atom)
 -define(ISSUER_REST_TO_STORAGE,
-        maps:from_list([{snake_to_camel_atom(Key), Key} ||
+        maps:from_list([{misc:snake_to_camel_atom(Key), Key} ||
                            {Key, _} <- ?ISSUER_PARAMS_WITH_FORMATTERS])).
 
 %% Storage to REST mapping (snake_case atom -> {camelCase atom, formatter})
 -define(ISSUER_STORAGE_TO_REST,
-        maps:from_list([{Key, {snake_to_camel_atom(Key), Format}} ||
+        maps:from_list([{Key, {misc:snake_to_camel_atom(Key), Format}} ||
                            {Key, Format} <- ?ISSUER_PARAMS_WITH_FORMATTERS])).
 
 %% Custom claims parameters and their descriptions:
@@ -199,12 +199,12 @@
 
 %% REST to storage mapping (camelCase atom -> snake_case atom)
 -define(CUSTOM_CLAIM_REST_TO_STORAGE,
-        maps:from_list([{snake_to_camel_atom(Key), Key} ||
+        maps:from_list([{misc:snake_to_camel_atom(Key), Key} ||
                            {Key, _} <- ?CUSTOM_CLAIM_PARAMS_WITH_FORMATTERS])).
 
 %% Storage to REST mapping (snake_case atom -> {camelCase atom, formatter})
 -define(CUSTOM_CLAIM_STORAGE_TO_REST,
-        maps:from_list([{Key, {snake_to_camel_atom(Key), Format}} ||
+        maps:from_list([{Key, {misc:snake_to_camel_atom(Key), Format}} ||
                            {Key, Format} <-
                                ?CUSTOM_CLAIM_PARAMS_WITH_FORMATTERS])).
 
@@ -256,12 +256,12 @@
 
 %% REST to storage mapping (camelCase atom -> snake_case atom)
 -define(OIDC_PROVIDER_REST_TO_STORAGE,
-        maps:from_list([{snake_to_camel_atom(Key), Key} ||
+        maps:from_list([{misc:snake_to_camel_atom(Key), Key} ||
                            {Key, _} <- ?OIDC_PROVIDER_PARAMS_WITH_FORMATTERS])).
 
 %% Storage to REST mapping (snake_case atom -> {camelCase atom, formatter})
 -define(OIDC_PROVIDER_STORAGE_TO_REST,
-        maps:from_list([{Key, {snake_to_camel_atom(Key), Format}} ||
+        maps:from_list([{Key, {misc:snake_to_camel_atom(Key), Format}} ||
                            {Key, Format} <-
                                ?OIDC_PROVIDER_PARAMS_WITH_FORMATTERS])).
 
@@ -287,12 +287,6 @@ tls_validators(VerifyPeerKey, CaKey, SniKey, AddressFamilyKey) ->
      validator:default(CaKey, {<<>>, []}, _),
      validator:string(SniKey, _)
     ].
-
-snake_to_camel_atom(Atom) when is_atom(Atom) ->
-    Parts = string:split(atom_to_list(Atom), "_", all),
-    [First | Rest] = Parts,
-    Camel = [First | [string:titlecase(Part) || Part <- Rest]],
-    list_to_atom(lists:concat(Camel)).
 
 %% Best effort local sync to ensure subsequent JWT validation requests use the
 %% new settings.
@@ -1049,14 +1043,6 @@ proplist_to_map_test_() ->
      ?_assertEqual(
         <<"simple">>,
         proplist_to_map(<<"simple">>))
-    ].
-
-snake_to_camel_test_() ->
-    [
-     ?_assertEqual('audClaim', snake_to_camel_atom(aud_claim)),
-     ?_assertEqual('jwksUriHttpTimeoutMs',
-                   snake_to_camel_atom(jwks_uri_http_timeout_ms)),
-     ?_assertEqual('simple', snake_to_camel_atom(simple))
     ].
 
 %% @doc Tests for format conversion functions.
