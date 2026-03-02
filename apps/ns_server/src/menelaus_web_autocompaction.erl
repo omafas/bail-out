@@ -31,7 +31,8 @@
          parse_validate_number/4,
          parse_validate_boolean_field/3]).
 
--define(MAX_PURGE_INTERVAL, ?get_param(max_purge_interval, 60)).
+-define(MAX_PURGE_INTERVAL_PRE_TOTORO, ?get_param(max_purge_interval, 60)).
+-define(MAX_PURGE_INTERVAL, ?get_param(max_purge_interval, 3 * 365)).
 
 
 handle_get_global_settings(Req) ->
@@ -329,10 +330,11 @@ do_parse_validate_purge_interval(Params, LowerLimit) ->
                       false ->
                           %% Prior to totoro the maximum was 60 but could
                           %% be changed via /diag/eval
-                          ?MAX_PURGE_INTERVAL;
+                          ?MAX_PURGE_INTERVAL_PRE_TOTORO;
                       true ->
-                          %% Effectively no limit
-                          ?MAX_32BIT_SIGNED_INT
+                          %% Starting with totoro the maximum is 3 years but
+                          %% can be changed via /diag/eval
+                          ?MAX_PURGE_INTERVAL
                   end,
     Fun = mk_number_field_validator(LowerLimit, MaxInterval, Params,
                                     list_to_float),
