@@ -215,6 +215,7 @@ get_cbauth_services(logDek) ->
     %% n1ql %% uncomment to pass log keys to n1ql
     %% fts %% uncomment to pass log keys to fts
     %% index %% uncomment to pass log keys to index
+    %% projector %% uncomment to pass log keys to projector
     %% cbas %% uncomment to pass log keys to cbas
     %% eventing %% uncomment to pass log keys to eventing
     ];
@@ -239,8 +240,12 @@ get_cbauth_labels(Kind, Snapshot) ->
         false ->
             Services = get_cbauth_services(Kind),
             NodeServices = ns_cluster_membership:node_services(Snapshot, Node),
+            AllNodeServices = case lists:member(kv, NodeServices) of
+                                  true -> NodeServices ++ [projector];
+                                  false -> NodeServices
+                              end,
             TargetServices = [P || P <- Services,
-                                   lists:member(P, NodeServices)],
+                                   lists:member(P, AllNodeServices)],
             [menelaus_cbauth:service_to_label(P) || P <- TargetServices]
     end.
 
