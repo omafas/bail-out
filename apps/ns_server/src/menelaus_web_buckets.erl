@@ -2179,6 +2179,7 @@ validate_membase_bucket_params(CommonParams, Params, Name,
          parse_validate_dcp_connections_between_nodes(Params, IsNew, Is79,
                                                       IsEnterprise),
          parse_validate_fusion_enabled(Params, IsNew, IsTotoro, IsEnterprise),
+         parse_validate_fusion_state(Params, IsNew, IsTotoro, IsEnterprise),
          parse_validate_dcp_backfill_idle_protection_enabled(Params,
                                                              BucketConfig,
                                                              IsNew,
@@ -4178,6 +4179,23 @@ parse_validate_fusion_enabled(
             end
     end.
 
+parse_validate_fusion_state(
+  Params, IsNew, _IsTotoro = true, _IsEnterprise = true) ->
+    case proplists:is_defined("magmaFusionState", Params) of
+        true ->
+            case IsNew of
+                true -> {error, magmaFusionState,
+                         <<"Cannot set magmaFusionState, use fusionEnabled "
+                           "instead">>};
+                false -> {error, magmaFusionState,
+                          <<"Cannot update magmaFusionState, use the fusion "
+                            "API instead">>}
+            end;
+        false -> ignore
+    end;
+parse_validate_fusion_state(_Params, _IsNew, _IsTotoro, _IsEnterprise) ->
+    ignore.
+
 %% We are not validating any compat mode here, we need to support this change in
 %% a maintenance release due to a memcached behaviour change.
 parse_validate_workload_pattern_default(Params) ->
@@ -5540,6 +5558,40 @@ parse_validate_fusion_enabled_test_() ->
                         end
                 end}
        end, Combinations)}.
+
+parse_validate_fusion_state_test_() ->
+    ParamsSet = [{"magmaFusionState", "enabled"}],
+    ParamsUnset = [],
+    CreateMsg = <<"Cannot set magmaFusionState, use fusionEnabled instead">>,
+    UpdateMsg =
+        <<"Cannot update magmaFusionState, use the fusion API instead">>,
+    Tests = [{"pre-totoro",
+              ParamsSet,
+              {false, false, true},
+              ignore},
+             {"CE",
+              ParamsSet,
+              {false, false, true},
+              ignore},
+             {"CE not set",
+              ParamsUnset,
+              {false, false, true},
+              ignore},
+             {"create",
+              ParamsSet,
+              {true, true, true},
+              {error, magmaFusionState, CreateMsg}},
+             {"update",
+              ParamsSet,
+              {false, true, true},
+              {error, magmaFusionState, UpdateMsg}}],
+    {setup,
+     fun () -> ok end,
+     [{Name,
+       ?_assertEqual(
+          Expected,
+          parse_validate_fusion_state(Params, IsNew, IsTotoro, IsEnterprise))}
+      || {Name, Params, {IsNew, IsTotoro, IsEnterprise}, Expected} <- Tests]}.
 
 parse_validate_max_magma_shards_test() ->
     meck:new(config_profile, [passthrough]),
