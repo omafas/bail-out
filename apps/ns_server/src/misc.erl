@@ -500,9 +500,9 @@ wait_for_process_test_() ->
      end}.
 -endif.
 
--spec terminate(pid(), atom()) -> true.
+-spec terminate(pid(), term()) -> true.
 terminate(Pid, normal) ->
-    terminate(Pid, shutdown);
+    terminate(Pid, {shutdown, {normal, self()}});
 terminate(Pid, Reason) ->
     exit(Pid, Reason).
 
