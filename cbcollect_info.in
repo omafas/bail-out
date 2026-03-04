@@ -1894,7 +1894,7 @@ def correct_split(string, splitchar):
 
 
 def make_product_task(guts, initargs_path, local_token_creds_fun,
-                      memcached_pass_fun, master_password, options):
+                      memcached_pass_fun, master_password, bindir, options):
     if read_guts(guts, "tls") == "true":
         tls = True
     else:
@@ -1909,8 +1909,10 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
     path_config_datadir = read_guts(guts, "path_config_datadir")
     configdir = maybe_sanitize_path(os.path.join(path_config_datadir,
                                                  "config"))
-    bindir = maybe_sanitize_path(read_guts(guts, "path_config_bindir"))
-    cbbrowse_static_args = f"-config_dir {configdir} -bin_dir {bindir}"
+    path_config_bindir = maybe_sanitize_path(read_guts(
+        guts, "path_config_bindir"))
+    cbbrowse_static_args = f"-config_dir {configdir} " \
+        "-bin_dir {path_config_bindir}"
     if master_password is not None:
         cbbrowse_static_args = f"{cbbrowse_static_args} -password_prompt"
 
@@ -2409,6 +2411,16 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
          for bucket in read_guts(guts, "persistent_buckets")
          for path in glob.glob(os.path.join(dbdir, bucket))],
 
+        AllOsTask("fusion dump",
+                   [os.path.join(bindir, 'fusion', 'metadata_dump'), "--uri",
+                    'chronicle://%s:%s' % (local_url_addr,
+                                           read_guts(guts, "rest_port")),
+                    "--namespace-prefix", "kv",
+                    "--username", "@fusion",
+                    "--password-stdin"],
+                  to_stdin=master_password,
+                  log_file="fusion.log"),
+
         # RocksDB has logs per DB (i.e. vBucket). 'LOG' is the most
         # recent file, with old files named LOG.old.<timestamp>.
         # Sort so we go from oldest -> newest as per other log files.
@@ -2610,7 +2622,9 @@ def dump_utilities(*args, **kwargs):
         def __getattr__(self, name):
             return None
 
-    tasks = make_os_tasks() + make_product_task({}, "", lambda: "@:", lambda: "", None, FakeOptions())
+    tasks = make_os_tasks() + make_product_task({}, "", lambda: "@:",
+                                                lambda: "", lambda: "", None,
+                                                "", FakeOptions())
 
     for task in tasks:
         utility = guess_utility(task.command)
@@ -3203,7 +3217,7 @@ def main():
     all_tasks.extend(make_product_task(guts, guts_initargs_path,
                                        local_token_creds_fun,
                                        memcached_password_fun,
-                                       master_password, options))
+                                       master_password, bindir, options))
 
     for f in glob.glob(os.path.join(guts.get("path_config_datadir"),
                                     "config", "certs", "*")):
