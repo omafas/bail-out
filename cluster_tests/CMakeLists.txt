@@ -1,5 +1,6 @@
 # The CV containers are the main users of the build target. They have `uv`
 # which can manage python versions and our pip requirements for us.
+SEPARATE_ARGUMENTS(cluster_test_args NATIVE_COMMAND $ENV{CLUSTER_TESTS_ARGS})
 ADD_CUSTOM_TARGET(cluster_tests
         COMMAND JAVA_HOME=${Java_JAVA_HOME} uv run --python 3.9.22
         --with-requirements ${CMAKE_CURRENT_SOURCE_DIR}/requirements.txt
