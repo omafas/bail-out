@@ -135,7 +135,7 @@
                              encryption_service |
                              disabled.
 -type dek_id() :: cb_cluster_secrets:key_id().
--type dek_kind() :: configDek | logDek | auditDek |
+-type dek_kind() :: configDek | logDek | auditDek | otherDek |
                     {bucketDek, BucketUUID :: binary()} |
                     {serviceBucketDek, BucketUUID :: binary()}.
 -type good_dek(Type, Info) :: #{id := dek_id(), type := Type, info := Info}.
@@ -500,6 +500,7 @@ call_dek_callback_unsafe(CallbackName, Kind, Args) ->
 dek_user_impl(configDek) -> cb_deks_config;
 dek_user_impl(logDek) -> cb_deks_log;
 dek_user_impl(auditDek) -> cb_deks_audit;
+dek_user_impl(otherDek) -> cb_deks_other;
 dek_user_impl({bucketDek, _}) -> cb_deks_bucket;
 dek_user_impl({serviceBucketDek, _}) -> cb_deks_cbauth.
 
@@ -561,7 +562,8 @@ kind2datatype(serviceBucketDek) -> <<"service_bucket_data">>;
 kind2datatype(kek) -> <<"keys">>;
 kind2datatype(configDek) -> <<"config">>;
 kind2datatype(logDek) -> <<"logs">>;
-kind2datatype(auditDek) -> <<"audit">>.
+kind2datatype(auditDek) -> <<"audit">>;
+kind2datatype(otherDek) -> <<"other">>.
 
 -ifdef(TEST).
 

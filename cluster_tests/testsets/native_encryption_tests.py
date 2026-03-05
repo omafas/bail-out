@@ -137,6 +137,9 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         set_audit_encryption(self.cluster, 'disabled', -1,
                              dek_lifetime=default_dek_lifetime,
                              dek_rotation=default_dek_rotation)
+        set_other_encryption(self.cluster, 'disabled', -1,
+                             dek_lifetime=default_dek_lifetime,
+                             dek_rotation=default_dek_rotation)
         r = testlib.get_succ(self.cluster,
                              '/settings/security/encryptionAtRest/log')
         r = r.json()
@@ -162,6 +165,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                       'passwordSource': 'env'})
         change_password(self.sm_node, password='')
         set_cfg_dek_limit(self.cluster, None)
+        set_audit_dek_limit(self.cluster, None)
+        set_other_dek_limit(self.cluster, None)
         set_log_dek_limit(self.cluster, None)
         set_all_bucket_dek_limit(self.cluster, None)
         set_remove_hist_keys_interval(self.cluster, None)
@@ -315,6 +320,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         secret_json = cb_managed_secret(name='Test Secret 1',
                                         usage=['bucket-encryption',
                                                'config-encryption',
+                                               'other-encryption',
                                                'log-encryption'])
         secret_id = create_secret(self.random_node(), secret_json)
 
@@ -322,9 +328,10 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                     'encryptionAtRestKeyId': secret_id})
 
         set_cfg_encryption(self.cluster, 'encryptionKey', secret_id)
+        set_other_encryption(self.cluster, 'encryptionKey', secret_id)
         set_log_encryption(self.cluster, 'encryptionKey', secret_id)
         assert_secret_used_by(self.random_node(), secret_id,
-                              [used_by_log(), used_by_cfg(),
+                              [used_by_log(), used_by_cfg(), used_by_other(),
                                used_by_bucket(self.bucket_name)])
 
         hist_keys = get_historical_keys(self.cluster, secret_id)
@@ -335,8 +342,8 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                        hist_key_id0, expected_code=400)
         assert errors['_'] == 'Operation is unsafe. Can\'t be removed ' \
                               'because this key still encrypts some data in ' \
-                              'configuration, logs, ' \
-                              f'bucket "{self.bucket_name}"', \
+                              f'bucket "{self.bucket_name}", ' \
+                              'configuration, logs, and other', \
                f'unexpected error: {errors}'
 
         rotate_secret(self.random_node(), secret_id)
@@ -362,6 +369,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         self.cluster.delete_bucket(self.bucket_name)
         set_cfg_encryption(self.random_node(), 'nodeSecretManager', -1)
         set_log_encryption(self.random_node(), 'nodeSecretManager', -1)
+        set_other_encryption(self.random_node(), 'nodeSecretManager', -1)
 
         errors = delete_historical_key(self.random_node(), secret_id,
                                        hist_key_id1, expected_code=400)
@@ -2841,6 +2849,10 @@ def set_audit_encryption(cluster, *args, **kwargs):
     return set_comp_encryption(cluster, 'audit', *args, **kwargs)
 
 
+def set_other_encryption(cluster, *args, **kwargs):
+    return set_comp_encryption(cluster, 'other', *args, **kwargs)
+
+
 def set_comp_encryption(cluster, component, mode, secret,
                         dek_lifetime=None, dek_rotation=None,
                         skip_encryption_key_test=False,
@@ -3522,12 +3534,20 @@ def set_cfg_dek_limit(cluster, n):
     set_dek_limit(cluster, 'configDek', n)
 
 
+def set_audit_dek_limit(cluster, n):
+    set_dek_limit(cluster, 'auditDek', n)
+
+
 def set_log_dek_limit(cluster, n):
     set_dek_limit(cluster, 'logDek', n)
 
 
 def set_all_bucket_dek_limit(cluster, n):
     set_dek_limit(cluster, 'bucketDek', n)
+
+
+def set_other_dek_limit(cluster, n):
+    set_dek_limit(cluster, 'otherDek', n)
 
 
 def set_bucket_dek_limit(cluster, bucket, n):
@@ -4039,6 +4059,11 @@ def used_by_cfg():
 def used_by_log():
     return {'usage': f'log-encryption',
             'description': f'logs'}
+
+
+def used_by_other():
+    return {'usage': f'other-encryption',
+            'description': f'other'}
 
 
 def assert_secret_test_results(secret, expected_status,

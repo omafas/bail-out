@@ -3871,7 +3871,8 @@ validate_usages([Usage | Rest], Snapshot) ->
                     {error, not_found} -> {error, bucket_not_found}
                 end;
             U when U =:= config_encryption; U =:= audit_encryption;
-                   U =:= log_encryption; U =:= secrets_encryption ->
+                   U =:= log_encryption; U =:= secrets_encryption;
+                   U =:= other_encryption->
                 ok
         end,
     maybe

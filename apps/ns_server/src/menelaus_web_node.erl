@@ -490,12 +490,14 @@ build_encryption_at_rest_info(Bucket, Snapshot, NsDoctorInfo) ->
             CfgInfo = proplists:get_value(config_encryption, AllInfos, []),
             LogInfo = proplists:get_value(log_encryption, AllInfos, []),
             AuditInfo = proplists:get_value(audit_encryption, AllInfos, []),
+            OtherInfo = proplists:get_value(other_encryption, AllInfos, []),
 
             Format = fun menelaus_web_encr_at_rest:format_encr_at_rest_info/1,
 
             NodeInfo = {[{configuration, Format(CfgInfo)},
                          {logs, Format(LogInfo)},
-                         {audits, Format(AuditInfo)}]},
+                         {audits, Format(AuditInfo)},
+                         {other, Format(OtherInfo)}]},
 
             [{encryptionAtRestInfo, NodeInfo}]
             ++

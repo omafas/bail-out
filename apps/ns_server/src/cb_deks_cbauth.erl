@@ -219,6 +219,15 @@ get_cbauth_services(logDek) ->
     %% cbas %% uncomment to pass log keys to cbas
     %% eventing %% uncomment to pass log keys to eventing
     ];
+get_cbauth_services(otherDek) ->
+    [
+    %% n1ql %% uncomment to pass other keys to n1ql
+    %% fts %% uncomment to pass other keys to fts
+    %% index %% uncomment to pass other keys to index
+    %% projector %% uncomment to pass other keys to projector
+    %% cbas %% uncomment to pass other keys to cbas
+    %% eventing %% uncomment to pass other keys to eventing
+    ];
 get_cbauth_services({serviceBucketDek, _}) ->
     [
     %% n1ql %% uncomment to pass service bucket keys to n1ql
@@ -288,7 +297,8 @@ dek_kind_to_json(Kind) ->
         case Kind of
             {bucketDek, UUID} -> {<<"bucket">>, UUID};
             {serviceBucketDek, UUID} -> {<<"service_bucket">>, UUID};
-            logDek -> {<<"log">>, <<>>}
+            logDek -> {<<"log">>, <<>>};
+            otherDek -> {<<"other">>, <<>>}
             %% Other kinds are not supported used by any service currently,
             %% so we don't need to support them here (dialyzer complains about
             %% them being unused)
@@ -312,6 +322,8 @@ cbauth_key_type_to_dek_kind("service_bucket", BucketUUID) ->
     {ok, {serviceBucketDek, iolist_to_binary(BucketUUID)}};
 cbauth_key_type_to_dek_kind("log", _) ->
     {ok, logDek};
+cbauth_key_type_to_dek_kind("other", _) ->
+    {ok, otherDek};
 cbauth_key_type_to_dek_kind("config", _) ->
     {ok, configDek};
 cbauth_key_type_to_dek_kind("audit", _) ->
@@ -333,7 +345,8 @@ cbauth_key_type_to_dek_kind_test() ->
               Res
           end, [{"config", configDek},
                 {"log", logDek},
-                {"audit", auditDek}]),
+                {"audit", auditDek},
+                {"other", otherDek}]),
 
     ?assertEqual([], ?DEK_KIND_LIST_STATIC -- HandledKinds),
 

@@ -124,7 +124,7 @@
         "labels": [
             {
                 "name": "data_type",
-                "help": "Encrypted data type (config, logs, audit, bucket_<bucket_name>)"
+                "help": "Encrypted data type (config, logs, audit, other, bucket_<bucket_name>)"
             }
         ]
     },
@@ -136,7 +136,7 @@
         "labels": [
             {
                 "name": "type",
-                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, bucketDek_<bucket_name>)"
+                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, otherDek, bucketDek_<bucket_name>)"
             }
         ]
     },
@@ -148,7 +148,7 @@
         "labels": [
             {
                 "name": "type",
-                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, bucketDek_<bucket_name>)"
+                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, otherDek, bucketDek_<bucket_name>)"
             }
         ]
     },
@@ -160,7 +160,7 @@
         "labels": [
             {
                 "name": "type",
-                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, bucketDek_<bucket_name>)"
+                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, otherDek, bucketDek_<bucket_name>)"
             }
         ]
     },
@@ -172,7 +172,7 @@
         "labels": [
             {
                 "name": "type",
-                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, bucketDek_<bucket_name>)"
+                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, otherDek, bucketDek_<bucket_name>)"
             }
         ]
     },
@@ -184,7 +184,7 @@
         "labels": [
             {
                 "name": "type",
-                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, bucketDek_<bucket_name>)"
+                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, otherDek, bucketDek_<bucket_name>)"
             }
         ]
     },
@@ -196,7 +196,7 @@
         "labels": [
             {
                 "name": "type",
-                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, bucketDek_<bucket_name>)"
+                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, otherDek, bucketDek_<bucket_name>)"
             }
         ]
     },
@@ -208,7 +208,7 @@
         "labels": [
             {
                 "name": "type",
-                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, bucketDek_<bucket_name>)"
+                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, otherDek, bucketDek_<bucket_name>)"
             }
         ]
     },
@@ -220,7 +220,7 @@
         "labels": [
             {
                 "name": "type",
-                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, bucketDek_<bucket_name>)"
+                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, otherDek, bucketDek_<bucket_name>)"
             }
         ]
     },
@@ -232,7 +232,7 @@
         "labels": [
             {
                 "name": "type",
-                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, bucketDek_<bucket_name>)"
+                "help": "Data encryption key (DEK) type (configDek, logDek, auditDek, otherDek, bucketDek_<bucket_name>)"
             }
         ]
     },

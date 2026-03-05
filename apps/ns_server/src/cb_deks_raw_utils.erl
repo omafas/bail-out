@@ -50,7 +50,7 @@ external_list(DekKind, GetCfgDekFun, VerifyMacFun, Opts) ->
         end
     end.
 
--spec bootstrap_get_deks(configDek | logDek | auditDek, map()) ->
+-spec bootstrap_get_deks(configDek | logDek | auditDek | otherDek, map()) ->
           {ok, cb_crypto:dek_snapshot()} | {error, _}.
 bootstrap_get_deks(DekKind, Opts) ->
     maybe

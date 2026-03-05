@@ -1,0 +1,103 @@
+%% @author Couchbase <info@couchbase.com>
+%% @copyright 2025-Present Couchbase, Inc.
+%%
+%% Use of this software is governed by the Business Source License included in
+%% the file licenses/BSL-Couchbase.txt.  As of the Change Date specified in that
+%% file, in accordance with the Business Source License, use of this software
+%% will be governed by the Apache License, Version 2.0, included in the file
+%% licenses/APL2.txt.
+%%
+
+-module(cb_deks_other).
+
+-behaviour(cb_deks).
+
+-include("ns_common.hrl").
+-include("cb_cluster_secrets.hrl").
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
+-export([get_encryption_method/3,
+         update_deks/2,
+         get_required_usage/1,
+         get_deks_lifetime/2,
+         get_deks_rotation_interval/2,
+         get_drop_deks_timestamp/2,
+         get_force_encryption_timestamp/2,
+         get_dek_ids_in_use/2,
+         initiate_drop_deks/3,
+         synchronize_deks/2,
+         fetch_chronicle_keys_in_txn/2,
+         dek_consumers/2]).
+
+-spec get_encryption_method(cb_deks:dek_kind(), cluster | node,
+                            cb_cluster_secrets:chronicle_snapshot()) ->
+              {ok, cb_deks:encryption_method()} | {error, not_found}.
+get_encryption_method(_Kind, Scope, Snapshot) ->
+    cb_crypto:get_encryption_method(other_encryption, Scope, Snapshot).
+
+-spec update_deks(cb_deks:dek_kind(),
+                  cb_cluster_secrets:chronicle_snapshot()) -> ok | {error, _}.
+update_deks(Kind, Snapshot) ->
+    cb_deks_cbauth:update_deks(Kind, Snapshot).
+
+-spec dek_consumers(cb_deks:dek_kind(),
+                    cb_cluster_secrets:chronicle_snapshot()) -> [term()].
+dek_consumers(Kind, Snapshot) ->
+    cb_deks_cbauth:dek_consumers(Kind, Snapshot).
+
+-spec get_required_usage(cb_deks:dek_kind()) -> cb_cluster_secrets:secret_usage().
+get_required_usage(_Kind) ->
+    other_encryption.
+
+-spec get_deks_lifetime(cb_deks:dek_kind(),
+                        cb_cluster_secrets:chronicle_snapshot()) ->
+          {ok, undefined | pos_integer()} | {error, not_found}.
+get_deks_lifetime(_Kind, Snapshot) ->
+    cb_crypto:get_dek_kind_lifetime(other_encryption, Snapshot).
+
+-spec get_deks_rotation_interval(cb_deks:dek_kind(),
+                                 cb_cluster_secrets:chronicle_snapshot()) ->
+          {ok, undefined | pos_integer()} | {error, not_found}.
+get_deks_rotation_interval(_Kind, Snapshot) ->
+    cb_crypto:get_dek_rotation_interval(other_encryption, Snapshot).
+
+-spec get_drop_deks_timestamp(cb_deks:dek_kind(),
+                              cb_cluster_secrets:chronicle_snapshot()) ->
+          {ok, undefined | calendar:datetime()} | {error, not_found}.
+get_drop_deks_timestamp(_Kind, Snapshot) ->
+    cb_crypto:get_drop_keys_timestamp(other_encryption, Snapshot).
+
+-spec get_force_encryption_timestamp(cb_deks:dek_kind(),
+                                    cb_cluster_secrets:chronicle_snapshot()) ->
+          {ok, undefined | calendar:datetime()} | {error, not_found}.
+get_force_encryption_timestamp(_Kind, Snapshot) ->
+    cb_crypto:get_force_encryption_timestamp(other_encryption, Snapshot).
+
+-spec get_dek_ids_in_use(cb_deks:dek_kind(),
+                         cb_cluster_secrets:chronicle_snapshot()) ->
+          {ok, [cb_deks:dek_id()]} | {error, _}.
+get_dek_ids_in_use(Kind, Snapshot) ->
+    cb_deks_cbauth:get_dek_ids_in_use(Kind, Snapshot).
+
+-spec initiate_drop_deks(cb_deks:dek_kind(), [cb_deks:dek_id()],
+                         cb_cluster_secrets:chronicle_snapshot()) ->
+          {ok, done | started} | {error, not_found | retry | _}.
+initiate_drop_deks(Kind, DekIdsToDrop, Snapshot) ->
+    cb_deks_cbauth:initiate_drop_deks(Kind, DekIdsToDrop, Snapshot).
+
+-spec synchronize_deks(cb_deks:dek_kind(),
+                      cb_cluster_secrets:chronicle_snapshot()) ->
+          ok | {error, _}.
+synchronize_deks(Kind, Snapshot) ->
+    cb_deks_cbauth:synchronize_deks(Kind, Snapshot).
+
+-spec fetch_chronicle_keys_in_txn(cb_deks:dek_kind(), Txn :: term()) ->
+          cb_cluster_secrets:chronicle_snapshot().
+fetch_chronicle_keys_in_txn(Kind, Txn) ->
+    OtherSnapshot = chronicle_compat:txn_get_many(
+                      [?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY], Txn),
+    CbauthSnapshot = cb_deks_cbauth:fetch_chronicle_keys_in_txn(Kind, Txn),
+    maps:merge(OtherSnapshot, CbauthSnapshot).

@@ -177,6 +177,8 @@ params() ->
                  log_encryption),
      encr_method("audit.encryptionMethod", "audit.encryptionKeyId",
                  audit_encryption),
+     encr_method("other.encryptionMethod", "other.encryptionKeyId",
+                 other_encryption),
 
      encr_secret_id("config.encryptionKeyId", "config.encryptionMethod",
                     config_encryption),
@@ -184,6 +186,8 @@ params() ->
                     log_encryption),
      encr_secret_id("audit.encryptionKeyId", "audit.encryptionMethod",
                     audit_encryption),
+     encr_secret_id("other.encryptionKeyId", "other.encryptionMethod",
+                    other_encryption),
 
      encr_dek_lifetime("config.dekLifetime",
                        "config.dekRotationInterval", config_encryption),
@@ -191,6 +195,8 @@ params() ->
                        "log.dekRotationInterval", log_encryption),
      encr_dek_lifetime("audit.dekLifetime",
                        "audit.dekRotationInterval", audit_encryption),
+     encr_dek_lifetime("other.dekLifetime",
+                       "other.dekRotationInterval", other_encryption),
 
      encr_dek_rotate_intrvl("config.dekRotationInterval",
                             "config.dekLifetime", config_encryption),
@@ -198,22 +204,28 @@ params() ->
                             "log.dekLifetime", log_encryption),
      encr_dek_rotate_intrvl("audit.dekRotationInterval",
                             "audit.dekLifetime", audit_encryption),
+     encr_dek_rotate_intrvl("other.dekRotationInterval",
+                            "other.dekLifetime", other_encryption),
 
      encr_deks_drop_date("config.dekLastDropDate", config_encryption),
      encr_deks_drop_date("log.dekLastDropDate", log_encryption),
      encr_deks_drop_date("audit.dekLastDropDate", audit_encryption),
+     encr_deks_drop_date("other.dekLastDropDate", other_encryption),
 
      encr_force_encr_date("config.lastForceEncryptionDate", config_encryption),
      encr_force_encr_date("log.lastForceEncryptionDate", log_encryption),
      encr_force_encr_date("audit.lastForceEncryptionDate", audit_encryption),
+     encr_force_encr_date("other.lastForceEncryptionDate", other_encryption),
 
      encr_info("config.info", config_encryption),
      encr_info("log.info", log_encryption),
      encr_info("audit.info", audit_encryption),
+     encr_info("other.info", other_encryption),
 
      skip_test("config.skipEncryptionKeyTest", config_encryption),
      skip_test("log.skipEncryptionKeyTest", log_encryption),
-     skip_test("audit.skipEncryptionKeyTest", audit_encryption)].
+     skip_test("audit.skipEncryptionKeyTest", audit_encryption),
+     skip_test("other.skipEncryptionKeyTest", other_encryption)].
 
 type_spec(secret_id) ->
     ValidatorFun = fun (?SECRET_ID_NOT_SET) -> ok;
@@ -474,6 +486,7 @@ handle_drop_keys(TypeName, ApplySettings, AuditPropsFun, Req) ->
                   "config" -> config_encryption;
                   "log" -> log_encryption;
                   "audit" -> audit_encryption;
+                  "other" -> other_encryption;
                   _ -> menelaus_util:web_exception(404, "not found")
               end,
           Res = cb_cluster_secrets:chronicle_transaction(
@@ -573,18 +586,17 @@ defaults() ->
                              dek_rotation_interval_in_sec => 30*60*60*24,
                              dek_drop_datetime => {not_set, ""},
                              force_encryption_datetime => {not_set, ""}},
-      log_encryption => #{encryption => disabled,
-                          secret_id => ?SECRET_ID_NOT_SET,
-                          dek_lifetime_in_sec => 365*60*60*24,
-                          dek_rotation_interval_in_sec => 30*60*60*24,
-                          dek_drop_datetime => {not_set, ""},
-                          force_encryption_datetime => {not_set, ""}},
-      audit_encryption => #{encryption => disabled,
-                            secret_id => ?SECRET_ID_NOT_SET,
-                            dek_lifetime_in_sec => 365*60*60*24,
-                            dek_rotation_interval_in_sec => 30*60*60*24,
-                            dek_drop_datetime => {not_set, ""},
-                            force_encryption_datetime => {not_set, ""}}}.
+      log_encryption => default_encr_settings(),
+      audit_encryption => default_encr_settings(),
+      other_encryption => default_encr_settings()}.
+
+default_encr_settings() ->
+    #{encryption => disabled,
+      secret_id => ?SECRET_ID_NOT_SET,
+      dek_lifetime_in_sec => 365*60*60*24,
+      dek_rotation_interval_in_sec => 30*60*60*24,
+      dek_drop_datetime => {not_set, ""},
+      force_encryption_datetime => {not_set, ""}}.
 
 validate_no_unencrypted_secrets(config_encryption,
                                 #{encryption := disabled,

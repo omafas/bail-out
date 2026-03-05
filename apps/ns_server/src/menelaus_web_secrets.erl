@@ -501,12 +501,15 @@ usage_to_json(secrets_encryption) ->
     {true, <<"KEK-encryption">>};
 usage_to_json(audit_encryption) ->
     {true, <<"audit-encryption">>};
+usage_to_json(other_encryption) ->
+    {true, <<"other-encryption">>};
 usage_to_json(log_encryption) ->
     {true, <<"log-encryption">>}.
 
 usage_to_string(config_encryption) -> "configuration";
 usage_to_string(log_encryption) -> "logs";
 usage_to_string(audit_encryption) -> "audits";
+usage_to_string(other_encryption) -> "other";
 usage_to_string(secrets_encryption) -> "encryption keys";
 usage_to_string({bucket_encryption, <<"*">>}) -> "all buckets";
 usage_to_string({bucket_encryption, BucketUUID}) ->
@@ -662,6 +665,8 @@ validate_key_usage(Name, Snapshot, State) ->
                   {value, config_encryption};
               <<"audit-encryption">> ->
                   {value, audit_encryption};
+              <<"other-encryption">> ->
+                  {value, other_encryption};
               <<"log-encryption">> ->
                   {value, log_encryption};
               _ ->
@@ -1166,6 +1171,7 @@ usage_extra_permissions(Usage, _PermType, _Snapshot)
                             when Usage =:= secrets_encryption;
                                  Usage =:= config_encryption;
                                  Usage =:= audit_encryption;
+                                 Usage =:= other_encryption;
                                  Usage =:= log_encryption ->
     [].
 
@@ -1341,7 +1347,15 @@ format_secrets_used_by_list(UsedByMap, Snapshot) ->
                       fun ({bucket_encryption, BUUID}) -> {left, BUUID};
                           (K) -> {right, K}
                       end, Usages),
-                FormattedUsages = lists:map(fun usage_to_string/1, Other),
+                Other2 = case lists:member(other_encryption, Other) of
+                             true ->
+                                 %% "other" should always be last
+                                 lists:delete(other_encryption, Other) ++
+                                 [other_encryption];
+                             false ->
+                                 Other
+                         end,
+                FormattedUsages = lists:map(fun usage_to_string/1, Other2),
                 AllBuckets = maps:from_list(
                                [{U, N} || {N, U} <- ns_bucket:uuids(Snapshot)]),
                 Buckets = lists:map(fun (B) ->
@@ -1357,7 +1371,7 @@ format_secrets_used_by_list(UsedByMap, Snapshot) ->
                         1 -> ["bucket " ++ Buckets2];
                         _ -> ["buckets " ++ Buckets2]
                     end,
-                FormattedUsages ++ BucketsStr
+                BucketsStr ++ FormattedUsages
         end,
     Kind2Usage =
         fun (K) ->
@@ -1371,21 +1385,23 @@ format_secrets_used_by_list(UsedByMap, Snapshot) ->
                       1 -> ["key " ++ Joined(Secrets)];
                       _ -> ["keys " ++ Joined(Secrets)]
                   end,
-    Strings1 = FormatUsages(UsagesUsedByCfg) ++ SecretsStrs,
+    Strings1 = SecretsStrs ++ FormatUsages(UsagesUsedByCfg),
     Strings2 = FormatUsages(UsagesUsedByDeks -- UsagesUsedByCfg),
+    Concat = fun ([E]) -> E;
+                 (L) ->
+                     [Last | TailReversed] = lists:reverse(L),
+                     Tail = lists:reverse(TailReversed),
+                     lists:join(", ", Tail) ++ ", and " ++ Last
+             end,
 
     case {Strings1, Strings2} of
         {_, []} ->
-            "this key is configured to encrypt " ++
-            lists:join(", ", Strings1);
+            "this key is configured to encrypt " ++ Concat(Strings1);
         {[], _} ->
-            "this key still encrypts some data in " ++
-            lists:join(", ", Strings2);
+            "this key still encrypts some data in " ++ Concat(Strings2);
         {_ , _} ->
-            "this key is configured to encrypt " ++
-            lists:join(", ", Strings1) ++
-            "; it also still encrypts some data in " ++
-            lists:join(", ", Strings2)
+            "this key is configured to encrypt " ++ Concat(Strings1) ++
+            "; it also still encrypts some data in " ++ Concat(Strings2)
     end.
 
 format_secret_props(Props) ->
@@ -1489,38 +1505,50 @@ format_secrets_used_by_list_test() ->
     All = cb_deks:dek_cluster_kinds_list(Snapshot),
     Secrets = ["s1", "s2"],
     F = ?cut(lists:flatten(format_secrets_used_by_list(_, Snapshot))),
-    ?assertEqual("this key is configured to encrypt configuration, logs, "
-                 "audits, buckets \"b1\", \"b2\"",
+    ?assertEqual("this key is configured to encrypt buckets \"b1\", \"b2\", "
+                 "configuration, logs, audits, and other",
                  F(#{by_deks => All, by_config => All, by_secrets => []})),
-    ?assertEqual("this key is configured to encrypt configuration, logs, "
-                 "audits, buckets \"b1\", \"b2\"",
+    ?assertEqual("this key is configured to encrypt buckets \"b1\", \"b2\", "
+                 "configuration, logs, audits, and other",
                  F(#{by_deks => [], by_config => All, by_secrets => []})),
-    ?assertEqual("this key still encrypts some data in configuration, logs, "
-                 "audits, buckets \"b1\", \"b2\"",
+    ?assertEqual("this key still encrypts some data in buckets \"b1\", \"b2\", "
+                 "configuration, logs, audits, and other",
                  F(#{by_deks => All, by_config => [], by_secrets => []})),
+    ?assertEqual("this key still encrypts some data in configuration, "
+                 "and other",
+                 F(#{by_deks => [configDek, otherDek], by_config => [],
+                     by_secrets => []})),
     ?assertEqual("this key is configured to encrypt keys \"s1\", \"s2\"",
                  F(#{by_deks => [], by_config => [], by_secrets => Secrets})),
-    ?assertEqual("this key is configured to encrypt configuration, logs, "
-                 "audits, buckets \"b1\", \"b2\", keys \"s1\", \"s2\"",
+    ?assertEqual("this key is configured to encrypt keys \"s1\", \"s2\", "
+                 "buckets \"b1\", \"b2\", configuration, logs, audits, "
+                 "and other",
                  F(#{by_deks => [], by_config => All, by_secrets => Secrets})),
-    ?assertEqual("this key is configured to encrypt configuration, logs, "
-                 "audits, buckets \"b1\", \"b2\", keys \"s1\", \"s2\"",
+    ?assertEqual("this key is configured to encrypt keys \"s1\", \"s2\", "
+                 "and bucket \"b1\"",
+                 F(#{by_deks => [], by_config => [{bucketDek, <<"b1-uuid">>}],
+                     by_secrets => Secrets})),
+    ?assertEqual("this key is configured to encrypt keys \"s1\", \"s2\", "
+                 "buckets \"b1\", \"b2\", configuration, logs, audits, "
+                 "and other",
                  F(#{by_deks => All, by_config => All, by_secrets => Secrets})),
     ?assertEqual("this key is configured to encrypt configuration; it also "
-                 "still encrypts some data in logs, audits, "
-                 "buckets \"b1\", \"b2\"",
+                 "still encrypts some data in buckets \"b1\", \"b2\", logs, "
+                 "audits, and other",
                  F(#{by_deks => All, by_config => [configDek],
                      by_secrets => []})),
-    ?assertEqual("this key is configured to encrypt configuration, "
-                 "bucket \"b2\", keys \"s1\", \"s2\"; "
+    ?assertEqual("this key is configured to encrypt keys \"s1\", \"s2\", "
+                 "bucket \"b2\", configuration, and other; "
                  "it also still encrypts some data in bucket \"b1\"",
                  F(#{by_deks => [configDek, {bucketDek, <<"b1-uuid">>}],
-                     by_config => [{bucketDek, <<"b2-uuid">>}, configDek],
+                     by_config => [otherDek, {bucketDek, <<"b2-uuid">>},
+                                   configDek],
                      by_secrets => Secrets})),
-    ?assertEqual("this key is configured to encrypt configuration, "
-                 "bucket \"b2\", key \"s1\"; "
-                 "it also still encrypts some data in bucket \"b1\"",
-                 F(#{by_deks => [configDek, {bucketDek, <<"b1-uuid">>}],
+    ?assertEqual("this key is configured to encrypt key \"s1\", bucket \"b2\", "
+                 "and configuration; it also still encrypts some data in "
+                 "bucket \"b1\", and other",
+                 F(#{by_deks => [configDek, otherDek,
+                                 {bucketDek, <<"b1-uuid">>}],
                      by_config => [{bucketDek, <<"b2-uuid">>}, configDek],
                      by_secrets => ["s1"]})).
 

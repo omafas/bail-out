@@ -122,7 +122,7 @@
 
 -type dek_snapshot() :: #dek_snapshot{}.
 -type encryption_type() :: config_encryption | log_encryption |
-                           audit_encryption.
+                           audit_encryption | other_encryption.
 -type fetch_deks_res() :: {ok, #dek_snapshot{}} | {error, term()}.
 -type encr_compression_cfg() :: {zlib,
                                  Level :: pos_integer(),

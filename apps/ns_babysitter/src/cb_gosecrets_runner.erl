@@ -739,6 +739,8 @@ key_path(logDek, _Cfg) ->
     proplists:get_value(log_dek_path, defaults(), undefined);
 key_path(auditDek, _Cfg) ->
     proplists:get_value(audit_dek_path, defaults(), undefined);
+key_path(otherDek, _Cfg) ->
+    proplists:get_value(other_dek_path, defaults(), undefined);
 key_path(bucketDek, Cfg) ->
     Key = bucket_dek_path,
     case proplists:get_value(Key, Cfg) of
@@ -758,6 +760,7 @@ defaults() ->
      {kek_path, iolist_to_binary(filename:join(ConfigDir, "keks"))},
      {config_dek_path, iolist_to_binary(filename:join(ConfigDir, "deks"))},
      {audit_dek_path, iolist_to_binary(filename:join(ConfigDir, "audit_deks"))},
+     {other_dek_path, iolist_to_binary(filename:join(ConfigDir, "other_deks"))},
      {log_dek_path, iolist_to_binary(filename:join(ConfigDir, "logs_deks"))},
      {service_bucket_dek_path,
       iolist_to_binary(filename:join(ConfigDir, "service_bucket_deks"))}].

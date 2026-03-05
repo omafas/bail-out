@@ -23,7 +23,7 @@
 
 %% Note: this list of kinds does not include bucketDek, as it depends on
 %% bucket UUID.
--define(DEK_KIND_LIST_STATIC, [configDek, logDek, auditDek]).
+-define(DEK_KIND_LIST_STATIC, [configDek, logDek, auditDek, otherDek]).
 -define(KEY_KIND_LIST_STATIC, [kek | ?DEK_KIND_LIST_STATIC]).
 
 -endif.
