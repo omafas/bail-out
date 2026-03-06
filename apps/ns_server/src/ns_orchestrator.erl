@@ -520,7 +520,8 @@ ensure_janitor_run(Item, Timeout) ->
           {total_quota_too_high, list()} |
           {rebalance_not_allowed, list()} |
           {params_mismatch, list()} |
-          {invalid_rebalance_plan, string()}.
+          {invalid_rebalance_plan, string()} |
+          {cluster_node_limit_exceeded, string()}.
 start_rebalance(Params) ->
     #{desired_services_nodes := DesiredServicesNodes,
       known_nodes := KnownNodes} = Params,
@@ -752,12 +753,20 @@ handle_event({call, From}, {maybe_start_rebalance, Params},
                  #{read_consistency => quorum}),
 
     try
-        %% Safety checks here are inherently unsafe. Whilst we are building
+        NewParams0 = build_rebalance_params(ParamsWithId, Snapshot),
+
+        %% Unlike the safety checks, which are rerun inside the leader activity
+        %% with the latest snapshot of the rebalance params, the CE node limit
+        %% check only runs here. The 'KeepNodes' list can only grow if the
+        %% 'currently' failed nodes are added back, and that case is caught by
+        %% the state_change_check/3 in rebalance_safety_checks/2.
+        maybe_check_ce_node_limit(NewParams0),
+
+        %% Safety checks here are inherently unsafe. Whilst we have built
         %% our parameters using a consistent snapshot, the snapshot may change
         %% by the time we start the rebalance as we are not yet in a leader
         %% activity. We will run these checks again inside the leader activity
         %% before we start the rebalance for safety.
-        NewParams0 = build_rebalance_params(ParamsWithId, Snapshot),
         rebalance_safety_checks(NewParams0, Snapshot),
 
         %% We validate and handle the fusion rebalance plan entirely separately
@@ -1561,9 +1570,38 @@ buckets_shutdown({delete_bucket, BucketName}, From, State) ->
 buckets_shutdown(Msg, From, State) ->
     ?log_debug("Ignore Msg: ~p in State: ~p", [Msg, State]),
     {keep_state_and_data, [{reply, From, in_buckets_shutdown}]}.
+
 %%
 %% Internal functions
 %%
+
+maybe_check_ce_node_limit(#{keep_nodes := KeepNodes}) ->
+    case ns_config:read_key_fast(disable_ce_restrictions, false) of
+        true ->
+            ok;
+        false ->
+            check_ce_node_limit(KeepNodes)
+    end.
+
+check_ce_node_limit(KeepNodes) ->
+    NumKeepCeNodes =
+        length(lists:filter(
+            fun(Node) ->
+                not ns_config:read_key_fast({node, Node, is_enterprise}, false)
+            end, KeepNodes)),
+    case NumKeepCeNodes > 5 of
+        false ->
+            ok;
+        true ->
+            ErrMsg = lists:flatten(io_lib:format(
+                "Rebalance was called with ~p Community Edition servers; "
+                "Cannot rebalance with more than 5 such servers in the "
+                "cluster.",
+                [NumKeepCeNodes])),
+            ale:error(?USER_LOGGER, ErrMsg),
+            throw({cluster_node_limit_exceeded, ErrMsg})
+    end.
+
 retrieve_rebalance_plan_and_check_uuid(PlanUUID) ->
     PlanUUIDBin = list_to_binary(PlanUUID),
     case ets:lookup(?ETS, ?FUSION_REBALANCE_PLAN) of

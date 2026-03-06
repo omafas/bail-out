@@ -1407,6 +1407,8 @@ do_handle_rebalance(Req, Params) ->
                    io_lib:format(
                      "Incompatibility with stored rebalance plan: ~s.",
                      [Error]))}]}, 400);
+        {cluster_node_limit_exceeded, Error} ->
+            reply_text(Req, Error, 400);
         %% pre-7.6 responses
         ok ->
             ns_audit:rebalance_initiated(Req, KnownNodes, EjectedNodes,
