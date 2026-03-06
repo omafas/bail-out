@@ -786,8 +786,8 @@ get_nested_value_test() ->
 
 extract_claims_test_() ->
     {setup,
-     fun() -> meck:new(jose_jwt) end,
-     fun(_) -> meck:unload(jose_jwt) end,
+     fun() -> meck:new([jose_jwt, jose_jws], [passthrough]) end,
+     fun(_) -> meck:unload() end,
      fun(_) ->
              Issuers = #{
                          "test-issuer" =>

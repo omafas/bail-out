@@ -561,7 +561,7 @@ test_process_failure_logic(ProcessType) ->
     run_test_and_assert(
       ?cut(force_unpause_via_process_failure_body(ProcessType)),
       exit_normal, exit_not_normal),
-    meck:unload(Modules).
+    meck:unload().
 
 force_unpause_via_hib_process_failure_test() ->
     test_process_failure_logic(hibernation_manager).
