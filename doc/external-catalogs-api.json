@@ -1,0 +1,360 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Couchbase External Catalogs API",
+    "description": "REST API for managing external catalogs in Couchbase Server. External catalogs are identified by a unique name.\n",
+    "version": "1.0.0",
+    "license": {
+      "name": "Business Source License 1.1",
+      "url": "https://www.couchbase.com/licensing"
+    }
+  },
+  "paths": {
+    "/pools/default/externalCatalogs": {
+      "get": {
+        "summary": "List all external catalogs",
+        "operationId": "getExternalCatalogs",
+        "tags": [
+          "External Catalogs"
+        ],
+        "security": [
+          {
+            "basicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A JSON array of external catalogs.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Catalog"
+                  }
+                },
+                "example": [
+                  {
+                    "name": "my-catalog"
+                  },
+                  {
+                    "name": "other-catalog"
+                  }
+                ]
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new external catalog",
+        "operationId": "createExternalCatalog",
+        "tags": [
+          "External Catalogs"
+        ],
+        "security": [
+          {
+            "basicAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogInput"
+              },
+              "example": {
+                "name": "my-catalog"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The created external catalog.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                },
+                "example": {
+                  "name": "my-catalog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input. The name is missing, empty, too long, or contains invalid characters.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "A catalog with the given name already exists.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "External catalog 'my-catalog' already exists"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pools/default/externalCatalogs/{name}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CatalogName"
+        }
+      ],
+      "get": {
+        "summary": "Get an external catalog by name",
+        "operationId": "getExternalCatalog",
+        "tags": [
+          "External Catalogs"
+        ],
+        "security": [
+          {
+            "basicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested external catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                },
+                "example": {
+                  "name": "my-catalog"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "summary": "Modify an external catalog",
+        "operationId": "updateExternalCatalog",
+        "tags": [
+          "External Catalogs"
+        ],
+        "security": [
+          {
+            "basicAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogInput"
+              },
+              "example": {
+                "name": "new-name"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated external catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                },
+                "example": {
+                  "name": "new-name"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input. The name is missing, empty, too long, or contains invalid characters.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "A catalog with the new name already exists.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "External catalog 'new-name' already exists"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete an external catalog",
+        "operationId": "deleteExternalCatalog",
+        "tags": [
+          "External Catalogs"
+        ],
+        "security": [
+          {
+            "basicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Catalog deleted successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {}
+                },
+                "example": []
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "basicAuth": {
+        "type": "http",
+        "scheme": "basic",
+        "description": "HTTP Basic authentication using Couchbase Server credentials. Requires the external_catalog read permission for GET requests and the external_catalog write permission for POST, PUT, and DELETE requests.\n"
+      }
+    },
+    "parameters": {
+      "CatalogName": {
+        "name": "name",
+        "in": "path",
+        "required": true,
+        "description": "The unique name of the external catalog.\n",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[a-zA-Z0-9_\\-\\.]+$"
+        }
+      }
+    },
+    "schemas": {
+      "Catalog": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The unique name of the external catalog.\n",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[a-zA-Z0-9_\\-\\.]+$",
+            "example": "my-catalog"
+          }
+        }
+      },
+      "CatalogInput": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The unique name for the external catalog. Must contain only alphanumeric characters, underscores, hyphens, and dots.\n",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[a-zA-Z0-9_\\-\\.]+$",
+            "example": "my-catalog"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "A map of field names to error messages.\n"
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Missing or invalid credentials.\n"
+      },
+      "Forbidden": {
+        "description": "The authenticated user does not have the required permissions.\n"
+      },
+      "NotFound": {
+        "description": "The requested external catalog was not found.\n",
+        "content": {
+          "text/plain": {
+            "schema": {
+              "type": "string"
+            },
+            "example": "Requested resource not found.\r\n"
+          }
+        }
+      }
+    }
+  }
+}

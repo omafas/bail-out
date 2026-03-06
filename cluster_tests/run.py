@@ -86,7 +86,8 @@ from testsets import \
     fusion_tests, \
     metakv_tests, \
     ce_rebalance_tests, \
-    rebalance_tests
+    rebalance_tests, \
+    external_catalog_tests
 
 tmp_cluster_dir = os.path.join(testlib.get_cluster_test_dir(),
                                "test_cluster_data")
