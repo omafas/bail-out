@@ -265,8 +265,8 @@ filter_out_unneeded_tests_modules(Modules) ->
                              true
                      end
              end, Set0),
-
-    sets:to_list(Set1).
+    %% Sort the list, to have deterministic behaviour
+    lists:sort(sets:to_list(Set1)).
 
 is_tests_module(Module0) ->
     Suffix = "_tests",
