@@ -463,7 +463,8 @@ goport_args(goxdcr, Config, _Cmd, _NodeUUID) ->
         [IsEnterpriseFlag | build_afamily_requirement("-")] ++
         ["-caFile=" ++ ns_ssl_services_setup:ca_file_path() || IsEnterprise] ++
         ["-clientCertFile=" ++ ClientCertPath || IsEnterprise] ++
-        ["-clientKeyFile=" ++ ClientKeyPath || IsEnterprise];
+        ["-clientKeyFile=" ++ ClientKeyPath || IsEnterprise] ++
+        goxdcr_disable_ce_restrictions_flag(IsEnterprise);
 
 goport_args(index, Config, _Cmd, NodeUUID) ->
     {ok, LogDir} = application:get_env(ns_server, error_logger_mf_dir),
@@ -727,3 +728,13 @@ memcached_spec(Config) ->
       port_server_dont_start,
       stream]
     }.
+
+goxdcr_disable_ce_restrictions_flag(true) ->
+    [];
+goxdcr_disable_ce_restrictions_flag(false) ->
+    case ns_config:read_key_fast(disable_ce_restrictions, false) of
+        true ->
+            ["--disableCERestrictions"];
+        false ->
+            []
+    end.
