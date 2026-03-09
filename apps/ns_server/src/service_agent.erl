@@ -25,6 +25,7 @@
 -export([prepare_pause_bucket/5, pause_bucket/5]).
 -export([prepare_resume_bucket/6, resume_bucket/6]).
 -export([validate_bucket_config/4]).
+-export([validate_external_catalog_config/4]).
 -export([spawn_connection_waiter/2]).
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
@@ -64,7 +65,8 @@
 
           type :: undefined | rebalance | failover | pause_bucket |
                   resume_bucket | dry_run_resume_bucket |
-                  validate_bucket_config
+                  validate_bucket_config |
+                  validate_external_catalog_config
                }).
 
 start_link(Service) ->
@@ -224,6 +226,18 @@ validate_bucket_config(Service, Nodes, ConfigString,
     handle_multicall_result(Service, validate_bucket_config, Result,
                             fun functools:id/1).
 
+validate_external_catalog_config(n1ql, Nodes,
+                                 CatalogConfig,
+                                 Options) ->
+    Result = multi_call(
+               Nodes, n1ql,
+               {validate_external_catalog_config,
+                CatalogConfig, Options},
+               ?OUTER_TIMEOUT),
+    handle_multicall_result(
+      n1ql, validate_external_catalog_config,
+      Result, fun (R) -> {ok, R} end).
+
 %% gen_server callbacks
 init(Service)       ->
     process_flag(trap_exit, true),
@@ -300,6 +314,16 @@ handle_call({validate_bucket_config, ConfigString, Options}, From,
       fun (Conn) ->
               handle_validate_bucket_config(Conn, ConfigString,
                                             Options)
+      end);
+handle_call({validate_external_catalog_config,
+             CatalogConfig, Options}, From, State) ->
+    State1 = State#state{
+               type = validate_external_catalog_config},
+    run_on_task_runner(
+      From, State1,
+      fun (Conn) ->
+              handle_validate_external_catalog_config(
+                Conn, CatalogConfig, Options)
       end);
 handle_call(Call, From, State) ->
     ?log_warning("Unexpected call ~p from ~p when in state~n~p",
@@ -856,6 +880,12 @@ handle_pause_bucket(Conn, Id, Args,
 
 handle_validate_bucket_config(Conn, BucketConfig, Options) ->
     service_api:validate_bucket_config(Conn, BucketConfig, Options).
+
+handle_validate_external_catalog_config(Conn,
+                                        CatalogConfig,
+                                        Options) ->
+    service_api:validate_external_catalog_config(
+      Conn, CatalogConfig, Options).
 
 handle_prepare_resume_bucket(Conn, Id, Args, DryRun) ->
     service_api:prepare_resume_bucket(Conn, Id, Args, DryRun).

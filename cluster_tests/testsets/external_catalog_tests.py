@@ -19,10 +19,21 @@ class ExternalCatalogTests(testlib.BaseTestSet):
 
     @staticmethod
     def requirements():
-        return testlib.ClusterRequirements()
+        return testlib.ClusterRequirements(
+            buckets=[],
+            min_num_nodes=1,
+            min_num_connected=1,
+            balanced=True,
+            include_services=[testlib.Service.QUERY])
 
     def setup(self):
-        pass
+        testlib.set_config_key(self.cluster,
+                               'ignore_external_catalog_validation_errors',
+                               True)
+        testlib.diag_eval(self.cluster,
+                          'ns_config:set('\
+                          'forced_external_catalog_validation_results,'\
+                          ' #{<<"param">> => <<"value">>})')
 
     def teardown(self):
         pass
@@ -89,11 +100,15 @@ class ExternalCatalogTests(testlib.BaseTestSet):
     def modify_catalog_test(self):
         testlib.post_succ(
             self.cluster, BASE_PATH,
-            data={"name": "old-name"})
+            data={"name": "modify-catalog"})
 
         testlib.put_succ(
-            self.cluster, catalog_path("old-name"),
-            data={})
+            self.cluster, catalog_path("modify-catalog"),
+            data={"param": "value"}),
+
+        r = testlib.get_succ(
+            self.cluster, catalog_path("modify-catalog"))
+        testlib.assert_eq("value", r.json()["param"])
 
     def modify_nonexistent_catalog_test(self):
         testlib.put_fail(

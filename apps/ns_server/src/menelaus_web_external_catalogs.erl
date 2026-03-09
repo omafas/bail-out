@@ -45,41 +45,55 @@ handle_post_catalog(Req) ->
     menelaus_util:assert_is_totoro(),
     validator:handle(
       fun (Params) ->
-              Name = list_to_binary(proplists:get_value(name, Params)),
-              %% For now we just support the name (map key), more will be added
-              %% soon.
-              Catalog = [],
-              case add_catalog(Name, Catalog) of
-                  {ok, _} ->
-                      menelaus_util:reply_json(
-                        Req, format_catalog(Catalog), 200);
-                  already_exists ->
-                      menelaus_util:reply_json(
-                        Req,
-                        iolist_to_binary(
-                          io_lib:format(
-                            "External catalog '~s' "
-                            "already exists", [Name])),
-                        409)
+              %% It's easier to treat everything as binaries.
+              BinaryParams = binary_params(Params),
+              Name = proplists:get_value(name, BinaryParams),
+              case validate_with_service(BinaryParams) of
+                  {ok, ServiceOKs} ->
+                      Catalog = build_catalog(
+                                  ServiceOKs,
+                                  BinaryParams),
+                      case add_catalog(Name, Catalog) of
+                          {ok, _} ->
+                              menelaus_util:reply_json(
+                                Req,
+                                format_catalog(Catalog),
+                                200);
+                          already_exists ->
+                              reply_conflict(Req, Name)
+                      end;
+                  {errors, Errors} ->
+                      reply_validation_errors(
+                        Req, Errors)
               end
       end, Req, form, name_validators()).
 
 handle_put_catalog(Name, Req) ->
     menelaus_util:assert_is_totoro(),
     validator:handle(
-      fun (_Params) ->
-              %% This one doesn't make much sense yet, not til we add support
-              %% for service params
-              BinName = list_to_binary(Name),
-              Catalog = [],
-              case replace_catalog(BinName, Catalog) of
-                  {ok, _} ->
-                      menelaus_util:reply_json(
-                        Req,
-                        format_catalog(Catalog),
-                        200);
-                  not_found ->
-                      menelaus_util:reply_not_found(Req)
+      fun (Params) ->
+              %% Name is prohibited in params, so we can append it safely.
+              BinaryParams = binary_params([{name, Name} | Params]),
+              BinName = proplists:get_value(name, BinaryParams),
+              case validate_with_service(BinaryParams) of
+                  {ok, ServiceOKs} ->
+                      Updated = build_catalog(
+                                  ServiceOKs,
+                                  BinaryParams),
+                      case replace_catalog(
+                             BinName, Updated) of
+                          {ok, _} ->
+                              menelaus_util:reply_json(
+                                Req,
+                                format_catalog(Updated),
+                                200);
+                          not_found ->
+                              menelaus_util:reply_not_found(
+                                Req)
+                      end;
+                  {errors, Errors} ->
+                      reply_validation_errors(
+                        Req, Errors)
               end
       end, Req, form, [validator:prohibited(name, _)]).
 
@@ -90,6 +104,69 @@ handle_delete_catalog(Name, Req) ->
             menelaus_util:reply_json(Req, [], 200);
         not_found ->
             menelaus_util:reply_not_found(Req)
+    end.
+
+%% Service validation
+
+validate_with_service(ExtraParams) ->
+    WithCompat =
+        [{compat_version,
+          cluster_compat_mode:effective_cluster_compat_version()} |
+         ExtraParams],
+    Nodes = get_query_nodes(),
+    case Nodes of
+        [] ->
+            {ok, #{}};
+        _ ->
+            validate_against_query_nodes(
+              Nodes, {WithCompat}, #{})
+    end.
+
+get_query_nodes() ->
+    AllNodes =
+        ns_cluster_membership:service_active_nodes(
+          n1ql),
+    ns_node_disco:only_live_nodes(AllNodes).
+
+validate_against_query_nodes([FirstNode | _], CatalogConfig,
+                             ServiceOptions) ->
+    maybe
+        %% Whilst we could validate on all nodes, there is currently no need.
+        %% The code should handle multiple already though, just in case.
+        {ok, Results} = service_agent:validate_external_catalog_config(
+                          n1ql, [FirstNode], CatalogConfig, ServiceOptions),
+
+        ValidationOptions = #{filter_internal => false,
+                              filter_unsupported => false},
+        {ok, {OKs, Errors}} =
+            delegated_config:process_service_api_validation_results(
+              Results,
+              ValidationOptions),
+
+        %% Cluster_tests need a way to test as much of the code as possible,
+        %% without relying on other components (i.e. knowing the config that
+        %% query supports). We can inject our own values for the sake of
+        %% testing.
+        ForcedValidationResults =
+            ns_config:read_key_fast(forced_external_catalog_validation_results,
+                                    #{}),
+
+        case maps:size(ForcedValidationResults) of
+            0 ->
+                case maps:size(Errors) of
+                    0 -> {ok, OKs};
+                    _ -> {errors, maps:to_list(Errors)}
+                end;
+            _ ->
+                {ok, ForcedValidationResults}
+        end
+    else
+        {error, Error} ->
+            ?log_error(
+               "Error validating external catalog config with query service: "
+               "~p",
+                [Error]),
+            {errors, [{<<"_">>, <<"Service validation failed">>}]}
     end.
 
 %% Chronicle operations
@@ -155,7 +232,8 @@ find_catalog(Name, Catalogs) ->
     end.
 
 format_catalog(Catalog) ->
-    {Catalog}.
+    ExtraParams = proplists:get_value(extra_params, Catalog, []),
+    {ExtraParams}.
 
 format_catalog(Name, Catalog) ->
     {[{Name, format_catalog(Catalog)}]}.
@@ -163,6 +241,42 @@ format_catalog(Name, Catalog) ->
 format_catalogs(Catalogs) when is_map(Catalogs) ->
     {maps:to_list(maps:map(fun format_catalog/2, Catalogs))}.
 
+build_catalog(ServiceOKs, Params) ->
+    %% Filter down the OKsFromServices to only Params we wanted
+    %% to set, since the returned list is all parameters, not just
+    %% the ones we wanted to set.
+    ExtraParams = lists:filtermap(
+                    fun ({Key, Value}) ->
+                            case maps:is_key(Key, ServiceOKs) of
+                                false -> false;
+                                true -> {true, {Key, Value}}
+                            end
+                    end, Params),
+
+    [{extra_params, ExtraParams}].
+
+binary_params(Params) ->
+    lists:foldl(
+        fun({name, V}, Acc) ->
+            [{name, list_to_binary(V)} | Acc];
+            ({K, V}, Acc) ->
+                [{list_to_binary(K), list_to_binary(V)} | Acc]
+            end, [], Params).
+
+reply_conflict(Req, Name) ->
+    menelaus_util:reply_json(
+      Req,
+      iolist_to_binary(
+        io_lib:format(
+          "External catalog '~s' already exists",
+          [Name])),
+      409).
+
+reply_validation_errors(Req, Errors) ->
+    ErrorJson =
+        {[{Key, Msg} || {Key, Msg} <- Errors]},
+    menelaus_util:reply_json(
+      Req, {[{errors, ErrorJson}]}, 400).
 
 name_validators() ->
     [validator:required(name, _),
