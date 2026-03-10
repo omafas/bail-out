@@ -210,6 +210,15 @@ server_groups_uri_json(GroupsV) ->
                          (list_to_binary(integer_to_list(GroupsV)))/binary>>} ||
         cluster_compat_mode:is_enterprise()].
 
+build_external_catalogs() ->
+    case cluster_compat_mode:is_cluster_totoro() of
+        true ->
+            [{externalCatalogsManifestUid,
+              menelaus_web_external_catalogs:get_uid()}];
+        false ->
+            []
+    end.
+
 do_build_pool_info(Id, InfoLevel, Stability, LocalAddr) ->
     Ctx = menelaus_web_node:get_context({ip, LocalAddr}, false, Stability),
     Config = menelaus_web_node:get_config(Ctx),
@@ -260,7 +269,8 @@ do_build_pool_info(Id, InfoLevel, Stability, LocalAddr) ->
          build_ui_params(InfoLevel, Snapshot),
          build_internal_params(InfoLevel),
          build_unstable_params(Ctx),
-         server_groups_uri_json(GroupsV)],
+         server_groups_uri_json(GroupsV),
+         build_external_catalogs()],
     {lists:flatten(PropList)}.
 
 -spec build_rebalance_status() -> proplists:proplist().

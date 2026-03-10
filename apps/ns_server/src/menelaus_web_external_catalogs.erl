@@ -20,7 +20,8 @@
          handle_post_catalog/1,
          handle_put_catalog/2,
          handle_patch_catalog/2,
-         handle_delete_catalog/2]).
+         handle_delete_catalog/2,
+         get_uid/0]).
 
 -define(CHRONICLE_KEY, external_catalogs).
 -define(MAX_NAME_LENGTH, 256).
@@ -234,6 +235,9 @@ get_catalogs(#{catalogs := Catalogs}) ->
 
 get_uid(#{uid := Uid}) ->
     Uid.
+
+get_uid() ->
+    get_uid(get_state()).
 
 set_state(ManifestUid, Catalogs) ->
     [{set, ?CHRONICLE_KEY,

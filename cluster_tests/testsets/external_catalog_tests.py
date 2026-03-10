@@ -267,3 +267,20 @@ class ExternalCatalogTests(testlib.BaseTestSet):
             catalog_path("rev-uid"),
             data={"param1": "value1"})
         testlib.assert_eq(uid0 + 2, r.json()["rev"])
+
+    def pools_default_includes_catalogs_test(self):
+        r = testlib.get_succ(
+            self.cluster, "/pools/default")
+        body = r.json()
+        testlib.assert_in("externalCatalogsManifestUid", body)
+        rev = body["externalCatalogsManifestUid"]
+
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "pool-cat"})
+
+        r = testlib.get_succ(
+            self.cluster, "/pools/default")
+        body = r.json()
+        testlib.assert_in("externalCatalogsManifestUid", body)
+        testlib.assert_eq(rev + 1, body["externalCatalogsManifestUid"])
