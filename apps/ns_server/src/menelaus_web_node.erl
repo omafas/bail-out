@@ -182,7 +182,7 @@ node_init(Req, Props) ->
                 {error, ErrorTerm} ->
                     Msg = iolist_to_binary(
                             netconfig_updater:format_error(ErrorTerm)),
-                    throw({error, 400, Msg})
+                    throw({error, netconfig_updater:error_code(ErrorTerm), Msg})
             end
     end,
 
@@ -1373,6 +1373,11 @@ node_encryption_validators() ->
               Encr2 andalso ClientVer2)
        end, [nodeEncryption, clientCertVerification], _)].
 
+reply_netconfig_updater_error(Req, ErrorTerm) ->
+    Msg = iolist_to_binary(netconfig_updater:format_error(ErrorTerm)),
+    menelaus_util:reply_global_error(
+      Req, Msg, netconfig_updater:error_code(ErrorTerm)).
+
 handle_setup_net_config(Req) ->
     validator:handle(
       fun (Values) ->
@@ -1388,9 +1393,7 @@ handle_setup_net_config(Req) ->
                             ns_ssl_services_setup:sync(),
                         menelaus_util:reply(Req, 200);
                     {error, ErrorTerm} ->
-                        Msg = iolist_to_binary(
-                                netconfig_updater:format_error(ErrorTerm)),
-                        menelaus_util:reply_global_error(Req, Msg)
+                        reply_netconfig_updater_error(Req, ErrorTerm)
                 end
             end)
       end, Req, form, net_config_validators(false)).
@@ -1398,9 +1401,7 @@ handle_setup_net_config(Req) ->
 handle_change_external_listeners(disable_unused, Req) ->
     case netconfig_updater:change_external_listeners(disable_unused, []) of
         ok -> menelaus_util:reply(Req, 200);
-        {error, ErrorTerm} ->
-            Msg = iolist_to_binary(netconfig_updater:format_error(ErrorTerm)),
-            menelaus_util:reply_global_error(Req, Msg)
+        {error, ErrorTerm} -> reply_netconfig_updater_error(Req, ErrorTerm)
     end;
 handle_change_external_listeners(Action, Req) ->
     validator:handle(
@@ -1427,9 +1428,7 @@ handle_change_external_listeners(Action, Req) ->
                               menelaus_util:reply(Req, 200)
                       end;
                   {error, ErrorTerm} ->
-                      Msg = iolist_to_binary(
-                              netconfig_updater:format_error(ErrorTerm)),
-                      menelaus_util:reply_global_error(Req, Msg)
+                      reply_netconfig_updater_error(Req, ErrorTerm)
               end
       end, Req, form, net_config_validators(Action == disable)).
 

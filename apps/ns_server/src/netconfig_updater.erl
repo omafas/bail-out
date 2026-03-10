@@ -15,7 +15,8 @@
          apply_config/1,
          change_external_listeners/2,
          ensure_tls_dist_started/1,
-         format_error/1]).
+         format_error/1,
+         error_code/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -81,8 +82,16 @@ handle_call({apply_config, Config}, _From, State) ->
     CurConfig2 = lists:usort(CurConfig) -- Config,
     AFamily = proplists:get_value(afamily, Config2),
     case check_nodename_resolvable(node(), AFamily) of
-        ok -> handle_with_marker(apply_config, CurConfig2, Config2, State);
-        {error, _} = Error -> {reply, Error, State, hibernate}
+        ok ->
+            case verify(apply_config, Config2) of
+                ok ->
+                    handle_with_marker(apply_config, CurConfig2, Config2,
+                                       State);
+                {error, _} = Error ->
+                    {reply, Error, State, hibernate}
+            end;
+        {error, _} = Error ->
+            {reply, Error, State, hibernate}
     end;
 
 handle_call({change_listeners, disable_unused, _Config}, _From, State) ->
@@ -187,6 +196,15 @@ apply_and_delete_marker(Cmd) ->
           end,
     (Res =:= ok) andalso misc:remove_marker(update_marker_path()),
     Res.
+
+verify(apply_config, Config) ->
+    case (need_local_update(Config) orelse need_external_update(Config))
+        andalso rebalance:running() of
+        true ->
+            {error, in_rebalance};
+        false ->
+            ok
+    end.
 
 apply_config_unprotected([]) -> ok;
 apply_config_unprotected(Config) ->
@@ -340,6 +358,13 @@ check_connection_proto(Node, Family, Encryption) ->
             erlang:throw({node_info, Node, Error})
     end.
 
+-spec error_code(term()) -> integer().
+error_code(in_rebalance) ->
+    503;
+error_code(_) ->
+    400.
+
+-spec format_error(term()) -> iolist().
 format_error({update_cb_dist_config_error, Msg}) ->
     io_lib:format("Failed to update distribution configuration file. ~s",
                   [Msg]);
@@ -375,6 +400,8 @@ format_error({not_started_listeners, Listeners}) ->
 format_error({node_resolution_failed, {AFamily, Hostname, Reason}}) ->
     io_lib:format("Unable to resolve ~s address for ~s: ~p",
                   [misc:afamily2str(AFamily), Hostname, Reason]);
+format_error(in_rebalance) ->
+    "Not allowed during rebalance";
 format_error(R) ->
     io_lib:format("~p", [R]).
 

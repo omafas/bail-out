@@ -63,6 +63,7 @@
          ensure_local/1,
          ensure_local/2,
          reply_global_error/2,
+         reply_global_error/3,
          reply_error/3,
          require_auth/1,
          send_chunked/3,
@@ -582,12 +583,18 @@ ensure_local(Req, ExtraMsg) ->
     end.
 
 reply_global_error(Req, Error) ->
-    reply_error(Req, "_", Error).
+    reply_global_error(Req, Error, 400).
+
+reply_global_error(Req, Error, Code) ->
+    reply_error(Req, "_", Error, Code).
 
 reply_error(Req, Field, Error) ->
+    reply_error(Req, Field, Error, 400).
+
+reply_error(Req, Field, Error, Code) ->
     reply_json(
       Req, {[{errors, {[{iolist_to_binary([Field]),
-                         iolist_to_binary([Error])}]}}]}, 400).
+                         iolist_to_binary([Error])}]}}]}, Code).
 
 require_auth(Req) ->
     %% We need this for browsers that display auth
