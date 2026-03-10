@@ -184,8 +184,14 @@ static ERL_NIF_TERM kbkdf_hmac_nif(ErlNifEnv* env, int argc,
     return enif_make_tuple2(env, enif_make_atom(env, "ok"), out_bin);
 }
 
+static int upgrade(ErlNifEnv* env, void** priv_data, void** old_priv_data,
+                   ERL_NIF_TERM load_info)
+{
+    return 0;
+}
+
 static ErlNifFunc nif_funcs[] = {
     {"kbkdf_hmac", 5, kbkdf_hmac_nif}
 };
 
-ERL_NIF_INIT(cb_openssl, nif_funcs, NULL, NULL, NULL, NULL)
+ERL_NIF_INIT(cb_openssl, nif_funcs, NULL, NULL, upgrade, NULL)
