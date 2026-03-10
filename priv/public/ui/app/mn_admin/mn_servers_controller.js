@@ -122,8 +122,8 @@ function configure($stateProvider) {
         title: "Servers"
       },
       resolve: {
-        encryptionSettings: ['mnServersService', function (mnServersService) {
-          return mnServersService.getNodeEncryptionSettings();
+        encryptionSettings: ['mnServersService', 'permissions', function (mnServersService, permissions) {
+          return (permissions.cluster.admin.security.read && mnServersService.getNodeEncryptionSettings()) || Promise.resolve(null);
         }]
       }
     })
@@ -154,7 +154,7 @@ function configure($stateProvider) {
 function mnServersController($scope, $state, $uibModal, mnPoolDefault, mnPoller, mnServersService, mnBucketsService, mnHelper, mnGroupsService, mnPromiseHelper, permissions, mnStatisticsNewService, mnCertificatesService, pools, poolDefault, mnClusterConfigurationService, encryptionSettings) {
   var vm = this;
   vm.mnPoolDefault = mnPoolDefault.latestValue();
-  vm.encryptionSettings = encryptionSettings.data;
+  vm.encryptionSettings = encryptionSettings?.data;
 
   vm.postStopRebalance = postStopRebalance;
   vm.onStopRecovery = onStopRecovery;
