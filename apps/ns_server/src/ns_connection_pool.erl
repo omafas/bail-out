@@ -82,6 +82,7 @@ start_link(Options) ->
 %% @hidden
 -spec init(any()) -> {ok, #ns_connection_pool{}}.
 init(Options) ->
+    erlang:process_flag(trap_exit, true),
     process_flag(priority, high),
     case lists:member({seed,1}, ssl:module_info(exports)) of
         true ->
@@ -168,7 +169,21 @@ handle_info({ssl, Socket, _}, State) ->
 handle_info({'DOWN', MonRef, process, Pid, _Reason}, State) ->
     {ok, {Dest, MonRef}, State2} = find_client(Pid, State),
     {noreply, maybe_notify_blocked_client(Dest, State2)};
-handle_info(_, State) ->
+handle_info({'EXIT', From, Reason}, State) when is_port(From) ->
+    %% It was observed that sometimes if the controlling process
+    %% gets shut down during the socket transfer back to the pool,
+    %% the pool might receive 'EXIT' from it. We don't want to crash
+    %% the whole pool in such situation, just scrub the socket off
+    %% our state and go on.
+    ?log_info("Received exit from ~p with reason ~p. Ignore.",
+               [From, Reason]),
+    {noreply, remove_socket(From, State)};
+handle_info({'EXIT', From, Reason}, State) when Reason =/= normal ->
+    ?log_debug("Received exit from ~p with reason ~p. Exiting.",
+               [From, Reason]),
+    {stop, Reason, State};
+handle_info(Msg, State) ->
+    ?log_info("Unrecognized message ~p", [Msg]),
     {noreply, State}.
 
 %% @hidden
