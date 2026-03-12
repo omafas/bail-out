@@ -104,6 +104,7 @@ open_port_args() ->
 
 child_start(Arg) ->
     try
+        maybe_enable_code_coverage(),
         do_child_start(Arg)
     catch T:E:S ->
         io:format("Can't start process with arg ~p ~p:~p~n~p~n", [Arg, T, E, S]),
@@ -146,6 +147,7 @@ child_loop_quick_exit(BootModule) ->
             Fn()
     catch _T:_E -> ignore
     end,
+    maybe_export_coverage(),
     misc:halt(0).
 
 child_loop(Port, BootModule) ->
@@ -157,6 +159,7 @@ child_loop(Port, BootModule) ->
             ?log_debug("~s: Got EOL", [os:getpid()]),
             BootModule:stop(),
             ?log_debug("Got EOL: after ~s:stop()", [BootModule]),
+            maybe_export_coverage(),
             misc:halt(0);
         {Port, eof} ->
             (catch ?log_debug("Got EOF")),
@@ -168,11 +171,13 @@ child_loop(Port, BootModule) ->
             io:format("--------------~n!!! Message from parent: ~s~n------------~n~n", [Msg]),
             (catch ?log_debug("--------------~n!!! Message from parent: ~s~n------------~n~n", [Msg])),
             BootModule:stop(),
+            maybe_export_coverage(),
             misc:halt(0);
         Unexpected ->
             io:format("Got unexpected message: ~p~n", [Unexpected]),
             (catch ?log_debug("Got unexpected message: ~p~n", [Unexpected])),
             timer:sleep(3000),
+            maybe_export_coverage(),
             misc:halt(1)
     end.
 
@@ -345,3 +350,50 @@ get_all_env(ns_babysitter) ->
                  end, Env);
 get_all_env(Flag) ->
     application:get_all_env(Flag).
+
+get_code_coverage_module_strings() ->
+    case os:getenv("CB_CODE_COVERAGE_MODULES") of
+        "" -> disabled;
+        false -> disabled;
+        S -> {ok, string:lexemes(S, ", ")}
+    end.
+
+maybe_enable_code_coverage() ->
+    case get_code_coverage_module_strings() of
+        disabled -> ok;
+        {ok, _} -> enable_code_coverage()
+    end.
+
+%% Compiled with line coverage enabled?
+-if(?CB_CODE_COVERAGE_ENABLED).
+enable_code_coverage() ->
+    %% Does VM support code coverage?
+    case code:coverage_support() of
+        true ->
+            code:set_coverage_mode(line_counters);
+        false ->
+            io:format(standard_error,
+                        "ERROR: Code coverage requested but not "
+                        "supported by Erlang VM~n", []),
+            misc:halt(1)
+    end.
+-else.
+enable_code_coverage() ->
+    io:format(standard_error,
+                "ERROR: Code coverage requested but not enabled "
+                "at compile time (see line_coverage compiler "
+                "option)~n", []),
+    misc:halt(1).
+-endif.
+
+maybe_export_coverage() ->
+    case get_code_coverage_module_strings() of
+        disabled -> ok;
+        {ok, ModuleStrings} ->
+            case os:getenv("CB_CODE_COVERAGE_DIR") of
+                false -> ok;
+                "" -> ok;
+                CoverageDir ->
+                    cb_cover:export_coverage(ModuleStrings, CoverageDir)
+            end
+    end.

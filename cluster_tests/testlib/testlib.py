@@ -1038,6 +1038,10 @@ def get_cluster_test_dir():
     return os.path.join(THIS_FILE_DIR, '..')
 
 
+def get_coverage_dir():
+    return os.path.join(get_cluster_test_dir(), '.coverage')
+
+
 def get_install_dir():
     return os.path.join(NS_SERVER_DIR, '..', 'install')
 
@@ -1048,6 +1052,17 @@ def get_bin_dir():
 
 def get_utility_path(utility_name):
     return os.path.join(get_bin_dir(), utility_name)
+
+
+def get_escript_path():
+    p = get_utility_path('escript')
+    if not os.path.exists(p):
+        # no escript in project's ./bin
+        # try using escript from $PATH
+        p = shutil.which('escript')
+        if p is None:
+            raise RuntimeError("escript not found")
+    return p
 
 
 def get_ns_server_dir():

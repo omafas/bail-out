@@ -28,6 +28,8 @@ import random
 import pprint
 from copy import deepcopy
 import builtins
+import subprocess
+import json
 
 # Pretty prints any tracebacks that may be generated if the process dies
 from traceback_with_variables import activate_by_import
@@ -164,6 +166,10 @@ Usage: {{program_name}}
         Do not right align the result column in the output
     [--no-wrap]
         Do not wrap the output to the screen width
+    [--code-coverage-modules=<mods|all>]
+        Enable code coverage collection. A comma-separated list of module names
+        or 'all' to scan all modules in ns_server/apps/*/src/.
+        Disabled by default.
     [--help]
         Show this help
 """
@@ -200,6 +206,108 @@ def list_all_tests():
         print(f"\n{name}:")
         for test in tests:
             print(f"  - {test}")
+
+
+def scan_modules_for_coverage():
+    """Scan ns_server/apps/*/src/**/*.erl to get all module names."""
+    ns_server_dir = testlib.get_ns_server_dir()
+    apps_src = os.path.join(ns_server_dir, "apps", "*", "src")
+    modules = set()
+    for erl_file in glob.glob(os.path.join(apps_src, "**", "*.erl"),
+                             recursive=True):
+        basename = os.path.basename(erl_file)
+        module = os.path.splitext(basename)[0]
+        modules.add(module)
+    sorted_modules = sorted(modules)
+    testlib.maybe_print(f"Scanned {len(sorted_modules)} modules for coverage")
+    return sorted_modules
+
+
+def generate_coverage_report():
+    """Generate coverage report by running the Erlang escript."""
+
+    print("Starting coverage report generation...")
+
+    # Discover all coverage directories
+    cluster_dirs = glob.glob(tmp_cluster_dir + "*")
+    print("Searching for coverage data in "
+          f"{len(cluster_dirs)} cluster directories")
+
+    cov_data_dirs = []
+    cov_dir = os.path.join(testlib.get_coverage_dir(), "raw")
+    if os.path.isdir(cov_dir):
+        cov_data_dirs.append(cov_dir)
+        print(f"  Found coverage directory: {cov_dir}")
+
+    if not cov_data_dirs:
+        print("No coverage data found - skipping report generation")
+        return
+
+    print(f"Found coverage data in {len(cov_data_dirs)} cluster directories")
+
+    report_dir = testlib.get_coverage_dir()
+    os.makedirs(report_dir, exist_ok=True)
+
+    # Run the Erlang escript to generate the report
+    coverage_script_path = os.path.join(testlib.get_scripts_dir(),
+                                        "generate_coverage_report.escript")
+
+    if not os.path.exists(coverage_script_path):
+        raise RuntimeError("Coverage report escript not found: "
+                           f"{coverage_script_path}")
+
+    escript_path = testlib.get_escript_path()
+
+    print(f"Output directory: {report_dir}")
+    print(f"Coverage directories: {len(cov_data_dirs)}")
+
+    try:
+        # Build command for argparse:
+        # --report-dir <dir> --import-dirs <dir1> ...
+        cmd = [escript_path, coverage_script_path,
+               "--report-dir", report_dir,
+               "--import-dirs"] + cov_data_dirs
+        ScriptTimeout = 1200
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=ScriptTimeout
+        )
+
+        log_file = os.path.join(report_dir, "generate_coverage_stderr.txt")
+        with open(log_file, 'w') as f:
+            f.write(result.stderr)
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Coverage report generation failed with exit code "
+                f"{result.returncode}\nSee {log_file} for details")
+
+        try:
+            coverage_data = json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                f"Failed to parse coverage output: {e}\n"
+                f"Raw output: {result.stdout}")
+
+        needed_modules = set(testlib.config.get('code_coverage_modules', []))
+        covered_modules = set(coverage_data.get('module_coverage', {}).keys())
+        missing_modules = sorted(needed_modules - covered_modules)
+        coverage_data['missing_modules'] = missing_modules
+
+        coverage_data['full_report_dir'] = os.path.normpath(report_dir)
+
+        if missing_modules:
+            missing_file = os.path.join(report_dir, "missing_modules.txt")
+            with open(missing_file, 'w') as f:
+                f.write('\n'.join(missing_modules))
+
+        print(f"Coverage report generated successfully in: {report_dir}")
+        return coverage_data
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(
+            f"Coverage report generation timed out ({ScriptTimeout}s)") from e
 
 
 def find_similar_tests(name, available_names, max_suggestions=1, cutoff=0.6,
@@ -281,7 +389,8 @@ def main():
                                            'dont-report-time',
                                            'test-timeout=',
                                            'no-res-alignment',
-                                           'no-wrap'])
+                                           'no-wrap',
+                                           'code-coverage-modules='])
     except getopt.GetoptError as err:
         bad_args_exit(str(err))
 
@@ -360,6 +469,18 @@ def main():
             randomize_clusters = True
         elif o == '--random-order':
             random_order = True
+        elif o == '--code-coverage-modules':
+            if use_existing_server:
+                bad_args_exit("--code-coverage-modules is not supported with "
+                              "--cluster|-c (pre-existing cluster)")
+            if a.lower() == 'all':
+                testlib.config['code_coverage_modules'] = \
+                    scan_modules_for_coverage()
+            else:
+                testlib.config['code_coverage_modules'] = \
+                    [m.strip() for m in a.split(',')]
+            testlib.maybe_print(f"Code coverage enabled for modules: "
+                                f"{testlib.config['code_coverage_modules']}")
         elif o == '--testset-iterations':
             testset_iterations = int(a)
         elif o == '--test-iterations':
@@ -460,6 +581,11 @@ def main():
     else:
         remove_temp_cluster_directories()
 
+    coverage_report_dir = testlib.get_coverage_dir()
+    # Remove previous report if it exists
+    if os.path.exists(coverage_report_dir):
+        shutil.rmtree(coverage_report_dir)
+
     executed = 0
     test_time = 0
     total_log_collection_time = 0
@@ -538,6 +664,25 @@ def main():
         not_ran += testset_not_ran
         total_log_collection_time += log_collection_time
 
+    if not cluster.is_existing_cluster():
+        cluster.destroy()
+
+    testlib.print_wrapped("\n=== Finishing ",
+                          max_width=testlib.config['screen_width'])
+
+    # Generate coverage report if coverage is enabled
+    coverage_data = None
+    if len(errors) == 0 and testlib.config.get('code_coverage_modules'):
+        coverage_data, err, _ = testlib.safe_test_function_call(
+                                   sys.modules[__name__],
+                                   'generate_coverage_report',
+                                   [], 0, report_name=True)
+        if err is not None:
+            ename = 'code coverage report generation'
+            if ename not in errors:
+                errors[ename] = []
+            errors[ename].append(err)
+
     restore_print()
 
     ns_in_sec = 1000000000
@@ -572,6 +717,22 @@ def main():
         print("Total log collection time: "
               f"{format_time(log_collection_time_s)}")
 
+    if coverage_data:
+        total_coverage = coverage_data.get('total_coverage', 0)
+        total_lines = coverage_data.get('total_lines', 0)
+        total_covered_lines = coverage_data.get('total_covered_lines', 0)
+        module_coverage = coverage_data.get('module_coverage', {})
+        missing_modules = coverage_data.get('missing_modules', [])
+
+        missing_str = (f", {len(missing_modules)} module(s) not found"
+                       if missing_modules else "")
+        print(f"Overall code coverage:    {total_coverage:.2f}% "
+              f"({len(module_coverage)} module(s) analyzed{missing_str})")
+        print(f"Covered / total lines:    {total_covered_lines} "
+              f"/ {total_lines}")
+        print("Full coverage report is available at "
+              f"{coverage_data['full_report_dir']}")
+
     print(f"\nSeed: {seed}\n")
 
     for name in errors:
@@ -593,9 +754,8 @@ def main():
     elif not (testlib.config['keep_tmp_dirs'] or
               check_for_core_files() or
               cluster.is_existing_cluster()):
-        # Kill any created nodes and possibly delete directories as we don't
-        # need to keep around data from successful tests
-        cluster.destroy()
+        # Delete directories as we don't need to keep around data from
+        # successful tests
         remove_temp_cluster_directories()
 
 

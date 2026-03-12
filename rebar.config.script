@@ -1,0 +1,20 @@
+CoverageEnabled = case os:getenv("CB_CODE_COVERAGE_ENABLED") of
+                      false -> false;
+                      "" -> false;
+                      _ -> true
+                  end,
+
+lists:map(
+  fun ({erl_opts, Opts}) ->
+          NewOpts = case CoverageEnabled of
+                        true -> [line_coverage, force_line_counters];
+                        false -> []
+                    end ++
+                    %% Extra purpose of this option is to guarantee that
+                    %% all files are re-compiled when CB_CODE_COVERAGE_ENABLED
+                    %% env variable is changed.
+                    [{d, 'CB_CODE_COVERAGE_ENABLED', CoverageEnabled}],
+          {erl_opts, NewOpts ++ Opts};
+      (E) ->
+          E
+  end, CONFIG).

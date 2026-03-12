@@ -15,6 +15,7 @@ from testlib.cluster import Cluster, build_cluster
 from testlib import get_succ
 from testlib.util import Service, services_to_strings
 import random
+import os
 
 
 MIN_MEM_QUOTA = 256
@@ -136,6 +137,16 @@ class ClusterRequirements:
         start_args.update(self.get_default_start_args())
         for requirement in self.as_list():
             start_args.update(requirement.start_args)
+
+        # Inject code coverage environment variables if coverage is enabled
+        code_coverage_modules = testlib.config.get('code_coverage_modules')
+        if code_coverage_modules:
+            coverage_dir = os.path.join(testlib.get_coverage_dir(), "raw")
+            os.makedirs(coverage_dir, exist_ok=True)
+            cb_code_coverage = ','.join(code_coverage_modules)
+            start_args.setdefault('env', {})
+            start_args['env']['CB_CODE_COVERAGE_MODULES'] = cb_code_coverage
+            start_args['env']['CB_CODE_COVERAGE_DIR'] = coverage_dir
 
         connect_args = {'start_index': first_node_index}
         connect_args.update(self.get_default_connect_args(start_args))
