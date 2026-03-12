@@ -1797,11 +1797,9 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
     diag_url = "http://%s:%s/diag" % (
         local_url_addr, read_guts(guts, "rest_port"))
 
-    from distutils.spawn import find_executable
-
     lookup_cmd = None
     for cmd in ["dig", "nslookup", "host"]:
-        if find_executable(cmd) is not None:
+        if shutil.which(cmd) is not None:
             lookup_cmd = cmd
             break
 
