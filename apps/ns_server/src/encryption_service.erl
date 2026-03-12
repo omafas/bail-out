@@ -534,10 +534,12 @@ init([]) ->
                           end,
             chronicle_compat_events:notify_if_key_changes(
                                       EventFilter, update),
-            case maybe_update_dek_path_in_config() of
-                ok ->
-                    create_encryption_service_stats(),
-                    {ok, #{}};
+            maybe
+                ok ?= maybe_upgrade_config(),
+                ok ?= maybe_update_dek_path_in_config(),
+                create_encryption_service_stats(),
+                {ok, #{}}
+            else
                 {error, Reason} ->
                     {stop, Reason}
             end;
@@ -799,6 +801,28 @@ maybe_update_dek_path_in_config() ->
                     end
             end;
         {error, not_found} -> ok
+    end.
+
+maybe_upgrade_config() ->
+    Cfg = ns_config:read_key_fast(ns_config_sm_key(), []),
+    CurrentCfgVsn = proplists:get_value(cfg_version, Cfg, 0),
+    ShouldBeCfgVsn = 1,
+    %% No need in real upgrade yet, just updating the cfg_version to
+    %% trigger config gosecrets.cfg rewrite
+    case CurrentCfgVsn of
+        ShouldBeCfgVsn ->
+            ?log_debug("No need to upgrade config"),
+            ok;
+        _ ->
+            ?log_info("Upgrading encryption service config"),
+            NewCfg = misc:update_proplist(Cfg, [{cfg_version, ShouldBeCfgVsn}]),
+            case change_config(NewCfg) of
+                ok ->
+                    ?log_info("Encryption service config upgraded"),
+                    ok;
+                {error, _} = Error ->
+                    {error, {change_cfg_failed, Error}}
+            end
     end.
 
 wrap_error_msg(ok, _A, _) -> ok;
