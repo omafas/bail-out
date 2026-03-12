@@ -697,6 +697,11 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["_cbauth", "getUserBuckets"] ->
                     {{[admin, internal], all},
                      fun menelaus_web_rbac:handle_get_user_buckets_for_cbauth/1};
+                ["_cbauth", "getCredential" | IdTokens] ->
+                    IdStr = lists:flatten(lists:join("/", IdTokens)),
+                    {{[admin, internal], all},
+                     fun menelaus_web_credentials:handle_get_credential_for_cbauth/2,
+                     [IdStr]};
                 ["_prometheusMetrics"] ->
                     {{[admin, internal, stats], read},
                      fun menelaus_web_prometheus:handle_get_local_metrics/2,

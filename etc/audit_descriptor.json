@@ -2196,6 +2196,43 @@
               },
               "sessionid": ""
           }
+      },
+      {
+          "id" : 8297,
+          "name" : "consume credential",
+          "description" : "A credential was consumed by a service.",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields": {
+              "timestamp"  : "",
+              "real_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "remote": {
+                  "ip": "",
+                  "port": 1
+              },
+              "local": {
+                  "ip": "",
+                  "port": 1
+              },
+              "id" : "",
+              "service" : "",
+              "on_behalf_of": {
+                  "domain": "",
+                  "user": ""
+              }
+          },
+          "optional_fields": {
+              "error" : "",
+              "authenticated_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "sessionid": ""
+          }
       }
     ]
 }

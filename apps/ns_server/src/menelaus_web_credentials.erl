@@ -54,7 +54,7 @@
 
 -type credential_audit_event() :: create_credential | list_credentials |
                                   read_credential | update_credential |
-                                  delete_credential.
+                                  delete_credential | consume_credential.
 
 -type credential_audit_args() ::
         {credential_id(), credential_type(),
@@ -62,7 +62,8 @@
         {string(), non_neg_integer()} |  % list
         {credential_id(), credential_type() | undefined} | % read
         {credential_id(), credential_public_view() | undefined} | % update
-        credential_id(). % delete
+        credential_id() | % delete
+        {credential_id(), atom(), string(), atom()}. % consume
 
 -export([handle_settings/2]).
 
@@ -71,7 +72,8 @@
          handle_get/2,
          handle_post/2,
          handle_put/2,
-         handle_delete/2]).
+         handle_delete/2,
+         handle_get_credential_for_cbauth/2]).
 
 -export([sanitize_chronicle_cfg/1]).
 
@@ -280,7 +282,14 @@ format_audit_params(update_credential, {Id, Cred}, Error) ->
     [{id, list_to_binary(Id)}] ++ MetaParams ++ format_error(Error);
 
 format_audit_params(delete_credential, Id, Error) ->
-    [{id, list_to_binary(Id)}] ++ format_error(Error).
+    [{id, list_to_binary(Id)}] ++ format_error(Error);
+
+format_audit_params(consume_credential, {Id, Service, User, Domain}, Error) ->
+    [{id, list_to_binary(Id)},
+     {service, atom_to_binary(Service)},
+     {on_behalf_of, format_identity(
+                      #{user => list_to_binary(User), domain => Domain})}]
+        ++ format_error(Error).
 
 %% Convert an author() map to the ejson identity shape used in audit events.
 %% Delegates to ns_audit:get_identity/1 which handles domain conversion
@@ -460,9 +469,206 @@ handle_delete(IdStr, Req) ->
             reply_store_error(Req, Reason)
     end.
 
+%% @doc Internal cbauth endpoint: GET /_cbauth/getCredential/<id>
+%%
+%% Called by Go services via cbauth's Creds.GetCredential(id). The service
+%% authenticates using its own identity (e.g. @cbq-engine, @fts, @backup) for
+%% the route-level {[admin, internal], all} guard, and passes the end-user
+%% identity in query parameters:
+%%   ?user=<user>&domain=<domain>&extras=<base64-encoded extras>
+%%
+%% Enforces:
+%%   1. Service-identity binding — when the on-behalf-of user is a service
+%%      identity (@-prefixed), it must match the authenticated caller. The
+%%      Go/cbauth side already enforces this via verifySpecialCreds, so this
+%%      check only fires for raw HTTP calls that bypass cbauth.
+%%   2. RBAC — the on-behalf-of user must have `consume` permission on
+%%      `{credentials, Id}`.
+%%   3. Expiry — credentials past their `expires_at` are rejected (enforced by
+%%      cb_credentials_store:consume_credential/1).
+%%   4. a. Service user — bypass guardrails.
+%%      b. End user — the calling service must be explicitly listed in the
+%%         credential's `allowed_services` guardrail.
+handle_get_credential_for_cbauth(IdStr, Req) ->
+    Params = mochiweb_request:parse_qs(Req),
+    User = proplists:get_value("user", Params),
+    Domain = list_to_existing_atom(proplists:get_value("domain", Params)),
+    Extras = proplists:get_value("extras", Params, undefined),
+    OnBehalf = {User, Domain},
+    Service = service_from_identity(Req),
+    case check_caller_identity(Req, Service, OnBehalf) of
+        ok ->
+            AuthnRes =
+                menelaus_auth:get_authn_res_from_on_behalf_of(
+                  User, Domain, Extras),
+            case check_consume_permission(IdStr, AuthnRes) of
+                true ->
+                    handle_consume_credential(
+                      IdStr, Service, User, Domain, Req);
+                false ->
+                    audit_consume(Req, IdStr, Service,
+                                  User, Domain, access_denied),
+                    reply_cbauth_error(
+                      Req,
+                      <<"INSUFFICIENT_PERMISSIONS">>,
+                      <<"Access denied: insufficient permissions to consume "
+                        "this credential">>, 403)
+            end;
+        {error, Reason} ->
+            audit_consume(Req, IdStr, Service, User, Domain, access_denied),
+            reply_cbauth_error(Req, <<"INSUFFICIENT_PERMISSIONS">>, Reason, 403)
+    end.
+
+%% @doc Validate the calling service identity.
+%%
+%% Two checks, both of which must pass:
+%%   1. The caller must map to a known service (not `unknown`).
+%%   2. When the on-behalf-of identity is a service identity (@-prefixed), it
+%%      must match the authenticated caller. This prevents a raw HTTP request
+%%      that authenticates as cbq-engine from passing ?user=@backup.
+-spec check_caller_identity(term(), atom(), {string(), atom()}) ->
+          ok | {error, binary()}.
+check_caller_identity(_Req, unknown, _OnBehalf) ->
+    {error, <<"Access denied: unknown service">>};
+check_caller_identity(Req, _Service, OnBehalf) ->
+    case is_service_identity(OnBehalf) of
+        false ->
+            ok;
+        true ->
+            case menelaus_auth:get_identity(Req) =:= OnBehalf of
+                true ->
+                    ok;
+                false ->
+                    {error,
+                     <<"Access denied: on-behalf-of service identity does not "
+                       "match authenticated caller">>}
+            end
+    end.
+
+%% @doc Second stage: call consume (which checks expiry), then bifurcate based
+%% on whether the on-behalf-of identity is a service user or an end user.
+%%
+%% Service users: bypass guardrails.
+%% End users: enforce the allowedServices guardrail.
+handle_consume_credential(IdStr, Service, User, Domain, Req) ->
+    case cb_credentials_store:consume_credential(IdStr) of
+        {ok, Cred} ->
+            OnBehalf = {User, Domain},
+            case is_service_identity(OnBehalf) of
+                true ->
+                    audit_consume(Req, IdStr, Service, User, Domain, ok),
+                    reply_json_ok(Req, encode_response(
+                                         export_credential(Cred)), 200);
+                false ->
+                    handle_end_user_consume(IdStr, Service, User, Domain, Cred,
+                                            Req)
+            end;
+        {error, not_found} ->
+            audit_consume(Req, IdStr, Service, User, Domain, not_found),
+            menelaus_util:reply_not_found(Req);
+        {error, expired} ->
+            audit_consume(Req, IdStr, Service, User, Domain, expired),
+            reply_cbauth_error(
+              Req, <<"CREDENTIAL_EXPIRED">>, <<"Credential has expired">>, 403);
+        {error, unsupported_schema_version} ->
+            audit_consume(Req, IdStr, Service, User, Domain,
+                          unsupported_schema_version),
+            reply_cbauth_error(
+              Req, <<"UNSUPPORTED_SCHEMA_VERSION">>,
+              <<"Credential uses an unsupported schema version">>, 503);
+        {error, Reason} ->
+            audit_consume(Req, IdStr, Service, User, Domain, Reason),
+            reply_store_error(Req, Reason)
+    end.
+
+%% @doc Handle consume for an end user: enforce the allowedServices guardrail.
+handle_end_user_consume(IdStr, Service, User, Domain, Cred, Req) ->
+    case check_service_guardrail(Service, Cred) of
+        ok ->
+            audit_consume(Req, IdStr, Service, User, Domain, ok),
+            reply_json_ok(Req, encode_response(export_credential(Cred)), 200);
+        {error, service_not_allowed} ->
+            audit_consume(Req, IdStr, Service, User, Domain,
+                          service_not_allowed),
+            reply_cbauth_error(
+              Req,
+              <<"SERVICE_GUARDRAIL_BLOCKED">>,
+              <<"Access denied: service not listed in credential's "
+                "allowedServices guardrail">>, 403)
+    end.
+
+%% @doc Derive the calling service from the authenticated identity on the
+%% request.  Services authenticate as @-prefixed internal users (e.g.
+%% @cbq-engine, @backup, @fts) to access /_cbauth endpoints.  We map
+%% that identity to the canonical service atom used in guardrails.
+%%
+%% Returns `unknown` when the identity is missing, not an @-prefixed user,
+%% or does not map to a known service.
+-spec service_from_identity(term()) -> atom().
+service_from_identity(Req) ->
+    case menelaus_auth:get_identity(Req) of
+        {[$@ | Name], _Domain} ->
+            misc:identity_name_to_service(Name);
+        _ ->
+            unknown
+    end.
+
+%% @doc Check if identity is a service identity (@ user in admin domain).
+%% Service identities like @backup, @cbq-engine bypass guardrails.
+%% Human admins like "Administrator" in admin domain do NOT bypass guardrails.
+%%
+%% Note: This replicates the logic in menelaus_auth:is_internal_identity/1
+%% because we need to check the on-behalf-of identity (from query params),
+%% not the caller's identity from the request.
+-spec is_service_identity({string(), atom()}) -> boolean().
+is_service_identity({[$@ | _], admin}) -> true;
+is_service_identity(_) -> false.
+
+%% @doc Check that the on-behalf-of user has RBAC `consume` permission on
+%% the requested credential.
+-spec check_consume_permission(credential_id(), term()) -> boolean().
+check_consume_permission(IdStr, AuthnRes) ->
+    menelaus_roles:is_allowed(
+      {[{credentials, IdStr}], consume}, AuthnRes).
+
+
+%% @doc Check the `allowed_services` guardrail for end-users.
+%%
+%% The calling service must be explicitly listed in `allowed_services`.
+%% If `allowed_services` is not set or empty, access is denied.
+-spec check_service_guardrail(atom(), map()) ->
+          ok | {error, service_not_allowed}.
+check_service_guardrail(Service, #{meta := Meta}) ->
+    case maps:find(guardrails, Meta) of
+        {ok, #{allowed_services := AllowedBins}}
+          when AllowedBins =/= [] ->
+            ServiceBin = atom_to_binary(Service),
+            case lists:member(ServiceBin, AllowedBins) of
+                true  -> ok;
+                false -> {error, service_not_allowed}
+            end;
+        _ ->
+            {error, service_not_allowed}
+    end.
+
+%% @doc Audit a consume_credential event.  Called for both successes and
+%% failures so that denied access is visible in the audit trail.
+%% Includes both the calling service and the on-behalf-of user identity.
+-spec audit_consume(term(), credential_id(), atom(), string(), atom(),
+                    ok | credential_error_reason()) -> ok.
+audit_consume(Req, IdStr, Service, User, Domain, Error) ->
+    audit_credential(Req, consume_credential,
+                     {IdStr, Service, User, Domain}, Error).
+
 reply_json_ok(Req, JsonBin, Code) ->
     menelaus_util:reply(Req, JsonBin, Code,
                         [{"Content-Type", "application/json"}]).
+
+reply_cbauth_error(Req, Code, Reason, HttpStatus) ->
+    reply_json_ok(Req,
+                  encode_response(
+                    #{error => #{code => Code, reason => Reason}}),
+                  HttpStatus).
 
 %% Credential request validation
 
@@ -514,8 +720,9 @@ validated_meta_extra(Props) ->
 
 %% @doc Validators for the optional guardrails sub-object.
 %%
-%% Most guardrail fields are optional arrays of strings.  allowedServices
-%% is additionally constrained to known service names (kv, n1ql, index, ...).
+%% Most guardrail fields are optional arrays of strings. allowedServices
+%% is constrained to services that consume credentials via cbauth
+%% (n1ql, backup, index, xdcr, fts, eventing, cbas).
 %%
 %% urlWhitelist is an optional sub-object with the following fields:
 %%   allAccess      – boolean (default false); when true, all URLs are allowed
@@ -523,8 +730,7 @@ validated_meta_extra(Props) ->
 %%   disallowedUrls – array of URL strings (validated as proper URLs)
 guardrails_validators() ->
     ConvertArray = fun (L) -> [list_to_binary(S) || S <- L] end,
-    ServiceNames = [atom_to_list(S)
-                    || S <- ns_cluster_membership:supported_services()],
+    ServiceNames = [atom_to_list(S) || S <- ?CREDENTIAL_CONSUMER_SERVICES],
     [validator:string_array(allowedServices,
                             fun (S) ->
                                     case lists:member(S, ServiceNames) of

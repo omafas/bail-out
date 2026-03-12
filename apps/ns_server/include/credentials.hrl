@@ -11,6 +11,9 @@
         [aws, azure_shared, azure_ad, azure_sas, azure_managed, gcp, http,
          couchbase]).
 
+-define(CREDENTIAL_CONSUMER_SERVICES,
+        [n1ql, backup, index, xdcr, fts, eventing, cbas]).
+
 -type credential_type() :: aws | azure_shared | azure_ad | azure_sas |
                            azure_managed | gcp | http | couchbase.
 
@@ -22,7 +25,10 @@
                                    already_expired |
                                    unsupported_schema_version |
                                    invalid_type |
-                                   {txn_failed, Reason :: term()}.
+                                   {txn_failed, Reason :: term()} |
+                                   expired |
+                                   service_not_allowed |
+                                   access_denied.
 -type credential_id() :: string().
 
 -type credential_meta() :: #{created_at := integer(),

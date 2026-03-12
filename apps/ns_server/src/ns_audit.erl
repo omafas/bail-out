@@ -540,7 +540,9 @@ code(read_credential) ->
 code(update_credential) ->
     8295;
 code(delete_credential) ->
-    8296.
+    8296;
+code(consume_credential) ->
+    8297.
 
 send_to_memcached(ParentPID, {Code, EncodedBody, IsSync}) ->
     case (catch ns_memcached_sockets_pool:executing_on_socket(
