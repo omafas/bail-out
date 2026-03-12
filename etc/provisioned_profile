@@ -18,6 +18,7 @@
 {{n1ql, sequential_scan_disabled}, true}.
 {allow_hash_migration_during_auth, true}.
 {{memcached, mirror_ssl_port}, 11300}.
+{num_rebalance_reports, 15}.
 
 %% cgroup support is disabled until all platforms (AWS, GCP, Azure) support
 %% it.

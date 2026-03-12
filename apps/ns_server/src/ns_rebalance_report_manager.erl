@@ -294,10 +294,13 @@ refresh(Dir) ->
               fun (_, S) -> {noreply, S} end)
     end.
 
-%% If configured use that value. num_rebalance_reports is not set by ns_server
-%% anywhere. Can only be set by explicit administrative action we provide.
+%% num_rebalance_reports can be set by explicit administrative action we
+%% provide (/diag/eval). The default value can be set in a configuration
+%% profile.
 get_num_rebalance_reports() ->
-    ns_config:read_key_fast(num_rebalance_reports, ?NUM_REBALANCE_REPORTS).
+    Default = config_profile:get_value(num_rebalance_reports,
+                                       ?NUM_REBALANCE_REPORTS),
+    ns_config:read_key_fast(num_rebalance_reports, Default).
 
 fetch_task(MissingReports, Dir) ->
     ClusterNodes = ns_node_disco:nodes_wanted(),
