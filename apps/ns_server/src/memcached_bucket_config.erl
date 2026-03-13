@@ -396,6 +396,11 @@ value_to_binary(V) when is_binary(V) ->
 value_to_binary(V) ->
     list_to_binary(value_to_string(V)).
 
+has_changed(_BucketName, ?MAGMA_FUSION_AUTH_TOKEN, _Value, _Dict) ->
+    %% KV won't report this key. It's set via a special path and only if it has
+    %% a value. It will only have a value if it has changed, but we test that
+    %% later. Always consider it to be changed here.
+    true;
 has_changed(_BucketName, _Name, undefined, _Dict) ->
     false;
 has_changed(BucketName, Name, Value, Dict) ->
@@ -408,10 +413,10 @@ has_changed(BucketName, Name, Value, Dict) ->
                [Name, BucketName, OldValue, Value]),
             true;
         error ->
-            ?log_info(
-               "Detected change of parameter ~s for bucket ~s to ~s",
-               [Name, BucketName, Value]),
-            true
+            %% KV doesn't know about the parameters, setting it would result in
+            %% some error. This is valid in Totoro/8.1, buckets may have config
+            %% for other services such as continuous backup.
+            false
     end.
 
 maybe_update_param(_Sock, _Stats, _BucketName,
