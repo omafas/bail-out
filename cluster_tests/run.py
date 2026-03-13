@@ -97,6 +97,9 @@ log_collection_default_regex = (".*diags"
                                 "|Collecting .*/snapshots"
                                 "|Chronicle dump")
 
+code_coverage_excluded_modules = ["ale_transform", "cut" ,
+                                  "ns_server_testrunner_api"]
+
 USAGE_STRING = f"""
 Usage: {{program_name}}
     [--cluster | -c <address>:<port>]
@@ -222,6 +225,8 @@ def scan_modules_for_coverage():
                              recursive=True):
         basename = os.path.basename(erl_file)
         module = os.path.splitext(basename)[0]
+        if module in code_coverage_excluded_modules:
+            continue
         modules.add(module)
     sorted_modules = sorted(modules)
     testlib.maybe_print(f"Scanned {len(sorted_modules)} modules for coverage")
