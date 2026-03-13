@@ -1173,25 +1173,21 @@ validate_time_duration(Name, State) ->
       end, Name, State).
 
 promql_filters_for_identity(AuthnRes) ->
-    Roles = menelaus_roles:get_roles(AuthnRes),
     CompiledRoles = menelaus_roles:get_compiled_roles(AuthnRes),
-    promql_filters_for_roles(Roles, CompiledRoles).
+    Snapshot = ns_bucket:get_snapshot(all, [collections, uuid]),
+    promql_filters_for_roles(Snapshot, CompiledRoles).
 
-promql_filters_for_roles(Roles, CompiledRoles) ->
-    PermCheck =
-        fun (Obj) ->
-            menelaus_roles:is_allowed(collection_perm(Obj), CompiledRoles)
-        end,
-    case PermCheck([all, all, all]) of
+promql_filters_for_roles(Snapshot, CompiledRoles) ->
+    [{RootPerm, stats}] = collection_perms([all, all, all]),
+    case menelaus_roles:is_allowed(RootPerm, CompiledRoles) of
         true -> [{[]}]; %% one empty filter
         false ->
-            Definitions = menelaus_roles:get_definitions(all),
             %% Building a map that looks like the following:
             %% #{"bucket1" => true,
             %%   "bucket2" => #{"scope1" => true,
             %%                  "scope2" => #{"collection1" => true,
             %%                                "collection2" => true}}}
-            PermMap = build_stats_perm_map(Roles, PermCheck, Definitions),
+            PermMap = build_stats_perm_map(Snapshot, CompiledRoles),
             convert_perm_map_to_promql_ast(PermMap)
     end.
 
@@ -1215,18 +1211,47 @@ promql_filters_for_roles_test() ->
     Snapshot = #{{bucket, Bucket1, collections} => {Manifest, ChronicleRev},
                  {bucket, Bucket2, collections} => {Manifest, ChronicleRev},
                  {bucket, Bucket1, uuid} => {UUID1, ChronicleRev},
-                 {bucket, Bucket2, uuid} => {UUID2, ChronicleRev}},
+                 {bucket, Bucket2, uuid} => {UUID2, ChronicleRev},
+                 bucket_names => {[Bucket1, Bucket2], ChronicleRev}},
 
     fake_chronicle_kv:setup(),
     menelaus_roles:set_role_definitions(),
+
+    CustomRole0 =
+        {<<"custom_role_0">>, [], [{mutable, true}],
+         [{[{collection, [Bucket1, "_default", "_default"]}, stats], [read]},
+          {[{bucket, Bucket2}, stats], [read]}]},
+    menelaus_roles:set_role(CustomRole0),
+
+    CustomRole1 =
+        {<<"custom_role_1">>, [], [{mutable, true}],
+         [{[{collection, [Bucket1, "_default", "_default"]}, stats], none},
+          {[{bucket, Bucket1}, stats], [read]}]},
+    menelaus_roles:set_role(CustomRole1),
+
+    CustomRole2 =
+        {<<"custom_role_2">>, [], [{mutable, true}],
+         [{[{collection, [Bucket1, "_default", "_default"]}, stats], [read]},
+          {[{scope, [Bucket1, "_default"]}, stats], none},
+          {[{bucket, Bucket1}, stats], [read]}]},
+    menelaus_roles:set_role(CustomRole2),
+
+    CustomRole3 =
+        {<<"custom_role_3">>, [], [{mutable, true}],
+         [{[{collection, [Bucket1, "_default", "_default"]}, stats], none},
+          {[{scope, [Bucket1, "_default"]}, stats], [read]},
+          {[{bucket, Bucket1}, stats], none}]},
+    menelaus_roles:set_role(CustomRole3),
+
     CompiledRoles = menelaus_roles:compile_roles(
                       _,
                       menelaus_roles:get_definitions(all),
                       Snapshot),
 
     Filters = fun (Roles) ->
-                  AST = promql_filters_for_roles(Roles, CompiledRoles(Roles)),
-                  promQL:format_promql({union, AST})
+                      AST = promql_filters_for_roles(Snapshot,
+                                                     CompiledRoles(Roles)),
+                      promQL:format_promql({union, AST})
               end,
 
     config_profile:load_default_profile_for_test(),
@@ -1269,16 +1294,15 @@ promql_filters_for_roles_test() ->
            Filters([{<<"eventing_manage_functions">>, [{Bucket1, UUID1}, any]}])),
 
         ?assertBinStringsEqual(
-          <<"{bucket=`test1`,scope=~`_default`} or {bucket!~`.+`}">>,
-           Filters([{<<"eventing_manage_functions">>, [{Bucket1, UUID1},
-                                                       {"_default", 0}]}])),
+          <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
+          Filters([{<<"eventing_manage_functions">>, [{Bucket1, UUID1},
+                                                      {"_default", 0}]}])),
 
         ?assertBinStringsEqual(
-          <<"{bucket=`test1`,scope=~`_default`} or {bucket=~`test2`} or "
-            "{bucket!~`.+`}">>,
-           Filters([{<<"eventing_manage_functions">>, [{Bucket1, UUID1},
-                                                       {"_default", 0}]},
-                    {<<"eventing_manage_functions">>, [{Bucket2, UUID2}, any]}])),
+          <<"{bucket=~`test1|test2`} or {bucket!~`.+`}">>,
+          Filters([{<<"eventing_manage_functions">>, [{Bucket1, UUID1},
+                                                      {"_default", 0}]},
+                   {<<"eventing_manage_functions">>, [{Bucket2, UUID2}, any]}])),
 
         ?assertBinStringsEqual(
           <<"{bucket=`test1`,scope=`_default`,collection=~`_default`} or "
@@ -1301,6 +1325,62 @@ promql_filters_for_roles_test() ->
            Filters([{<<"data_reader">>, [any, any, any]},
                     {<<"eventing_manage_functions">>, [{Bucket1, UUID1}, any]}])),
 
+        ?assertBinStringsEqual(
+           <<"{bucket=`test1`,scope=`_default`,collection=~`_default`} or "
+             "{bucket=~`test2`} or {bucket!~`.+`}">>,
+           Filters([<<"custom_role_0">>])),
+
+        ?assertBinStringsEqual(
+           <<"{bucket=`test1`,scope=`_default`,collection!~`_default`} or "
+             "{bucket=`test1`,scope!~`_default`} or {bucket!~`.+`}">>,
+           Filters([<<"custom_role_1">>])),
+
+        ?assertBinStringsEqual(
+           <<"{bucket=`test1`,scope=`_default`,collection=~`_default`} or "
+             "{bucket=`test1`,scope!~`_default`} or {bucket!~`.+`}">>,
+           Filters([<<"custom_role_2">>])),
+
+        ?assertBinStringsEqual(
+           <<"{bucket=`test1`,scope=`_default`,collection!~`_default`} or "
+             "{bucket!~`.+`}">>,
+           Filters([<<"custom_role_3">>])),
+
+        lists:foreach(
+          fun (Role) ->
+                  ?assertBinStringsEqual(
+                     Filters([Role]),
+                     Filters([Role, Role]))
+          end, [<<"custom_role_0">>, <<"custom_role_1">>,
+                <<"custom_role_2">>, <<"custom_role_3">>]),
+
+        ?assertBinStringsEqual(
+           <<"{bucket=~`test1|test2`} or {bucket!~`.+`}">>,
+           Filters([<<"custom_role_0">>, <<"custom_role_1">>])),
+
+        ?assertBinStringsEqual(
+           <<"{bucket=`test1`,scope=`_default`,collection=~`_default`} or "
+             "{bucket=`test1`,scope!~`_default`} or {bucket=~`test2`} or "
+             "{bucket!~`.+`}">>,
+           Filters([<<"custom_role_0">>, <<"custom_role_2">>])),
+
+        ?assertBinStringsEqual(
+           <<"{bucket=`test1`,scope=~`_default`} or {bucket=~`test2`} or "
+             "{bucket!~`.+`}">>,
+           Filters([<<"custom_role_0">>, <<"custom_role_3">>])),
+
+        ?assertBinStringsEqual(
+           <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
+           Filters([<<"custom_role_1">>, <<"custom_role_2">>])),
+
+        ?assertBinStringsEqual(
+           <<"{bucket=`test1`,scope=`_default`,collection!~`_default`} or "
+             "{bucket=`test1`,scope!~`_default`} or {bucket!~`.+`}">>,
+           Filters([<<"custom_role_1">>, <<"custom_role_3">>])),
+
+        ?assertBinStringsEqual(
+           <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
+           Filters([<<"custom_role_2">>, <<"custom_role_3">>])),
+
         ok
     after
         fake_chronicle_kv:teardown(),
@@ -1310,81 +1390,45 @@ promql_filters_for_roles_test() ->
 
 -endif.
 
-collection_perm([B, S, C]) -> {[{collection, [B, S, C]}, stats], read};
-collection_perm([B, S]) ->    {[{collection, [B, S, all]}, stats], read};
-collection_perm([B]) ->       {[{collection, [B, all, all]}, stats], read}.
+collection_perms([B, S, C]) ->
+    [{{[{collection, [B, S, C]}, stats], read}, stats}].
 
-build_stats_perm_map(UserRoles, PermCheckFun, RolesDefinitions) ->
-    ParamDefs = menelaus_roles:get_param_defs(_, RolesDefinitions),
-    StrippedParams =
-        [{Defs, menelaus_roles:strip_ids(Defs, P)} ||
-            {R, P} <- UserRoles,
-            Defs <- [ParamDefs(R)],
-            %% Filtering out any 'not_found' definition, which will be custom
-            %% roles. Support for use of custom roles with the stats API will
-            %% be added in a later commit.
-            Defs =/= not_found],
+get_priv_object_key([Bucket | Rest]) ->
+    [case Bucket of
+         {N, _} ->
+             N;
+         _ ->
+             Bucket
+     end
+    | lists:filtermap(fun (any) -> false; ({N, _}) -> {true, N} end, Rest)].
 
-    %% Filtering out all the params that give full access to all buckets
-    %% because: 1. the rest of the function assumes that bucket is a binary
-    %%             string (not atom 'any');
-    %%          2. perm filter is not needed in this case;
-    %%          3. this case is handled outside of this function.
-    FilteredParams =
-        lists:filter(
-          fun ({[bucket_name], [any]}) -> false;
-              ({?RBAC_SCOPE_PARAMS, [any, any]}) -> false;
-              ({?RBAC_COLLECTION_PARAMS, [any, any, any]}) -> false;
-              (_) -> true
-          end, StrippedParams),
+build_stats_perm_map(Snapshot, CompiledRoles) ->
+    menelaus_permissions:check_collection_permissions(
+         Snapshot, CompiledRoles,
+         fun (_) -> [] end,
+         fun collection_perms/1,
+         fun get_priv_object_key/1).
 
-    Params =
-        maps:to_list(
-          maps:groups_from_list(
-            fun ({[bucket_name], _}) -> buckets;
-                ({?RBAC_SCOPE_PARAMS, [_, any]}) -> buckets;
-                ({?RBAC_COLLECTION_PARAMS, [_, any, any]}) -> buckets;
-                ({?RBAC_SCOPE_PARAMS, _}) -> scopes;
-                ({?RBAC_COLLECTION_PARAMS, [_, _, any]}) -> scopes;
-                ({?RBAC_COLLECTION_PARAMS, _}) -> collections
-            end,
-            fun ({[bucket_name], B}) -> B;
-                ({?RBAC_SCOPE_PARAMS, [B, any]}) -> [B];
-                ({?RBAC_COLLECTION_PARAMS, [B, any, any]}) -> [B];
-                ({?RBAC_SCOPE_PARAMS, S}) -> S;
-                ({?RBAC_COLLECTION_PARAMS, [B, S, any]}) -> [B, S];
-                ({?RBAC_COLLECTION_PARAMS, P}) -> P
-            end, FilteredParams)),
+priv_object_allowed(PrivObject) ->
+    Privileges = menelaus_permissions:privileges(PrivObject),
+    sets:is_element(stats, Privileges).
 
-    CheckParam =
-        fun F([Obj], CheckPerm, Acc) ->
-                case CheckPerm([Obj]) of
-                    true -> Acc#{Obj => true};
-                    false -> Acc
-                end;
-            F([Obj | T], CheckPerm, Acc) ->
-                case maps:get(Obj, Acc, #{}) of
-                    true -> Acc;
-                    Map ->
-                        NewCheckPerm = fun (E) -> CheckPerm([Obj | E]) end,
-                        SubAcc = F(T, NewCheckPerm, Map),
-                        Acc#{Obj => SubAcc}
-                end
-        end,
-
-    CheckParamPerm = ?cut(CheckParam(_1, PermCheckFun, _2)),
-
-    functools:chain(
-      #{},
-      [lists:foldl(CheckParamPerm, _,
-                   proplists:get_value(buckets, Params, [])),
-       lists:foldl(CheckParamPerm, _,
-                   proplists:get_value(scopes, Params, [])),
-       lists:foldl(CheckParamPerm, _,
-                   proplists:get_value(collections, Params, []))]).
+priv_children_empty(PrivObject) ->
+    Children = menelaus_permissions:children(PrivObject),
+    maps:size(Children) =:= 0.
 
 allowed_objects(PermMap) ->
-    maps:keys(maps:filter(fun (_, V) -> V =:= true end, PermMap)).
+    maps:keys(maps:filter(fun (_, V) ->
+                                  priv_object_allowed(V) andalso
+                                      priv_children_empty(V)
+                          end, PermMap)).
+
+not_allowed_objects(PermMap) ->
+    maps:keys(maps:filter(fun (_, V) ->
+                                  not (priv_object_allowed(V) andalso
+                                       priv_children_empty(V))
+                          end,
+                          PermMap)).
 
 convert_perm_map_to_promql_ast(PermMap) ->
     AllowedBuckets = allowed_objects(PermMap),
@@ -1401,30 +1445,49 @@ convert_perm_map_to_promql_ast(PermMap) ->
 buckets_filter(Buckets) ->
     {[{eq_any, "bucket", Buckets}]}.
 
-convert_scope_map_to_promql_ast(_Bucket, true, Acc) ->
-    Acc;
-convert_scope_map_to_promql_ast(Bucket, ScopeMap, Acc) ->
+convert_scope_map_to_promql_ast(Bucket, BucketPrivObj, Acc) ->
+    BucketAllowed = priv_object_allowed(BucketPrivObj),
+    ScopeMap = menelaus_permissions:children(BucketPrivObj),
     AllowedScopes = allowed_objects(ScopeMap),
+    NotAllowedScopes = not_allowed_objects(ScopeMap),
     [scopes_filter(Bucket, AllowedScopes)
-     || AllowedScopes =/= []] ++
-    maps:fold(convert_collection_map_to_promql_ast(Bucket, _, _, _),
-              Acc, ScopeMap).
+     || AllowedScopes =/= [],
+        not BucketAllowed] ++
+        [scopes_exclusion(Bucket, NotAllowedScopes)
+         || NotAllowedScopes =/= [],
+            BucketAllowed] ++
+        maps:fold(convert_collection_map_to_promql_ast(Bucket, _, _, _),
+                  Acc, ScopeMap).
 
 scopes_filter(Bucket, Scopes) ->
     {[{eq, "bucket", Bucket},
       {re, "scope", lists:join("|", Scopes)}]}.
 
-convert_collection_map_to_promql_ast(_Bucket, _Scope, true, Acc) ->
-    Acc;
-convert_collection_map_to_promql_ast(Bucket, Scope, CollectionMap, Acc) ->
+scopes_exclusion(Bucket, Scopes) ->
+    {[{eq, "bucket", Bucket},
+      {not_re, "scope", lists:join("|", Scopes)}]}.
+
+convert_collection_map_to_promql_ast(Bucket, Scope, ScopePrivObj, Acc) ->
+    ScopeAllowed = priv_object_allowed(ScopePrivObj),
+    CollectionMap = menelaus_permissions:children(ScopePrivObj),
     AllowedCols = allowed_objects(CollectionMap),
+    NotAllowedCols = not_allowed_objects(CollectionMap),
     [collections_filter(Bucket, Scope, AllowedCols)
-     || AllowedCols =/= []] ++ Acc.
+     || AllowedCols =/= [],
+        not ScopeAllowed] ++
+        [collections_exclusion(Bucket, Scope, NotAllowedCols)
+         || NotAllowedCols =/= [],
+            ScopeAllowed] ++ Acc.
 
 collections_filter(Bucket, Scope, Collections) ->
     {[{eq, "bucket", Bucket},
       {eq, "scope", Scope},
       {re, "collection", lists:join("|", Collections)}]}.
+
+collections_exclusion(Bucket, Scope, Collections) ->
+    {[{eq, "bucket", Bucket},
+      {eq, "scope", Scope},
+      {not_re, "collection", lists:join("|", Collections)}]}.
 
 verify_derived_metrics(Metrics) ->
     AllDerivedMetrics = all_derived_metrics(),

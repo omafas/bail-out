@@ -147,13 +147,17 @@ remove_trailing_any([B, S, any]) ->
 remove_trailing_any([B, S, C]) ->
     [B, S, C].
 
+get_params([] = Rest) ->
+    {[any, any, any], Rest};
 get_params([{bucket, B} | Rest]) ->
     {[B, any, any], Rest};
 get_params([{scope, [B, S]} | Rest]) ->
     {[B, S, any], Rest};
 get_params([{collection, [B, S, C]} | Rest]) ->
     {[B, S, C], Rest};
-get_params(Rest) ->
+get_params([O | _] = Rest) when is_atom(O) ->
+    %% We don't want to silently fail when there are invalid parameterisations,
+    %% so we need the first vertex to be an atom if it's not a known parameter
     {[any, any, any], Rest}.
 
 expand_collection_params({PermissionObject, Operations}, Snapshot) ->
