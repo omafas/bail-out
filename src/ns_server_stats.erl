@@ -588,7 +588,16 @@ report_ns_server_lc_stats(ReportMetricFun, ReportMetaFun) ->
     report_ns_server_stats_helper(Stats, ReportMetricFun, ReportMetaFun).
 
 report_ns_server_hc_stats(ReportMetricFun, ReportMetaFun) ->
-    Stats = ets:tab2list(?MODULE),
+    Stats = ets:foldl(
+              fun (M, AccIn) ->
+                      case lists:member(element(1, M),
+                                        low_cardinality_stats()) of
+                          true ->
+                              AccIn;
+                          false ->
+                              [M | AccIn]
+                      end
+              end, [], ?MODULE),
     report_ns_server_stats_helper(Stats, ReportMetricFun, ReportMetaFun).
 
 report_ns_server_stats_helper(Stats, ReportMetricFun, ReportMetaFun) ->
@@ -1704,26 +1713,26 @@ test_hc_stats() ->
        [<<"# TYPE cm_http_requests_total counter\n"
           "# HELP cm_http_requests_total Total number of HTTP requests "
           "categorized\n">>,
-        <<"cm_http_requests_total{code=\"200\",method=\"GET\",path="
+        <<"cm_http_requests_total{code=\"200\",method=\"PUT\",path="
+          "\"/pools/path2\",scheme=\"http\",user=\"user\"} 2\n">>,
+        <<"cm_http_requests_total{code=\"200\",method=\"PUT\",path="
           "\"/pools/path1\",scheme=\"http\",user=\"user\"} 1\n">>,
         <<"cm_http_requests_total{code=\"200\",method=\"GET\",path="
           "\"/pools/path2\",scheme=\"http\",user=\"user\"} 3\n">>,
-        <<"cm_http_requests_total{code=\"200\",method=\"PUT\",path="
+        <<"cm_http_requests_total{code=\"200\",method=\"GET\",path="
           "\"/pools/path1\",scheme=\"http\",user=\"user\"} 1\n">>,
-        <<"cm_http_requests_total{code=\"200\",method=\"PUT\",path="
-          "\"/pools/path2\",scheme=\"http\",user=\"user\"} 2\n">>,
         <<"# TYPE cm_outgoing_http_requests_total counter\n"
           "# HELP cm_outgoing_http_requests_total Total number of outgoing HTTP requests\n">>,
-        <<"cm_outgoing_http_requests_total{code=\"200\","
-          "type=\"indexer\"} 3\n">>,
-        <<"cm_outgoing_http_requests_total{code=\"200\","
-          "type=\"prometheus\"} 2\n">>,
-        <<"cm_outgoing_http_requests_total{code=\"202\","
-          "type=\"prometheus\"} 2\n">>,
-        <<"cm_outgoing_http_requests_total{code=\"400\","
-          "type=\"indexer\"} 2\n">>,
         <<"cm_outgoing_http_requests_total{code=\"400\","
           "type=\"prometheus\"} 1\n">>,
+        <<"cm_outgoing_http_requests_total{code=\"400\","
+          "type=\"indexer\"} 2\n">>,
+        <<"cm_outgoing_http_requests_total{code=\"202\","
+          "type=\"prometheus\"} 2\n">>,
+        <<"cm_outgoing_http_requests_total{code=\"200\","
+          "type=\"prometheus\"} 2\n">>,
+        <<"cm_outgoing_http_requests_total{code=\"200\","
+          "type=\"indexer\"} 3\n">>,
         <<"# TYPE cm_http_requests_seconds histogram\n"
           "# HELP cm_http_requests_seconds Number of bucket HTTP requests\n">>,
         <<"cm_http_requests_seconds_bucket{le=\"0.001\"} 0\n">>,
