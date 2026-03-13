@@ -19,6 +19,9 @@ cli() ->
         arguments => [
             #{name => report_dir, long => "-report-dir", required => true,
               help => "Directory where coverage reports will be generated"},
+            #{name => format, long => "-format", type => {atom, [html, txt, all]},
+              default => html,
+              help => "Output format: html, txt, or all (default: html)"},
             #{name => import_dirs, long => "-import-dirs", required => true,
               nargs => nonempty_list,
               help => "Coverage data directories to import"}
@@ -26,13 +29,14 @@ cli() ->
         handler => fun run/1
     }.
 
-run(#{report_dir := ReportDir, import_dirs := CoverageDirs}) ->
+run(#{report_dir := ReportDir, format := Format, import_dirs := CoverageDirs}) ->
     StartTime = erlang:monotonic_time(millisecond),
     ok = filelib:ensure_path(ReportDir ++ "/"),
     init_log(ReportDir),
     log("=== Coverage Report Generation ==="),
     log("Coverage dirs: ~p", [CoverageDirs]),
     log("Report dir: ~s", [ReportDir]),
+    log("Format: ~p", [Format]),
     maybe_start_cover(),
 
     %% Discover all .coverdata files from all directories
@@ -58,9 +62,23 @@ run(#{report_dir := ReportDir, import_dirs := CoverageDirs}) ->
     ImportedModules = cover:imported_modules(),
 
     HtmlDir = filename:join(ReportDir, "html"),
-    log("Generating HTML reports to ~s", [HtmlDir]),
-    generate_html_reports(ImportedModules, HtmlDir),
+    TxtDir = filename:join(ReportDir, "txt"),
+    %% Generate HTML reports (if requested)
+    case lists:member(Format, [html, all]) of
+        true ->
+            log("Generating HTML reports to ~s", [HtmlDir]),
+            generate_html_reports(ImportedModules, HtmlDir);
+        false ->
+            ok
+    end,
 
+    %% Generate TXT reports (if requested)
+    case lists:member(Format, [txt, all]) of
+        true ->
+            log("Generating TXT reports to ~s", [TxtDir]),
+            generate_txt_reports(ImportedModules, TxtDir);
+        false ->
+            ok
     end,
 
     %% Compute coverage summary
@@ -96,6 +114,15 @@ generate_html_reports(Modules, HtmlDir) ->
             log("  Generated ~p HTML reports", [length(Ok)]);
         {error, Reason} ->
             panic("Failed to generate HTML reports: ~p", [Reason])
+    end.
+
+generate_txt_reports(Modules, TxtDir) ->
+    ok = filelib:ensure_path(TxtDir ++ "/"),
+    case cover:analyse_to_file(Modules, [{outdir, TxtDir}]) of
+        {result, Ok, _Fail} ->
+            log("  Generated ~p TXT reports", [length(Ok)]);
+        {error, Reason} ->
+            panic("Failed to generate TXT reports: ~p", [Reason])
     end.
 
 init_log(ReportDir) ->

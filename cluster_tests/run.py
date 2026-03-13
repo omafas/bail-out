@@ -170,6 +170,11 @@ Usage: {{program_name}}
         Enable code coverage collection. A comma-separated list of module names
         or 'all' to scan all modules in ns_server/apps/*/src/.
         Disabled by default.
+    [--coverage-output-format=<html|txt|all>]
+        Output format for coverage report. Default: html.
+        html - HTML reports only
+        txt  - Text reports only (per-module .txt files)
+        all  - Both HTML and text reports
     [--help]
         Show this help
 """
@@ -243,6 +248,8 @@ def generate_coverage_report():
         print("No coverage data found - skipping report generation")
         return
 
+    coverage_format = testlib.config.get('coverage_output_format', 'html')
+
     print(f"Found coverage data in {len(cov_data_dirs)} cluster directories")
 
     report_dir = testlib.get_coverage_dir()
@@ -260,12 +267,14 @@ def generate_coverage_report():
 
     print(f"Output directory: {report_dir}")
     print(f"Coverage directories: {len(cov_data_dirs)}")
+    print(f"Coverage output format: {coverage_format}")
 
     try:
         # Build command for argparse:
-        # --report-dir <dir> --import-dirs <dir1> ...
+        # --report-dir <dir> --format <html|txt|all> --import-dirs <dir1> ...
         cmd = [escript_path, coverage_script_path,
                "--report-dir", report_dir,
+               "--format", coverage_format,
                "--import-dirs"] + cov_data_dirs
         ScriptTimeout = 1200
         result = subprocess.run(
@@ -390,7 +399,8 @@ def main():
                                            'test-timeout=',
                                            'no-res-alignment',
                                            'no-wrap',
-                                           'code-coverage-modules='])
+                                           'code-coverage-modules=',
+                                           'coverage-output-format='])
     except getopt.GetoptError as err:
         bad_args_exit(str(err))
 
@@ -499,6 +509,13 @@ def main():
             testlib.config['align_res'] = False
         elif o == '--no-wrap':
             testlib.config['wrap_output'] = False
+        elif o == '--coverage-output-format':
+            valid_formats = ['html', 'txt', 'all']
+            if a not in valid_formats:
+                bad_args_exit(f"Invalid coverage output format: {a}. "
+                              f"Must be one of {', '.join(valid_formats)}")
+            testlib.config['coverage_output_format'] = a
+            testlib.maybe_print(f"Coverage report output format: {a}")
         elif o in ('--list', '-l'):
             list_all_tests()
             exit(0)
