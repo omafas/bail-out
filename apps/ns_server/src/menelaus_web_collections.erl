@@ -146,41 +146,44 @@ collection_validators(DefaultAllowed, BucketConfig) ->
 handle_post_collection(Bucket, Scope, Req) ->
     assert_api_available(Bucket),
 
-    case ns_bucket:get_bucket(Bucket) of
-        {ok, BucketConf} ->
-            validator:handle(
-                fun (Values) ->
-                    Name = proplists:get_value(name, Values),
-                    RV = collections:create_collection(
-                        Bucket, Scope, Name, proplists:delete(name, Values)),
-                    maybe_audit(RV, Req,
-                        ns_audit:create_collection(_, Bucket, Scope, Name,
-                            _)),
-                    maybe_add_event_log(RV, Bucket, []),
-                    handle_rv(RV, collection_create, Req)
-                end, Req, form,
-                collection_validators(default_not_allowed, BucketConf));
+    maybe
+        {ok, BucketConf} ?= ns_bucket:get_bucket(Bucket),
+        validator:handle(
+          fun (Values) ->
+                  Name = proplists:get_value(name, Values),
+                  RV = collections:create_collection(
+                         Bucket, Scope, Name, proplists:delete(name, Values)),
+                  maybe_audit(RV, Req,
+                              ns_audit:create_collection(_, Bucket, Scope, Name,
+                                                         _)),
+                  maybe_add_event_log(RV, Bucket, []),
+                  handle_rv(RV, collection_create, Req)
+          end, Req, form,
+          collection_validators(default_not_allowed, BucketConf))
+    else
         not_present ->
             handle_rv({bucket_not_found, Bucket}, collection_create, Req)
     end.
 
 handle_patch_collection(Bucket, Scope, Name, Req) ->
     assert_api_available(Bucket),
-    case ns_bucket:get_bucket(Bucket) of
-        {ok, BucketConf} ->
-            validator:handle(
-                fun (Values) ->
-                    RV =  collections:modify_collection(
-                        Bucket, Scope, Name, proplists:delete(name, Values)),
-                    maybe_audit(RV, Req,
-                                ns_audit:modify_collection(_, Bucket, Scope,
-                                                           Name, _)),
-                    maybe_add_event_log(RV, Bucket, []),
-                    handle_rv(RV, collection_patch, Req)
-                end, Req, form,
-                collection_modifiable_validators(BucketConf) ++
-                % Don't allow any other params
-                [validator:unsupported(_)]);
+
+    maybe
+        {ok, BucketConf} ?= ns_bucket:get_bucket(Bucket),
+        validator:handle(
+          fun (Values) ->
+                  RV = collections:modify_collection(
+                         Bucket, Scope, Name, proplists:delete(name, Values)),
+                  maybe_audit(RV, Req,
+                              ns_audit:modify_collection(_, Bucket, Scope, Name,
+                                                         _)),
+                  maybe_add_event_log(RV, Bucket, []),
+                  handle_rv(RV, collection_patch, Req)
+          end, Req, form,
+          collection_modifiable_validators(BucketConf) ++
+              %% Don't allow any other params
+              [validator:unsupported(_)])
+    else
         not_present ->
             handle_rv({bucket_not_found, Bucket}, collection_patch, Req)
     end.
@@ -204,31 +207,32 @@ handle_set_manifest(Bucket, Req) ->
 
     ValidOnUid = proplists:get_value("validOnUid",
                                      mochiweb_request:parse_qs(Req)),
-    case ns_bucket:get_bucket(Bucket) of
-        {ok, BucketConf} ->
-            validator:handle(
-                fun (KVList) ->
-                    Scopes = proplists:get_value(scopes, KVList),
-                    AuthnRes = menelaus_auth:get_authn_res(Req),
-                    RV = collections:set_manifest(Bucket, AuthnRes, Scopes,
-                                                  ValidOnUid),
-                    InputManifest = mochiweb_request:recv_body(Req),
-                    maybe_audit(RV, Req,
-                                ns_audit:set_manifest(_, Bucket, InputManifest,
-                                                      ValidOnUid, _)),
-                    %% Add event logs for each of the specific operation performed.
-                    maybe_add_event_log(RV, Bucket, []),
-                    handle_rv(RV, manifest_set, Req)
-                end, Req, json,
-                [validator:required(scopes, _),
-                 validate_scopes(scopes, BucketConf, _),
-                 check_duplicates(scopes, _),
-                 validator:unsupported(_)]);
-        _ ->
-            handle_rv({error,
-                      io_lib:format("Could not get config for Bucket ~p",
-                                    [Bucket])},
-                      manifest_set, Req)
+    maybe
+        {ok, BucketConf} ?= ns_bucket:get_bucket(Bucket),
+        validator:handle(
+          fun (KVList) ->
+                  Scopes = proplists:get_value(scopes, KVList),
+                  AuthnRes = menelaus_auth:get_authn_res(Req),
+                  RV = collections:set_manifest(Bucket, AuthnRes, Scopes,
+                                                ValidOnUid),
+                  InputManifest = mochiweb_request:recv_body(Req),
+                  maybe_audit(RV, Req,
+                              ns_audit:set_manifest(_, Bucket, InputManifest,
+                                                    ValidOnUid, _)),
+                  %% Add event logs for each of the specific operation performed
+                  maybe_add_event_log(RV, Bucket, []),
+                  handle_rv(RV, manifest_set, Req)
+          end, Req, json,
+          [validator:required(scopes, _),
+           validate_scopes(scopes, BucketConf, _),
+           check_duplicates(scopes, _),
+           validator:unsupported(_)])
+    else
+        not_present ->
+            handle_rv(
+              {error,
+               io_lib:format("Could not get config for Bucket ~p", [Bucket])},
+              manifest_set, Req)
     end.
 
 check_duplicates(Name, State) ->
