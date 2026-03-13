@@ -913,6 +913,17 @@ class Cluster:
             sleep_time=sleep_time
         )
 
+    def ensure_coverage_modules_loaded(self):
+        module_list = testlib.config.get('code_coverage_modules')
+        if not module_list:
+            return
+        # Build Erlang list of strings: ["mod1","mod2",...]
+        mods_term = "[" + ",".join(f'"{m}"' for m in module_list) + "]"
+        code = f"cb_cover:ensure_loaded({mods_term})."
+        verbose = testlib.config['verbose']
+        testlib.post_succ(self, "/diag/eval", data=code, verbose=verbose)
+
+
 def get_services_string(services: List[Service]):
     return ",".join(services_to_strings(services))
 

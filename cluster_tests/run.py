@@ -681,6 +681,14 @@ def main():
         not_ran += testset_not_ran
         total_log_collection_time += log_collection_time
 
+    # Before the very last cluster gets stopped, we make sure all
+    # the modules for code coverage are loaded.
+    # By doing so, we make sure those modules that are not used at all
+    # (coverage==0%) will still be counted in the code coverage report.
+    # We don't do it on every cluster because it slows down the coverage
+    # calculation.
+    cluster.ensure_coverage_modules_loaded()
+
     if not cluster.is_existing_cluster():
         cluster.destroy()
 

@@ -28,7 +28,7 @@
 
 -module(cb_cover).
 
--export([export_coverage/2]).
+-export([export_coverage/2, ensure_loaded/1]).
 
 -record(bump, {module   = '_',              % atom()
                function = '_',              % atom()
@@ -113,7 +113,7 @@ export_coverdata_loop([ModuleStr | Rest], Fd, AvailableModules) ->
                               [Module, Exception]),
                     export_coverdata_loop(Rest, Fd, AvailableModules)
             end;
-        skip ->
+        {error, _} ->
             export_coverdata_loop(Rest, Fd, AvailableModules)
     end.
 
@@ -122,7 +122,7 @@ prepare_module(Module, _AvailableModules) when is_atom(Module) ->
         false -> %% Not loaded anyway
             io:format("Module ~p not loaded, skipping coverage export~n",
                       [Module]),
-            skip;
+            {error, not_loaded};
         {file, _} ->
             {ok, Module}
     end;
@@ -133,7 +133,7 @@ prepare_module(ModuleStr, AvailableModules) when is_list(ModuleStr) ->
         false ->
             io:format("Module ~s not found, skipping coverage export~n",
                       [ModuleStr]),
-            skip
+            {error, invalid_module}
     end.
 
 write_coverdata_file_header(Fd, Module, WhichFile) ->
@@ -144,3 +144,23 @@ write_coverdata_data(Fd, Module, CoverageData) ->
       fun({Line, Count}) ->
               write({#bump{module = Module, line = Line}, Count}, Fd)
       end, CoverageData).
+
+%% Ensure that the given modules are loaded so coverage data can be
+%% collected. For each module, if prepare_module returns not_loaded,
+%% we attempt to load it via code:ensure_loaded/1.
+%% The function is used in cluster tests.
+ensure_loaded(ModulesAsStrings) when is_list(ModulesAsStrings) ->
+    %% Before converting it to an atom, check if such module exists
+    AvailableModules = [Mod || {Mod, _, _} <- code:all_available()],
+    AvailableModulesSet = sets:from_list(AvailableModules),
+    lists:foreach(
+      fun(ModuleStr) ->
+            case prepare_module(ModuleStr, AvailableModulesSet) of
+                {ok, _} -> ok;
+                {error, invalid_module} -> ok;
+                {error, not_loaded} ->
+                    code:ensure_loaded(list_to_atom(ModuleStr)),
+                    ok
+            end
+      end, ModulesAsStrings),
+    ok.
