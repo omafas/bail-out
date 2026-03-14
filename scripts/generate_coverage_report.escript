@@ -100,6 +100,12 @@ run(#{report_dir := ReportDir, format := Format, import_dirs := CoverageDirs}) -
 
     %% Write summary.txt
     write_summary_file(ReportDir, SummaryMap),
+    write_jenkins_metric_file(ReportDir, "coverage_percentage.properties",
+                              maps:get(total_coverage, SummaryMap, 0.0)),
+    write_jenkins_metric_file(ReportDir, "covered_lines.properties",
+                              maps:get(total_covered_lines, SummaryMap, 0)),
+    write_jenkins_metric_file(ReportDir, "total_lines.properties",
+                              maps:get(total_lines, SummaryMap, 0)),
 
     %% Output JSON to stdout
     JSON = json:encode(SummaryMap),
@@ -228,6 +234,16 @@ write_summary_file(ReportDir, SummaryMap) ->
               || {Mod, Pct} <- SortedByPct]],
     ok = file:write_file(SummaryFile, Lines),
     log("Wrote summary to ~s", [SummaryFile]).
+
+write_jenkins_metric_file(ReportDir, FileName, Value) ->
+    MetricsFile = filename:join([ReportDir, "jenkins_metrics", FileName]),
+    filelib:ensure_dir(MetricsFile),
+    ValueStr = case is_integer(Value) of
+                   true -> integer_to_list(Value);
+                   false -> io_lib:format("~.2f", [Value])
+               end,
+    Data = io_lib:format("YVALUE=~s~n", [ValueStr]),
+    ok = file:write_file(MetricsFile, Data).
 
 disable_cover_output() ->
     case whereis(cover_server) of
