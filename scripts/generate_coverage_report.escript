@@ -167,21 +167,23 @@ compute_coverage_summary(Modules) ->
     log("Found ~p modules with coverage data", [length(Modules)]),
 
     %% Compute coverage for each module
-    {ModuleCoverage, TotalCov, TotalLines} = lists:foldl(
-        fun(Module, {ModAcc, CovAcc, TotalAcc}) ->
-            case cover:analyse(Module, coverage, module) of
-                {ok, {Module, {Cov, NotCov}}} ->
-                    Total = Cov + NotCov,
-                    Pct = if
-                              Total > 0 -> (Cov * 100) / Total;
-                              true -> 0.0
-                          end,
-                    log("  ~s: ~.2f%", [Module, Pct]),
-                    {ModAcc#{Module => Pct}, CovAcc + Cov, TotalAcc + Total};
-                {error, Reason} ->
-                    panic("Error analyzing ~s: ~p", [Module, Reason])
-            end
-        end, {#{}, 0, 0}, Modules),
+    {result, OkRes, FailRes} = cover:analyse(Modules, coverage, module),
+    case FailRes of
+        [] -> ok;
+        _ -> panic("Error analyzing: ~p", [FailRes])
+    end,
+    {ModuleCoverage, TotalCov, TotalLines} =
+        lists:foldl(
+          fun ({Module, {Cov, NotCov}}, {ModAcc, CovAcc, TotalAcc}) ->
+              Total = Cov + NotCov,
+              Pct = if
+                        Total > 0 -> (Cov * 100) / Total;
+                        true -> 0.0
+                    end,
+              log("  ~s: ~.2f% (Cov: ~p, NotCov: ~p)",
+                  [Module, Pct, Cov, NotCov]),
+              {ModAcc#{Module => Pct}, CovAcc + Cov, TotalAcc + Total}
+          end, {#{}, 0, 0}, OkRes),
 
     %% Calculate total coverage
     TotalPercentage = case TotalLines > 0 of
