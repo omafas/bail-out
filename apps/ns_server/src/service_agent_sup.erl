@@ -55,12 +55,13 @@ wanted_children() ->
         [S || S <- ns_cluster_membership:topology_aware_services(),
               ns_cluster_membership:should_run_service(Snapshot, S, node())],
 
-    %% We run cont_backup service_agent such that we can validate the bucket
-    %% config against it via the ServiceAPI.
-    AllServices = case ns_ports_setup:should_run(cont_backup, Snapshot) of
-                      true -> Services ++ [cont_backup];
-                      false -> Services
-                  end,
+    %% We run service_agents on these additional services so that we can
+    %% validate the bucket config against it via the ServiceAPI.
+    AdditionalServices =
+        [S || S <- [cont_backup, goxdcr],
+              ns_ports_setup:should_run(S, Snapshot)],
+
+    AllServices = Services ++ AdditionalServices,
     [{service_agent, S} || S <- AllServices].
 
 running_children() ->

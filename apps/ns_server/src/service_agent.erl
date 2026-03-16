@@ -214,12 +214,14 @@ resume_bucket(Service, Node, Id, Args, DryRun, Manager) ->
                      {resume_bucket, Id, Args, DryRun, Observer}},
                     ?OUTER_TIMEOUT).
 
-validate_bucket_config(cont_backup, Nodes, ConfigString, Options) ->
-    Result = multi_call(Nodes, cont_backup,
+validate_bucket_config(Service, Nodes, ConfigString,
+                       Options) when Service =:= cont_backup;
+                                     Service =:= goxdcr ->
+    Result = multi_call(Nodes, Service,
                         {validate_bucket_config, ConfigString,
                          Options},
                         ?OUTER_TIMEOUT),
-    handle_multicall_result(cont_backup, validate_bucket_config, Result,
+    handle_multicall_result(Service, validate_bucket_config, Result,
                             fun functools:id/1).
 
 %% gen_server callbacks

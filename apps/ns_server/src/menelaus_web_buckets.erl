@@ -1447,6 +1447,9 @@ parse_bucket_params_continue_via_services(
     ProposedBucket = [{type, proplists:get_value(bucketType, OKs)}] ++
         merge_proplists(CurrentBucket, OKs),
 
+    IsCcvBeingEnabled =
+        proplists:get_value(cross_cluster_versioning_enabled, OKs, false),
+
     %% We will pass parameters down as snake_case, since that is what
     %% the services use (memcached for historical reasons). If we fail to
     %% convert to snake_case, we ignore the parameter - unknown params are
@@ -1493,6 +1496,7 @@ parse_bucket_params_continue_via_services(
         validate_bucket_config_against_services(
           BucketConfigString,
           #{allow_internal_params => AllowInternalParams,
+            validate_ccv_en => IsCcvBeingEnabled,
             service_options => #{justReturnParams => false}}),
 
     %% If there are any errors, we should return them.
@@ -1537,8 +1541,7 @@ process_bucket_config_from_services(AcceptedKeys, OKs, OKsFromServices,
     UpdatedOKs = misc:update_proplist(OKs, [{extra_params, NewExtras}]),
     {ok, UpdatedOKs}.
 
-validate_bucket_config_against_services(BucketConfigString,
-                                        Options) ->
+validate_bucket_config_against_services(BucketConfigString, Options) ->
     %% Validate the params using with memcached and continuous backup. We will
     %% then merge the returned OKs and Errors into those that we generated in
     %% our config validation logic.
@@ -1547,6 +1550,8 @@ validate_bucket_config_against_services(BucketConfigString,
           [?cut(validate_bucket_config_with_memcached(BucketConfigString,
                                                       Options)),
            ?cut(maybe_validate_bucket_config_with_continuous_backup(
+                  BucketConfigString, Options)),
+           ?cut(maybe_validate_bucket_config_with_goxdcr(
                   BucketConfigString, Options))
           ]),
 
@@ -1605,36 +1610,33 @@ validate_bucket_config_with_memcached(BucketConfigString,
             {error, Error}
     end.
 
-validate_bucket_config_with_continuous_backup(Nodes, BucketConfigString,
-                                              Options) ->
+validate_bucket_config_with_service(Nodes, Service, BucketConfigString,
+                                    Options) ->
     #{service_options := ServiceOptions} = Options,
-    case service_agent:validate_bucket_config(cont_backup, Nodes,
+    case service_agent:validate_bucket_config(Service, Nodes,
                                               BucketConfigString,
                                               ServiceOptions) of
         All when is_list(All) ->
-            process_continuous_backup_validation_result(All,
-                                                        Options);
+            process_service_validation_result(All, Options);
         {error, Error} ->
             ale:error(?USER_LOGGER,
-                      "Error validating bucket config with continuous backup: "
-                      "~p",
-                      [Error]),
+                      "Error validating bucket config with ~p: ~p",
+                      [Service, Error]),
             {error, Error}
     end.
 
-process_continuous_backup_validation_result(AllResults,
-                                            Options) ->
+process_service_validation_result(AllResults, Options) ->
     R1 = lists:map(
            fun({_, {ok, NodeResult}}) ->
                    {ok, R} =
-                       process_one_node_continuous_backup_validation_result(
+                       process_one_node_service_validation_result(
                          NodeResult,
                          Options),
                    R
            end, AllResults),
     {ok, merge_service_bucket_config_validation_results(R1)}.
 
-process_one_node_continuous_backup_validation_result(NodeResult,
+process_one_node_service_validation_result(NodeResult,
                                                      Options) ->
     %% TODO MB-64129: When the service API uses json over ejson we can
     %% remove this.
@@ -1657,6 +1659,19 @@ maybe_validate_bucket_config_with_continuous_backup(BucketConfigString,
               BucketConfigString, Options)
     end.
 
+maybe_validate_bucket_config_with_goxdcr(BucketConfigString, Options) ->
+    case maps:get(validate_ccv_en, Options, false) of
+        false ->
+            {ok, {#{}, #{}}};
+        true ->
+            %% The purpose is to check with goxdcr on if CcvEn should be allowed
+            %% and it only needs to be checked against the local service on the
+            %% node
+            validate_bucket_config_with_service([node()],
+                                                 goxdcr, BucketConfigString,
+                                                 Options)
+    end.
+
 find_nodes_and_validate_bucket_config_with_continuous_backup(
   BucketConfigString, Options) ->
     KVNodes = ns_cluster_membership:service_active_nodes(kv),
@@ -1664,9 +1679,8 @@ find_nodes_and_validate_bucket_config_with_continuous_backup(
         [] ->
             erlang:exit("No live nodes found for continuous backup");
         Nodes ->
-            validate_bucket_config_with_continuous_backup(Nodes,
-                                                          BucketConfigString,
-                                                          Options)
+            validate_bucket_config_with_service(Nodes, cont_backup,
+                                                BucketConfigString, Options)
     end.
 
 process_service_bucket_config_validation_map(ValidationMap, Options) ->
