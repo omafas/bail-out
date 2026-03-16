@@ -142,25 +142,38 @@ cleanup_fusion_uploaders(Uploaders, Bucket, BucketConfig, Servers, Map) ->
     EnumeratedUploaders = lists:zip3(lists:seq(0, length(Uploaders) - 1),
                                      Uploaders, Map),
     FusionState = ns_bucket:get_fusion_state(BucketConfig),
-    lists:foreach(
-      fun (Node) ->
-              {ToStart, ToStop} =
-                  case FusionState of
-                      enabled ->
-                          {[{Vb, T} ||
-                               {Vb, {N, T}, Chain} <- EnumeratedUploaders,
-                               N =:= Node,
-                               lists:member(N, Chain)],
-                           [Vb || {Vb, {N, _}, Chain} <- EnumeratedUploaders,
-                                  N =/= Node,
-                                  lists:member(Node, Chain)]};
-                      _ ->
-                          {[], [Vb || {Vb, _, Chain} <- EnumeratedUploaders,
-                                      lists:member(Node, Chain)]}
-                  end,
-              janitor_agent:maybe_stop_fusion_uploaders(Node, Bucket, ToStop),
-              janitor_agent:maybe_start_fusion_uploaders(Node, Bucket, ToStart)
-      end, Servers).
+    {ToStartPerNode, ToStopPerNode} =
+        lists:foldl(
+          fun (Node, {AccToStart, AccToStop}) ->
+                  {ToStart, ToStop} =
+                      case FusionState of
+                          enabled ->
+                              {[{Vb, T} ||
+                                   {Vb, {N, T}, Chain} <- EnumeratedUploaders,
+                                   N =:= Node,
+                                   lists:member(N, Chain)],
+                               [Vb ||
+                                   {Vb, {N, _}, Chain} <- EnumeratedUploaders,
+                                   N =/= Node,
+                                   lists:member(Node, Chain)]};
+                          _ ->
+                              {[], [Vb || {Vb, _, Chain} <- EnumeratedUploaders,
+                                          lists:member(Node, Chain)]}
+                      end,
+                  {[{Node, ToStart} | AccToStart], [{Node, ToStop} | AccToStop]}
+          end, {[], []}, Servers),
+    case janitor_agent:maybe_stop_fusion_uploaders(Bucket, ToStopPerNode) of
+        ok -> ok;
+        Error -> ?log_debug(
+                    "Error ~p stopping fusion uploaders ~p for bucket ~p",
+                    [Error, ToStopPerNode, Bucket])
+    end,
+    case janitor_agent:maybe_start_fusion_uploaders(Bucket, ToStartPerNode) of
+        ok -> ok;
+        Error1 -> ?log_debug(
+                     "Error ~p starting fusion uploaders ~p for bucket ~p",
+                     [Error1, ToStartPerNode, Bucket])
+    end.
 
 repeat_bucket_config_cleanup(Bucket, Options) ->
     SnapShot =

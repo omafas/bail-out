@@ -75,8 +75,8 @@
          get_failover_logs/2,
          mount_volumes/4,
          cleanup_mounted_volumes/2,
-         maybe_start_fusion_uploaders/3,
-         maybe_stop_fusion_uploaders/3,
+         maybe_start_fusion_uploaders/2,
+         maybe_stop_fusion_uploaders/2,
          get_active_guest_volumes/2,
          get_fusion_sync_info/2,
          sync_fusion_log_store/1,
@@ -416,20 +416,22 @@ process_multicall_rv(BadReplies, BadNodes) ->
     {errors, [{N, bad_node} || N <- BadNodes] ++ BadReplies}.
 
 -spec maybe_start_fusion_uploaders(
-        node(), ns_bucket:name(), [{vbucket_id(), integer()}]) -> ok.
-maybe_start_fusion_uploaders(_Node, _Bucket, []) ->
-    ok;
-maybe_start_fusion_uploaders(Node, Bucket, Uploaders) ->
-    gen_server:cast({server_name(Bucket), Node},
-                    {maybe_start_fusion_uploaders, Uploaders}).
+        ns_bucket:name(), [{node(), [{vbucket_id(), integer()}]}]) ->
+          ok | {error, {failed_nodes, [node()]}}.
+maybe_start_fusion_uploaders(Bucket, NodesUploaders) ->
+    NodesCalls = [{N, {maybe_start_fusion_uploaders, Uploaders}} ||
+                     {N, Uploaders} <- NodesUploaders,
+                     Uploaders =/= []],
+    call_on_nodes(Bucket, NodesCalls, fun servant_call/3).
 
--spec maybe_stop_fusion_uploaders(node(), ns_bucket:name(),
-                                  [vbucket_id()]) -> ok.
-maybe_stop_fusion_uploaders(_Node, _Bucket, []) ->
-    ok;
-maybe_stop_fusion_uploaders(Node, Bucket, VBuckets) ->
-    gen_server:cast({server_name(Bucket), Node},
-                    {maybe_stop_fusion_uploaders, VBuckets}).
+-spec maybe_stop_fusion_uploaders(ns_bucket:name(),
+                                  [{node(), [vbucket_id()]}]) ->
+          ok | {error, {failed_nodes, [node()]}}.
+maybe_stop_fusion_uploaders(Bucket, NodesVBuckets) ->
+    NodesCalls = [{N, {maybe_stop_fusion_uploaders, VBuckets}} ||
+                     {N, VBuckets} <- NodesVBuckets,
+                     VBuckets =/= []],
+    call_on_nodes(Bucket, NodesCalls, fun servant_call/3).
 
 -spec get_active_guest_volumes(ns_bucket:name(), ns_bucket:config()) ->
           {error, {failed_nodes, [node()]}} | {ok, [{node(), [binary()]}]}.
@@ -838,6 +840,18 @@ handle_call(get_fusion_uploaders_state, From, State) ->
       fun (undefined, #state{bucket_name = Bucket}) ->
               ns_memcached:get_fusion_uploaders_state(Bucket)
       end);
+handle_call({maybe_start_fusion_uploaders, Uploaders}, From, State) ->
+    handle_call_via_servant(
+      From, State, undefined,
+      fun (undefined, #state{bucket_name = Bucket}) ->
+              ns_memcached:maybe_start_fusion_uploaders(Bucket, Uploaders)
+      end);
+handle_call({maybe_stop_fusion_uploaders, VBuckets}, From, State) ->
+    handle_call_via_servant(
+      From, State, undefined,
+      fun (undefined, #state{bucket_name = Bucket}) ->
+              ns_memcached:maybe_stop_fusion_uploaders(Bucket, VBuckets)
+      end);
 handle_call(Call, From, State) ->
     do_handle_call(Call, From, cleanup_rebalance_artifacts(Call, State)).
 
@@ -1089,24 +1103,6 @@ handle_cast({apply_vbucket_state_reply, ReplyPid, Call, Reply},
                        [ReplyPid, WorkerPid, Reply]),
             {noreply, State}
     end;
-handle_cast({maybe_start_fusion_uploaders, Uploaders},
-            #state{bucket_name = Bucket} = State) ->
-    case ns_memcached:maybe_start_fusion_uploaders(Bucket, Uploaders) of
-        ok ->
-            ok;
-        Error ->
-            ?log_error("Error starting fusion uploaders: ~p", [Error])
-    end,
-    {noreply, State};
-handle_cast({maybe_stop_fusion_uploaders, VBuckets},
-            #state{bucket_name = Bucket} = State) ->
-    case ns_memcached:maybe_stop_fusion_uploaders(Bucket, VBuckets) of
-        ok ->
-            ok;
-        Error ->
-            ?log_error("Error stopping fusion uploaders: ~p", [Error])
-    end,
-    {noreply, State};
 
 handle_cast(_, _State) ->
     erlang:error(cannot_do).
