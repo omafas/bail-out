@@ -53,7 +53,7 @@ mover(Parent, Bucket, VBucket, OldChain, NewChain, Quirks, Options) ->
               process_flag(trap_exit, true),
               mover_inner(Parent, Bucket, VBucket, OldChain, NewChain, Quirks,
                           Options),
-              on_move_done(Parent, Bucket, VBucket, OldChain, NewChain, Options)
+              on_move_done(Parent, Bucket, VBucket, OldChain, NewChain)
       end,
       fun () ->
               misc:sync_shutdown_many_i_am_trapping_exits(get_cleanup_list())
@@ -766,17 +766,17 @@ update_replication_post_move(RebalancerPid, BucketName, VBucket, OldChain, NewCh
            BucketName, RebalancerPid,
            VBucket, AddChanges ++ DelChanges).
 
-on_move_done(RebalancerPid, Bucket, VBucket, OldChain, NewChain, Options) ->
+on_move_done(RebalancerPid, Bucket, VBucket, OldChain, NewChain) ->
     WorkerPid = self(),
 
     spawn_and_wait(
       fun () ->
               on_move_done_body(RebalancerPid, WorkerPid,
-                                Bucket, VBucket, OldChain, NewChain, Options)
+                                Bucket, VBucket, OldChain, NewChain)
       end).
 
 on_move_done_body(RebalancerPid, WorkerPid, Bucket, VBucket, OldChain,
-                  [NewMaster | _] = NewChain, Options) ->
+                  [NewMaster | _] = NewChain) ->
     update_vbucket_map(RebalancerPid, WorkerPid, Bucket, VBucket),
 
     %% Set topology on the NewMaster.
@@ -786,25 +786,6 @@ on_move_done_body(RebalancerPid, WorkerPid, Bucket, VBucket, OldChain,
 
     update_replication_post_move(RebalancerPid, Bucket, VBucket, OldChain,
                                  NewChain),
-
-    case proplists:get_value(uploader, Options) of
-        undefined ->
-            ok;
-        {Node, Term} ->
-            case proplists:get_value(delete_uploader, Options) of
-                undefined ->
-                    ok;
-                OldUploader ->
-                    ?log_debug("Stopping uploader ~p on bucket ~p, vbucket ~p.",
-                               [OldUploader, Bucket, VBucket]),
-                    janitor_agent:maybe_stop_fusion_uploaders(
-                      OldUploader, Bucket, [VBucket])
-            end,
-            ?log_debug("Starting uploader ~p on bucket ~p, vbucket ~p with "
-                       "term ~p", [Node, Bucket, VBucket, Term]),
-            janitor_agent:maybe_start_fusion_uploaders(
-              Node, Bucket, [{VBucket, Term}])
-    end,
 
     OldCopies0 = OldChain -- NewChain,
     OldCopies = [OldCopyNode || OldCopyNode <- OldCopies0,

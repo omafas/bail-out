@@ -333,21 +333,6 @@ on_move_done(Worker, #state{bucket = Bucket,
     report_progress(NextState),
     spawn_workers(NextState).
 
-get_uploader_options(_VBucket, #state{uploaders = undefined,
-                                      uploader_moves = undefined}) ->
-    [];
-get_uploader_options(VBucket, #state{uploaders = FusionUploaders,
-                                     uploader_moves = FusionUploaderMoves}) ->
-    case array:get(VBucket, FusionUploaderMoves) of
-        same ->
-            [];
-        NewUploader ->
-            {CurrentUploaderNode, _} = array:get(VBucket, FusionUploaders),
-            [{uploader, NewUploader} |
-             [{delete_uploader, CurrentUploaderNode} ||
-                 CurrentUploaderNode =/= undefined]]
-    end.
-
 handle_update_vbucket_map(
   Worker, From,
   #state{map = Map, uploaders = FusionUploaders,
@@ -475,11 +460,9 @@ spawn_workers(#state{bucket = Bucket,
     end.
 
 spawn_worker({move, {VBucket, OldChain, NewChain, Quirks, Options}},
-             #state{bucket = Bucket} = State) ->
-    UploaderOptions = get_uploader_options(VBucket, State),
+             #state{bucket = Bucket}) ->
     Pid = ns_single_vbucket_mover:spawn_mover(
-            Bucket, VBucket, OldChain, NewChain, Quirks,
-            Options ++ UploaderOptions),
+            Bucket, VBucket, OldChain, NewChain, Quirks, Options),
     {ok, Pid};
 spawn_worker({compact, Node}, #state{bucket = Bucket}) ->
     case ets:take(compaction_inhibitions, Node) of
