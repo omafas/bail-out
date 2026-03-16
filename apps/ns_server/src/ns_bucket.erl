@@ -3201,8 +3201,18 @@ chronicle_upgrade_bucket_props_to_79(BucketName, ChronicleTxn) ->
                                   fun props_to_add_for_79/1).
 
 chronicle_upgrade_bucket_props_to_totoro(BucketName, ChronicleTxn) ->
-    chronicle_update_bucket_props(BucketName, ChronicleTxn,
-                                  fun props_to_add_for_totoro/1).
+    Txn2 = chronicle_update_bucket_props(BucketName, ChronicleTxn,
+                                         fun props_to_add_for_totoro/1),
+
+    CollectionsKey = sub_key(BucketName, collections),
+    case chronicle_upgrade:get_key(CollectionsKey, ChronicleTxn) of
+        {error, not_found} ->
+            Txn2;
+        {ok, Manifest} ->
+            NewManifest = collections:upgrade_to_totoro(Manifest),
+            chronicle_upgrade:set_key(CollectionsKey, NewManifest,
+                                      Txn2)
+    end.
 
 %% To enable the case where the user, under the guidance from Couchbase
 %% support, has preset "new" settings in the bucket config with values

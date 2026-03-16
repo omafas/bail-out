@@ -27,10 +27,13 @@
          uid/2,
          num_collections/2,
          manifest_json_for_memcached/2,
-         manifest_json_for_rest_response/3,
+         manifest_json_for_rest_response/4,
          create_scope/2,
          create_collection/4,
          modify_collection/4,
+         create_external_collection/4,
+         modify_external_collection/4,
+         drop_external_collection/3,
          drop_scope/2,
          drop_collection/3,
          system_collections/0,
@@ -56,6 +59,7 @@
          last_seen_ids_key/2,
          last_seen_ids_set/3,
          upgrade_to_76/2,
+         upgrade_to_totoro/1,
          history_retention_enabled/2]).
 
 %% rpc from other nodes
@@ -121,7 +125,12 @@ default_manifest(BucketConf) ->
         false ->
             manifest_without_system_scope(BucketConf);
         true ->
-            manifest_with_system_scope(BucketConf)
+            case are_external_collections_enabled() of
+                false->
+                    manifest_with_system_scope(BucketConf);
+                true ->
+                    manifest_with_external_collections(BucketConf)
+            end
     end.
 
 historic_default_collection_props() ->
@@ -216,8 +225,18 @@ manifest_with_system_scope(BucketConf) ->
         [{uid, 8},
          {collections, Collections}]}]}].
 
+manifest_with_external_collections(BucketConf) ->
+    manifest_with_system_scope(BucketConf) ++
+        starting_external_collection_counters().
+
+starting_external_collection_counters() ->
+    [{external_coll_manifest_uid, 0}].
+
 is_system_scope_enabled() ->
     cluster_compat_mode:is_cluster_76().
+
+are_external_collections_enabled() ->
+    cluster_compat_mode:is_cluster_totoro().
 
 %% Properties for collections within the _system scope.
 system_scope_collection_properties() ->
@@ -259,14 +278,23 @@ with_scope(Fun, ScopeName, Manifest) ->
     end.
 
 with_collection(Fun, ScopeName, CollectionName, Manifest) ->
+    with_collection(Fun, ScopeName, CollectionName, Manifest, false).
+
+with_collection(Fun, ScopeName, CollectionName, Manifest, IsExternal) ->
+    NotFound = {collection_not_found, ScopeName, CollectionName},
     with_scope(
       fun (Scope) ->
               Collections = get_collections(Scope),
               case find_collection(CollectionName, Collections) of
                   undefined ->
-                      {collection_not_found, ScopeName, CollectionName};
+                      NotFound;
                   Props ->
-                      Fun(Props)
+                      case is_collection_visible_for_req(Props, IsExternal) of
+                          true ->
+                              Fun(Props);
+                          false ->
+                              NotFound
+                      end
               end
       end, ScopeName, Manifest).
 
@@ -290,6 +318,9 @@ uid(Bucket, Snapshot) ->
 get_uid(Props) ->
     proplists:get_value(uid, Props).
 
+get_external_uid(Props) ->
+    proplists:get_value(external_coll_manifest_uid, Props).
+
 num_collections(Bucket, Snapshot) ->
     case get_manifest(Bucket, Snapshot) of
         undefined ->
@@ -309,10 +340,8 @@ convert_uid_from_memcached(V) when is_binary(V) ->
 uid(Props) ->
     convert_uid_to_memcached(get_uid(Props)).
 
-collection_prop_to_memcached(uid, V) ->
-    convert_uid_to_memcached(V);
-collection_prop_to_memcached(_, V) ->
-    V.
+external_uid(Props) ->
+    convert_uid_to_memcached(get_external_uid(Props)).
 
 %% The default collection properties. These properties may not be specified but
 %% can be inferred from the collections manifest if not specified. This has two
@@ -348,7 +377,12 @@ maybe_modify_props(Name, Props, ForRestResponse) ->
                 map_props_for_memcached(Props)
         end,
     {[{name, list_to_binary(Name)} |
-      [{K, collection_prop_to_memcached(K, V)} || {K, V} <- AdjustedProps]]}.
+      [format_prop(K, V) || {K, V} <- AdjustedProps]]}.
+
+format_prop(uid, V) ->
+    {uid, convert_uid_to_memcached(V)};
+format_prop(K, V)  ->
+    {K, V}.
 
 %% This function is needed to map properties used by ns_server into those
 %% used by memcached. This was done when the maxTTL bugs were resolved in
@@ -404,11 +438,11 @@ filter_collections_with_roles(Bucket, Scopes, Roles) ->
 %% to memcached.
 manifest_json_for_memcached(Bucket, Snapshot) ->
     Manifest = get_manifest(Bucket, Snapshot),
-    jsonify_manifest(Manifest, false).
+    jsonify_manifest(Manifest, false, false).
 
 %% Build the manifest with possible inferred values to return in REST
 %% results.
-manifest_json_for_rest_response(AuthnRes, Bucket, Snapshot) ->
+manifest_json_for_rest_response(AuthnRes, Bucket, Snapshot, IncludeExternal) ->
     Roles = menelaus_roles:get_compiled_roles(AuthnRes),
     {ok, BucketConfig} = ns_bucket:get_bucket(Bucket, Snapshot),
     DefaultManifest = default_manifest(BucketConfig),
@@ -416,14 +450,14 @@ manifest_json_for_rest_response(AuthnRes, Bucket, Snapshot) ->
     FilteredManifest = on_scopes(
                          filter_collections_with_roles(Bucket, _, Roles),
                          Manifest),
-    jsonify_manifest(FilteredManifest, true).
+    jsonify_manifest(FilteredManifest, true, IncludeExternal).
 
 %% If 'ForRestResponse' is true then certain values are inferred. This was
 %% done in releases prior to 7.6 to save space in the manifest (see
 %% default_collection_props()). But the inferred values lead to confusion
 %% and bugs. Note: Until the cluster compat mode is 7.6 we continue
 %% to support the inferred values.
-jsonify_manifest(Manifest, ForRestResponse) ->
+jsonify_manifest(Manifest, ForRestResponse, IncludeExternal) ->
     ScopesJson =
         lists:map(
           fun ({ScopeName, Scope}) ->
@@ -431,9 +465,15 @@ jsonify_manifest(Manifest, ForRestResponse) ->
                     {uid, uid(Scope)},
                     {collections,
                      [maybe_modify_props(CollName, Coll, ForRestResponse) ||
-                         {CollName, Coll} <- get_collections(Scope)]}]}
+                         {CollName, Coll} <- get_collections(Scope),
+                          proplists:is_defined(external, Coll) =:=
+                              IncludeExternal]}]}
           end, get_scopes(Manifest)),
-    {[{uid, uid(Manifest)}, {scopes, ScopesJson}]}.
+    Uid = case IncludeExternal of
+              false -> uid(Manifest);
+              true -> external_uid(Manifest)
+          end,
+    {[{uid, Uid}, {scopes, ScopesJson}]}.
 
 get_max_supported(num_scopes) ->
     MaxSupported = case cluster_compat_mode:is_cluster_totoro() of
@@ -480,6 +520,15 @@ create_collection(Bucket, Scope, Name, Props) ->
 modify_collection(Bucket, Scope, Name, Props) ->
     % Can't remove defaults here as we might be setting a value to the default
     update(Bucket, {modify_collection, Scope, Name, Props}).
+
+create_external_collection(Bucket, Scope, Name, Props) ->
+    update(Bucket, {create_external_collection, Scope, Name, Props}).
+
+modify_external_collection(Bucket, Scope, Name, Props) ->
+    update(Bucket, {modify_external_collection, Scope, Name, Props}).
+
+drop_external_collection(Bucket, Scope, Name) ->
+    update(Bucket, {drop_external_collection, Scope, Name}).
 
 drop_scope(Bucket, Name) ->
     update(Bucket, {drop_scope, Name}).
@@ -593,10 +642,24 @@ do_update_with_manifest(Snapshot, Bucket, Manifest, Operation,
 
 advance_manifest_id(bump_epoch, Manifest) ->
     Manifest;
+advance_manifest_id({Op, _, _, _}, Manifest)
+    when Op =:= create_external_collection orelse
+         Op =:= modify_external_collection orelse
+         Op =:= drop_external_collection ->
+    advance_external_collection_manifest_uid(Manifest);
 advance_manifest_id(_Operation, Manifest) ->
-    bump_id(lists:keyreplace(uid, 1, Manifest,
-                             {uid, proplists:get_value(next_uid, Manifest)}),
-            next_uid).
+    advance_collection_manifest_uid(uid, next_uid, Manifest).
+
+advance_external_collection_manifest_uid(Manifest) ->
+    advance_collection_manifest_uid(external_coll_manifest_uid,
+                                    next_uid,
+                                    Manifest).
+
+advance_collection_manifest_uid(UidKey, NextUidKey, Manifest) ->
+    bump_id(
+        lists:keyreplace(UidKey, 1, Manifest,
+                         {UidKey, proplists:get_value(NextUidKey, Manifest)}),
+        NextUidKey).
 
 perform_operations(_Manifest, {error, Error}, _BucketConf) ->
     Error;
@@ -893,6 +956,9 @@ create_collection_with_history_allowed(Name, Props, BucketConf) ->
             ok
     end.
 
+is_collection_visible_for_req(Props, IsExternal) ->
+    proplists:get_bool(external, Props) =:= IsExternal.
+
 verify_oper({check_uid, CheckUid}, Manifest, _BucketConf) ->
     ManifestUid = proplists:get_value(uid, Manifest),
     case CheckUid =:= ManifestUid orelse CheckUid =:= undefined of
@@ -931,7 +997,13 @@ verify_oper({drop_collection, ?SYSTEM_SCOPE_NAME, "_" ++ _ = CollectionName},
             _Manifest, _BucketConf) ->
     {cannot_drop_system_collection, ?SYSTEM_SCOPE_NAME, CollectionName};
 verify_oper({drop_collection, ScopeName, Name}, Manifest, _BucketConf) ->
-    with_collection(fun (_) -> ok end, ScopeName, Name, Manifest);
+    with_collection(
+      fun(Props) ->
+              case is_collection_visible_for_req(Props, false) of
+                  true -> ok;
+                  false -> {collection_not_found, ScopeName, Name}
+              end
+      end, ScopeName, Name, Manifest, false);
 verify_oper({modify_collection, ScopeName, Name, SuppliedProps},
             Manifest, BucketConf) ->
     functools:sequence_(
@@ -939,6 +1011,23 @@ verify_oper({modify_collection, ScopeName, Name, SuppliedProps},
               Name, SuppliedProps, BucketConf)),
        ?cut(modify_collection_allowed(
               ScopeName, Name, Manifest, SuppliedProps))]);
+verify_oper({create_external_collection, ?SYSTEM_SCOPE_NAME, _Name,
+             _SuppliedProps},
+            _Manifest, _BucketConf) ->
+    {cannot_create_collection_in_system_scope};
+verify_oper({create_external_collection, ScopeName, Name, _Props},
+            Manifest, _BucketConf) ->
+    create_collection_allowed(Name, ScopeName, Manifest);
+verify_oper({modify_external_collection, ScopeName, Name, _SuppliedProps},
+            Manifest, _BucketConf) ->
+    with_collection(fun (_) -> ok end, ScopeName, Name, Manifest, true);
+verify_oper({drop_external_collection, ?SYSTEM_SCOPE_NAME,
+             "_" ++ _ = CollectionName},
+            _Manifest, _BucketConf) ->
+    {cannot_drop_system_collection, ?SYSTEM_SCOPE_NAME, CollectionName};
+verify_oper({drop_external_collection, ScopeName, Name}, Manifest,
+            _BucketConf) ->
+    with_collection(fun (_) -> ok end, ScopeName, Name, Manifest, true);
 verify_oper(bump_epoch, _Manifest, _BucketConf) ->
     ok.
 
@@ -958,21 +1047,33 @@ handle_oper({create_collection, Scope, Name, Props}, Manifest, BucketConf) ->
                          ?INCREMENT_COUNTER);
 handle_oper({modify_collection, Scope, Name, Props}, Manifest, _BucketConf) ->
     modify_collection_props(Manifest, Name, Scope, Props);
+handle_oper({create_external_collection, Scope, Name, Props}, Manifest,
+            _BucketConf) ->
+    do_create_external_collection(Scope, Name, Props, Manifest,
+                                  ?INCREMENT_COUNTER);
+handle_oper({modify_external_collection, Scope, Name, Props}, Manifest,
+            _BucketConf) ->
+    modify_external_collection_props(Manifest, Name, Scope, Props);
 handle_oper({drop_collection, Scope, Name}, Manifest, _BucketConf) ->
-    NumCollections = case Name of
-                         "_default" -> 0;
-                         _ -> 1
-                     end,
-    functools:chain(
-      Manifest,
-      [delete_collection(_, Name, Scope),
-       update_counter(_, num_collections, -NumCollections)]);
+    handle_drop_collection(Scope, Name, Manifest);
+handle_oper({drop_external_collection, Scope, Name}, Manifest, _BucketConf) ->
+    handle_drop_collection(Scope, Name, Manifest);
 handle_oper(bump_epoch, Manifest, _BucketConf) ->
     functools:chain(
       Manifest,
       [bump_id(_, next_scope_uid, epoch()),
        bump_id(_, next_coll_uid, epoch()),
        bump_id(_, next_uid, epoch())]).
+
+handle_drop_collection(Scope, Name, Manifest) ->
+    NumCollections = case Name of
+                         "_default" -> 0;
+                         _ -> 1
+                     end,
+    functools:chain(
+        Manifest,
+        [delete_collection(_, Name, Scope),
+         update_counter(_, num_collections, -NumCollections)]).
 
 do_create_scope(Name, Manifest, Increment) ->
     functools:chain(
@@ -987,6 +1088,13 @@ do_create_collection(Scope, Name, Props, Manifest, BucketConf, Increment) ->
       [add_collection(_, Name, Scope, Props, BucketConf),
        bump_id(_, next_coll_uid),
        update_counter(_, num_collections, Increment)]).
+
+do_create_external_collection(Scope, Name, Props, Manifest, Increment) ->
+    functools:chain(
+        Manifest,
+        [add_external_collection(_, Name, Scope, Props),
+         bump_id(_, next_coll_uid),
+         update_counter(_, num_collections, Increment)]).
 
 get_counter(Manifest, Counter) ->
     proplists:get_value(Counter, Manifest).
@@ -1080,6 +1188,14 @@ add_collection(Manifest, Name, ScopeName, SuppliedProps, BucketConf) ->
     on_collections([{Name, [{uid, Uid} | SanitizedProps]} | _], ScopeName,
                    Manifest).
 
+add_external_collection(Manifest, Name, ScopeName, SuppliedProps) ->
+    Uid = proplists:get_value(next_coll_uid, Manifest),
+    on_collections([{Name,
+                     [{uid, Uid},
+                      {external, true}] ++ SuppliedProps} | _],
+                   ScopeName,
+                   Manifest).
+
 maybe_add_metered(Props, ScopeName) ->
     case config_profile:get_bool(enable_metered_collections) andalso
          ScopeName =/= ?SYSTEM_SCOPE_NAME of
@@ -1107,6 +1223,20 @@ modify_collection_props(Manifest, Name, ScopeName, DesiredProps) ->
                     Collections
             end
         end, ScopeName, Manifest).
+
+modify_external_collection_props(Manifest, Name, ScopeName, DesiredProps) ->
+    on_collections(
+      fun (Collections) ->
+              {Name, CurrentProps} = lists:keyfind(Name, 1, Collections),
+              NewProps = misc:update_proplist(CurrentProps, DesiredProps),
+              case lists:sort(NewProps) =:= lists:sort(CurrentProps) of
+                  false ->
+                      lists:keyreplace(Name, 1, Collections, {Name, NewProps});
+                  true ->
+                      %% Don't update the collection if there is no change
+                      Collections
+              end
+      end, ScopeName, Manifest).
 
 delete_collection(Manifest, Name, ScopeName) ->
     on_collections(lists:keydelete(Name, 1, _), ScopeName, Manifest).
@@ -1321,6 +1451,10 @@ upgrade_to_76(ManifestIn, BucketConfig) ->
     %% manifest.
     advance_manifest_id(upgrade, Manifest2).
 
+upgrade_to_totoro(ManifestIn) ->
+    %% Just need to add the external collection counters
+    ManifestIn ++ starting_external_collection_counters().
+
 maybe_add_collection_props(BucketConfig, Scopes) ->
     lists:map(
       fun ({ScopeName, ScopeProps}) ->
@@ -1464,6 +1598,18 @@ update_manifest_test_set_manifest(Manifest, NewScopes) ->
 
     update_with_manifest(Manifest,
                          {set_manifest, Roles, NewScopes, ValidOnUid}).
+
+update_manifest_test_create_external_collection(
+  Manifest, Scope, Name, Props) ->
+    update_with_manifest(
+      Manifest,
+      {create_external_collection, Scope, Name, Props}).
+
+update_manifest_test_modify_external_collection(
+  Manifest, Scope, Name, Props) ->
+    update_with_manifest(
+      Manifest,
+      {modify_external_collection, Scope, Name, Props}).
 
 get_bucket_config(Bucket) ->
     Snapshot = ns_bucket:get_snapshot(Bucket, [props]),
@@ -2163,6 +2309,192 @@ set_manifest_t() ->
     ?assertEqual([{maxTTL, ?USE_BUCKET_MAXTTL}, {uid, 8}, {history, true}],
                  get_collection("c1", get_scope("s1", Manifest5_4))).
 
+create_external_collection_t() ->
+    {ok, BucketConf} = get_bucket_config("bucket"),
+    Manifest = default_manifest(BucketConf),
+
+    %% Create an external collection in _default scope.
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_external_collection(
+          Manifest, "_default", "ext1", []),
+    ExtColl1 = get_collection("ext1", get_scope("_default", Manifest1)),
+    ?assertEqual(10, get_uid(ExtColl1)),
+    ?assert(proplists:get_value(external, ExtColl1)),
+
+    %% External collection create increments next coll uid counter.
+    ?assertEqual(11, proplists:get_value(next_coll_uid, Manifest1)),
+
+    %% Can't create external collection with same name.
+    ?assertEqual(
+       {abort,
+        {error,
+         {collection_already_exists, "_default", "ext1"}}},
+       update_manifest_test_create_external_collection(
+         Manifest1, "_default", "ext1", [])),
+
+    %% Can create external collection in a user scope.
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_create_scope(Manifest1, "s1"),
+    {commit, [{_, _, Manifest3}], _} =
+        update_manifest_test_create_external_collection(
+          Manifest2, "s1", "ext2", [{someKey, someVal}]),
+    ExtColl2 = get_collection("ext2", get_scope("s1", Manifest3)),
+    ?assertEqual(11, get_uid(ExtColl2)),
+    ?assert(proplists:get_value(external, ExtColl2)),
+    ?assertEqual(someVal, proplists:get_value(someKey, ExtColl2)),
+
+    %% Can't create external collection in _system scope.
+    ?assertEqual(
+       {abort,
+        {error,
+         {cannot_create_collection_in_system_scope}}},
+       update_manifest_test_create_external_collection(
+         Manifest1, "_system", "ext_sys", [])).
+
+modify_external_collection_t() ->
+    {ok, BucketConf} = get_bucket_config("bucket"),
+    Manifest = default_manifest(BucketConf),
+
+    %% Create with initial properties.
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_external_collection(
+          Manifest, "_default", "ext1",
+          [{foo, bar}, {key, val}]),
+    ExtColl1 = get_collection(
+                 "ext1", get_scope("_default", Manifest1)),
+    ?assertEqual(bar, proplists:get_value(foo, ExtColl1)),
+    ?assertEqual(val, proplists:get_value(key, ExtColl1)),
+
+    %% Modify one property value.
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_modify_external_collection(
+          Manifest1, "_default", "ext1",
+          [{foo, baz}]),
+    ExtColl2 = get_collection(
+                 "ext1", get_scope("_default", Manifest2)),
+    ?assertEqual(baz, proplists:get_value(foo, ExtColl2)),
+    %% uid and external marker are preserved.
+    ?assertEqual(10, get_uid(ExtColl2)),
+    ?assert(proplists:get_value(external, ExtColl2)),
+
+    %% Modifying with same props is a no-op.
+    {abort, {not_changed, _}} =
+        update_manifest_test_modify_external_collection(
+          Manifest2, "_default", "ext1",
+          [{foo, baz}]),
+
+    %% Modify in a non-default scope.
+    {commit, [{_, _, Manifest3}], _} =
+        update_manifest_test_create_scope(Manifest2, "s1"),
+    {commit, [{_, _, Manifest4}], _} =
+        update_manifest_test_create_external_collection(
+          Manifest3, "s1", "ext2",
+          [{prop1, a}, {prop2, b}]),
+    {commit, [{_, _, Manifest5}], _} =
+        update_manifest_test_modify_external_collection(
+          Manifest4, "s1", "ext2",
+          [{prop1, c}]),
+    ExtColl5 = get_collection(
+                 "ext2", get_scope("s1", Manifest5)),
+    ?assertEqual(c, proplists:get_value(prop1, ExtColl5)),
+    ?assertEqual(b, proplists:get_value(prop2, ExtColl5)),
+    ?assert(proplists:get_value(external, ExtColl5)).
+
+external_collection_manifest_uid_t() ->
+    {ok, BucketConf} = get_bucket_config("bucket"),
+    Manifest = default_manifest(BucketConf),
+
+    %% Initial external manifest uid is 0.
+    ?assertEqual(0, get_external_uid(Manifest)),
+    ?assertEqual(1, get_uid(Manifest)),
+    ?assertEqual(2, proplists:get_value(next_uid, Manifest)),
+
+    %% Creating an external collection bumps the external manifest uid and not
+    %% the normal one
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_external_collection(
+          Manifest, "_default", "ext1", []),
+    ?assertEqual(2, get_external_uid(Manifest1)),
+    ?assertEqual(1, get_uid(Manifest1)),
+    ?assertEqual(3, proplists:get_value(next_uid, Manifest1)),
+
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_create_external_collection(
+          Manifest1, "_default", "ext2", []),
+    ?assertEqual(3, get_external_uid(Manifest2)),
+    ?assertEqual(1, get_uid(Manifest2)),
+    ?assertEqual(4, proplists:get_value(next_uid, Manifest2)),
+
+    %% Creating a regular collection should NOT bump the
+    %% external manifest uid.
+    {commit, [{_, _, Manifest3}], _} =
+        update_manifest_test_create_collection(
+          Manifest2, "_default", "c1", []),
+    ?assertEqual(3, get_external_uid(Manifest3)),
+    ?assertEqual(4, get_uid(Manifest3)),
+    ?assertEqual(5, proplists:get_value(next_uid, Manifest3)).
+
+external_collection_filtering_t() ->
+    {ok, BucketConf} = get_bucket_config("bucket"),
+    Manifest = default_manifest(BucketConf),
+
+    %% Create a regular and an external collection.
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_collection(
+          Manifest, "_default", "c1", []),
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_create_external_collection(
+          Manifest1, "_default", "ext1", []),
+
+    %% jsonify with IncludeExternal=false should exclude
+    %% external collections.
+    {JsonProps} = jsonify_manifest(Manifest2, true, false),
+    [{ScopeJson}] =
+        [S || S <- proplists:get_value(scopes, JsonProps),
+              proplists:get_value(
+                name, element(1, S)) =:= <<"_default">>],
+    DefaultColls = proplists:get_value(
+                     collections, ScopeJson),
+    DefaultCollNames =
+        [proplists:get_value(name, element(1, C))
+         || C <- DefaultColls],
+    ?assert(lists:member(<<"c1">>, DefaultCollNames)),
+    ?assert(lists:member(<<"_default">>, DefaultCollNames)),
+    ?assertNot(lists:member(<<"ext1">>, DefaultCollNames)),
+
+    %% jsonify with IncludeExternal=true should include
+    %% only external collections.
+    {ExtJsonProps} = jsonify_manifest(
+                       Manifest2, true, true),
+    [{ExtScopeJson}] =
+        [S || S <- proplists:get_value(
+                     scopes, ExtJsonProps),
+              proplists:get_value(
+                name, element(1, S)) =:= <<"_default">>],
+    ExtColls = proplists:get_value(
+                 collections, ExtScopeJson),
+    ExtCollNames =
+        [proplists:get_value(name, element(1, C))
+         || C <- ExtColls],
+    ?assert(lists:member(<<"ext1">>, ExtCollNames)),
+    ?assertNot(lists:member(<<"c1">>, ExtCollNames)),
+    ?assertNot(lists:member(
+                 <<"_default">>, ExtCollNames)).
+
+upgrade_to_totoro_t() ->
+    ManifestIn = [{uid, 1},
+                  {next_uid, 2},
+                  {next_scope_uid, 9},
+                  {next_coll_uid, 10},
+                  {num_scopes, 0},
+                  {num_collections, 0},
+                  {scopes, []}],
+    ManifestOut = upgrade_to_totoro(ManifestIn),
+    ?assertEqual(
+       0,
+       proplists:get_value(
+         external_coll_manifest_uid, ManifestOut)).
+
 %% The _system scope gets added on upgrade containing service-specific
 %% collections for query and mobile.
 upgrade_to_76_system_scope_t() ->
@@ -2231,7 +2563,21 @@ basic_collections_manifest_test_() ->
       {"upgrade to 7.6 test (system scope)",
        fun() -> upgrade_to_76_system_scope_t() end},
       {"upgrade to 7.6 test (collection history)",
-       fun() -> upgrade_to_76_collection_history_t() end}]}.
+       fun() -> upgrade_to_76_collection_history_t() end},
+      {"create external collection test",
+       fun() -> create_external_collection_t() end},
+      {"modify external collection test",
+       fun() -> modify_external_collection_t() end},
+      {"external collection manifest uid test",
+       fun() ->
+               external_collection_manifest_uid_t()
+       end},
+      {"external collection filtering test",
+       fun() ->
+               external_collection_filtering_t()
+       end},
+      {"upgrade to totoro test",
+       fun() -> upgrade_to_totoro_t() end}]}.
 
 create_snapshot(Bucket, Props) ->
     Manifest =

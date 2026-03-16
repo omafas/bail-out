@@ -32,9 +32,10 @@
          name_validator/1]).
 
 handle_get(Bucket, Req) ->
+    External = is_req_external(Req),
     menelaus_util:reply_json(
       Req, collections:manifest_json_for_rest_response(
-             menelaus_auth:get_authn_res(Req), Bucket, direct)).
+             menelaus_auth:get_authn_res(Req), Bucket, direct, External)).
 
 handle_post_scope(Bucket, Req) ->
     assert_api_available(Bucket),
@@ -99,14 +100,18 @@ scope_validators(default_not_allowed) ->
     scope_validators([]);
 scope_validators(special_allowed) ->
     scope_validators(["_default", ?SYSTEM_SCOPE_NAME] ++
-                     collections:system_collections());
+                         collections:system_collections());
 scope_validators(Exceptions) ->
+    scope_validators_without_unsupported(Exceptions) ++
+        [validator:unsupported(_)].
+
+scope_validators_without_unsupported(Exceptions) ->
     [validator:required(name, _),
      validator:string(name, _),
      validator:length(name, 1, 251, _),
      name_validator(_),
-     name_first_char_validator(_, Exceptions),
-     validator:unsupported(_)].
+     name_first_char_validator(_, Exceptions)].
+
 
 %% "history" can only be true for magma buckets.
 history_validator(BucketConfig, State) ->
@@ -141,52 +146,108 @@ collection_modifiable_validators(BucketConfig) ->
 
 collection_validators(DefaultAllowed, BucketConfig) ->
     collection_modifiable_validators(BucketConfig) ++
-     scope_validators(DefaultAllowed).
+        scope_validators(DefaultAllowed).
+
+external_collection_validators() ->
+    [validator:no_duplicate_keys(_)] ++
+        scope_validators_without_unsupported([]).
 
 handle_post_collection(Bucket, Scope, Req) ->
     assert_api_available(Bucket),
 
     maybe
         {ok, BucketConf} ?= ns_bucket:get_bucket(Bucket),
-        validator:handle(
-          fun (Values) ->
-                  Name = proplists:get_value(name, Values),
-                  RV = collections:create_collection(
-                         Bucket, Scope, Name, proplists:delete(name, Values)),
-                  maybe_audit(RV, Req,
-                              ns_audit:create_collection(_, Bucket, Scope, Name,
-                                                         _)),
-                  maybe_add_event_log(RV, Bucket, []),
-                  handle_rv(RV, collection_create, Req)
-          end, Req, form,
-          collection_validators(default_not_allowed, BucketConf))
+        ExternalCollection = is_req_external(Req),
+
+        case ExternalCollection of
+            false ->
+                handle_post_couchbase_collection(Bucket, Scope, Req,
+                                                 BucketConf);
+            true ->
+                handle_post_external_collection(Bucket, Scope, Req)
+        end
     else
         not_present ->
             handle_rv({bucket_not_found, Bucket}, collection_create, Req)
     end.
+
+handle_post_couchbase_collection(Bucket, Scope, Req, BucketConf) ->
+    validator:handle(
+      fun (Values) ->
+              Name = proplists:get_value(name, Values),
+              RV = collections:create_collection(
+                     Bucket, Scope, Name, proplists:delete(name, Values)),
+              maybe_audit(RV, Req,
+                          ns_audit:create_collection(_, Bucket, Scope, Name,
+                                                     _)),
+              maybe_add_event_log(RV, Bucket, []),
+              handle_rv(RV, collection_create, Req)
+      end, Req, form,
+      collection_validators(default_not_allowed, BucketConf)).
+
+handle_post_external_collection(Bucket, Scope, Req) ->
+    menelaus_util:assert_is_totoro(),
+    validator:handle(
+      fun (Values) ->
+              Name = proplists:get_value(name, Values),
+              RV = collections:create_external_collection(
+                     Bucket, Scope, Name, proplists:delete(name, Values)),
+              maybe_audit(RV, Req,
+                          ns_audit:create_collection(_, Bucket, Scope, Name,
+                                                     _)),
+              maybe_add_event_log(RV, Bucket, []),
+              handle_rv(RV, collection_create, Req)
+      end, Req, form,
+      external_collection_validators() ++ [validator:unsupported(_)]).
 
 handle_patch_collection(Bucket, Scope, Name, Req) ->
     assert_api_available(Bucket),
 
     maybe
         {ok, BucketConf} ?= ns_bucket:get_bucket(Bucket),
-        validator:handle(
-          fun (Values) ->
-                  RV = collections:modify_collection(
-                         Bucket, Scope, Name, proplists:delete(name, Values)),
-                  maybe_audit(RV, Req,
-                              ns_audit:modify_collection(_, Bucket, Scope, Name,
-                                                         _)),
-                  maybe_add_event_log(RV, Bucket, []),
-                  handle_rv(RV, collection_patch, Req)
-          end, Req, form,
-          collection_modifiable_validators(BucketConf) ++
-              %% Don't allow any other params
-              [validator:unsupported(_)])
+        ExternalCollection = is_req_external(Req),
+        case ExternalCollection of
+            false ->
+                handle_patch_couchbase_collection(Bucket, Scope, Name, Req,
+                                                  BucketConf);
+            true ->
+                handle_patch_external_collection(Bucket, Scope, Name, Req)
+        end
     else
         not_present ->
             handle_rv({bucket_not_found, Bucket}, collection_patch, Req)
     end.
+
+handle_patch_couchbase_collection(Bucket, Scope, Name, Req, BucketConf) ->
+    validator:handle(
+      fun (Values) ->
+              RV = collections:modify_collection(
+                     Bucket, Scope, Name, proplists:delete(name, Values)),
+              maybe_audit(RV, Req,
+                          ns_audit:modify_collection(_, Bucket, Scope, Name,
+                                                     _)),
+              maybe_add_event_log(RV, Bucket, []),
+              handle_rv(RV, collection_patch, Req)
+      end, Req, form,
+      collection_modifiable_validators(BucketConf) ++
+          %% Don't allow any other params
+          [validator:unsupported(_)]).
+
+handle_patch_external_collection(Bucket, Scope, Name, Req) ->
+    menelaus_util:assert_is_totoro(),
+    validator:handle(
+      fun (Values) ->
+              RV = collections:modify_external_collection(
+                     Bucket, Scope, Name, proplists:delete(name, Values)),
+              maybe_audit(RV, Req,
+                          ns_audit:modify_collection(_, Bucket, Scope, Name,
+                                                     _)),
+              maybe_add_event_log(RV, Bucket, []),
+              handle_rv(RV, collection_patch, Req)
+      end, Req, form,
+      [validator:prohibited(name, _),
+       validator:no_duplicate_keys(_),
+       validator:unsupported(_)]).
 
 handle_delete_scope(Bucket, Name, Req) ->
     assert_api_available(Bucket),
@@ -197,7 +258,14 @@ handle_delete_scope(Bucket, Name, Req) ->
 
 handle_delete_collection(Bucket, Scope, Name, Req) ->
     assert_api_available(Bucket),
-    RV = collections:drop_collection(Bucket, Scope, Name),
+    ExternalCollection = is_req_external(Req),
+    RV =
+        case ExternalCollection of
+            false -> collections:drop_collection(Bucket, Scope, Name);
+            true ->
+                menelaus_util:assert_is_totoro(),
+                collections:drop_external_collection(Bucket, Scope, Name)
+        end,
     maybe_audit(RV, Req, ns_audit:drop_collection(_, Bucket, Scope, Name, _)),
     maybe_add_event_log(RV, Bucket, []),
     handle_rv(RV, collection_delete, Req).
@@ -447,6 +515,9 @@ handle_rv(Error, Type, Req) ->
 reply_global_error(Req, Msg, Code) ->
     menelaus_util:reply_json(
       Req, {[{errors, {[{<<"_">>, iolist_to_binary(Msg)}]}}]}, Code).
+
+is_req_external(Req) ->
+    proplists:get_value("external", mochiweb_request:parse_qs(Req)) =:= "1".
 
 -ifdef(TEST).
 bucket_config_not_found_when_posting_collections_test() ->
