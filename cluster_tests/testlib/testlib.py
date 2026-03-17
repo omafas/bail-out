@@ -1069,6 +1069,10 @@ def get_scripts_dir():
     return os.path.join(NS_SERVER_DIR, 'scripts')
 
 
+def get_etc_dir():
+    return os.path.join(NS_SERVER_DIR, 'etc')
+
+
 def print_wrapped(str_to_print, indent=0, suffix="", max_width=None,
                   separators=None, **kwargs):
     if separators is None:

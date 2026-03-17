@@ -94,9 +94,9 @@ class StatsValidator:
         # to be added to the file.
         if self.unknown_stats:
             print("\nStats returned by endpoints with no entry in the "
-                  "descriptions file. This is a bug!\n")
+                  "descriptions file. This is a bug!\n", file=sys.stderr)
             for item in self.unknown_stats:
-                print(f"{item}")
+                print(f"{item}", file=sys.stderr)
 
         # Print stats present in the description file but not returned
         # in the stats endpoints results. This may be ok as the workload
@@ -132,10 +132,11 @@ class StatsValidator:
                               if len(apis) > 1}
 
             if duplicate_stats:
-                print("\nStats found in more than one endpoint:\n")
+                print("\nStats found in more than one endpoint:\n",
+                      file=sys.stderr)
                 for stat in sorted(duplicate_stats.keys()):
                     apis_string = ", ".join(duplicate_stats[stat])
-                    print(f"{stat} (found in: {apis_string})")
+                    print(f"{stat} (found in: {apis_string})", file=sys.stderr)
 
     def known_stat(self, stat_name):
         if stat_name in self.json_data:

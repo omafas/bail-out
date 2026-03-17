@@ -10,8 +10,10 @@ import testlib
 import time
 import math
 import sys
+import subprocess
 from pprint import pprint
 import requests
+import os
 
 from testlib.test_tag_decorator import tag, Tag
 from testlib.util import Service
@@ -411,6 +413,29 @@ class StatsTests(testlib.BaseTestSet):
 
         testlib.poll_for_condition(node_unreachable_metric_recorded,
                                    sleep_time=2, timeout=60)
+
+    # Run validate_stats.py script to validate stats against metrics_metadata.json
+    @tag(Tag.LowUrgency)
+    def validate_stats_file_test(self):
+        script_path = os.path.join(testlib.get_scripts_dir(),
+                                   "validate_stats.py")
+        descriptors_path = os.path.join(testlib.get_etc_dir(),
+                                        "metrics_metadata.json")
+        node = self.from_node()
+        cluster_address = node.hostname()
+
+        cmd = ["python3", script_path, "-u", self.cluster.auth[0],
+               "-p", self.cluster.auth[1], "-c", cluster_address,
+               "-d", descriptors_path]
+
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                               timeout=300)
+
+        assert result.returncode == 0, \
+               f"validate_stats.py failed with return code {result.returncode}"
+
+        if result.stderr:
+            assert result.stderr == None, f"{result.stderr}"
 
 
 def make_prometheus_query(node, statname):
