@@ -286,8 +286,17 @@ get_validation_config_string_internal(BucketName, BucketConfig,
                                       RequestedChanges) ->
     BucketType = proplists:get_value(type, BucketConfig),
     MemQuota = proplists:get_value(ram_quota, BucketConfig),
-    ExistingParams = params_without_extras(BucketType, "BucketName",
-                                           BucketConfig, MemQuota, "UUID",
+
+    %% Prior to bucket creation, we don't know UUID so it is not needed for
+    %% validation. For bucket updates, we can provide it
+    UUID = case ns_bucket:uuid(BucketName, direct) of
+               not_present ->
+                   "undefined";
+               Value ->
+                   Value
+           end,
+    ExistingParams = params_without_extras(BucketType, BucketName,
+                                           BucketConfig, MemQuota, UUID,
                                            "DBSubDir"),
     ExistingParamsKeys = proplists:get_keys(ExistingParams),
     ExistingExtraParams = get_extra_params(BucketConfig),
