@@ -1022,7 +1022,8 @@ func (state *StoredKeysState) writeKeyToFile(keyIface storedKeyIface, curVsn int
 	if err != nil {
 		return fmt.Errorf("failed to create dir for file %s: %s", keyPath, err.Error())
 	}
-	err = atomicWriteFile(keyPath, finalData, 0640)
+	tmpPattern := "tmp_" + strings.ReplaceAll(filepath.Base(keyPath), ".key.", "_") + "_*"
+	err = atomicWriteFileWithPattern(keyPath, finalData, 0640, tmpPattern)
 	if err != nil {
 		return fmt.Errorf("failed to write key %s to file %s: %s", keyIface.name(), keyPath, err.Error())
 	}

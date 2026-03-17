@@ -87,8 +87,11 @@ func aesgcmDecrypt(key, data, AD []byte) ([]byte, error) {
 }
 
 func atomicWriteFile(path string, binary []byte, perm fs.FileMode) (err error) {
-	tmpfile, err := ioutil.TempFile(
-		filepath.Dir(path), filepath.Base(path)+"-*.tmp")
+	return atomicWriteFileWithPattern(path, binary, perm, filepath.Base(path)+"-*.tmp")
+}
+
+func atomicWriteFileWithPattern(path string, binary []byte, perm fs.FileMode, tmp_file_pattern string) (err error) {
+	tmpfile, err := ioutil.TempFile(filepath.Dir(path), tmp_file_pattern)
 	if err != nil {
 		return err
 	}
