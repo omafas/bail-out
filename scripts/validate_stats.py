@@ -24,9 +24,13 @@ import argparse
 import requests
 import json
 import sys
+from prometheus_client.parser import text_string_to_metric_families
 
 
 class StatsValidator:
+
+    # List of API endpoints to validate. Add more endpoints here as needed.
+    DEFAULT_APIS = ["_prometheusMetrics", "_prometheusMetricsHigh"]
 
     def __init__(self, args):
         # Hook to pass when loading json from a file to detect duplicate
@@ -45,6 +49,9 @@ class StatsValidator:
         self.password = args.password
         self.descriptors = args.descriptors
         self.unknown_stats = []
+        self.apis = self.DEFAULT_APIS
+
+        self.endpoint_stats = {}
 
         with open(self.descriptors, 'r') as file:
             self.json_data = json.load(file,
@@ -110,6 +117,26 @@ class StatsValidator:
                     deprecated = ""
                 print(f"{item} {deprecated}")
 
+        # Print duplicated stats between all endpoints
+        if len(self.apis) > 1:
+            # Build a map of stat_name -> list of endpoints
+            stat_to_apis = {}
+            for api in self.apis:
+                for stat in self.endpoint_stats.get(api, set()):
+                    if stat not in stat_to_apis:
+                        stat_to_apis[stat] = []
+                    stat_to_apis[stat].append(api)
+
+            # Find stats that appear in more than one endpoint
+            duplicate_stats = {stat: apis for stat, apis in stat_to_apis.items()
+                              if len(apis) > 1}
+
+            if duplicate_stats:
+                print("\nStats found in more than one endpoint:\n")
+                for stat in sorted(duplicate_stats.keys()):
+                    apis_string = ", ".join(duplicate_stats[stat])
+                    print(f"{stat} (found in: {apis_string})")
+
     def known_stat(self, stat_name):
         if stat_name in self.json_data:
             if not "found" in self.json_data[stat_name]:
@@ -153,24 +180,21 @@ class StatsValidator:
         with s.get(url=u, headers=None,
                    auth=(self.user, self.password)) as resp:
             count = 0
-            for raw_line in resp.iter_lines():
-                if raw_line:
-                    line = raw_line.decode("utf-8").strip()
-                    if not line.startswith("#"):
-                        # This should handle:
-                        #    statABC{} 34
-                        #    statDEF 45
-                        #    statGHI {} 77
-                        if " " in line:
-                            line = line.split(" ", 1)[0]
-                        if "{" in line:
-                            stat_name = line.split("{", 1)[0]
-                        else:
-                            stat_name = line
-                        if not self.known_stat(stat_name):
-                            if not self.check_base_stat_name(stat_name):
-                                self.track_unknown(stat_name)
-                        count += 1
+            for family in text_string_to_metric_families(resp.text):
+                # The family.name doesn't include the suffix, if any, while
+                # the checking with stats descriptions needs it. So we use
+                # the name in the first sample.
+                stat_name = family.samples[0].name
+
+                # Store stat name for this endpoint
+                if api not in self.endpoint_stats:
+                    self.endpoint_stats[api] = set()
+                self.endpoint_stats[api].add(stat_name)
+
+                if not self.known_stat(stat_name):
+                    if not self.check_base_stat_name(stat_name):
+                        self.track_unknown(stat_name)
+                count += 1
             print(f"Processed {count} stats from rest endpoint")
 
 
@@ -190,8 +214,8 @@ def main():
     args = parser.parse_args()
 
     monitor = StatsValidator(args)
-    monitor.validate_stats("_prometheusMetrics")
-    monitor.validate_stats("_prometheusMetricsHigh")
+    for api in monitor.apis:
+        monitor.validate_stats(api)
     monitor.finalize()
 
 
