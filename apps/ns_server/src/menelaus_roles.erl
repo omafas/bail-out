@@ -2364,7 +2364,7 @@ params_version_test__() ->
                {props, toy_props()}])]).
 
 validate_test_roles(Roles) ->
-    lists:all(
+    lists:foreach(
       fun ({Name, Params, Desc, Permissions}) when is_atom(Name),
                                                    is_list(Params),
                                                    is_list(Desc),
@@ -2377,10 +2377,9 @@ validate_test_roles(Roles) ->
                                     fun (A) when is_atom(A) -> true;
                                         ({A, _}) when is_atom(A) -> true;
                                         (_) -> false
-                                    end, Obj)),
-                          true
+                                    end, Obj))
                   end,
-              lists:all(
+              lists:foreach(
                 fun ({Object, all}) -> ValidateObject(Object);
                     ({Object, none}) -> ValidateObject(Object);
                     ({Object, Ops}) when is_list(Ops) ->
@@ -2390,10 +2389,16 @@ validate_test_roles(Roles) ->
       end, Roles).
 
 roles_format_test__() ->
-    ?assert(validate_test_roles(roles())),
-    ?assert(validate_test_roles(menelaus_old_roles:roles_pre_76())),
-    ?assert(validate_test_roles(menelaus_old_roles:roles_pre_79())),
-    ?assert(validate_test_roles(menelaus_old_roles:roles_pre_totoro())).
+    validate_test_roles(roles()).
+
+roles_pre_76_format_test__() ->
+    validate_test_roles(menelaus_old_roles:roles_pre_76()).
+
+roles_pre_79_format_test__() ->
+    validate_test_roles(menelaus_old_roles:roles_pre_79()).
+
+roles_pre_totoro_format_test__() ->
+    validate_test_roles(menelaus_old_roles:roles_pre_totoro()).
 
 params_from_permissions_test__() ->
     CompiledRoles =
@@ -2486,6 +2491,9 @@ default_profile_test_() ->
       fun params_version_test__/0,
       fun validate_role_test__/0,
       fun roles_format_test__/0,
+      fun roles_pre_76_format_test__/0,
+      fun roles_pre_79_format_test__/0,
+      fun roles_pre_totoro_format_test__/0,
       fun params_from_permissions_test__/0,
       fun extended_roles_test__/0]}.
 
@@ -2497,9 +2505,6 @@ analytics_admin_empty_profile_test_() ->
      fun (_) -> config_profile:unload_profile_for_test() end,
      [fun () ->
               Roles = compile_roles([analytics_admin], roles()),
-              ?log_debug(
-                 "compile_roles: ~p",
-                 [Roles]),
               ?assertEqual(true,
                            is_allowed(
                              {[{bucket, "foobar"}, analytics], manage}, Roles)),
