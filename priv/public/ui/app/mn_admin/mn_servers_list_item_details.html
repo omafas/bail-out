@@ -33,7 +33,7 @@
         </span>
         <span ng-if="!node.nodeEncryption">off</span>
       </div>
-      <div ng-if="serversListItemDetailsCtl.isEnterprise && node.hasOwnProperty('encryptionAtRestInfo')">
+      <div ng-if="serversListItemDetailsCtl.isEnterprise && node.hasOwnProperty('encryptionAtRestInfo') && serversListItemDetailsCtl.encryptionSettings">
         <div>
 
           <mn-encryption-status class="inline" item-type="config" item-type-label="Configuration" encryption-settings="serversListItemDetailsCtl.encryptionSettings" encryption-info="node.encryptionAtRestInfo.configuration"></mn-encryption-status>
