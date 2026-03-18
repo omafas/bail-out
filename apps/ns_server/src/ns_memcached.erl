@@ -2833,13 +2833,14 @@ get_active_guest_volumes(Bucket) ->
 -spec sync_fusion_log_store(ns_bucket:name(), [vbucket_id()]) ->
           ok | {errors, [{vbucket_id(), mc_error()}]}.
 sync_fusion_log_store(Bucket, VBuckets) ->
+    PropsJson = ejson:encode({[{reset, false}]}),
     perform_very_long_call(
       fun (Sock) ->
               Errors =
                   lists:filtermap(
                     fun (VBucket) ->
                             case mc_client_binary:sync_fusion_log_store(
-                                   Sock, VBucket) of
+                                   Sock, VBucket, PropsJson) of
                                 ok ->
                                     false;
                                 {memcached_error, internal, undefined} ->
@@ -2857,7 +2858,7 @@ sync_fusion_log_store(Bucket, VBuckets) ->
                           _ ->
                               {errors, Errors}
                       end}
-      end, Bucket).
+      end, Bucket, [json]).
 
 fetch_fusion_sync_info(Sock, Bucket, VBucket) ->
     case fetch_fusion_stats(Sock, Bucket, "sync_info", VBucket) of

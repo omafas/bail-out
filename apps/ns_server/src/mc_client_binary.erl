@@ -83,7 +83,7 @@
          set_chronicle_auth_token/2,
          start_fusion_uploader/3,
          stop_fusion_uploader/2,
-         sync_fusion_log_store/2,
+         sync_fusion_log_store/3,
          delete_fusion_namespace/5,
          get_fusion_namespaces/3,
          download_snapshot/3,
@@ -1269,11 +1269,12 @@ stop_fusion_uploader(Sock, VBucket) ->
             process_error_response(Response)
     end.
 
--spec sync_fusion_log_store(port(), vbucket_id()) -> ok | mc_error().
-sync_fusion_log_store(Sock, VBucket) ->
+-spec sync_fusion_log_store(port(), vbucket_id(), binary()) -> ok | mc_error().
+sync_fusion_log_store(Sock, VBucket, PropsJson) ->
     report_counter(?FUNCTION_NAME),
     case cmd(?CMD_SYNC_FUSION_LOGSTORE, Sock, undefined, undefined,
-             {#mc_header{vbucket = VBucket}, #mc_entry{}},
+             {#mc_header{vbucket = VBucket},
+              #mc_entry{data = PropsJson, datatype = ?MC_DATATYPE_JSON}},
              infinity) of
         {ok, #mc_header{status=?SUCCESS}, _, _} -> ok;
         Response -> process_error_response(Response)
