@@ -17,6 +17,7 @@ import tempfile
 import contextlib
 
 CERT_REQUIRED_ALERT = 'ALERT_CERTIFICATE_REQUIRED'
+HANDSHAKE_FAILURE_ALERT = 'SSLV3_ALERT_HANDSHAKE_FAILURE'
 
 class AuthnTests(testlib.BaseTestSet):
 
@@ -66,6 +67,11 @@ class AuthnTests(testlib.BaseTestSet):
                              auth=self.wrong_pass_creds,
                              headers={'invalid-auth-response':'on'})
         assert 'WWW-Authenticate' not in r.headers
+
+        self.assert_views_auth(auth=self.creds)
+        self.assert_views_auth(auth=None, expect_failure=True)
+        self.assert_views_auth(auth=self.wrong_user_creds, expect_failure=True)
+        self.assert_views_auth(auth=self.wrong_pass_creds, expect_failure=True)
 
 
     def scram_sha512_test(self):
@@ -158,6 +164,8 @@ class AuthnTests(testlib.BaseTestSet):
                 assert_tls_cert_required_alert(
                     lambda: testlib.get(self.cluster, self.testEndpoint,
                                         https=True, auth=self.creds))
+                assert_tls_cert_required_alert(
+                    lambda: self.assert_views_auth(https=True, auth=self.creds))
 
                 r = testlib.get_succ(self.cluster, '/whoami', https=True,
                                      auth=self.creds,
@@ -167,9 +175,11 @@ class AuthnTests(testlib.BaseTestSet):
             else: # regular auth should still work
                 testlib.get_succ(self.cluster, self.testEndpoint, https=True,
                                  auth=self.creds)
+                self.assert_views_auth(https=True, auth=self.creds)
 
             testlib.get_succ(node, self.testEndpoint, https=True,
                              auth=None, cert=client_cert_file)
+            self.assert_views_auth(https=True, auth=None, cert=client_cert_file)
 
 
     def client_cert_optional_auth_test(self):
@@ -254,6 +264,27 @@ class AuthnTests(testlib.BaseTestSet):
                           node, https=True, expected="impossible"))
             assert_client_cert_UI_login_availability(
                 node, https=False, expected="cannot_use")
+
+
+    def assert_views_auth(self, https=False, expect_failure=False, **kwargs):
+        expected_code = 401 if expect_failure else 404
+        node = self.cluster.connected_nodes[0]
+        port_name = 'ssl_capi_port' if https else 'capi_port'
+        data = f'service_ports:get_port({port_name}).'
+        r = testlib.post_succ(self.cluster, '/diag/eval', data=data)
+        port = int(r.text)
+        host = testlib.maybe_add_brackets(node.host)
+        scheme = 'https' if https else 'http'
+        url = f'{scheme}://{host}:{port}/not_existing/_design'
+        if https:
+            server_ca_file = os.path.join(node.data_path(),
+                                          'config', 'certs', 'ca.pem')
+            kwargs['verify'] = server_ca_file
+        print(f'sending GET {url} {kwargs} ' \
+              f'(expected code {expected_code})')
+        res = requests.request('GET', url, **kwargs)
+        print(f'result: {res.status_code}')
+        testlib.assert_http_code(expected_code, res),
 
 
 
@@ -352,7 +383,10 @@ def assert_tls_cert_required_alert(fun):
             # is received.
             if 'EOF occurred in violation of protocol' in str(e):
                 return False
-            testlib.assert_in(CERT_REQUIRED_ALERT, str(e))
+            assert CERT_REQUIRED_ALERT in str(e) or \
+                   HANDSHAKE_FAILURE_ALERT in str(e), \
+                   f'{CERT_REQUIRED_ALERT} (TLS1.3) or ' \
+                   f'{HANDSHAKE_FAILURE_ALERT} (TLS1.2) is expected, got: {e}'
         return True
 
     testlib.poll_for_condition(do, 0.1, attempts=10,
