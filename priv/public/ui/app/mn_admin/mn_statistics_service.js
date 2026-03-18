@@ -103,8 +103,8 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
       //e.g. start = - N * step + 1 (- 12 * 10  + 1 = -119)
       config.start += 1;
     }
-    // adjust the config for other zoom levels
-    else {
+    // adjust the config for longer zoom levels
+    else if (isNaN(originConfig.zoom) || originConfig.zoom >= 60000){
       fixLongChartConfig(config);
     }
   }
@@ -117,7 +117,8 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
     if (originConfig.zoom == "minute") {
       config.timeWindow = Math.max(config.step * 2, 360);
     }
-    else {
+    // long charts need adjustment, avoid doing so if zoom < 60s
+    else if (isNaN(originConfig.zoom) || originConfig.zoom >= 60000) {
       fixLongChartConfig(config);
     }
   }
@@ -589,7 +590,7 @@ function mnStatisticsNewServiceFactory($http, mnServersService, mnPoller, $rootS
         if (config.alignTimestamps) {
           cfg1.alignTimestamps = true;
         }
-        if (config.zoom !== "minute") {
+        if (config.zoom !== "minute" && (isNaN(config.zoom) || config.zoom >= 60000)) {
           fixLongChartConfig(cfg1);
         }
         rv.push(cfg1);
