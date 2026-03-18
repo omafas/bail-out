@@ -31,7 +31,8 @@ class Service(Enum):
     def tls_port_atom(self):
         return {
             Service.KV: "memcached_ssl_port",
-            Service.QUERY: "ssl_query_port"
+            Service.QUERY: "ssl_query_port",
+            Service.VIEWS: "ssl_capi_port"
         }[self]
 
 
