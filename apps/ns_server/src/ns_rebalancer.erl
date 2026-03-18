@@ -615,7 +615,24 @@ rebalance_body(PotentiallyStaleParams, DesiredServers) ->
     EjectNowNodes = EjectNodesAll -- [node()],
     eject_nodes(EjectNowNodes),
 
+    determine_rebalance_type(Snapshot),
+
     ok.
+
+determine_rebalance_type(Snapshot) ->
+    ActiveBefore = ns_cluster_membership:active_nodes(Snapshot),
+    ActiveAfter = ns_cluster_membership:active_nodes(),
+    Added = ActiveAfter -- ActiveBefore,
+    Removed = ActiveBefore -- ActiveAfter,
+    RebalanceType = case {length(Added), length(Removed)} of
+                        {0, 0} -> normal;
+                        {_, 0} -> node_addition;
+                        {0, _} -> node_removal;
+                        {N, N} -> swap_rebalance;
+                        {_, _} -> normal
+                    end,
+    ns_rebalance_observer:record_initial_info(RebalanceType, length(Added),
+                                              Added, length(Removed), Removed).
 
 delta_recovery(_, _, _, [], _) ->
     [];

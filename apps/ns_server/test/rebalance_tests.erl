@@ -109,6 +109,12 @@ rebalance_test_setup(SetupConfig) ->
                         {[], []}
                 end),
 
+    meck:expect(ns_memcached, get_vbucket_details_stats,
+                fun (_Bucket, _Keys) ->
+                        Stats = dict:new(),
+                        dict:store(9, {"db_data_size", "1234"}, Stats)
+                end),
+
     mock_helpers:setup_mocks([leader_activities,
                               rebalance_agent,
                               compat_mode_manager,

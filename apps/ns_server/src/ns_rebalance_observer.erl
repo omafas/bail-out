@@ -26,6 +26,7 @@
          get_current_stage/0,
          get_progress_for_alerting/1,
          record_rebalance_report/1,
+         record_initial_info/5,
          update_progress/3,
          submit_master_event/1,
          get_current_rebalance_report/0]).
@@ -56,7 +57,9 @@
                        snapshot_deks_import = #stat_info{},
                        snapshot_waiting = #stat_info{},
                        takeover = #stat_info{},
-                       persistence = #stat_info{}}).
+                       persistence = #stat_info{},
+                       %% Size from active node
+                       vb_size :: non_neg_integer()}).
 
 -record(total_stat_info, {total_time = 0,
                           completed_count = 0}).
@@ -90,6 +93,12 @@
                 buckets_count :: pos_integer(),
                 bucket_number :: non_neg_integer(),
                 stage_info :: rebalance_stage_info:stage_info(),
+                rebalance_type :: normal | node_addition | node_removal |
+                                  swap_rebalance,
+                num_nodes_added :: non_neg_integer(),
+                nodes_added :: [node()],
+                num_nodes_removed :: non_neg_integer(),
+                nodes_removed :: [node()],
                 nodes_info :: [{atom(), [node()]}],
                 type :: atom(),
                 rebalance_id :: binary(),
@@ -155,6 +164,11 @@ update_progress(Stage, NotifyMetric, StageProgress) ->
     gen_server:cast(?SERVER, {update_progress, Stage, NotifyMetric,
                               StageProgress}).
 
+record_initial_info(RebalanceType, NumNodesAdded, NodesAdded, NumNodesRemoved,
+                    NodesRemoved) ->
+    gen_server:cast(?SERVER, {initial_info, RebalanceType, NumNodesAdded,
+                              NodesAdded, NumNodesRemoved, NodesRemoved}).
+
 get_registered_local_name() ->
     ?MODULE.
 
@@ -190,6 +204,11 @@ init({Services, NodesInfo, Type, Id}) ->
     {ok, #state{bucket = undefined,
                 buckets_count = BucketsCount,
                 bucket_number = 0,
+                rebalance_type = normal,
+                num_nodes_added = 0,
+                nodes_added = [],
+                num_nodes_removed = 0,
+                nodes_removed = [],
                 stage_info = StageInfo,
                 nodes_info = NodesInfo,
                 type = Type,
@@ -253,11 +272,21 @@ handle_call(get_aggregated_progress, _From,
 handle_call({get_rebalance_info, Options}, _From,
             #state{stage_info = StageInfo,
                    nodes_info = NodesInfo,
+                   rebalance_type = RebalanceType,
+                   num_nodes_added = NumNodesAdded,
+                   nodes_added = NodesAdded,
+                   num_nodes_removed = NumNodesRemoved,
+                   nodes_removed = NodesRemoved,
                    rebalance_id = Id} = State) ->
     StageDetails = get_all_stage_rebalance_details(State, Options),
     RebalanceInfo = [{stageInfo, rebalance_stage_info:get_stage_info(
                                    StageInfo, StageDetails)},
                      {rebalanceId, Id},
+                     {rebalanceType, RebalanceType},
+                     {numNodesAdded, NumNodesAdded},
+                     {nodesAdded, NodesAdded},
+                     {numNodesRemoved, NumNodesRemoved},
+                     {nodesRemoved, NodesRemoved},
                      {nodesInfo, {NodesInfo}},
                      {masterNode, atom_to_binary(node(), latin1)}],
     {reply, {ok, RebalanceInfo}, State};
@@ -405,6 +434,15 @@ handle_cast({update_progress, Stage, NotifyMetric, StageProgress},
                      Stage, NotifyMetric, StageProgress, Old),
     {noreply, State#state{stage_info = NewStageInfo}};
 
+handle_cast({initial_info, RebalanceType, NumNodesAdded, NodesAdded,
+             NumNodesRemoved, NodesRemoved},
+            State) ->
+    {noreply, State#state{rebalance_type = RebalanceType,
+                          num_nodes_added = NumNodesAdded,
+                          nodes_added = NodesAdded,
+                          num_nodes_removed = NumNodesRemoved,
+                          nodes_removed = NodesRemoved}};
+
 handle_cast(Req, _State) ->
     ?log_error("Got unknown cast: ~p", [Req]),
     erlang:error({unknown_cast, Req}).
@@ -426,16 +464,21 @@ initiate_bucket_rebalance(BucketName, {Moves, UndefinedMoves}, Verbose,
         keygroup_sorted(lists:merge(lists:sort(BuildDestinations0),
                                     lists:sort(BuildDestinations1))),
 
-    SomeEstimates0 = misc:parallel_map(
-                       fun ({Node, VBs}) ->
-                               {ok, DcpEstimates} =
-                                   janitor_agent:get_mass_dcp_docs_estimate(BucketName, Node, VBs),
+    VBSizes = get_vb_sizes(BucketName),
 
-                               [{{Node, VB}, {VBEstimate, VBChkItems}} ||
-                                   {VB, {VBEstimate, VBChkItems, _}} <-
-                                       lists:zip(VBs, DcpEstimates)]
-                       end, BuildDestinations, infinity),
-
+    SomeEstimates0 =
+        misc:parallel_map(
+          fun ({Node, VBs}) ->
+                  {ok, DcpEstimates} =
+                    janitor_agent:get_mass_dcp_docs_estimate(BucketName,
+                                                             Node, VBs),
+                    lists:foldl(
+                      fun ({VB, {VBEstimate, VBChkItems, _}}, AccIn) ->
+                              Sz = proplists:get_value(VB, VBSizes, 0),
+                              [{{Node, VB}, {VBEstimate, VBChkItems, Sz}} |
+                               AccIn]
+                      end, [], lists:zip(VBs, DcpEstimates))
+          end, BuildDestinations, infinity),
 
     SomeEstimates = lists:append(SomeEstimates0),
 
@@ -444,10 +487,12 @@ initiate_bucket_rebalance(BucketName, {Moves, UndefinedMoves}, Verbose,
 
     BuiltMoves =
         [begin
-             {_, {MasterEstimate, _}} = lists:keyfind({MasterNode, VB}, 1, SomeEstimates),
+             {_, {MasterEstimate, _, VBSize}} = lists:keyfind({MasterNode, VB},
+                                                              1, SomeEstimates),
              RBStats =
                  [begin
-                      {_, {ReplicaEstimate, _}} = lists:keyfind({Replica, VB}, 1, SomeEstimates),
+                      {_, {ReplicaEstimate, _, _}} =
+                        lists:keyfind({Replica, VB}, 1, SomeEstimates),
                       Estimate = case ReplicaEstimate =< MasterEstimate of
                                      true ->
                                          MasterEstimate - ReplicaEstimate;
@@ -462,11 +507,13 @@ initiate_bucket_rebalance(BucketName, {Moves, UndefinedMoves}, Verbose,
                          Replica =/= MasterNode],
              {VB, #vbucket_info{before_chain = ChainBefore,
                                 after_chain = ChainAfter,
-                                stats = RBStats}}
+                                stats = RBStats,
+                                vb_size = VBSize}}
          end || {VB, [MasterNode|_] = ChainBefore, ChainAfter, _, _} <- Moves],
 
     BuiltUndefinedMoves = [{VB, #vbucket_info{before_chain = ChainBefore,
                                               after_chain = ChainAfter,
+                                              vb_size = 0,
                                               stats = []}}
                            || {VB, ChainBefore, ChainAfter, _, _}
                                   <- UndefinedMoves],
@@ -476,6 +523,60 @@ initiate_bucket_rebalance(BucketName, {Moves, UndefinedMoves}, Verbose,
     TmpState = update_vb_and_rep_info(OldState, BucketName,
                                       dict:from_list(AllMoves)),
     TmpState#state{bucket = BucketName}.
+
+get_vb_sizes(BucketName) ->
+    %% Query all the nodes as each doesn't have the complete picture.
+    {NodeResp, NodeErrors, DownNodes} =
+        misc:rpc_multicall_with_plist_result(
+          [node() | nodes()], ns_memcached, get_vbucket_details_stats,
+          [BucketName, ["db_data_size"]],
+          ?REBALANCE_OBSERVER_TASK_DEFAULT_TIMEOUT),
+    case NodeErrors =:= [] orelse DownNodes =:= [] of
+        false ->
+            %% Report the error but continue with any good responses
+            ?log_error("Failed to get VB sizes from nodes ~p",
+                       [{NodeErrors, DownNodes}]);
+        true ->
+            ok
+    end,
+
+    %% Build a map with the node as the key and the value is the sizes
+    %% dict obtained above.
+    NodeRespMap = maps:from_list([{Node, Dict} ||
+                                  {Node, {ok, Dict}} <- NodeResp]),
+
+    %% Get the vbucket map to find active nodes
+    {ok, BucketConfig} = ns_bucket:get_bucket(BucketName),
+    Map = proplists:get_value(map, BucketConfig, []),
+
+    %% Build list of {Vb, Size} where Size is from the active node
+    VBSizes = lists:zipwith(
+                fun (Vb, [ActiveNode | _]) ->
+                        {Vb, get_vb_size_helper(Vb, ActiveNode, NodeRespMap)}
+                end, lists:seq(0, length(Map) - 1), Map),
+
+    ?log_debug("VBucket sizes from active nodes: ~p", [VBSizes]),
+    VBSizes.
+
+get_vb_size_helper(Vb, ActiveNode, NodeRespMap) ->
+    case maps:find(ActiveNode, NodeRespMap) of
+        {ok, VbDict} ->
+            case dict:find(Vb, VbDict) of
+                {ok, Props} ->
+                    case proplists:get_value("db_data_size", Props) of
+                        undefined -> 0;
+                        Size -> list_to_integer(Size)
+                    end;
+                error ->
+                    ?log_debug("Failed to find vbucket ~p in active node ~p",
+                               [Vb, ActiveNode]),
+                    0
+            end;
+        error ->
+            ?log_debug("Failed to find info for vbucket ~p from active node ~p",
+                       [Vb, ActiveNode]),
+            0
+    end.
 
 handle_master_event({rebalance_stage_started, Stage, Nodes}, State) ->
     update_stage(Stage, {started, Nodes}, State);
@@ -1157,6 +1258,7 @@ construct_vbucket_info_json(Id,
                                           move = Move,
                                           backfill = Backfill,
                                           takeover = Takeover,
+                                          vb_size = VBSize,
                                           persistence = Persistence} = Info) ->
     RInfoJson = case RBS of
                     [] ->
@@ -1169,6 +1271,7 @@ construct_vbucket_info_json(Id,
     {[{id, Id},
       {beforeChain, BC},
       {afterChain, AC},
+      {size, VBSize},
       {move, construct_stat_info_json(Move)},
       {backfill, construct_stat_info_json(Backfill)}] ++
       maybe_add_file_based_backfill_vbucket_info_json(Info) ++
@@ -1357,6 +1460,18 @@ setup_test_ns_rebalance_observer() ->
     meck:expect(cluster_compat_mode, is_cluster_79,
                 fun () -> true end),
 
+    meck:new(ns_config, [passthrough]),
+    meck:expect(ns_config, get_timeout,
+                fun (_, Default) ->
+                        Default
+                end),
+
+    meck:expect(ns_memcached, get_vbucket_details_stats,
+                fun (_Bucket, _Keys) ->
+                        Stats = dict:new(),
+                        {ok, dict:store(0, [{"db_data_size", "1234"}], Stats)}
+                end),
+
     meck:new(ns_bucket, [passthrough]),
     meck:expect(ns_bucket, get_buckets,
                 fun () ->
@@ -1367,6 +1482,17 @@ setup_test_ns_rebalance_observer() ->
                            {servers, ['n_0', 'n_1']},
                            {map, [['n_0','n_1'], ['n_1','n_0']]}]}]
                 end),
+    meck:expect(ns_bucket, get_bucket,
+                fun ("Bucket1") ->
+                        {ok, [{storage_mode, couchstore},
+                              {type, membase},
+                              {num_vbuckets, 2},
+                              {servers, ['n_0', 'n_1']},
+                              {map, [['n_0','n_1'], ['n_1','n_0']]}]};
+                    (_) ->
+                        not_present
+                end),
+
     {ok, Pid} = gen_server:start_link(?MODULE,
                                       {[], [{active_nodes, [n1, n0]}],
                                        rebalance, ?REBALANCE_ID},
@@ -1511,6 +1637,7 @@ rebalance_inner() ->
                              [{[{id,0},
                                {beforeChain, [n_0, n_1]},
                                 {afterChain, [n_1, n_0]},
+                                {size, _},
                                 {move,
                                  {[{startTime, _},
                                    {completedTime, _},
@@ -1566,6 +1693,11 @@ rebalance_inner() ->
                          {completedTime, _},
                          {timeTaken, _}]}}]}}]}}]}},
              {rebalanceId, ?REBALANCE_ID},
+             {rebalanceType, normal},
+             {numNodesAdded, 0},
+             {nodesAdded, []},
+             {numNodesRemoved, 0},
+             {nodesRemoved, []},
              {nodesInfo, {[{active_nodes, [n1, n0]}]}},
              {masterNode, _}]},
        test_get_rebalance_info()),
@@ -1593,6 +1725,11 @@ failover() ->
                          {completedTime, _},
                          {timeTaken, _}]}}]}}]}}]}},
              {rebalanceId, ?REBALANCE_ID},
+             {rebalanceType, normal},
+             {numNodesAdded, 0},
+             {nodesAdded, []},
+             {numNodesRemoved, 0},
+             {nodesRemoved, []},
              {nodesInfo, {[{active_nodes, [n1, n0]}]}},
              {masterNode, _}]},
        test_get_rebalance_info()),
