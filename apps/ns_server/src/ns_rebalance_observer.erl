@@ -1174,6 +1174,7 @@ construct_bucket_level_info_json(
                      compaction_info = CompactionInfo,
                      vbucket_level_info = VBLevelInfo}, Options) ->
     case construct_compaction_info_json(CompactionInfo) ++
+        construct_per_node_data_size_moved(VBLevelInfo) ++
         construct_vbucket_level_info_json(VBLevelInfo, Options) ++
         construct_replication_info(ReplicationInfo) ++
         construct_mounting_volumes_info_json(MV) of
@@ -1182,6 +1183,15 @@ construct_bucket_level_info_json(
         BLI ->
             {Stat} = construct_stat_info_json(TL),
             [{BucketName, {BLI ++ Stat}}]
+    end.
+
+construct_per_node_data_size_moved(
+  #vbucket_level_info{vbucket_info = AllVBInfo}) ->
+    case calculate_per_node_size(AllVBInfo) of
+        [] ->
+            [];
+        PerNodeSizes ->
+            [{perNodeInboundDataSize, {PerNodeSizes}}]
     end.
 
 construct_replication_info(ReplicationInfo) ->
@@ -1250,6 +1260,29 @@ construct_replica_building_stats_json(#replica_building_stats{
     {Node, {[{node, Node},
              {inDocsTotal, DT},
              {inDocsLeft, DL}]}}.
+
+%% Returns the size of data that was moved per node. The argument to this
+%% function is a dict with items keyed by the VB number. The value is the
+%% vbucket_info which contains the before/after chain as well as the
+%% vbucket size. The same node may be involved for multiple vbuckets so
+%% we have to aggregate the vbucket sizes associated with each node.
+calculate_per_node_size(AllVBInfo) ->
+    PerNode =
+        dict:fold(
+          fun (_VB,
+               #vbucket_info{before_chain = BC,
+                             after_chain = AC,
+                             vb_size = VBSize},
+               AccIn) ->
+                  %% Determine which nodes are destinations of the move
+                  DestinationNodes = AC -- BC,
+                  lists:foldl(
+                    fun (Node, AccIn2) ->
+                            maps:update_with(Node, fun (S) -> S + VBSize end,
+                                             VBSize, AccIn2)
+                    end, AccIn, DestinationNodes)
+          end, maps:new(), AllVBInfo),
+    maps:to_list(PerNode).
 
 construct_vbucket_info_json(Id,
                             #vbucket_info{before_chain = BC,
