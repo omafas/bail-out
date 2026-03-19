@@ -1912,7 +1912,7 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
     path_config_bindir = maybe_sanitize_path(read_guts(
         guts, "path_config_bindir"))
     cbbrowse_static_args = f"-config_dir {configdir} " \
-        "-bin_dir {path_config_bindir}"
+        f"-bin_dir {path_config_bindir}"
     if master_password is not None:
         cbbrowse_static_args = f"{cbbrowse_static_args} -password_prompt"
 
