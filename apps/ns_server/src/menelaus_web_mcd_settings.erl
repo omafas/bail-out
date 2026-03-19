@@ -108,7 +108,12 @@ supported_extra_setting_names() ->
      {external_auth_request_timeout, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {not_locked_returns_tmpfail, bool},
      {clustermap_push_notifications_enabled, bool},
-     {magma_blind_write_optimisation_enabled, bool}].
+     {magma_blind_write_optimisation_enabled, bool},
+     {file_fragment_checksum_enabled, bool},
+     {file_fragment_max_chunk_size, {int, 0, ?MAX_64BIT_UNSIGNED_INT}},
+     {file_fragment_checksum_length, {int, 0, ?MAX_64BIT_UNSIGNED_INT}},
+     {snapshot_download_fsync_interval, {int, 0, ?MAX_64BIT_UNSIGNED_INT}},
+     {snapshot_download_write_size, {int, 0, ?MAX_64BIT_UNSIGNED_INT}}].
 
 supported_nodes() ->
     ns_node_disco:nodes_wanted().
