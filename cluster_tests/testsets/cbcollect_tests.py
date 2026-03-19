@@ -288,6 +288,11 @@ def run_cbcollect(node, path_to_zip, redaction_level=None, task_regexp=None,
                   encrypt_action=EncrZipAction.ENCR_NONE,
                   stdin_zip_password=None, expected_exit_code=0):
     print(f'Starting cbcollect at node {node} to file: {path_to_zip}...')
+    if stdin_zip_password is not None:
+        password_file = f'{path_to_zip}.password'
+        # Writing password to disk for debug purposes
+        with open(password_file, 'w') as f:
+            f.write(stdin_zip_password)
     initargs = os.path.join(node.data_path(), "initargs")
     args = [testlib.get_utility_path('cbcollect_info'),
             "--initargs", initargs, str(path_to_zip)]
