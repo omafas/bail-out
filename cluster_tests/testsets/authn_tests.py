@@ -7,6 +7,7 @@
 # will be governed by the Apache License, Version 2.0, included in the file
 # licenses/APL2.txt.
 import testlib
+from testlib.util import Service
 import base64
 import os
 from scramp import ScramClient
@@ -68,6 +69,11 @@ class AuthnTests(testlib.BaseTestSet):
                              auth=self.wrong_pass_creds,
                              headers={'invalid-auth-response':'on'})
         assert 'WWW-Authenticate' not in r.headers
+
+        self.assert_views_auth(auth=self.creds)
+        self.assert_views_auth(auth=None, expect_failure=True)
+        self.assert_views_auth(auth=self.wrong_user_creds, expect_failure=True)
+        self.assert_views_auth(auth=self.wrong_pass_creds, expect_failure=True)
 
 
     def scram_sha512_test(self):
@@ -161,6 +167,8 @@ class AuthnTests(testlib.BaseTestSet):
                 assert_tls_cert_required_alert(
                     lambda: testlib.get(self.cluster, self.testEndpoint,
                                         https=True, auth=self.creds))
+                assert_tls_cert_required_alert(
+                    lambda: self.assert_views_auth(https=True, auth=self.creds))
 
                 r = testlib.get_succ(self.cluster, '/whoami', https=True,
                                      auth=self.creds,
@@ -170,9 +178,11 @@ class AuthnTests(testlib.BaseTestSet):
             else: # regular auth should still work
                 testlib.get_succ(self.cluster, self.testEndpoint, https=True,
                                  auth=self.creds)
+                self.assert_views_auth(https=True, auth=self.creds)
 
             testlib.get_succ(node, self.testEndpoint, https=True,
                              auth=None, cert=client_cert_file)
+            self.assert_views_auth(https=True, auth=None, cert=client_cert_file)
 
 
     def client_cert_optional_auth_test(self):
@@ -266,6 +276,11 @@ class AuthnTests(testlib.BaseTestSet):
             assert_client_cert_UI_login_availability(
                 node, https=False, expected="cannot_use")
 
+    def assert_views_auth(self, expect_failure=False, **kwargs):
+        expected_code = 401 if expect_failure else 404
+        testlib.get(self.cluster, '/not_existing/_design/',
+                    service=Service.VIEWS, expected_code=expected_code,
+                    **kwargs)
 
 
 def assert_client_cert_UI_login_availability(node, expected=None, **kwargs):
