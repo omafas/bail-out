@@ -494,7 +494,6 @@
           600)).
 -define(APP_TELEMETRY_DEFAULT_SCRAPE_INTERVAL_SECONDS, 60).
 
-
 -define(call_on_ns_server_node(Body, Args),
         case ns_node_disco:couchdb_node() == node() of
             false ->
