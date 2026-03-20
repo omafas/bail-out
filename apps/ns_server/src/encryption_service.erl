@@ -94,12 +94,21 @@ decrypt(Data) ->
     cb_gosecrets_runner:decrypt(?RUNNER, Data).
 
 change_password(NewPassword) ->
-    cb_gosecrets_runner:change_password(?RUNNER, NewPassword).
+    safe_call({change_password, NewPassword}, infinity).
 
 get_keys_ref() ->
     cb_gosecrets_runner:get_keys_ref(?RUNNER).
 
 get_state() ->
+    get_state(node()).
+
+get_state(Node) ->
+    case ns_config:read_key_fast(ns_config_status_key(Node), undefined) of
+        undefined -> undefined;
+        Status -> {ok, Status}
+    end.
+
+retrieve_state() ->
     cb_gosecrets_runner:get_state(?RUNNER).
 
 rotate_data_key() ->
@@ -537,6 +546,7 @@ init([]) ->
             maybe
                 ok ?= maybe_upgrade_config(),
                 ok ?= maybe_update_dek_path_in_config(),
+                update_master_password_status(),
                 create_encryption_service_stats(),
                 {ok, #{}}
             else
@@ -551,6 +561,14 @@ handle_call({change_config, Cfg}, _From, State) ->
         ok -> {reply, ok, State};
         {error, _} = Error ->
             {stop, {change_cfg_failed, Error}, Error, State}
+    end;
+handle_call({change_password, NewPassword}, _From, State) ->
+    case cb_gosecrets_runner:change_password(?RUNNER, NewPassword) of
+        ok ->
+            update_master_password_status(),
+            {reply, ok, State};
+        Error ->
+            {reply, Error, State}
     end;
 handle_call(sync, _From, State) ->
     {reply, ok, State};
@@ -579,6 +597,17 @@ terminate(_Reason, _State) ->
 %%% Internal functions
 %%%===================================================================
 
+update_master_password_status() ->
+    {ok, Status} = retrieve_state(),
+    Key = ns_config_status_key(node()),
+    case ns_config:read_key_fast(Key, undefined) of
+        Status -> ok;
+        _ -> ns_config:set(Key, Status)
+    end.
+
+ns_config_status_key(Node) ->
+    {node, Node, master_password_status}.
+
 change_config(NewCfg) ->
     OldCfg = ns_config:read_key_fast(ns_config_sm_key(), []),
     ?log_debug("Change config started.~nOld cfg: ~p~nNew cfg: ~p",
@@ -589,6 +618,7 @@ change_config(NewCfg) ->
                        _ResetPassword = true) of
         ok ->
             misc:remove_marker(MarkerPath),
+            update_master_password_status(),
             ok;
         {error, _} = Error -> Error
     end.
