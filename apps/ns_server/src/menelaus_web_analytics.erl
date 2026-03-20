@@ -270,7 +270,7 @@ cluster_init_validators_test() ->
         Respond = fun (Body, Code) ->
             erlang:put(json_test_response, {Body, Code})
                   end,
-        GlobalError = ?cut({[{errors, {[{"_", list_to_binary(_)}]}}]}),
+        GlobalError = ?cut({[{errors, {[{<<"_">>, list_to_binary(_)}]}}]}),
         JsonObject = <<"{\"key1\": \"v1\"}">>,
         meck:expect(menelaus_util, reply_json,
             fun (_Req, Body, Code) ->

@@ -29,6 +29,7 @@
          post_validate_all/2,
          json_array/3,
          get_value/2,
+         get_warnings/1,
          convert/3,
          one_of/3,
          string/2,
@@ -84,7 +85,7 @@
 -export([handle_proplist/2]).
 -endif.
 
--record(state, {kv = [], touched = [], errors = []}).
+-record(state, {kv = [], touched = [], errors = [], warnings = []}).
 
 handle(Fun, Req, json, Validators) ->
     handle_one(Fun, Req, with_json_object(
@@ -127,26 +128,28 @@ validate_only(Req) ->
 
 handle_multiple(Fun, Req, States) when is_list(States) ->
     Errors = [E || #state{errors = E} <- States],
+    Warnings = [W || #state{warnings = W} <- States],
 
     ValidationSucceed = ([] == lists:flatten(Errors)),
     case ValidationSucceed of
         true ->
             case validate_only(Req) of
-                true -> report_errors_for_multiple(Req, Errors, 200);
+                true -> report_errors_for_multiple(Req, Errors, Warnings, 200);
                 false -> Fun([prepare_params(S) || S <- States])
             end;
         false ->
-            report_errors_for_multiple(Req, Errors, 400)
+            report_errors_for_multiple(Req, Errors, Warnings, 400)
     end.
 
-handle_one(Fun, Req, #state{errors = Errors} = State) ->
+handle_one(Fun, Req, #state{errors = Errors,
+                            warnings = Warnings} = State) ->
     case {validate_only(Req), Errors} of
         {false, []} ->
             Fun(prepare_params(State));
         {true, []} ->
-            report_errors_for_one(Req, Errors, 200);
+            report_errors_for_one(Req, Errors, Warnings, 200);
         {_, _} ->
-            report_errors_for_one(Req, Errors, 400)
+            report_errors_for_one(Req, Errors, Warnings, 400)
     end.
 
 prepare_params(State) ->
@@ -179,35 +182,58 @@ process_fatal_errors(Req, Errors) ->
             true
     end.
 
-jsonify_errors(Errors) ->
-    {[{Name, jsonify_error(E)} || {Name, E} <- Errors]}.
+jsonify_results(Results) ->
+    {[{jsonify_name(Name), jsonify_error(E)} || {Name, E} <- Results]}.
+
+%% Note: Atom name can come from report_errors_for_one()
+jsonify_name(Name) when is_atom(Name) ->
+    atom_to_binary(Name);
+jsonify_name(Name) ->
+    iolist_to_binary(Name).
 
 jsonify_error({json, Json}) ->
     Json;
 jsonify_error(E) ->
     iolist_to_binary(E).
 
-report_errors_for_multiple(Req, Errors, Code) ->
+report_errors_for_multiple(Req, Errors, Warnings, Code) ->
     case process_fatal_errors(Req, lists:flatten(Errors)) of
         true ->
             ok;
         false ->
-            send_error_json(Req, [jsonify_errors(E) || E <- Errors],
-                            Code)
+            JsonErrors = [jsonify_results(E) || E <- Errors],
+            JsonWarnings = [jsonify_results(W) || W <- Warnings],
+            send_error_json(Req, JsonErrors, JsonWarnings, Code)
     end.
 
 -spec report_errors_for_one(mochiweb_request(), list(), non_neg_integer()) ->
           ok | mochiweb_response().
 report_errors_for_one(Req, Errors, Code) ->
+    report_errors_for_one(Req, Errors, [], Code).
+
+-spec report_errors_for_one(mochiweb_request(), list(), list(),
+                            non_neg_integer()) ->
+          ok | mochiweb_response().
+report_errors_for_one(Req, Errors, Warnings, Code) ->
     case process_fatal_errors(Req, Errors) of
         true ->
             ok;
         false ->
-            send_error_json(Req, jsonify_errors(Errors), Code)
+            send_error_json(Req, jsonify_results(Errors),
+                            jsonify_results(Warnings), Code)
     end.
 
-send_error_json(Req, Errors, Code) ->
-    menelaus_util:reply_json(Req, {[{errors, Errors}]}, Code).
+send_error_json(Req, Errors, Warnings, Code) ->
+    ShowWarnings = case Warnings of
+                       {[]} ->
+                          false;
+                       _ when is_list(Warnings) ->
+                          [{[]}] /= lists:usort(Warnings);
+                       _ ->
+                          true
+                   end,
+    MaybeWarnings = [{warnings, Warnings} || ShowWarnings],
+    menelaus_util:reply_json(Req, {[{errors, Errors} | MaybeWarnings]}, Code).
 
 json_array(Name, Validators, State) ->
     validate(
@@ -215,12 +241,18 @@ json_array(Name, Validators, State) ->
               States = [with_decoded_object(Elem, Validators) ||
                            Elem <- JsonArray],
               Errors = [ErrorList || #state{errors = ErrorList} <- States],
-              case lists:flatten(Errors) of
-                  [] ->
+              Warnings = [WarnList || #state{warnings = WarnList} <- States],
+              case {lists:flatten(Errors), lists:flatten(Warnings)} of
+                  {[], []} ->
                       {value, [{prepare_params(St)} || St <- States]};
-                  _ ->
-                      {error, {json, [jsonify_errors(ErrorList) ||
-                                         ErrorList <- Errors]}}
+                  {[], _} ->
+                      {warning, [{prepare_params(St)} || St <- States],
+                                {json, [jsonify_results(W) || W <- Warnings]}};
+                  {_, []} ->
+                      {error, {json, [jsonify_results(E) || E <- Errors]}};
+                  {_, _} ->
+                      {error, {json, [jsonify_results(E) || E <- Errors]},
+                              {json, [jsonify_results(W) || W <- Warnings]}}
               end;
           (_) ->
               {error, "The value must be a json array"}
@@ -239,11 +271,17 @@ with_decoded_object(_, _) ->
 
 validate_decoded_object(DecodedObject, Validators) ->
     St = with_decoded_object(DecodedObject, Validators),
-    case St#state.errors of
-        [] ->
+    case {St#state.errors, St#state.warnings} of
+        {[], []} ->
             {value, prepare_params(St)};
-        _ ->
-            {error, {json, jsonify_errors(St#state.errors)}}
+        {[], Warnings} ->
+            {warning, prepare_params(St), {json, jsonify_results(Warnings)}};
+        {Errors, []} ->
+            {error, {json, jsonify_results(Errors)}};
+        {Errors, Warnings} ->
+            {error,
+             {json, jsonify_results(Errors)},
+             {json, jsonify_results(Warnings)}}
     end.
 
 decoded_json(Name, Validators, State) ->
@@ -320,6 +358,9 @@ get_value(Name, #state{kv = Props, errors = Errors}) ->
             end
     end.
 
+get_warnings(#state{warnings = Warnings}) ->
+    Warnings.
+
 touch(Name, #state{touched = Touched} = State) ->
     LName = name_to_list(Name),
     case lists:member(LName, Touched) of
@@ -337,6 +378,9 @@ return_value(Name, Value, #state{kv = Props} = State) ->
 return_error(Name, Error, #state{errors = Errors} = State) ->
     State#state{errors = [{name_to_list(Name), Error} | Errors]}.
 
+return_warning(Name, Warning, #state{warnings = Warnings} = State) ->
+    State#state{warnings = [{name_to_list(Name), Warning} | Warnings]}.
+
 validate(Fun, Name, State0) ->
     State = touch(Name, State0),
     case get_value(Name, State) of
@@ -348,8 +392,14 @@ validate(Fun, Name, State0) ->
                     State;
                 {value, V} ->
                     return_value(Name, V, State);
+                {warning, V, WarningMsg} ->
+                    return_warning(Name, WarningMsg,
+                                   return_value(Name, V, State));
                 {error, Error} ->
-                    return_error(Name, Error, State)
+                    return_error(Name, Error, State);
+                {error, Error, Warning} ->
+                    return_warning(Name, Warning,
+                                   return_error(Name, Error, State))
             end;
         Value when is_function(Fun, 2) ->
             case Fun(Value, State) of
@@ -357,8 +407,14 @@ validate(Fun, Name, State0) ->
                     NewState;
                 {value, V, NewState} ->
                     return_value(Name, V, NewState);
+                {warning, V, WarningMsg, NewState} ->
+                    return_warning(Name, WarningMsg,
+                                   return_value(Name, V, NewState));
                 {error, Error, NewState} ->
-                    return_error(Name, Error, NewState)
+                    return_error(Name, Error, NewState);
+                {error, Error, Warning, NewState} ->
+                    return_warning(Name, Warning,
+                                   return_error(Name, Error, NewState))
             end
     end.
 
@@ -640,6 +696,21 @@ range_test() ->
     ?assertEqual(Err7, "The value must be in range from 1 to " ++
                        integer_to_list(?MAX_64BIT_UNSIGNED_INT) ++
                        " (inclusive)").
+
+warning_test() ->
+    %% Test 1-ary function returning warning
+    State1 = #state{kv = [{"test", "value"}]},
+    Fun1 = fun(V) -> {warning, V ++ "_new", "warning message"} end,
+    Result1 = validate(Fun1, "test", State1),
+    ?assertEqual("value_new", get_value("test", Result1)),
+    ?assertEqual([{"test", "warning message"}], get_warnings(Result1)),
+
+    %% Test 2-ary function returning warning
+    State2 = #state{kv = [{"test", "value"}]},
+    Fun2 = fun(V, St) -> {warning, V ++ "_new", "warning message", St} end,
+    Result2 = validate(Fun2, "test", State2),
+    ?assertEqual("value_new", get_value("test", Result2)),
+    ?assertEqual([{"test", "warning message"}], get_warnings(Result2)).
 
 -endif.
 
@@ -1385,28 +1456,28 @@ token_list_test() ->
                  ?assertEqual(ExpectedBody, Body)
          end)()).
 
-handle_json_test_() ->
+test_warn_error_validator(ParamName) ->
+    validate(fun ("warn" = V) -> {warning, V, "warn message"};
+                 ("warn_and_error") -> {error, "error msg", "warn message"};
+                 ("error") -> {error, "error msg"};
+                 (_) -> ok
+             end, ParamName, _).
+
+run_tests_for_json_validators(Validators, Tests) ->
     Respond = fun (Body, Code) ->
                       erlang:put(json_test_response, {Body, Code})
               end,
-    Handle = fun (Type, Data) ->
-                     validator:handle(Respond(_, 200), Data, Type,
-                                      [validator:string(key1, _),
-                                       validator:string(key2, _),
-                                       validator:unsupported(_)]),
+    Handle = fun (Type, Data, Qs) ->
+                     meck:expect(mochiweb_request, parse_qs,
+                                 fun (_Req) -> Qs end),
+                     handle(Respond(_, 200), Data, Type, Validators),
                      erlang:get(json_test_response)
              end,
-    GlobalError = ?cut({[{errors, {[{<<"_">>, list_to_binary(_)}]}}]}),
-    GlobalErrorList = ?cut({[{errors, [{[{<<"_">>, list_to_binary(_)}]}]}]}),
-    JsonObject = <<"{\"key1\": \"v1\", \"key2\": \"v2\"}">>,
-    JsonList = <<"[{\"key1\": \"v1\", \"key2\": \"v2\"}]">>,
-    Rubbish = <<"fdfgjkhlkjl">>,
+
     {foreach,
      fun () ->
              meck:new(mochiweb_request, [passthrough]),
              meck:expect(mochiweb_request, recv_body, fun (Req) -> Req end),
-             meck:expect(mochiweb_request, parse_qs, fun (_Req) -> [] end),
-
              meck:new(menelaus_util, [passthrough]),
              meck:expect(menelaus_util, reply_json,
                          fun (_Req, Body, Code) ->
@@ -1419,51 +1490,271 @@ handle_json_test_() ->
              meck:unload(menelaus_util),
              ok
      end,
-     [{"json",
-       fun () ->
-               ?assertResponse([{key1, "v1"}, {key2, "v2"}], 200,
-                               Handle(json, JsonObject)),
-               ?assertResponse(GlobalError("Unexpected Json"), 400,
-                               Handle(json, JsonList)),
-               ?assertResponse(GlobalError("Invalid Json"), 400,
-                               Handle(json, Rubbish))
-       end},
-      {"json_array",
-       fun () ->
-               ?assertResponse([[{key1, "v1"}, {key2, "v2"}]], 200,
-                               Handle(json_array, JsonList)),
-               ?assertResponse(
-                  GlobalErrorList("A Json list must be specified."),
-                  400, Handle(json_array, JsonObject)),
-               ?assertResponse(GlobalErrorList("Invalid Json"), 400,
-                               Handle(json_array, Rubbish))
-       end},
-      {"json_map",
-       fun () ->
-               Validators = [validator:string(key, _),
-                             validator:string(prop, _),
-                             validator:unsupported(_)],
-               HandleMap =
-                   fun (Data) ->
-                           validator:handle(Respond(_, 200), Data,
-                                            json_map, Validators),
-                           erlang:get(json_test_response)
-                   end,
-               ?assertResponse([[{key, "key1"}, {prop, "v1"}],
-                                [{key, "key2"}, {prop, "v2"}]], 200,
-                               HandleMap(
-                                 <<"{\"key1\": {\"prop\": \"v1\"}, "
-                                   " \"key2\": {\"prop\": \"v2\"}}">>)),
-               ?assertResponse(
-                  GlobalErrorList("Must be a map K -> JsonObject."),
-                  400, HandleMap(
-                         <<"{\"key1\": \"val1\", "
-                           " \"key2\": {\"prop\": \"v2\"}}">>)),
-               ?assertResponse(GlobalErrorList("A Json map must be specified."),
-                               400, HandleMap(JsonList)),
-               ?assertResponse(GlobalErrorList("Invalid Json"), 400,
-                               HandleMap(Rubbish))
-       end}]}.
+     [{Name, fun () -> T(Handle) end} || {Name, T} <- Tests]}.
+
+handle_json_array_test_() ->
+    run_tests_for_json_validators(
+      [json_array(key1,
+                  [string(key1, _),
+                   string(key2, _),
+                   string(key3, _),
+                   test_warn_error_validator(key1),
+                   test_warn_error_validator(key2),
+                   test_warn_error_validator(key3)], _),
+       string(key2, _),
+       test_warn_error_validator(key2),
+       unsupported(_)],
+      [{"positive (json_array)",
+        fun (Handle) ->
+                ?assertResponse([{key1, [{[{key2, "v2"}, {key3,"v3"}]}]},
+                                 {key2, "v2"}], 200,
+                                Handle(json,
+                                       <<"{\"key1\": [{\"key2\": \"v2\","
+                                                      "\"key3\": \"v3\"}],"
+                                          "\"key2\": \"v2\"}">>, []))
+        end},
+       {"just_validate with warnings (json_array)",
+        fun (Handle) ->
+                ?assertResponse(
+                  {[{errors,{[]}},
+                    {warnings, {[{<<"key2">>, <<"warn message">>},
+                                 {<<"key1">>,
+                                  [{[{<<"key2">>, <<"warn message">>}]}]}]}}]},
+                  200,
+                  Handle(json,
+                          <<"{\"key1\": [{\"key2\": \"warn\","
+                                          "\"key3\": \"v3\"}],"
+                              "\"key2\": \"warn\"}">>,
+                          [{"just_validate", "1"}]))
+        end},
+       {"errors and warnings (json_array)",
+        fun (Handle) ->
+                ?assertResponse(
+                  {[{errors,{[{<<"key1">>,
+                               [{[{<<"key3">>, <<"error msg">>},
+                                  {<<"key2">>, <<"error msg">>}]}]}]}},
+                    {warnings,{[{<<"key2">>, <<"warn message">>},
+                                {<<"key1">>,
+                                 [{[{<<"key3">>, <<"warn message">>}]}]}]}}]},
+                  400,
+                  Handle(json, <<"{\"key1\": [{\"key2\": \"error\","
+                                              "\"key3\": \"warn_and_error\"}],"
+                                  "\"key2\": \"warn\"}">>, []))
+        end},
+       {"errors (json_array)",
+        fun (Handle) ->
+                ?assertResponse(
+                  {[{errors,{[{<<"key2">>, <<"error msg">>},
+                              {<<"key1">>, [{[{<<"key3">>,
+                                               <<"error msg">>}]}]}]}}]},
+                  400,
+                  Handle(json, <<"{\"key1\": [{\"key2\": \"v2\","
+                                              "\"key3\": \"error\"}],"
+                                  "\"key2\": \"error\"}">>, []))
+        end}
+      ]).
+
+handle_decoded_json_test_() ->
+    run_tests_for_json_validators(
+      [decoded_json(key1,
+                    [string(key2, _),
+                     string(key3, _),
+                     string(key4, _),
+                     test_warn_error_validator(key2),
+                     test_warn_error_validator(key3),
+                     test_warn_error_validator(key4)], _),
+       string(key2, _),
+       string(key3, _),
+       string(key4, _),
+       test_warn_error_validator(key2),
+       test_warn_error_validator(key3),
+       test_warn_error_validator(key4),
+       unsupported(_)],
+      [{"positive (decoded_json)",
+        fun (Handle) ->
+                ?assertResponse([{key1, [{key2,"v2"}]}, {key3,"v3"}], 200,
+                                Handle({[{<<"key1">>,
+                                          {[{<<"key2">>, <<"v2">>}]}},
+                                         {<<"key3">>, <<"v3">>}]},
+                                       undefined, []))
+        end},
+        {"just_validate with warnings (decoded_json)",
+         fun (Handle) ->
+                 JsonObject = {[{<<"key1">>, {[{<<"key2">>, <<"warn">>}]}},
+                                {<<"key3">>, <<"warn">>}]},
+                 ExpectedBody = {[{errors, {[]}},
+                                  {warnings,{[{<<"key3">>, <<"warn message">>},
+                                              {<<"key1">>,
+                                               {[{<<"key2">>,
+                                                  <<"warn message">>}]}}]}}]},
+                 ?assertResponse(ExpectedBody, 200,
+                                 Handle(JsonObject, undefined,
+                                        [{"just_validate", "1"}]))
+         end},
+        {"errors and warnings (decoded_json)",
+         fun (Handle) ->
+                 JsonObject = {[{<<"key1">>,
+                                 {[{<<"key2">>, <<"warn">>},
+                                   {<<"key3">>, <<"warn_and_error">>},
+                                   {<<"key4">>, <<"error">>}]}},
+                                {<<"key2">>, <<"warn_and_error">>},
+                                {<<"key3">>, <<"error">>},
+                                {<<"key4">>, <<"warn">>}]},
+                 ExpectedBody = {[{errors,
+                                   {[{<<"key3">>, <<"error msg">>},
+                                     {<<"key2">>, <<"error msg">>},
+                                     {<<"key1">>,
+                                      {[{<<"key4">>, <<"error msg">>},
+                                        {<<"key3">>, <<"error msg">>}]}}]}},
+                                  {warnings,
+                                   {[{<<"key4">>, <<"warn message">>},
+                                     {<<"key2">>, <<"warn message">>},
+                                     {<<"key1">>,
+                                      {[{<<"key3">>, <<"warn message">>},
+                                        {<<"key2">>, <<"warn message">>}]}}
+                                    ]}}]},
+                 ?assertResponse(ExpectedBody, 400,
+                                 Handle(JsonObject, undefined,
+                                        [{"just_validate", "1"}]))
+         end},
+        {"errors (decoded_json)",
+         fun (Handle) ->
+                 JsonObject = {[{<<"key1">>,
+                                 {[{<<"key2">>, <<"v2">>},
+                                   {<<"key3">>, <<"v3">>},
+                                   {<<"key4">>, <<"error">>}]}},
+                                {<<"key2">>, <<"v2">>},
+                                {<<"key3">>, <<"error">>},
+                                {<<"key4">>, <<"v4">>}]},
+                 ExpectedBody = {[{errors,
+                                   {[{<<"key3">>, <<"error msg">>},
+                                     {<<"key1">>,
+                                      {[{<<"key4">>, <<"error msg">>}]}}]}}]},
+                 ?assertResponse(ExpectedBody, 400,
+                                 Handle(JsonObject, undefined,
+                                        [{"just_validate", "1"}]))
+         end}
+      ]).
+
+handle_json_test_() ->
+    GlobalError = ?cut({[{errors, {[{<<"_">>, list_to_binary(_)}]}}]}),
+    GlobalErrorList = ?cut({[{errors, [{[{<<"_">>, list_to_binary(_)}]}]}]}),
+    JsonObject = <<"{\"key1\": \"v1\", \"key2\": \"v2\"}">>,
+    JsonList = <<"[{\"key1\": \"v1\", \"key2\": \"v2\"}]">>,
+    Rubbish = <<"fdfgjkhlkjl">>,
+    run_tests_for_json_validators(
+      [string(key1, _),
+       string(key2, _),
+       test_warn_error_validator(key1),
+       unsupported(_)],
+      [{"json",
+        fun (Handle) ->
+                ?assertResponse([{key1, "v1"}, {key2, "v2"}], 200,
+                                Handle(json, JsonObject, [])),
+                ?assertResponse(GlobalError("Unexpected Json"), 400,
+                                Handle(json, JsonList, [])),
+                ?assertResponse(GlobalError("Invalid Json"), 400,
+                                Handle(json, Rubbish, []))
+        end},
+       {"json_just_validate",
+        fun (Handle) ->
+                ?assertResponse({[{errors, {[]}}]}, 200,
+                                Handle(json, JsonObject,
+                                       [{"just_validate", "1"}])),
+                JsonObjectErr = <<"{\"key1\": \"warn\", \"key2\": 1}">>,
+                ExpectedBodyErr = {[{errors,
+                                     {[{<<"key2">>,
+                                        <<"Value must be json string">>}]}},
+                                    {warnings,
+                                     {[{<<"key1">>,
+                                        <<"warn message">>}]}}]},
+                ?assertResponse(ExpectedBodyErr, 400,
+                                Handle(json, JsonObjectErr,
+                                       [{"just_validate", "1"}])),
+                JsonObjectWarn = <<"{\"key1\": \"warn\", \"key2\": \"v2\"}">>,
+                ExpectedBody = {[{errors, {[]}},
+                                 {warnings, {[{<<"key1">>,
+                                               <<"warn message">>}]}}]},
+                ?assertResponse(ExpectedBody, 200,
+                                Handle(json, JsonObjectWarn,
+                                       [{"just_validate", "1"}]))
+        end},
+       {"json_array_warnings",
+        fun (Handle) ->
+                JsonList1 = <<"[{\"key1\": \"warn\", \"key2\": \"v2\"},
+                                {\"key1\": \"v1\",   \"key2\": 1},
+                                {\"key1\": \"warn\", \"key2\": 1}]">>,
+                ExpectedBody1 = {[{errors,
+                                   [{[]},
+                                    {[{<<"key2">>,
+                                       <<"Value must be json string">>}]},
+                                    {[{<<"key2">>,
+                                       <<"Value must be json string">>}]}]},
+                                  {warnings,
+                                   [{[{<<"key1">>,<<"warn message">>}]},
+                                    {[]},
+                                    {[{<<"key1">>,<<"warn message">>}]}]}]},
+                ?assertResponse(ExpectedBody1, 400,
+                                Handle(json_array, JsonList1, [])),
+
+                JsonList2 = <<"[{\"key1\": \"v1\", \"key2\": \"v2\"},
+                                {\"key1\": \"v1\", \"key2\": 1}]">>,
+                ExpectedBody2 = {[{errors,
+                                   [{[]},
+                                    {[{<<"key2">>,
+                                       <<"Value must be json string">>}]}]}]},
+                ?assertResponse(ExpectedBody2, 400,
+                                Handle(json_array, JsonList2, [])),
+
+                JsonList3 = <<"[{\"key1\": \"v1\", \"key2\": \"v2\"},
+                                {\"key1\": \"warn\", \"key2\": \"v2\"}]">>,
+                ExpectedBody3 = {[{errors,
+                                   [{[]},
+                                    {[]}]},
+                                  {warnings,
+                                   [{[]},
+                                    {[{<<"key1">>,<<"warn message">>}]}]}]},
+                ?assertResponse(ExpectedBody3, 200,
+                                Handle(json_array, JsonList3,
+                                       [{"just_validate", "1"}]))
+        end},
+       {"json_array",
+        fun (Handle) ->
+                ?assertResponse([[{key1, "v1"}, {key2, "v2"}]], 200,
+                                Handle(json_array, JsonList, [])),
+                ?assertResponse(
+                   GlobalErrorList("A Json list must be specified."),
+                   400, Handle(json_array, JsonObject, [])),
+                ?assertResponse(GlobalErrorList("Invalid Json"), 400,
+                                Handle(json_array, Rubbish, []))
+        end}]).
+
+handle_json_map_test_() ->
+    GlobalErrorList = ?cut({[{errors, [{[{<<"_">>, list_to_binary(_)}]}]}]}),
+    JsonList = <<"[{\"key1\": \"v1\", \"key2\": \"v2\"}]">>,
+    Rubbish = <<"fdfgjkhlkjl">>,
+    run_tests_for_json_validators(
+      [validator:string(key, _),
+       validator:string(prop, _),
+       validator:unsupported(_)],
+      [{"json_map",
+        fun (Handle) ->
+                ?assertResponse([[{key, "key1"}, {prop, "v1"}],
+                                 [{key, "key2"}, {prop, "v2"}]], 200,
+                                Handle(
+                                  json_map,
+                                  <<"{\"key1\": {\"prop\": \"v1\"}, "
+                                    " \"key2\": {\"prop\": \"v2\"}}">>, [])),
+                ?assertResponse(
+                   GlobalErrorList("Must be a map K -> JsonObject."),
+                   400, Handle(json_map,
+                               <<"{\"key1\": \"val1\", "
+                                 " \"key2\": {\"prop\": \"v2\"}}">>, [])),
+                ?assertResponse(GlobalErrorList("A Json map must be specified."),
+                                400, Handle(json_map, JsonList, [])),
+                ?assertResponse(GlobalErrorList("Invalid Json"), 400,
+                                Handle(json_map, Rubbish, []))
+        end}]).
 
 validate_field_path_test() ->
     %% Test valid field names
