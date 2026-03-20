@@ -25,7 +25,10 @@
 -define(ORCHESTRATOR_TIMEOUT, ?get_timeout(orchestrator, 5000)).
 
 -type services() :: [service()].
+-type server_group() :: undefined | binary().
 -type node_info() :: {version(), node(), services()}.
+-type node_info_with_server_group() ::
+        {version(), node(), services(), server_group()}.
 -type priority() :: lower | equal | higher.
 -type service_weights() :: [{service(), integer()}].
 
@@ -34,7 +37,9 @@
                 peers :: [node()],
                 last_heard :: integer(),
                 higher_priority_nodes = [] :: [{node(), integer()}],
-                service_weights = [] :: service_weights()}).
+                service_weights = [] :: service_weights(),
+                master_server_group = undefined :: server_group(),
+                server_groups_cache = #{} :: #{node() => server_group()}}).
 
 
 %% API
@@ -80,7 +85,8 @@ callback_mode() ->
 
 init([]) ->
     chronicle_compat_events:notify_if_key_changes([nodes_wanted,
-                                                   service_orchestrator_weight],
+                                                   service_orchestrator_weight,
+                                                   server_groups],
                                                   config_changed),
     erlang:process_flag(trap_exit, true),
     CurHBInterval = ?HEARTBEAT_INTERVAL,
@@ -90,28 +96,31 @@ init([]) ->
     case ns_node_disco:nodes_wanted() of
         [N] = P when N == node() ->
             ale:info(?USER_LOGGER, "I'm the only node, so I'm the master.", []),
+            State = rebuild_server_groups_cache(
+                      #state{last_heard=Now,
+                             peers=P,
+                             service_weights=get_service_weights()}),
             %% @state_change
             %% @from init
             %% @to master
             %% @reason Only node in cluster
-            {ok, master,
-                 start_master(#state{last_heard=Now,
-                                     peers=P,
-                                     service_weights = get_service_weights()})};
+            {ok, master, start_master(State)};
         Peers when is_list(Peers) ->
             %% We're a candidate
             ?log_debug("Starting as candidate. Peers: ~p", [Peers]),
+            State = rebuild_server_groups_cache(
+                      #state{last_heard = Now,
+                             %% Prevent new node from becoming master by
+                             %% accident, and wait for TIMEOUT amount of
+                             %% time before making a decision.
+                             higher_priority_nodes = [{node(), Now}],
+                             peers = Peers,
+                             service_weights = get_service_weights()}),
             %% @state_change
             %% @from init
             %% @to candidate
             %% @reason Other nodes in cluster
-            {ok, candidate, #state{last_heard = Now,
-                                   %% Prevent new node from becoming master by
-                                   %% accident, and wait for TIMEOUT amount of
-                                   %% time before making a decision.
-                                   higher_priority_nodes = [{node(), Now}],
-                                   peers = Peers,
-                                   service_weights = get_service_weights()}}
+            {ok, candidate, State}
     end.
 
 maybe_invalidate_current_master() ->
@@ -260,6 +269,7 @@ candidate(info, config_changed, StateData) ->
     Peers = ns_node_disco:nodes_wanted(),
     S0 = update_service_weights(StateData),
     S1 = refresh_high_priority_nodes(update_peers(S0, Peers)),
+    S2 = rebuild_server_groups_cache(S1),
     case Peers of
         [N] when N == node() ->
             ale:info(?USER_LOGGER,
@@ -269,9 +279,9 @@ candidate(info, config_changed, StateData) ->
             %% @from candidate
             %% @to master
             %% @reason Only node remaining
-            {next_state, master, start_master(S1)};
+            {next_state, master, start_master(S2)};
         _ ->
-            case can_be_master(S1) of
+            case can_be_master(S2) of
                 true ->
                     ale:info(?USER_LOGGER,
                              "Master has been removed from cluster. "
@@ -280,9 +290,9 @@ candidate(info, config_changed, StateData) ->
                     %% @from candidate
                     %% @to master
                     %% @reason Master removed from the cluster
-                    {next_state, master, start_master(S1)};
+                    {next_state, master, start_master(S2)};
                 false ->
-                    {keep_state, S1}
+                    {keep_state, refresh_master_server_group(S2)}
             end
     end;
 candidate(info, {send_heartbeat, LastHBInterval},
@@ -326,6 +336,7 @@ candidate(info, {heartbeat, {Version, Node}, master, _H},
                          "which is not in peers ~p", [Node, Peers]),
             keep_state_and_data;
         true ->
+            NodeSG = get_node_server_group(Node, State),
             %% If master is of strongly lower priority than we are, then we send
             %% fake mastership heartbeat to force previous master to
             %% surrender. Thus there will be some time when cluster won't
@@ -336,8 +347,9 @@ candidate(info, {heartbeat, {Version, Node}, master, _H},
                     false ->
                         Now = erlang:monotonic_time(),
                         update_high_priority_nodes(
-                          {Node, Now}, State#state{last_heard = Now,
-                                                   master = Node});
+                          {Node, Now}, State#state{last_heard=Now,
+                                                   master=Node,
+                                                   master_server_group=NodeSG});
                     true ->
                         case rebalance:status() of
                             running ->
@@ -348,7 +360,8 @@ candidate(info, {heartbeat, {Version, Node}, master, _H},
                                          "rebalance seems to be running",
                                          [Node]),
                                 State#state{last_heard=erlang:monotonic_time(),
-                                            master=Node};
+                                            master=Node,
+                                            master_server_group=NodeSG};
                             _ ->
                                 ale:info(?USER_LOGGER,
                                          "Candidate got master heartbeat from "
@@ -358,7 +371,8 @@ candidate(info, {heartbeat, {Version, Node}, master, _H},
 
                                 send_heartbeat_with_peers([Node], master,
                                                           State#state.peers),
-                                State#state{master=undefined}
+                                State#state{master=undefined,
+                                            master_server_group=NodeSG}
                         end
                 end,
 
@@ -376,12 +390,16 @@ candidate(info, {heartbeat, {Version, Node}, master, _H},
     end;
 
 candidate(info, {heartbeat, {Version, Node}, candidate, _H},
-          #state{peers=Peers, service_weights = ServiceWeights} = State) ->
-    NodeInfo = build_node_info(Version, Node),
+          #state{peers=Peers, service_weights = ServiceWeights,
+                 master_server_group = MasterServerGroup} = State) ->
+    NodeInfo = build_node_info_with_server_group(build_node_info(Version, Node),
+                                                 State),
+    SelfInfo = build_node_info_with_server_group(node_info(), State),
 
     case lists:member(Node, Peers) of
         true ->
-            case higher_priority_node(NodeInfo, ServiceWeights) of
+            case higher_priority_candidate_node(
+                   SelfInfo, NodeInfo, ServiceWeights, MasterServerGroup) of
                 true ->
                     Now = erlang:monotonic_time(),
                     %% Higher priority node
@@ -406,12 +424,13 @@ master(info, config_changed, StateData) ->
     Peers = ns_node_disco:nodes_wanted(),
     S0 = update_service_weights(StateData),
     S1 = refresh_high_priority_nodes(update_peers(S0, Peers)),
+    S2 = refresh_master_server_group(rebuild_server_groups_cache(S1)),
     case lists:member(node(), Peers) of
         true ->
-            {keep_state, S1};
+            {keep_state, S2};
         false ->
             ?log_info("Master has been demoted. Peers = ~p", [Peers]),
-            NewState = shutdown_master_sup(S1),
+            NewState = shutdown_master_sup(S2),
             %% @state_change
             %% @from master
             %% @to candidate
@@ -437,6 +456,7 @@ master(info,
                     case get_orchestrator_state() of
                         idle ->
                             ?log_info("Surrendering mastership to ~p", [Node]),
+                            NodeSG = get_node_server_group(Node, State),
                             NewState = shutdown_master_sup(State),
                             announce_leader(Node),
                             %% @state_change
@@ -448,7 +468,8 @@ master(info,
                              update_high_priority_nodes(
                                {Node, Now},
                                NewState#state{last_heard = Now,
-                                              master = Node})};
+                                              master = Node,
+                                              master_server_group = NodeSG})};
                         Other ->
                             ?log_info(
                                "Got master heartbeat from ~p when "
@@ -546,11 +567,13 @@ start_master(StateData) ->
                         _ ->
                             [{old_master, OldMaster}]
                     end,
+    ServerGroup = get_node_server_group(node(), StateData),
     event_log:add_log(master_selected,
                       [{new_master, node()}] ++ OldMasterJSON),
     StateData#state{child = Pid,
                     master = node(),
-                    higher_priority_nodes = []}.
+                    higher_priority_nodes = [],
+                    master_server_group = ServerGroup}.
 
 
 %% @private
@@ -575,7 +598,6 @@ shutdown_master_sup(State) ->
     State#state{child = undefined,
                 master = undefined}.
 
-
 %% Auxiliary functions
 
 build_node_version(CompatVersion) ->
@@ -584,6 +606,11 @@ build_node_version(CompatVersion) ->
 build_node_info(Version, Node) ->
     Services = ns_cluster_membership:node_services(Node),
     {Version, Node, Services}.
+
+build_node_info_with_server_group(NodeInfo, State) ->
+    {Version, Node, Services} = NodeInfo,
+    ServerGroup = get_node_server_group(Node, State),
+    {Version, Node, Services, ServerGroup}.
 
 %% Return node information for ourselves.
 -spec node_info() -> node_info().
@@ -632,6 +659,22 @@ compare_services(ServicesA, ServicesB, ServiceWeights) ->
            lower
     end.
 
+-spec compare_server_groups(
+    server_group(), server_group(), server_group()) -> priority().
+compare_server_groups(undefined, _ServerGroupB, _ServerGroupRef) ->
+    equal;
+compare_server_groups(_ServerGroupA, undefined, _ServerGroupRef) ->
+    equal;
+compare_server_groups(ServerGroupA, ServerGroupB, ServerGroupRef) ->
+    case {ServerGroupA =:= ServerGroupRef, ServerGroupB =:= ServerGroupRef} of
+        {false, true} ->
+            higher;
+        {true, false} ->
+            lower;
+        _ ->
+            equal
+    end.
+
 get_service_priority(Service, ServiceWeights) ->
     {Service, Priority} = lists:keyfind(Service, 1, ServiceWeights),
     Priority.
@@ -659,6 +702,22 @@ higher_priority_node({SelfVersion, SelfNode, SelfServices},
                                  [fun compare_version/2,
                                   compare_services(_, _, ServiceWeights),
                                   fun compare_name/2]).
+
+-spec higher_priority_candidate_node(
+    node_info_with_server_group(), node_info_with_server_group(),
+    service_weights(), server_group()) -> boolean().
+higher_priority_candidate_node(
+  {SelfVersion, SelfNode, SelfServices, SelfServerGroup},
+  {OtherVersion, OtherNode, OtherServices, OtherServerGroup},
+  ServiceWeights, PrevMasterServerGroup) ->
+    Comparators = [fun compare_version/2,
+                   compare_services(_, _, ServiceWeights),
+                   compare_server_groups(_, _, PrevMasterServerGroup),
+                   fun compare_name/2],
+    higher_priority_compare_node(
+      [SelfVersion, SelfServices, SelfServerGroup, SelfNode],
+      [OtherVersion, OtherServices, OtherServerGroup, OtherNode],
+      Comparators).
 
 %% Compare node info terms against one another with the given comparators.
 %% The list of terms should be of the form [version(), services(), node()]
@@ -759,6 +818,31 @@ refresh_high_priority_nodes(#state{higher_priority_nodes = Nodes,
 
           end, Nodes),
     State#state{higher_priority_nodes = NewNodes}.
+
+get_node_server_group(Node, #state{server_groups_cache = Cache}) ->
+    maps:get(Node, Cache, undefined).
+
+rebuild_server_groups_cache(#state{peers=Peers} = State) ->
+    Snapshot = ns_cluster_membership:get_snapshot(),
+    NewCache = lists:foldl(
+        fun(Node, Acc) ->
+            Acc#{Node => ns_cluster_membership:get_node_server_group(Node,
+                                                                     Snapshot)}
+        end, #{}, Peers),
+    State#state{server_groups_cache=NewCache}.
+
+refresh_master_server_group(#state{master=undefined} = State) ->
+    State;
+refresh_master_server_group(#state{master=Master, peers=Peers} = State) ->
+    %% If we still have a live master, update it's saved server group
+    %% otherwise preserve the remembered server group for election.
+    case lists:member(Master, Peers) of
+        true ->
+            State#state{master_server_group =
+                            get_node_server_group(Master, State)};
+        false ->
+            State
+    end.
 
 config_upgrade_to_76(_Config) ->
     [{delete, mb33750_workaround_enabled}].
@@ -1017,6 +1101,139 @@ strongly_lower_priority_services_t() ->
                                                      {Version76, NameA, [kv]},
                                                      ?DEFAULT_SERVICE_WEIGHTS)).
 
+%% Tests for the post-8.1 candidate priority algorithm.
+%% Note, the priority algorithm does not have a cluster compat mode check as
+%% it is designed to be backwards compatible.
+higher_priority_candidate_node_t() ->
+    Version72 = misc:parse_version("7.2.0"),
+    Version76 = misc:parse_version("7.6.0"),
+    NameA = 'ns_1',
+    NameB = 'ns_2',
+    NodeAIsHigherPrio = false,
+    NodeBIsHigherPrio = true,
+
+    HPCNVersionALower =
+        fun(SA, SB) ->
+            higher_priority_candidate_node({Version72, NameA, SA, <<"foo">>},
+                                           {Version76, NameB, SB, <<"foo">>},
+                                           ?DEFAULT_SERVICE_WEIGHTS,
+                                           <<"foo">>)
+        end,
+
+    %% Version always takes precedence, regardless of services or Server Group.
+    %% VersionA < VersionB => NodeB higher priority (ServicesA < ServicesB)
+    ?assertEqual(NodeBIsHigherPrio, HPCNVersionALower(?TEST_NO_SERVICES, [kv])),
+
+    %% VersionA < VersionB => NodeB higher priority (ServicesA > ServicesB)
+    ?assertEqual(NodeBIsHigherPrio, HPCNVersionALower([kv], ?TEST_NO_SERVICES)),
+
+    HPCNServicesALower =
+        fun(SGA, SGB, SG) ->
+            higher_priority_candidate_node({Version76, NameA, [kv], SGA},
+                                           {Version76, NameB, [index], SGB},
+                                           ?DEFAULT_SERVICE_WEIGHTS,
+                                           SG)
+        end,
+
+    %% The next priority criteria is the service list so we will use the same
+    %% version for these tests.
+    %% VersionA = VersionB and ServicesA > ServicesB => NodeB higher priority
+    %% (ServerGroupA != ServerGroupB != ReferenceServerGroup)
+    ?assertEqual(NodeBIsHigherPrio, HPCNServicesALower(<<"Group 1">>,
+                                                       <<"Group 2">>,
+                                                       <<"Group 3">>)),
+
+    %% VersionA = VersionB and ServicesA > ServicesB => NodeB higher priority
+    %% (ServerGroupA = ServerGroupB = ReferenceServerGroup)
+    ?assertEqual(NodeBIsHigherPrio, HPCNServicesALower(<<"Group 1">>,
+                                                       <<"Group 1">>,
+                                                       <<"Group 1">>)),
+
+    %% VersionA = VersionB and ServicesA > ServicesB => NodeB higher priority
+    %% (ServerGroupA != ServerGroupB, ServerGroupB = ReferenceServerGroup)
+    ?assertEqual(NodeBIsHigherPrio, HPCNServicesALower(<<"Group 1">>,
+                                                       <<"Group 2">>,
+                                                       <<"Group 2">>)),
+
+    %% VersionA = VersionB and ServicesA > ServicesB => NodeB higher priority
+    %% (ServerGroupA = ServerGroupB, ReferenceServerGroup = undefined)
+    ?assertEqual(NodeBIsHigherPrio, HPCNServicesALower(<<"Group 1">>,
+                                                       <<"Group 1">>,
+                                                       undefined)),
+
+    %% VersionA = VersionB and ServicesA > ServicesB => NodeB higher priority
+    %% (ServerGroupA != ServerGroupB, ReferenceServerGroup = undefined)
+    ?assertEqual(NodeBIsHigherPrio, HPCNServicesALower(<<"Group 1">>,
+                                                       <<"Group 2">>,
+                                                       undefined)),
+
+    HPCNNameALower =
+        fun(SGA, SGB, SG) ->
+            higher_priority_candidate_node({Version76, NameA, [kv], SGA},
+                                           {Version76, NameB, [kv], SGB},
+                                           ?DEFAULT_SERVICE_WEIGHTS,
+                                           SG)
+        end,
+
+    %% The next priority criteria is the Server Group, so we will use the same
+    %% version and services for these tests.
+    %% VersionA = VersionB and ServicesA = ServicesB and SGA = SG, SGB != SG =>
+    %% NodeB higher priority (NodeB in a different Server Group)
+    ?assertEqual(NodeBIsHigherPrio, HPCNNameALower(<<"Group 1">>,
+                                                   <<"Group 2">>,
+                                                   <<"Group 1">>)),
+
+    %% VersionA = VersionB and ServicesA = ServicesB and SGA != SG, SGB != SG =>
+    %% NodeA higher priority
+    %% (both nodes in different Server Groups => both equally preferred)
+    ?assertEqual(NodeAIsHigherPrio, HPCNNameALower(<<"Group 1">>,
+                                                   <<"Group 2">>,
+                                                   <<"Group 3">>)),
+
+    %% VersionA = VersionB and ServicesA = ServicesB and SGA = SGB = SG =>
+    %% NodeA higher priority
+    %% (both nodes in the same Server Group => both equally preferred)
+    ?assertEqual(NodeAIsHigherPrio, HPCNNameALower(<<"Group 1">>,
+                                                   <<"Group 1">>,
+                                                   <<"Group 1">>)),
+
+    %% VersionA = VersionB and ServicesA = ServicesB and SGA = SGB != SG =>
+    %% NodeA higher priority
+    %% (both nodes in the same Server Group => both equally preferred)
+    ?assertEqual(NodeAIsHigherPrio, HPCNNameALower(<<"Group 1">>,
+                                                   <<"Group 1">>,
+                                                   <<"Group 2">>)),
+
+    %% The server group criteria is a NOP if any of the server groups is
+    %% undefined, and we break that 'tie' using the node name.
+    %% VersionA = VersionB and ServicesA = ServicesB and
+    %% SGA != SGB, SG = undefined => NodeA higher priority
+    %% (no Server Group preference, NameA < NameB)
+    ?assertEqual(NodeAIsHigherPrio, HPCNNameALower(<<"Group 1">>,
+                                                   <<"Group 2">>,
+                                                   undefined)),
+
+    %% VersionA = VersionB and ServicesA = ServicesB and
+    %% SGA = SGB, SG = undefined => NodeA higher priority
+    %% (no Server Group preference, NameA < NameB)
+    ?assertEqual(NodeAIsHigherPrio, HPCNNameALower(<<"Group 1">>,
+                                                   <<"Group 1">>,
+                                                   undefined)),
+
+    %% VersionA = VersionB and ServicesA = ServicesB and
+    %% SGA = SG = undefined, SGB != SG => NodeA higher priority
+    %% (no Server Group preference, NameA < NameB)
+    ?assertEqual(NodeAIsHigherPrio, HPCNNameALower(undefined,
+                                                   <<"Group 1">>,
+                                                   undefined)),
+
+    %% VersionA = VersionB and ServicesA = ServicesB and
+    %% SGA = SG, SGB = undefined => NodeA higher priority
+    %% (no Server Group preference, NameA < NameB)
+    ?assertEqual(NodeAIsHigherPrio, HPCNNameALower(<<"Group 1">>,
+                                                   undefined,
+                                                   <<"Group 1">>)).
+
 node_info_t() ->
     {Version, Node, Services} =
         build_node_info(build_node_version([7,6,0]), 'ns_1@192.168.1.1'),
@@ -1044,6 +1261,8 @@ priority_test_() ->
          {"strongly lower priority test", fun strongly_lower_priority_node_t/0},
          {"strongly lower priority services test",
           fun strongly_lower_priority_services_t/0},
+         {"higher priority candidate node test",
+          fun higher_priority_candidate_node_t/0},
          {"node info test", fun node_info_t/0}]
     }.
 
