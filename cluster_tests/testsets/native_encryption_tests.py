@@ -1729,6 +1729,104 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                             data_statuses=['unencrypted'],
                                             dek_number=0)
 
+    def master_password_warning_test(self):
+        node1 = self.cluster.connected_nodes[0]
+        node2 = self.cluster.connected_nodes[1]
+        node3 = self.cluster.connected_nodes[2]
+        all_nodes = [node1, node2, node3]
+
+        def get_master_pass_state(node, at_node):
+            otp_node = node.otp_node()
+            r = testlib.diag_eval(
+                  at_node,
+                  "element(2, {ok, _} = "
+                  f"encryption_service:get_state('{otp_node}')).")
+            return r.text
+
+        def wait_master_pass_state(s, node):
+            expected = f'<<"{s}">>'
+            testlib.poll_for_condition(
+                lambda: all(get_master_pass_state(node, n) == expected
+                            for n in all_nodes),
+                sleep_time=1, attempts=10)
+
+        # Change master password and wait for all nodes to learn the new state
+        def sync_change_password(node, password=None):
+            # Note: when password is None, change_password will set it to
+            #       some random value,
+            change_password(node, password=password)
+            expect_state = 'default' if password == '' else 'user_configured'
+            wait_master_pass_state(expect_state, node)
+
+        def get_ear_warnings(component):
+            r = testlib.get_succ(self.random_node(),
+                                 '/settings/security/encryptionAtRest').json()
+            return r.get(component, {}).get('warnings', [])
+
+        def assert_warning(warnings, expected_nodes):
+            w = 'master password for node(s) ' \
+                f'{", ".join(n.hostname() for n in expected_nodes)} ' \
+                'is not configured'
+            testlib.assert_eq(len(warnings), 1)
+            testlib.assert_in(w, warnings[0])
+
+        def get_secret_warnings(secret_id):
+            r = testlib.get_succ(self.random_node(),
+                                 f'/settings/encryptionKeys/{secret_id}').json()
+            return r.get('warnings', [])
+
+        # We need to make sure that we have a clean state (no master passwords)
+        for n in all_nodes:
+            sync_change_password(n, password='')
+
+        # Disable all encryption
+        set_log_encryption(self.cluster, 'disabled', -1)
+        set_cfg_encryption(self.cluster, 'disabled', -1)
+        set_audit_encryption(self.cluster, 'disabled', -1)
+        set_other_encryption(self.cluster, 'disabled', -1)
+
+        # Initially no warnings (encryption disabled)
+        testlib.assert_eq(get_ear_warnings('config'), [])
+        testlib.assert_eq(get_ear_warnings('log'), [])
+        testlib.assert_eq(get_ear_warnings('audit'), [])
+        testlib.assert_eq(get_ear_warnings('other'), [])
+
+        # Enable config encryption using nodeSecretManager, it should trigger
+        # a warning under config
+        set_cfg_encryption(self.cluster, 'nodeSecretManager', -1)
+        assert_warning(get_ear_warnings('config'), all_nodes)
+
+        # Create a secret using nodeSecretManager
+        secret_id = create_secret(self.cluster, cb_managed_secret())
+        # It should trigger a warning in the secret itself
+        assert_warning(get_secret_warnings(secret_id), all_nodes)
+
+        # Create a secret using another secret (not nodeSecretManager)
+        # and verify it has NO warnings
+        secret2_spec = cb_managed_secret(encrypt_with='encryptionKey',
+                                         encrypt_secret_id=secret_id)
+        secret2_id = create_secret(self.cluster, secret2_spec)
+        testlib.assert_eq(get_secret_warnings(secret2_id), [])
+
+        try:
+            # Setting master password should make warnings disappear for
+            # that node
+            for n in [node1, node2]:
+                sync_change_password(n)
+
+            assert_warning(get_ear_warnings('config'), [node3])
+            assert_warning(get_secret_warnings(secret_id), [node3])
+
+            # Setting master password on the last node should make all warnings
+            # disappear
+            sync_change_password(node3)
+
+            testlib.assert_eq(get_ear_warnings('config'), [])
+            testlib.assert_eq(get_secret_warnings(secret_id), [])
+        finally:
+            for n in all_nodes:
+                sync_change_password(n, password='')
+
     def remove_old_deks_test(self):
         secret = cb_managed_secret(usage=['bucket-encryption'])
         secret_id = create_secret(self.random_node(), secret)
