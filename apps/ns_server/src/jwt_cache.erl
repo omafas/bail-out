@@ -323,22 +323,24 @@ fetch_jwks_from_oidc_discovery(DiscoveryURL, IssuerProps) ->
     DiscoveryTimeout = maps:get(http_timeout_ms, OidcSettings),
     DiscoveryOpts = extract_oidc_connect_options(DiscoveryURL, OidcSettings),
 
-    try rest_utils:request(<<"oidc_discovery">>, DiscoveryURL,
-                           "GET", [], <<>>, DiscoveryTimeout,
-                           [{connect_options, DiscoveryOpts}]) of
-        {ok, {{200, _}, _RespHeaders, Body}} ->
-            case jose:decode(Body) of
-                Map when is_map(Map) ->
-                    JwksUriBin = maps:get(<<"jwks_uri">>, Map),
-                    JwksURL = binary_to_list(JwksUriBin),
-                    fetch_jwks_from_url(JwksURL, IssuerProps);
-                _ ->
-                    throw(invalid_discovery)
-            end;
-        {ok, {{Status, _Reason}, _RespHeaders, _RespBody}} ->
-            throw({rest_failed, DiscoveryURL, {status, Status}});
-        {error, Reason} ->
-            throw({rest_failed, DiscoveryURL, {error, Reason}})
+    try
+        case rest_utils:request(<<"oidc_discovery">>, DiscoveryURL,
+                                "GET", [], <<>>, DiscoveryTimeout,
+                                [{connect_options, DiscoveryOpts}]) of
+            {ok, {{200, _}, _RespHeaders, Body}} ->
+                case jose:decode(Body) of
+                    Map when is_map(Map) ->
+                        JwksUriBin = maps:get(<<"jwks_uri">>, Map),
+                        JwksURL = binary_to_list(JwksUriBin),
+                        fetch_jwks_from_url(JwksURL, IssuerProps);
+                    _ ->
+                        throw(invalid_discovery)
+                end;
+            {ok, {{Status, _Reason}, _RespHeaders, _RespBody}} ->
+                throw({rest_failed, DiscoveryURL, {status, Status}});
+            {error, Reason} ->
+                throw({rest_failed, DiscoveryURL, {error, Reason}})
+        end
     catch
         throw:Error ->
             ?log_error("Failed to get OIDC discovery from ~p.~nReason: ~p",
