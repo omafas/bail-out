@@ -662,6 +662,11 @@ def assert_eq(got, expected, name='value', resp=None):
     assert expected == got, \
         format_error(resp, f'unexpected {name}: {got}, expected: {expected}')
 
+def assert_not_eq(got, expected, name='value', resp=None):
+    assert expected != got, \
+        format_error(resp,
+                     f'unexpected {name}: {got}, expected: not {expected}')
+
 def assert_gt(got, lower_bound, name='value'):
     assert got > lower_bound, \
         f'unexpected {name}: {got}, expected: > {lower_bound}'

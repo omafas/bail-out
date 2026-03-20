@@ -179,6 +179,7 @@
                 "$ref": "#/components/schemas/CatalogUpdateInput"
               },
               "example": {
+                "rev": 1,
                 "param1": "value1"
               }
             }
@@ -216,6 +217,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevMismatch"
           }
         }
       },
@@ -275,6 +279,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/RevMismatch"
           }
         }
       },
@@ -374,7 +381,13 @@
       },
       "CatalogUpdateInput": {
         "type": "object",
-        "description": "Input for updating a catalog. The name must not be included; it is taken from the URL path.\n",
+        "description": "Input for updating a catalog. The name must not be included; it is taken from the URL path. An optional rev may be provided for compare-and-swap semantics.\n",
+        "properties": {
+          "rev": {
+            "type": "integer",
+            "description": "Optional. If provided, the update will only succeed if the current revision of the catalog matches this value. If not provided, the update proceeds unconditionally.\n"
+          }
+        },
         "additionalProperties": {
           "type": "string"
         }
@@ -423,6 +436,17 @@
               "type": "string"
             },
             "example": "Requested resource not found.\r\n"
+          }
+        }
+      },
+      "RevMismatch": {
+        "description": "Revision mismatch. The catalog has been modified since it was last read.\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "string"
+            },
+            "example": "Revision mismatch. The catalog has been modified since it was last read."
           }
         }
       }

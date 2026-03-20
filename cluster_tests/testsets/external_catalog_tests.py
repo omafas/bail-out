@@ -268,6 +268,78 @@ class ExternalCatalogTests(testlib.BaseTestSet):
             data={"param1": "value1"})
         testlib.assert_eq(uid0 + 2, r.json()["rev"])
 
+    def cas_put_with_correct_rev_test(self):
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "cas-ok"})
+
+        r = testlib.get_succ(
+            self.cluster, catalog_path("cas-ok"))
+        rev = r.json()["rev"]
+
+        r2 = testlib.put_succ(
+            self.cluster, catalog_path("cas-ok"),
+            data={"rev": rev})
+        body = r2.json()
+        new_rev = body["rev"]
+        testlib.assert_not_eq(rev, new_rev)
+
+    def cas_put_with_stale_rev_test(self):
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "cas-stale"})
+
+        r = testlib.get_succ(
+            self.cluster,
+            catalog_path("cas-stale"))
+        stale_rev = r.json()["rev"]
+
+        # Modify the catalog to advance the revision
+        testlib.put_succ(
+            self.cluster,
+            catalog_path("cas-stale"),
+            data={})
+
+        # The stale rev should now cause a 409
+        testlib.put_fail(
+            self.cluster,
+            catalog_path("cas-stale"),
+            expected_code=409,
+            data={"rev": stale_rev})
+
+    def cas_put_without_rev_test(self):
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "cas-none"})
+
+        # PUT without rev should succeed unconditionally
+        r = testlib.put_succ(
+            self.cluster, catalog_path("cas-none"),
+            data={})
+        testlib.assert_in("rev", r.json())
+
+    def cas_put_rev_updates_after_modify_test(self):
+        r1 = testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "cas-update"})
+        rev1 = r1.json()["rev"]
+
+        r2 = testlib.put_succ(
+            self.cluster,
+            catalog_path("cas-update"),
+            data={"rev": rev1})
+        rev2 = r2.json()["rev"]
+
+        # Rev should change after a modification
+        assert rev1 != rev2, \
+            "rev should change after modification"
+
+        # The new rev should work for the next CAS
+        testlib.put_succ(
+            self.cluster,
+            catalog_path("cas-update"),
+            data={"rev": rev2})
+
     def pools_default_includes_catalogs_test(self):
         r = testlib.get_succ(
             self.cluster, "/pools/default")

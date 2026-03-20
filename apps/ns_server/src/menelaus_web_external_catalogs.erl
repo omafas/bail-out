@@ -84,13 +84,14 @@ handle_put_catalog(Name, Req) ->
               %% Name is prohibited in params, so we can append it safely.
               BinaryParams = binary_params([{name, Name} | Params]),
               BinName = proplists:get_value(name, BinaryParams),
+              UserRev = proplists:get_value(rev, Params),
               case validate_with_service(BinaryParams) of
                   {ok, ServiceOKs} ->
                       Updated = build_catalog(
                                   ServiceOKs,
                                   BinaryParams),
                       case replace_catalog(
-                             BinName, Updated) of
+                             BinName, Updated, UserRev) of
                           {ok, _, CommittedCatalog} ->
                               menelaus_util:reply_json(
                                 Req,
@@ -98,13 +99,16 @@ handle_put_catalog(Name, Req) ->
                                 200);
                           not_found ->
                               menelaus_util:reply_not_found(
-                                Req)
+                                Req);
+                          rev_mismatch ->
+                              reply_rev_mismatch(Req)
                       end;
                   {errors, Errors} ->
                       reply_validation_errors(
                         Req, Errors)
               end
-      end, Req, form, [validator:prohibited(name, _)]).
+      end, Req, form, [validator:prohibited(name, _),
+                       validator:integer(rev, _)]).
 
 handle_patch_catalog(Name, Req) ->
     menelaus_util:assert_is_totoro(),
@@ -113,6 +117,8 @@ handle_patch_catalog(Name, Req) ->
               %% Name is prohibited in params, so we can append it safely.
               BinaryParams = binary_params([{name, Name} | Params]),
               BinName = proplists:get_value(name, BinaryParams),
+
+              UserRev = proplists:get_value(rev, Params, undefined),
 
               maybe
                   Catalogs = get_catalogs(get_state()),
@@ -127,11 +133,8 @@ handle_patch_catalog(Name, Req) ->
 
                   Updated = build_catalog(ServiceOKs, AllProps),
 
-                  %% TODO: This is racy, someone else could update the catalog
-                  %% in the mean time. We are adding a rev in a future change
-                  %% though, and we can use that to either retry or fail.
                   {ok, _, CommittedCatalog} ?=
-                      replace_catalog(BinName, Updated),
+                      replace_catalog(BinName, Updated, UserRev),
 
                   menelaus_util:reply_json(
                       Req, format_catalog(CommittedCatalog), 200)
@@ -139,7 +142,11 @@ handle_patch_catalog(Name, Req) ->
                   not_found ->
                       menelaus_util:reply_not_found(Req);
                   {errors, Errors} ->
-                      reply_validation_errors(Req, Errors)
+                      reply_validation_errors(Req, Errors);
+                  rev_mismatch ->
+                      %% TODO: If the user did not pass any rev, this should
+                      %% retry some sensible number of times
+                      reply_rev_mismatch(Req)
               end
       end,
       Req, form,
@@ -261,22 +268,30 @@ add_catalog(Name, Catalog) ->
               end
       end).
 
-replace_catalog(Name, NewCatalogWithoutRev) ->
+replace_catalog(Name, NewCatalogWithoutRev, UserRev) ->
     chronicle_kv:transaction(
       kv, [?CHRONICLE_KEY],
       fun(Snapshot) ->
-              State = get_state(Snapshot),
-              Catalogs = get_catalogs(State),
-              case find_catalog(Name, Catalogs) of
+              maybe
+                  State = get_state(Snapshot),
+                  Catalogs = get_catalogs(State),
+                  {ok, OldCatalog} ?= find_catalog(Name, Catalogs),
+                  OldRev = proplists:get_value(rev, OldCatalog),
+                  case UserRev =:= undefined orelse
+                      OldRev =:= UserRev of
+                      false ->
+                          {abort, rev_mismatch};
+                      true ->
+                          NewUid = get_uid(State) + 1,
+                          NewCatalog =
+                              misc:update_proplist(NewCatalogWithoutRev,
+                                                   [{rev, NewUid}]),
+                          NewCatalogs = Catalogs#{Name => NewCatalog},
+                          {commit, set_state(NewUid, NewCatalogs), NewCatalog}
+                  end
+              else
                   not_found ->
-                      {abort, not_found};
-                  {ok, _OldCatalog} ->
-                      NewUid = get_uid(State) + 1,
-                      NewCatalog = misc:update_proplist(
-                          NewCatalogWithoutRev,
-                          [{rev, NewUid}]),
-                      NewCatalogs = Catalogs#{Name => NewCatalog},
-                      {commit, set_state(NewUid, NewCatalogs), NewCatalog}
+                      {abort, not_found}
               end
       end).
 
@@ -333,7 +348,9 @@ build_catalog(ServiceOKs, Params) ->
 binary_params(Params) ->
     lists:foldl(
         fun({name, V}, Acc) ->
-            [{name, list_to_binary(V)} | Acc];
+                [{name, list_to_binary(V)} | Acc];
+            ({rev, V}, Acc) ->
+                [{rev, V} | Acc];
             ({K, V}, Acc) ->
                 [{list_to_binary(K), list_to_binary(V)} | Acc]
             end, [], Params).
@@ -345,6 +362,13 @@ reply_conflict(Req, Name) ->
         io_lib:format(
           "External catalog '~s' already exists",
           [Name])),
+      409).
+
+reply_rev_mismatch(Req) ->
+    menelaus_util:reply_json(
+      Req,
+      <<"Revision mismatch. The catalog has been"
+        " modified since it was last read.">>,
       409).
 
 reply_validation_errors(Req, Errors) ->
