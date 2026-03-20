@@ -24,18 +24,20 @@
         ],
         "responses": {
           "200": {
-            "description": "A JSON object of external catalogs keyed by name.\n",
+            "description": "A JSON object containing the manifest uid and external catalogs keyed by name.\n",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "$ref": "#/components/schemas/Catalog"
-                  }
+                  "$ref": "#/components/schemas/CatalogList"
                 },
                 "example": {
-                  "my-catalog": {},
-                  "other-catalog": {}
+                  "uid": 2,
+                  "my-catalog": {
+                    "rev": 1
+                  },
+                  "other-catalog": {
+                    "rev": 2
+                  }
                 }
               }
             }
@@ -80,7 +82,9 @@
                 "schema": {
                   "$ref": "#/components/schemas/Catalog"
                 },
-                "example": {}
+                "example": {
+                  "rev": 1
+                }
               }
             }
           },
@@ -139,7 +143,9 @@
                 "schema": {
                   "$ref": "#/components/schemas/Catalog"
                 },
-                "example": {}
+                "example": {
+                  "rev": 1
+                }
               }
             }
           },
@@ -170,10 +176,10 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CatalogInput"
+                "$ref": "#/components/schemas/CatalogUpdateInput"
               },
               "example": {
-                "name": "new-name"
+                "param1": "value1"
               }
             }
           }
@@ -187,13 +193,13 @@
                   "$ref": "#/components/schemas/Catalog"
                 },
                 "example": {
-                  "name": "new-name"
+                  "rev": 2
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid input. The name is missing, empty, too long, or contains invalid characters.\n",
+            "description": "Invalid input.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -210,17 +216,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "A catalog with the new name already exists.\n",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string"
-                },
-                "example": "External catalog 'new-name' already exists"
-              }
-            }
           }
         }
       },
@@ -256,7 +251,9 @@
                 "schema": {
                   "$ref": "#/components/schemas/Catalog"
                 },
-                "example": {}
+                "example": {
+                  "rev": 3
+                }
               }
             }
           },
@@ -343,10 +340,37 @@
     "schemas": {
       "Catalog": {
         "type": "object",
+        "required": [
+          "rev"
+        ],
+        "properties": {
+          "rev": {
+            "type": "integer",
+            "description": "The revision of this catalog, set to the manifest uid at the time of the last mutation.\n",
+            "example": 1
+          }
+        },
         "additionalProperties": {
           "type": "string"
         },
-        "description": "A catalog object containing service-validated parameters. The name is not included in the response body; it is either the key in the list response or part of the URL path.\n"
+        "description": "A catalog object containing a rev and service-validated parameters. The name is not included in the response body; it is either the key in the list response or part of the URL path.\n"
+      },
+      "CatalogList": {
+        "type": "object",
+        "required": [
+          "uid"
+        ],
+        "properties": {
+          "uid": {
+            "type": "integer",
+            "description": "The manifest uid, incremented on every mutation to external catalogs.\n",
+            "example": 2
+          }
+        },
+        "additionalProperties": {
+          "$ref": "#/components/schemas/Catalog"
+        },
+        "description": "An object with a uid field and additional properties keyed by catalog name, each being a Catalog object.\n"
       },
       "CatalogUpdateInput": {
         "type": "object",

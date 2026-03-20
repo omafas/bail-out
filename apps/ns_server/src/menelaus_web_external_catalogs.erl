@@ -25,16 +25,23 @@
 -define(CHRONICLE_KEY, external_catalogs).
 -define(MAX_NAME_LENGTH, 256).
 
+%% The chronicle value is a map with two keys:
+%%   uid => non_neg_integer()
+%%   catalogs => #{binary() => catalog()}
+%% uid is incremented on every mutation and used as the
+%% rev value for the affected catalog.
+
 handle_get_catalogs(Req) ->
     menelaus_util:assert_is_totoro(),
-    Catalogs = get_catalogs(),
+    State = get_state(),
 
-    menelaus_util:reply_json(Req, format_catalogs(Catalogs)).
+    menelaus_util:reply_json(
+      Req, format_catalogs(State)).
 
 handle_get_catalog(Name, Req) ->
     menelaus_util:assert_is_totoro(),
     BinName = list_to_binary(Name),
-    case find_catalog(BinName, get_catalogs()) of
+    case find_catalog(BinName, get_catalogs(get_state())) of
         {ok, Catalog} ->
             menelaus_util:reply_json(
               Req, format_catalog(Catalog));
@@ -55,10 +62,10 @@ handle_post_catalog(Req) ->
                                   ServiceOKs,
                                   BinaryParams),
                       case add_catalog(Name, Catalog) of
-                          {ok, _} ->
+                          {ok, _, CommittedCatalog} ->
                               menelaus_util:reply_json(
                                 Req,
-                                format_catalog(Catalog),
+                                format_catalog(CommittedCatalog),
                                 200);
                           already_exists ->
                               reply_conflict(Req, Name)
@@ -67,7 +74,7 @@ handle_post_catalog(Req) ->
                       reply_validation_errors(
                         Req, Errors)
               end
-      end, Req, form, name_validators()).
+      end, Req, form, [validator:prohibited(rev, _) | name_validators()]).
 
 handle_put_catalog(Name, Req) ->
     menelaus_util:assert_is_totoro(),
@@ -83,10 +90,10 @@ handle_put_catalog(Name, Req) ->
                                   BinaryParams),
                       case replace_catalog(
                              BinName, Updated) of
-                          {ok, _} ->
+                          {ok, _, CommittedCatalog} ->
                               menelaus_util:reply_json(
                                 Req,
-                                format_catalog(Updated),
+                                format_catalog(CommittedCatalog),
                                 200);
                           not_found ->
                               menelaus_util:reply_not_found(
@@ -107,7 +114,7 @@ handle_patch_catalog(Name, Req) ->
               BinName = proplists:get_value(name, BinaryParams),
 
               maybe
-                  Catalogs = get_catalogs(),
+                  Catalogs = get_catalogs(get_state()),
                   {ok, ExistingCatalog} ?= find_catalog(BinName, Catalogs),
 
                   ExistingExtra =
@@ -122,11 +129,11 @@ handle_patch_catalog(Name, Req) ->
                   %% TODO: This is racy, someone else could update the catalog
                   %% in the mean time. We are adding a rev in a future change
                   %% though, and we can use that to either retry or fail.
-                  {ok, _} ?= replace_catalog(BinName, Updated),
+                  {ok, _, CommittedCatalog} ?=
+                      replace_catalog(BinName, Updated),
 
-                  menelaus_util:reply_json(Req,
-                                           format_catalog(Updated),
-                                           200)
+                  menelaus_util:reply_json(
+                      Req, format_catalog(CommittedCatalog), 200)
               else
                   not_found ->
                       menelaus_util:reply_not_found(Req);
@@ -211,55 +218,77 @@ validate_against_query_nodes([FirstNode | _], CatalogConfig,
 
 %% Chronicle operations
 
-get_catalogs() ->
-    get_catalogs(direct).
+default_state() ->
+    #{uid => 0,
+      catalogs => #{}}.
 
-get_catalogs(Snapshot) ->
+get_state() ->
+    get_state(direct).
+
+get_state(Snapshot) ->
     chronicle_compat:get(Snapshot, ?CHRONICLE_KEY,
-                         #{default => #{}}).
+                         #{default => default_state()}).
+
+get_catalogs(#{catalogs := Catalogs}) ->
+    Catalogs.
+
+get_uid(#{uid := Uid}) ->
+    Uid.
+
+set_state(ManifestUid, Catalogs) ->
+    [{set, ?CHRONICLE_KEY,
+      #{uid => ManifestUid,
+        catalogs => Catalogs}}].
 
 add_catalog(Name, Catalog) ->
     chronicle_kv:transaction(
       kv, [?CHRONICLE_KEY],
       fun (Snapshot) ->
-              Catalogs = get_catalogs(Snapshot),
+              State = get_state(Snapshot),
+              Catalogs = get_catalogs(State),
               case find_catalog(Name, Catalogs) of
                   {ok, _} ->
                       {abort, already_exists};
                   not_found ->
-                      {commit,
-                       [{set, ?CHRONICLE_KEY,
-                         Catalogs#{Name => Catalog}}]}
+                      NewUid = get_uid(State) + 1,
+                      CatalogWithRev = [{rev, NewUid} | Catalog],
+                      NewCatalogs = Catalogs#{Name => CatalogWithRev},
+                      {commit, set_state(NewUid, NewCatalogs), CatalogWithRev}
               end
       end).
 
-replace_catalog(Name, NewCatalog) ->
+replace_catalog(Name, NewCatalogWithoutRev) ->
     chronicle_kv:transaction(
-        kv, [?CHRONICLE_KEY],
-        fun(Snapshot) ->
-            Catalogs = get_catalogs(Snapshot),
-            case find_catalog(Name, Catalogs) of
-                not_found ->
-                    {abort, not_found};
-                {ok, _} ->
-                    NewCatalogs = Catalogs#{Name => NewCatalog},
-                    {commit,
-                        [{set, ?CHRONICLE_KEY, NewCatalogs}]}
-            end
-        end).
+      kv, [?CHRONICLE_KEY],
+      fun(Snapshot) ->
+              State = get_state(Snapshot),
+              Catalogs = get_catalogs(State),
+              case find_catalog(Name, Catalogs) of
+                  not_found ->
+                      {abort, not_found};
+                  {ok, _OldCatalog} ->
+                      NewUid = get_uid(State) + 1,
+                      NewCatalog = misc:update_proplist(
+                          NewCatalogWithoutRev,
+                          [{rev, NewUid}]),
+                      NewCatalogs = Catalogs#{Name => NewCatalog},
+                      {commit, set_state(NewUid, NewCatalogs), NewCatalog}
+              end
+      end).
 
 delete_catalog(Name) ->
     chronicle_kv:transaction(
       kv, [?CHRONICLE_KEY],
       fun (Snapshot) ->
-              Catalogs = get_catalogs(Snapshot),
+              State = get_state(Snapshot),
+              Catalogs = get_catalogs(State),
               case find_catalog(Name, Catalogs) of
                   not_found ->
                       {abort, not_found};
                   {ok, _} ->
+                      NewUid = get_uid(State) + 1,
                       NewCatalogs = maps:remove(Name, Catalogs),
-                      {commit,
-                       [{set, ?CHRONICLE_KEY, NewCatalogs}]}
+                      {commit, set_state(NewUid, NewCatalogs)}
               end
       end).
 
@@ -273,10 +302,15 @@ find_catalog(Name, Catalogs) ->
 
 format_catalog(Catalog) ->
     ExtraParams = proplists:get_value(extra_params, Catalog, []),
-    {ExtraParams}.
+    WithoutExtras = proplists:delete(extra_params, Catalog),
+    {WithoutExtras ++ ExtraParams}.
 
-format_catalogs(Catalogs) when is_map(Catalogs) ->
-    {maps:to_list(maps:map(fun (_K, V) -> format_catalog(V) end, Catalogs))}.
+format_catalogs(State) ->
+    Catalogs = get_catalogs(State),
+    FormattedCatalogs =
+        maps:to_list(maps:map(fun (_K, V) -> format_catalog(V) end, Catalogs)),
+    ManifestUid = get_uid(State),
+    {[{uid, ManifestUid} | FormattedCatalogs]}.
 
 build_catalog(ServiceOKs, Params) ->
     %% Filter down the OKsFromServices to only Params we wanted
