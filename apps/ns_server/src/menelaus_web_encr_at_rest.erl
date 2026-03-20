@@ -19,7 +19,8 @@
          format_encr_at_rest_info/1, handle_force_encr/2,
          handle_bucket_force_encr/2, min_dek_rotation_interval_in_sec/0,
          min_dek_lifetime_in_sec/0, dek_interval_error/1,
-         bypass_encr_cfg_restrictions/0, handle_import_ear_dek/1]).
+         bypass_encr_cfg_restrictions/0, handle_import_ear_dek/1,
+         get_master_password_warning/0]).
 
 encr_method(Param, SecretIdName, EncrType) ->
     AllowedInMixedClusters = case EncrType of
@@ -170,6 +171,10 @@ skip_test(Param, EncrType) ->
      #{cfg_key => [EncrType, skip_encryption_key_test],
        type => bool}}.
 
+warnings_list(Param, EncrType) ->
+    {Param, #{cfg_key => [EncrType, warnings],
+              type => {read_only, encr_warnings}}}.
+
 params() ->
     Types = [{"config", config_encryption},
              {"log", log_encryption},
@@ -189,7 +194,8 @@ params(Prefix, Type) ->
      encr_deks_drop_date(Prefix ++ ".dekLastDropDate", Type),
      encr_force_encr_date(Prefix ++ ".lastForceEncryptionDate", Type),
      encr_info(Prefix ++ ".info", Type),
-     skip_test(Prefix ++ ".skipEncryptionKeyTest", Type)].
+     skip_test(Prefix ++ ".skipEncryptionKeyTest", Type),
+     warnings_list(Prefix ++ ".warnings", Type)].
 
 type_spec(secret_id) ->
     ValidatorFun = fun (?SECRET_ID_NOT_SET) -> ok;
@@ -216,6 +222,17 @@ type_spec({encryption_method, AllowedInMixedClusters}) ->
                                 (_V) when AllowedInMixedClusters -> ok;
                                 (_V) -> {error, "Not supported until cluster "
                                                 "is fully 7.9"}
+                            end, _1, _2)),
+                     ?cut(validator:validate(
+                            fun (encryption_service) ->
+                                    case get_master_password_warning() of
+                                        undefined -> ok;
+                                        {ok, Warning} ->
+                                            {warning, encryption_service,
+                                             Warning}
+                                    end;
+                                (_V) ->
+                                    ok
                             end, _1, _2))],
       formatter => fun (encryption_service) -> {value, <<"nodeSecretManager">>};
                        (disabled) -> {value, <<"disabled">>};
@@ -225,6 +242,12 @@ type_spec(encr_info) ->
     #{validators => [not_supported],
       formatter => fun (undefined) -> ignore;
                        (Info) -> {value, format_encr_at_rest_info(Info)}
+                   end};
+type_spec(encr_warnings) ->
+    #{validators => [not_supported],
+      formatter => fun (undefined) -> ignore;
+                       (Warnings) ->
+                           {value, [iolist_to_binary(W) || W <- Warnings]}
                    end};
 type_spec({dek_interval, Min}) ->
     #{validators => [int,
@@ -241,9 +264,20 @@ handle_get(Path, Req) ->
     Settings = get_settings(direct),
     NodesInfo = ns_doctor:get_nodes(),
     Nodes = ns_cluster_membership:nodes_wanted(),
+    MaybeWarning = get_master_password_warning(),
     List = lists:map(
              fun ({K, V}) ->
-                 {K, [{info, aggregated_EAR_info(K, NodesInfo, Nodes)} | V]}
+                 UsesSM = proplists:get_value(encryption, V) =:=
+                              encryption_service,
+                 EARInfo = aggregated_EAR_info(K, NodesInfo, Nodes),
+                 Warnings = maybe
+                                    true ?= UsesSM,
+                                    {ok, Warning} ?= MaybeWarning,
+                                    [Warning]
+                                else
+                                    _ -> []
+                                end,
+                 {K, [{info, EARInfo}, {warnings, Warnings} | V]}
              end, settings_to_list(Settings)),
     menelaus_web_settings2:handle_get(Path, params(), fun type_spec/1, List,
                                       Req).
@@ -757,3 +791,30 @@ handle_import_ear_dek(Req) ->
        validator:default(timeout, 300000, _),
        validator:integer(timeout, 1, max, _),
        validator:unsupported(_)]).
+
+%% Returns warning as binary if master password is not configured on some
+%% cluster nodes
+-spec get_master_password_warning() -> {ok, binary()} | undefined.
+get_master_password_warning() ->
+    Nodes = ns_cluster_membership:nodes_wanted(),
+    Results = lists:map(
+                fun (Node) -> encryption_service:get_state(Node) end, Nodes),
+    PasswordUnsetNodes = lists:filtermap(
+                           fun ({Node, {ok, <<"default">>}}) -> {true, Node};
+                               ({_Node, _Err}) -> false
+                           end, lists:zip(Nodes, Results)),
+    case PasswordUnsetNodes of
+        [] -> undefined;
+        _ -> {ok, build_master_password_warning(PasswordUnsetNodes)}
+    end.
+
+build_master_password_warning(UnsetNodes) ->
+    Cfg = ns_config:latest(),
+    BuildHostname =
+        menelaus_web_node:build_node_hostname(Cfg, _, misc:localhost()),
+    SortedNodes = lists:usort(UnsetNodes),
+    NodesStr = iolist_to_binary(
+                 lists:join(", ", [BuildHostname(N) || N <- SortedNodes])),
+    iolist_to_binary(
+      io_lib:format("The master password for node(s) ~s is not configured",
+                    [NodesStr])).

@@ -38,6 +38,7 @@
          rotate_data_key/0,
          maybe_clear_backup_key/1,
          get_state/0,
+         get_state/1,
          os_pid/0,
          reconfigure/1,
          store_kek/6,

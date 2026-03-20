@@ -51,12 +51,21 @@ handle_get_secrets(Req) ->
     All = cb_cluster_secrets:get_all(Snapshot),
     FilteredSecrets = read_filter_secrets_by_permission(All, Req),
     TestResults = get_test_results_aggregated(FilteredSecrets),
+    MaybeWarning = menelaus_web_encr_at_rest:get_master_password_warning(),
     Res = lists:map(
             fun (#{id := Id} = Props) ->
                 UsedBy = cb_cluster_secrets:where_is_secret_used(Id, Snapshot),
                 TestRes = maps:get(Id, TestResults),
+                Warnings = maybe
+                               true ?= secret_uses_node_sm(Props),
+                               {ok, Warning} ?= MaybeWarning,
+                               [Warning]
+                           else
+                               _ -> []
+                           end,
                 {export_secret(Props#{used_by => UsedBy,
-                                      test_results => TestRes})}
+                                      test_results => TestRes,
+                                      warnings => Warnings})}
             end, FilteredSecrets),
     menelaus_util:reply_json(Req, Res).
 
@@ -74,8 +83,18 @@ handle_get_secret(IdStr, Req) when is_list(IdStr) ->
                     UsedBy = cb_cluster_secrets:where_is_secret_used(
                               Id, Snapshot),
                     #{Id := TestRes} = get_test_results_aggregated([Props]),
+                    Warnings =
+                        maybe
+                            true ?= secret_uses_node_sm(Props),
+                            {ok, Warning} ?= menelaus_web_encr_at_rest:
+                                               get_master_password_warning(),
+                            [Warning]
+                        else
+                            _ -> []
+                        end,
                     Res = {export_secret(Props#{used_by => UsedBy,
-                                                test_results => TestRes})},
+                                                test_results => TestRes,
+                                                warnings => Warnings})},
                     menelaus_util:reply_json(Req, Res)
             end;
         {error, not_found} ->
@@ -413,7 +432,9 @@ export_secret(#{type := DataType} = Props) ->
               (used_by, UsedBy) ->
                   format_secrets_used_by_list_to_json(UsedBy);
               (test_results, TestResults) ->
-                  format_test_results_to_json(TestResults)
+                  format_test_results_to_json(TestResults);
+              (warnings, Warnings) ->
+                  Warnings
           end, Props))).
 
 format_test_results_to_json(#{status := Status,
@@ -743,7 +764,11 @@ validate_encrypt_with(Name, Snapshot, State) ->
                   {ok, disabled} ->
                       {error, format_error(config_encryption_disabled)};
                   {ok, _} ->
-                      ok
+                      case menelaus_web_encr_at_rest:
+                             get_master_password_warning() of
+                          undefined -> ok;
+                          {ok, Warning} -> {warning, nodeSecretManager, Warning}
+                      end
               end
       end, Name, State).
 
@@ -1406,6 +1431,11 @@ format_secrets_used_by_list(UsedByMap, Snapshot) ->
 
 format_secret_props(Props) ->
     export_secret(Props).
+
+secret_uses_node_sm(#{data := Data}) ->
+    maps:get(encrypt_with, Data, undefined) =:= nodeSecretManager;
+secret_uses_node_sm(_) ->
+    false.
 
 %% Not using menelaus_util:assert_is_79() because it returns text
 %% instead of "global error" json, which is needed for the UI to show
