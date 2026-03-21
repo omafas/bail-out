@@ -23,8 +23,11 @@
          terminate/2, code_change/3]).
 
 -record(state, {
-                name_to_pid = #{} :: map()
+                name_to_pid = #{} :: map(),
+                retry_timer_ref :: undefined | reference()
                }).
+
+-define(RETRY_INTERVAL_MS, 30000). %% 30 seconds
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -45,25 +48,52 @@ init([]) ->
 handle_call(_Req, _From, State) ->
     {reply, ok, State}.
 
-handle_cast(restart, State0) ->
-    stop_all_workers(State0),
+restart_body(State) ->
+    cancel_retry_timer(State),
+    stop_all_workers(State),
     case menelaus_web_jwt:is_enabled() of
         true ->
             {noreply, start_all_workers(#state{})};
         false ->
             {noreply, #state{}}
-    end;
+    end.
+
+handle_cast(restart, State0) ->
+    restart_body(State0);
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'EXIT', Pid, _Reason}, #state{name_to_pid = Map0} = State0) ->
-    ?log_warning("OIDC provider worker ~p exited", [Pid]),
-    Map = maps:filter(fun(_, V) -> V =/= Pid end, Map0),
-    {noreply, State0#state{name_to_pid = Map}};
+handle_info(restart, State0) ->
+    restart_body(State0);
+handle_info({'EXIT', Pid, Reason},
+            #state{name_to_pid = Map0} = State0) ->
+    case maps:fold(fun(K, V, Acc) ->
+                           case V =:= Pid of
+                               true -> K;
+                               false -> Acc
+                           end
+                   end, undefined, Map0) of
+        undefined ->
+            ?log_warning("OIDC provider worker ~p exited (not in map): ~p",
+                         [Pid, Reason]),
+            {noreply, State0};
+        IssuerName ->
+            ?log_warning("OIDC provider worker for ~p (~p) exited: ~p",
+                         [IssuerName, Pid, Reason]),
+            Map = maps:remove(IssuerName, Map0),
+            {noreply, maybe_schedule_retry(State0#state{name_to_pid = Map})}
+    end;
+handle_info(retry_workers, #state{} = State0) ->
+    %% Cancel any scheduled retry and re-run the worker start routine which
+    %% will preserve already-started workers.
+    State1 = cancel_retry_timer(State0),
+    State2 = start_all_workers(State1),
+    {noreply, State2};
 handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, State) ->
+    cancel_retry_timer(State),
     stop_all_workers(State),
     ok.
 
@@ -71,14 +101,38 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% Internal
-
-start_all_workers(#state{} = State0) ->
+start_all_workers(#state{name_to_pid = Map0} = State0) ->
     Issuers = get_oidc_issuers_with_discovery(),
-    NameToPid = lists:foldl(fun start_worker_fold/2, #{}, Issuers),
-    State0#state{name_to_pid = NameToPid}.
+    %% Only attempt to start issuers that are not already present in our map.
+    MissingIssuers = [I || #{name := N} = I <- Issuers,
+                           not maps:is_key(N, Map0)],
+    NameToPid = lists:foldl(fun start_worker_fold/2, Map0, MissingIssuers),
+    State1 = State0#state{name_to_pid = NameToPid},
+    %% If any of the missing issuers failed to start (i.e. the map size
+    %% didn't increase by the number of missing issuers), schedule a retry.
+    ExpectedSize = maps:size(Map0) + length(MissingIssuers),
+    case maps:size(NameToPid) < ExpectedSize of
+        true -> maybe_schedule_retry(State1);
+        false -> State1
+    end.
 
 stop_all_workers(#state{name_to_pid = Map}) ->
     misc:terminate_and_wait([Pid || {_, Pid} <- maps:to_list(Map)], shutdown).
+
+maybe_schedule_retry(#state{retry_timer_ref = undefined} = State) ->
+    Ref = erlang:send_after(?RETRY_INTERVAL_MS, self(), retry_workers),
+    ?log_debug("Scheduled OIDC provider worker retry in ~p ms",
+               [?RETRY_INTERVAL_MS]),
+    State#state{retry_timer_ref = Ref};
+maybe_schedule_retry(State) ->
+    State.
+
+cancel_retry_timer(#state{retry_timer_ref = undefined} = State) ->
+    State;
+cancel_retry_timer(#state{retry_timer_ref = Ref} = State) ->
+    erlang:cancel_timer(Ref),
+    misc:flush(retry_workers),
+    State.
 
 start_worker_fold(#{name := IssuerName} = IssuerMap, Acc) ->
     WorkerName = {local, list_to_atom(IssuerName)},
