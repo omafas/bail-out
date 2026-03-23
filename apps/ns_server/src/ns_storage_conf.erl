@@ -806,37 +806,33 @@ delete_unused_db_files(Dir) when is_list(Dir) ->
             false -> %% Dir has to be a bucket name, not a bucket uuid
                 false
         end,
-    case IsBucketDirUUID of
-        true ->
-            IsEnterprise = cluster_compat_mode:is_enterprise(),
-            DeleteFun =
-                fun () ->
-                    case ns_couchdb_api:delete_databases_and_files_uuid(
-                           MaybeBucketUUID) of
-                        ok ->
-                            ok;
-                        Other ->
-                            ?log_error("Failed to delete old data files "
-                                    "dir ~p. Error = ~p", [Dir, Other]),
-                            Other
+    DeleteFun = fun () ->
+                    case IsBucketDirUUID of
+                        true ->
+                            ns_couchdb_api:delete_databases_and_files_uuid(
+                                             MaybeBucketUUID);
+                        false ->
+                            ns_couchdb_api:delete_databases_and_files(Dir)
                     end
                 end,
-            case IsEnterprise of
-                true ->
-                    cb_cluster_secrets:destroy_deks(
-                        {bucketDek, MaybeBucketUUID}, DeleteFun);
-                false ->
-                    DeleteFun()
-            end;
+    DeleteWithLogFun = fun () ->
+                           case DeleteFun() of
+                               ok ->
+                                   ok;
+                               Other ->
+                                   ?log_error("Failed to delete old data files "
+                                              "dir ~p. Error = ~p",
+                                              [Dir, Other]),
+                                   Other
+                           end
+                       end,
+    IsEnterprise = cluster_compat_mode:is_enterprise(),
+    case IsEnterprise of
+        true ->
+            cb_cluster_secrets:destroy_deks(
+                {bucketDek, MaybeBucketUUID}, DeleteWithLogFun);
         false ->
-            case ns_couchdb_api:delete_databases_and_files(Dir) of
-                ok ->
-                    ok;
-                Other ->
-                    ?log_error("Failed to delete old data files "
-                               "dir ~p. Error = ~p", [Dir, Other]),
-                    Other
-            end
+            DeleteWithLogFun()
     end.
 
 %% deletes @2i subdirectory in index directory of this node.
