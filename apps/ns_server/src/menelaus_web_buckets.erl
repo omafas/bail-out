@@ -614,7 +614,8 @@ build_extra_params_bucket_info(BucketName, BucketConfig) ->
     {ServiceOKs, ServiceErrors} =
         validate_bucket_config_against_services(
           BucketConfigString,
-          #{allow_internal_params => false,
+          #{filter_internal => true,
+            filter_unsupported => true,
             service_options => #{justReturnParams => true}}),
 
     case map_size(ServiceErrors) of
@@ -1495,7 +1496,8 @@ parse_bucket_params_continue_via_services(
     {ServiceOKs, ServiceErrors} =
         validate_bucket_config_against_services(
           BucketConfigString,
-          #{allow_internal_params => AllowInternalParams,
+          #{filter_internal => not AllowInternalParams,
+            filter_unsupported => true,
             validate_ccv_en => IsCcvBeingEnabled,
             service_options => #{justReturnParams => false}}),
 
@@ -1558,7 +1560,7 @@ validate_bucket_config_against_services(BucketConfigString, Options) ->
     %% Merge all of the OKs and Errors from the services together.
     case Res of
         {ok, AllResults} ->
-            merge_service_bucket_config_validation_results(AllResults);
+            delegated_config:merge_validation_results(AllResults);
         {error, Error} ->
             erlang:exit(
               lists:flatten(
@@ -1567,33 +1569,6 @@ validate_bucket_config_against_services(BucketConfigString, Options) ->
                   [Error])))
     end.
 
-merge_service_bucket_config_validation_results(AllResults) ->
-    lists:foldl(
-      fun ({ServiceOKs, ServiceErrors}, {OKAcc, ErrorsAcc}) ->
-              Fun =
-                  fun (Key, V1, V2) ->
-                          case V1 of
-                              V2 -> V1;
-                              _ -> erlang:exit(
-                                     lists:flatten(
-                                       io_lib:format(
-                                         "Values not equal for key "
-                                         "~s: ~s ~s",
-                                         [Key, V1, V2])))
-                          end
-                  end,
-              %% Merge together the OKs, if a key is present in
-              %% multiple service responses then they ought to
-              %% provide the same value.
-              O1 = maps:merge_with(Fun, OKAcc, ServiceOKs),
-              %% Should we see any errors we will just return one of
-              %% them for any given key. Services might report
-              %% errors differently so we shouldn't check that they
-              %% are the same.
-              E1 = maps:merge(ErrorsAcc, ServiceErrors),
-              {O1, E1}
-      end, {#{}, #{}}, AllResults).
-
 %% @doc Validate the bucket config with memcached.
 %% AllowInternalParams is a boolean that indicates if internal parameters should
 %% be allowed. If false, they will be ignored.
@@ -1601,8 +1576,8 @@ validate_bucket_config_with_memcached(BucketConfigString,
                                       Options) ->
     case ns_memcached:validate_bucket_config(BucketConfigString) of
         {ok, ValidationMap} ->
-            process_service_bucket_config_validation_map(ValidationMap,
-                                                         Options);
+            delegated_config:process_validation_result(ValidationMap,
+                                                       Options);
         {error, Error} ->
             ale:error(?USER_LOGGER,
                       "Error validating bucket config with memcached: ~p",
@@ -1617,37 +1592,14 @@ validate_bucket_config_with_service(Nodes, Service, BucketConfigString,
                                               BucketConfigString,
                                               ServiceOptions) of
         All when is_list(All) ->
-            process_service_validation_result(All, Options);
+            delegated_config:process_service_api_validation_results(All,
+                                                                    Options);
         {error, Error} ->
             ale:error(?USER_LOGGER,
                       "Error validating bucket config with ~p: ~p",
                       [Service, Error]),
             {error, Error}
     end.
-
-process_service_validation_result(AllResults, Options) ->
-    R1 = lists:map(
-           fun({_, {ok, NodeResult}}) ->
-                   {ok, R} =
-                       process_one_node_service_validation_result(
-                         NodeResult,
-                         Options),
-                   R
-           end, AllResults),
-    {ok, merge_service_bucket_config_validation_results(R1)}.
-
-process_one_node_service_validation_result(NodeResult,
-                                                     Options) ->
-    %% TODO MB-64129: When the service API uses json over ejson we can
-    %% remove this.
-    %% Hack - The validation map parsing code uses the json library
-    %% format of the parsed json response (a map) rather than the ejson
-    %% format. Convert the parsed json to a string then to the json
-    %% library decoded format such that we can re-use that code.
-    Str = ejson:encode(NodeResult),
-    Json = json:decode(Str),
-    process_service_bucket_config_validation_map(
-      maps:get(<<"validationResult">>, Json), Options).
 
 maybe_validate_bucket_config_with_continuous_backup(BucketConfigString,
                                                     Options) ->
@@ -1689,34 +1641,6 @@ find_nodes_and_validate_bucket_config_with_continuous_backup(
             validate_bucket_config_with_service(EEContBackupNodes, cont_backup,
                                                 BucketConfigString, Options)
     end.
-
-process_service_bucket_config_validation_map(ValidationMap, Options) ->
-    #{allow_internal_params := AllowInternalParams} = Options,
-    {AllOKs, Errors} = memcached_bucket_config_validation:group(ValidationMap),
-    FilteredOKs =
-        maps:filter(
-            fun (_K, V) ->
-                %% Filter out internal parameters
-                AllowInternalParams orelse
-                    memcached_bucket_config_validation:is_public_parameter(V)
-            end, AllOKs),
-    OKs =
-        maps:map(
-            fun (_K, V) ->
-                memcached_bucket_config_validation:get_value(V)
-            end, FilteredOKs),
-    FilteredErrors = maps:filter(
-        fun (_K, V) ->
-                %% Filter out unsupported parameters
-                not
-                  memcached_bucket_config_validation:is_unsupported_parameter(V)
-        end, Errors),
-    %% We only care about the error message.
-    ErrorMessages = maps:map(
-        fun (_K, V) ->
-                memcached_bucket_config_validation:get_error_message(V)
-        end, FilteredErrors),
-    {ok, {OKs, ErrorMessages}}.
 
 %% @doc Merge two proplists. The lists do not need to be sorted.
 merge_proplists(A, B) ->

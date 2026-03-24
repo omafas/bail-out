@@ -459,13 +459,13 @@ maybe_update_param(Sock, Stats, BucketName, {Name, Props, Value}, _JWT) ->
 %% This is used to determine if a restart is required for the extra params.
 -spec update_props_from_validation_result(list(), map()) -> list().
 update_props_from_validation_result(Props, ValidationResult) ->
-    ExtraProps = case memcached_bucket_config_validation:requires_restart(
-        ValidationResult) of
-        true ->
-            [restart];
-        false ->
-            []
-    end,
+    ExtraProps = case delegated_config:requires_restart(
+                        ValidationResult) of
+                     true ->
+                         [restart];
+                     false ->
+                         []
+                 end,
     %% Reload type config can be used with all parameters.
     Props ++ ExtraProps ++ [{reload, config}].
 
