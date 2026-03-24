@@ -2339,6 +2339,19 @@ def make_product_task(guts, initargs_path, local_token_creds_fun,
                    no_header=True)
          for path in glob.glob(os.path.join(rebdir, "rebalance_report*"))],
 
+        # Collect Query FFDC files, we specifically collect non .gz FFDC files
+        # here. This will allow us to handle encrypted or uncompressed FFDC
+        # files. Compressed .gz FFDC files are handled through the
+        # CollectFFDCFileTask as it has special handling for nested .gz files
+        [AllOsTask("FFDC File (%s)" % os.path.basename(path),
+                   "cbbrowse_logs %s %s" % (os.path.basename(path),
+                                            cbbrowse_static_args),
+                   to_stdin=master_password,
+                   addenv=[("REPORT_DIR", read_guts(guts, "log_path"))],
+                   log_file="%s" % os.path.basename(path),
+                   no_header=True)
+         for path in glob.glob(os.path.join(guts.get("log_path"), "query_ffdc*")) if not path.endswith(".gz")],
+
         [AllOsTask(name,
                    "cbbrowse_logs %s %s" % (os.path.basename(path),
                                             cbbrowse_static_args),
@@ -3271,13 +3284,14 @@ def main():
                 idx_dir, "@fts", "dumps", "*.dump.txt")):
             all_tasks.append(CollectFileTask(f"Collecting file {dump}", dump))
 
-    # Collect Query FFDC files...
-    ffdc_pat = os.path.join(guts.get("log_path"), "query_ffdc*")
+    # Collect Query compressed FFDC files. This handles unencrypted compressed
+    # FFDC files.
+    ffdc_pat_gz = os.path.join(guts.get("log_path"), "query_ffdc*.gz")
     if options.redact_level != "none":
-        for f in glob.glob(ffdc_pat):
+        for f in glob.glob(ffdc_pat_gz):
             all_tasks.append(CollectFFDCFileTask(f"Redacting & collecting {f}", f, True, salt_value))
     else:
-        for f in glob.glob(ffdc_pat):
+        for f in glob.glob(ffdc_pat_gz):
             all_tasks.append(CollectFFDCFileTask(f"Collecting {f}", f, False, ""))
 
     if options.verbosity:
