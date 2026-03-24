@@ -27,6 +27,7 @@
          get_progress_for_alerting/1,
          record_rebalance_report/1,
          record_initial_info/5,
+         report_rebalance_method/2,
          update_progress/3,
          submit_master_event/1,
          get_current_rebalance_report/0]).
@@ -86,6 +87,7 @@
                             bucket_timeline = #stat_info{},
                             replication_info = dict:new(),
                             compaction_info = #compaction_info{},
+                            rebalance_method = undefined,
                             mounting_volumes_info = undefined,
                             vbucket_level_info = #vbucket_level_info{}}).
 
@@ -168,6 +170,9 @@ record_initial_info(RebalanceType, NumNodesAdded, NodesAdded, NumNodesRemoved,
                     NodesRemoved) ->
     gen_server:cast(?SERVER, {initial_info, RebalanceType, NumNodesAdded,
                               NodesAdded, NumNodesRemoved, NodesRemoved}).
+
+report_rebalance_method(Bucket, RebalanceMethod) ->
+    gen_server:cast(?SERVER, {rebalance_method, Bucket, RebalanceMethod}).
 
 get_registered_local_name() ->
     ?MODULE.
@@ -442,6 +447,13 @@ handle_cast({initial_info, RebalanceType, NumNodesAdded, NodesAdded,
                           nodes_added = NodesAdded,
                           num_nodes_removed = NumNodesRemoved,
                           nodes_removed = NodesRemoved}};
+
+handle_cast({rebalance_method, BucketName, RebalanceMethod},
+            #state{bucket_info = OldBI} = State) ->
+    {ok, OldBLI} = dict:find(BucketName, OldBI),
+    NewBLI = OldBLI#bucket_level_info{rebalance_method = RebalanceMethod},
+    NewBI = dict:store(BucketName, NewBLI, OldBI),
+    {noreply, State#state{bucket_info = NewBI}};
 
 handle_cast(Req, _State) ->
     ?log_error("Got unknown cast: ~p", [Req]),
@@ -1172,11 +1184,18 @@ construct_bucket_level_info_json(
                      mounting_volumes_info = MV,
                      replication_info = ReplicationInfo,
                      compaction_info = CompactionInfo,
+                     rebalance_method = RebalanceMethod,
                      vbucket_level_info = VBLevelInfo}, Options) ->
     case construct_compaction_info_json(CompactionInfo) ++
         construct_per_node_data_size_moved(VBLevelInfo) ++
         construct_vbucket_level_info_json(VBLevelInfo, Options) ++
         construct_replication_info(ReplicationInfo) ++
+        case RebalanceMethod of
+            undefined ->
+                [];
+            _ ->
+                [{rebalance_method, RebalanceMethod}]
+        end ++
         construct_mounting_volumes_info_json(MV) of
         [] ->
             [];

@@ -711,6 +711,10 @@ rebalance_kv(KeepNodes, EjectNodes, DeltaRecoveryBuckets, DesiredServers,
                       TMap ->
                           {TMap, RebalancePlan}
                   end,
+              RebalanceMethod = determine_rebalance_method(
+                                  RebalancePlanToPass, BucketConfig),
+              ns_rebalance_observer:report_rebalance_method(BucketName,
+                                                            RebalanceMethod),
               rebalance_bucket(BucketName, BucketConfig, ProgressFun,
                                KeepKVNodes, EjectNodes, ForcedMap,
                                RebalancePlanToPass)
@@ -755,6 +759,20 @@ calculate_servers(BucketConfig, KeepKVNodes, EjectNodes) ->
         DesiredServers ->
            {DesiredServers,
             ns_bucket:get_servers(BucketConfig) -- DesiredServers}
+    end.
+
+determine_rebalance_method(RebalancePlan, BucketConfig) ->
+    case RebalancePlan =/= undefined of
+        true ->
+            fusion;
+        false ->
+            case ns_bucket:is_data_service_file_based_rebalance_enabled(
+                   BucketConfig) of
+                true ->
+                    file_based;
+                false ->
+                    dcp
+            end
     end.
 
 rebalance_membase_bucket(BucketName, BucketConfig, ProgressFun,
