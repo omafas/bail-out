@@ -53,8 +53,8 @@ class PassHashingSettingsTests(testlib.BaseTestSet):
 
     def change_admin_pass_respects_hash_alg_test(self):
         assert_cluster_uses_admin_creds(self.cluster)
-        admin = self.cluster.auth[0]
-        password = self.cluster.auth[1]
+        admin = self.cluster.admin_user()
+        password = self.cluster.admin_password()
 
         def test_hash(expected_hash):
             # changing admin password to make sure password hash is updated
@@ -836,5 +836,5 @@ def validate_scram_sha_auth(cluster, user, pwd, type):
 
 def assert_cluster_uses_admin_creds(cluster):
     admin = testlib.get_succ(cluster, '/settings/web').json()['username']
-    assert admin == cluster.auth[0], \
+    assert admin == cluster.admin_user(), \
            'this test expects that cluster uses administrator auth'

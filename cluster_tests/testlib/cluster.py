@@ -426,8 +426,8 @@ class Cluster:
         if use_client_cert_auth:
             data = {"clientCertAuth": "true"}
         elif auth == None:
-            data = {"user": self.auth[0],
-                    "password": self.auth[1]}
+            data = {"user": self.admin_user(),
+                    "password": self.admin_password()}
         else:
             data = {"user": auth[0],
                     "password": auth[1]}
@@ -467,8 +467,8 @@ class Cluster:
         if use_client_cert_auth:
             data['clientCertAuth'] = 'true'
         elif auth == None:
-            data['user'] = self.auth[0]
-            data['password'] = self.auth[1]
+            data['user'] = self.admin_user()
+            data['password'] = self.admin_password()
         else:
             data['user'] = auth[0]
             data['password'] = auth[1]
@@ -497,8 +497,8 @@ class Cluster:
             otp_nodes = testlib.get_otp_nodes(self)
             victim_otp_node = otp_nodes[victim_node.hostname()]
 
-        data = {"user": self.auth[0],
-                "password": self.auth[1],
+        data = {"user": self.admin_user(),
+                "password": self.admin_password(),
                 "otpNode": f"{victim_otp_node}",
                 "allowUnsafe": "true" if allow_unsafe else "false"}
         if verbose:
@@ -538,8 +538,8 @@ class Cluster:
         else:
             raise RuntimeError(f"Failed to find {node.hostname()} in otp_nodes")
 
-        data = {"user": self.auth[0],
-                "password": self.auth[1],
+        data = {"user": self.admin_user(),
+                "password": self.admin_password(),
                 "otpNode": f"{otp_node}",
                 "recoveryType": recovery_type}
         if verbose:
@@ -854,6 +854,12 @@ class Cluster:
     def get_cluster_uuid(self):
         r = testlib.get_succ(self, '/pools/default/terseClusterInfo')
         return r.json()['clusterUUID']
+
+    def admin_user(self):
+        return self.auth[0]
+
+    def admin_password(self):
+        return self.auth[1]
 
     def get_cluster_path(self, index_offset=0):
         cluster_data_name = f'test_cluster_data-{self.index+index_offset}'

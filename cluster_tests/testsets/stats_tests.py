@@ -424,8 +424,8 @@ class StatsTests(testlib.BaseTestSet):
         node = self.from_node()
         cluster_address = node.hostname()
 
-        cmd = ["python3", script_path, "-u", self.cluster.auth[0],
-               "-p", self.cluster.auth[1], "-c", cluster_address,
+        cmd = ["python3", script_path, "-u", self.cluster.admin_user(),
+               "-p", self.cluster.admin_password(), "-c", cluster_address,
                "-d", descriptors_path]
 
         result = subprocess.run(cmd, capture_output=True, text=True,

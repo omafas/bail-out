@@ -194,11 +194,13 @@ class AuthnTests(testlib.BaseTestSet):
 
 
     def admin_client_cert_optional_auth_test(self):
-        self.client_cert_auth_test_base(self.cluster.auth[0], mandatory=False)
+        self.client_cert_auth_test_base(self.cluster.admin_user(),
+                                        mandatory=False)
 
 
     def admin_client_cert_mandatory_auth_test(self):
-        self.client_cert_auth_test_base(self.cluster.auth[0], mandatory=True)
+        self.client_cert_auth_test_base(self.cluster.admin_user(),
+                                        mandatory=True)
 
 
     def mandatory_client_cert_ui_login_test(self):
