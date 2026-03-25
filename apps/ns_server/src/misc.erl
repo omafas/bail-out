@@ -4074,3 +4074,82 @@ snake_to_camel_test_() ->
     ].
 
 -endif.
+
+%% Service identity mapping - single source of truth.
+%% Maps user-facing service atom to:
+%%   identity     - the auth identity name (without @) used by the service
+%%   auth_aliases - additional identity names that map to this service
+%%   canonical    - the canonical @-prefixed identity for role storage
+%%                  (defaults to @<identity> if not specified)
+service_definitions() ->
+    #{n1ql     => #{identity => "cbq-engine"},
+      backup   => #{identity => "backup", auth_aliases => ["cbcontbk"]},
+      index    => #{identity => "index", auth_aliases => ["projector"]},
+      xdcr     => #{identity => "goxdcr"},
+      fts      => #{identity => "fts"},
+      eventing => #{identity => "eventing"},
+      cbas     => #{identity => "cbas"},
+      ns_server => #{identity => "ns_server"}}.
+
+%% @doc Convert a user-facing service name (string) to the internal @-prefixed
+%% admin-domain identity.
+%% e.g. "backup" -> {ok, "@backup"}, "n1ql" -> {ok, "@cbq-engine"}.
+-spec service_name_to_identity(string()) -> {ok, string()} | error.
+service_name_to_identity(ServiceName) ->
+    try list_to_existing_atom(ServiceName) of
+        Atom ->
+            case maps:find(Atom, service_definitions()) of
+                {ok, #{identity := Id}} -> {ok, "@" ++ Id};
+                error -> error
+            end
+    catch _:_ ->
+            error
+    end.
+
+%% @doc Convert an auth identity name (without @) to the service atom.
+%% e.g. "cbq-engine" -> n1ql, "backup" -> backup, "cbcontbk" -> backup.
+-spec identity_name_to_service(string()) -> atom().
+identity_name_to_service(IdentityName) ->
+    Map = maps:fold(
+            fun(Svc, #{identity := Id} = Props, Acc) ->
+                    Aliases = maps:get(auth_aliases, Props, []),
+                    lists:foldl(
+                      fun(Name, A) -> A#{Name => Svc} end,
+                      Acc, [Id | Aliases])
+            end,
+            #{}, service_definitions()),
+    maps:get(IdentityName, Map, unknown).
+
+%% @doc Convert an admin-domain identity to its canonical form for role lookups.
+%% e.g. "@cbcontbk" -> "@backup", "@backup" -> "@backup".
+-spec canonical_admin_identity(string()) -> string().
+canonical_admin_identity(Identity) ->
+    Map = maps:fold(
+            fun(_Svc, #{identity := Id} = Props, Acc) ->
+                    Canonical = "@" ++ Id,
+                    Aliases = maps:get(auth_aliases, Props, []),
+                    lists:foldl(
+                      fun(Alias, A) ->
+                              A#{"@" ++ Alias => Canonical}
+                      end, Acc, Aliases)
+            end,
+            #{}, service_definitions()),
+    maps:get(Identity, Map, Identity).
+
+-ifdef(TEST).
+service_identity_mapping_test_() ->
+    [?_assertEqual({ok, "@cbq-engine"}, service_name_to_identity("n1ql")),
+     ?_assertEqual({ok, "@backup"}, service_name_to_identity("backup")),
+     ?_assertEqual({ok, "@index"}, service_name_to_identity("index")),
+     ?_assertEqual({ok, "@goxdcr"}, service_name_to_identity("xdcr")),
+     ?_assertEqual(error, service_name_to_identity("cbcontbk")),
+     ?_assertEqual(error, service_name_to_identity("bogus")),
+     ?_assertEqual(n1ql, identity_name_to_service("cbq-engine")),
+     ?_assertEqual(backup, identity_name_to_service("cbcontbk")),
+     ?_assertEqual(backup, identity_name_to_service("backup")),
+     ?_assertEqual(index, identity_name_to_service("projector")),
+     ?_assertEqual(unknown, identity_name_to_service("bogus")),
+     ?_assertEqual("@backup", canonical_admin_identity("@cbcontbk")),
+     ?_assertEqual("@backup", canonical_admin_identity("@backup")),
+     ?_assertEqual("@cbq-engine", canonical_admin_identity("@cbq-engine"))].
+-endif.
