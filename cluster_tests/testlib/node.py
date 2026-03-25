@@ -144,6 +144,9 @@ class Node:
         return int(r.text.replace('"',""))
 
     def kill_ns_server(self):
+        if testlib.config.get('code_coverage_modules'):
+            print("Collecting coverage data before killing ns_server...")
+            testlib.diag_eval(self, 'child_erlang:maybe_export_coverage()')
         print(f'Killing ns_server for node {self.url}...')
         os.kill(self.get_ns_server_pid(), 9)
 

@@ -17,6 +17,10 @@
          child_start/1,
          open_port_args/0]).
 
+-if(?CB_CODE_COVERAGE_ENABLED).
+-export([maybe_export_coverage/0]).
+-endif.
+
 get_ns_server_vm_extra_args() ->
     case os:getenv("COUCHBASE_NS_SERVER_VM_EXTRA_ARGS") of
         false ->
