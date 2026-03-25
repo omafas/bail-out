@@ -18,6 +18,7 @@ import os
 from testlib.test_tag_decorator import tag, Tag
 from testlib.util import Service
 
+int_settings_path = "/internal/settings/metrics"
 
 class StatsRangeAPITests(testlib.BaseTestSet):
 
@@ -368,10 +369,15 @@ class StatsTests(testlib.BaseTestSet):
         return testlib.ClusterRequirements(num_nodes=3)
 
     def setup(self):
-        pass
+        self.orig_hc_interval = get_high_card_scrape_interval(self.cluster,
+                                                              "clusterManager")
+        set_high_card_scrape_interval(self.cluster, "clusterManager", 5)
 
     def teardown(self):
-        pass
+        print("Restoring orig high card scrape interval: "
+              f"{self.orig_hc_interval}")
+        set_high_card_scrape_interval(self.cluster, "clusterManager",
+                                      self.orig_hc_interval)
 
     def from_node(self):
         return self.cluster.connected_nodes[0]
@@ -396,6 +402,7 @@ class StatsTests(testlib.BaseTestSet):
             for res in make_prometheus_query(self.from_node(), statname):
                 if res["metric"]["node"] == victim_node.otp_node():
                     total += int(res["value"][1])
+            print(f"Got {statname} total: {total}")
             return total
 
         def node_unreachable_metric_recorded():
@@ -403,14 +410,18 @@ class StatsTests(testlib.BaseTestSet):
 
         # Wait until the stat exists and is available. Save the initial
         # total to verify our actions cause the stat to get incremented.
+        print(f"Waiting for {statname}  to be created and available...")
         testlib.poll_for_condition(stat_in_results, sleep_time=2, timeout=60)
         starting_total = get_stat_total()
 
         victim_node.kill_ns_server()
+
+        print(f"Waiting for {victim_node.url} to be back up...")
         testlib.poll_for_condition(lambda: check_node_up(victim_node),
                                    sleep_time=2, timeout=300,
                                    msg="wait for ns_server to be back up")
 
+        print(f"Waiting for {statname} to be incremented...")
         testlib.poll_for_condition(node_unreachable_metric_recorded,
                                    sleep_time=2, timeout=60)
 
@@ -449,3 +460,13 @@ def check_node_up(node):
         return r.status_code == 200
     except requests.exceptions.ConnectionError:
         return False
+
+
+def get_high_card_scrape_interval(cluster, service_name):
+    url = f'{int_settings_path}/services/{service_name}/highCardScrapeInterval'
+    return int(testlib.get_succ(cluster, url).text)
+
+
+def set_high_card_scrape_interval(cluster, service_name, interval_s):
+    url = f'{int_settings_path}/services/{service_name}/highCardScrapeInterval'
+    testlib.post_succ(cluster, url, json=interval_s)
