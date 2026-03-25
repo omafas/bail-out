@@ -517,6 +517,10 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {when_79({[admin, users], read},
                              {[admin, security], read}),
                      fun menelaus_web_rbac:handle_get_user/3, [Domain, UserId]};
+                ["settings", "rbac", "services", ServiceName, "roles"] ->
+                    {{[admin, security, admin], read},
+                     fun menelaus_web_rbac:handle_get_service_roles/2,
+                     [ServiceName]};
                 ["settings", "rbac", "groups"] ->
                     {when_79({[admin, users], read},
                              {[admin, security], read}),
@@ -1339,6 +1343,10 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {when_79({[admin, users], write},
                              {[admin, security], write}),
                      fun menelaus_web_rbac:handle_delete_user/3, [Domain, UserId]};
+                ["settings", "rbac", "services", ServiceName, "roles"] ->
+                    {{[admin, security, admin], write},
+                     fun menelaus_web_rbac:handle_delete_service_roles/2,
+                     [ServiceName]};
                 ["settings", "rbac", "groups", GroupId] ->
                     {when_79({[admin, users], write},
                              {[admin, security], write}),
@@ -1457,6 +1465,10 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {when_79({[admin, users], write},
                              {[admin, security], write}),
                      fun menelaus_web_rbac:handle_put_user/3, [Domain, UserId]};
+                ["settings", "rbac", "services", ServiceName, "roles"] ->
+                    {{[admin, security, admin], write},
+                     fun menelaus_web_rbac:handle_put_service_roles/2,
+                     [ServiceName]};
                 ["settings", "rbac", "groups", GroupId] ->
                     {when_79({[admin, users], write},
                              {[admin, security], write}),

@@ -177,8 +177,10 @@ This is `{[], all}` (everything) **minus** `{[{credentials, any}], none}` (no cr
 The intent is that a service cannot access credentials unless a Full Admin explicitly grants `credential_consumer[<pattern>]` to that service via `PUT /settings/rbac/services/:service/roles`.
 
 **Direct self-escalation via service roles endpoint — blocked.**
-The service roles endpoint (`/settings/rbac/services/:name/roles`) rejects requests from service identity callers.
-A service cannot grant `credential_consumer` to itself or another service through this endpoint.
+The `/settings/rbac/services/:name/roles` endpoint requires `{[admin, security, admin], write}`.
+`service_admin`'s `{[], all}` catch-all grants this permission, which would in principle let a service call the endpoint to assign `credential_consumer` to itself or another service.
+To close this path, the endpoint explicitly rejects requests from service identity callers (`reject_service_caller` in `menelaus_web_rbac.erl`).
+Broader removal of unneeded `service_admin` vertices (including `{[admin, security, admin], write}`) is tracked in [MB-71508](https://jira.issues.couchbase.com/browse/MB-71508); once that lands, this explicit check becomes defence-in-depth rather than the primary guard.
 See [rest-api-reference.md — Service Role Management](rest-api-reference.md#service-role-management--settingsrbacservicesnameroles) for details.
 
 **Known limitation — indirect credential access via user management ("puppet user" pattern).**
@@ -215,6 +217,7 @@ See [MB-71442](https://jira.issues.couchbase.com/browse/MB-71442) for the full i
 
 | Ticket | Summary |
 |---|---|
-| [MB-71442](https://jira.issues.couchbase.com/browse/MB-71442) | Harden service_admin Role to Prevent Indirect Credential Access |
+| [MB-71442](https://jira.issues.couchbase.com/browse/MB-71442) | Harden service_admin Role to Prevent Indirect Credential Access (puppet-user pattern) |
+| [MB-71508](https://jira.issues.couchbase.com/browse/MB-71508) | Tighten service_admin from deny-list to explicit allow-list |
 | [MB-71440](https://jira.issues.couchbase.com/browse/MB-71440) | Encrypt sensitive portion of the credential in memory (per-credential DEK via envelope encryption) |
 | [MB-71345](https://jira.issues.couchbase.com/browse/MB-71345) | Consolidate n2n encryption state into chronicle to eliminate races between ns_config reads and chronicle commits |

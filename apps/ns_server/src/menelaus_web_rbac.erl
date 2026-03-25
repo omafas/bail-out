@@ -32,6 +32,9 @@
          handle_put_user/3,
          handle_patch_user/2,
          handle_delete_user/3,
+         handle_get_service_roles/2,
+         handle_put_service_roles/2,
+         handle_delete_service_roles/2,
          handle_change_password/1,
          handle_reset_admin_password/1,
          handle_lock_admin/1,
@@ -521,6 +524,7 @@ handle_get_all_users(Req, Pattern, Params) ->
               [filter_by_roles(Roles),
                security_filter(Req),
                user_admin_filter(Req),
+               domain_filter(admin, Req),
                domain_filter(local, Req),
                domain_filter(external, Req),
                jsonify_users(),
@@ -577,6 +581,28 @@ reply_unknown_user_error(Req) ->
 reply_unknown_domain_error(Req) ->
     menelaus_util:reply_json(
       Req, <<"Unknown user domain.">>, 404).
+
+reply_unknown_service_error(Req) ->
+    menelaus_util:reply_json(
+      Req, <<"Unknown service.">>, 404).
+
+%% Prevent service identities from modifying service roles. This prevents a
+%% service from granting credential_consumer to itself or another service.
+%% service_admin's {[], all} catch-all grants {[admin, security, admin], write}
+%% (the permission this endpoint requires), so without this check a service
+%% could call the endpoint directly. Can be revisited once service_admin is
+%% narrowed to an explicit allow-list (MB-71508).
+reject_service_caller(Req) ->
+    case menelaus_auth:get_identity(Req) of
+        {[$@ | _], admin} ->
+            menelaus_util:web_json_exception(
+              403,
+              {[{message,
+                 <<"Service identities are not permitted to manage service "
+                   "roles">>}]});
+        _ ->
+            ok
+    end.
 
 filter_by_roles(all) ->
     pipes:filter(fun (_) -> true end);
@@ -1232,6 +1258,99 @@ handle_put_user_with_identity({_UserId, Domain} = Identity, Req) ->
                                           menelaus_users:group_exists(_),
                                           Domain == local, false, CompatVer)).
 
+handle_get_service_roles(ServiceName, Req) ->
+    case cluster_compat_mode:is_cluster_totoro() of
+        false ->
+            menelaus_util:reply_global_error(
+              Req,
+              <<"Service role management requires cluster upgrade to version "
+                "8.1 or later">>);
+        true ->
+            do_get_service_roles(ServiceName, Req)
+    end.
+
+do_get_service_roles(ServiceName, Req) ->
+    case misc:service_name_to_identity(ServiceName) of
+        error ->
+            reply_unknown_service_error(Req);
+        {ok, InternalId} ->
+            Identity = {InternalId, admin},
+            Roles = menelaus_users:get_roles(Identity),
+            ns_audit:rbac_info_retrieved(Req, users),
+            menelaus_util:reply_json(
+              Req, {[{roles, [role_to_json(R) || R <- Roles]}]})
+    end.
+
+handle_put_service_roles(ServiceName, Req) ->
+    %% Per-service role grants are only allowed after cluster compat mode
+    %% switches to totoro. During rolling upgrade, old nodes don't recognize
+    %% these entries in chronicle.
+    case cluster_compat_mode:is_cluster_totoro() of
+        false ->
+            menelaus_util:reply_global_error(
+              Req,
+              <<"Service role management requires cluster upgrade to version "
+                "8.1 or later">>);
+        true ->
+            do_put_service_roles(ServiceName, Req)
+    end.
+
+do_put_service_roles(ServiceName, Req) ->
+    reject_service_caller(Req),
+    case misc:service_name_to_identity(ServiceName) of
+        error ->
+            menelaus_util:reply_global_error(
+              Req, iolist_to_binary(
+                     io_lib:format("Unknown service: ~s", [ServiceName])));
+        {ok, UserId} ->
+            Identity = {UserId, admin},
+            CompatVer = cluster_compat_mode:get_compat_version(),
+            validator:handle(
+              fun (Values) ->
+                      reply(do_store_service_roles(Identity, Values, Req), Req)
+              end, Req, form, service_role_validators(CompatVer))
+    end.
+
+service_role_validators(CompatVer) ->
+    [validator:required(roles, _),
+     validate_roles(roles, CompatVer, _),
+     validate_service_roles(roles, _),
+     validator:unsupported(_)].
+
+validate_service_roles(Name, State) ->
+    validator:validate(
+      fun (Roles) ->
+              case lists:all(fun is_credential_consumer_role/1, Roles) of
+                  true -> ok;
+                  false ->
+                      {error,
+                       <<"Only credential_consumer role is permitted for "
+                         "services">>}
+              end
+      end, Name, State).
+
+is_credential_consumer_role({<<"credential_consumer">>, _}) ->
+    true;
+is_credential_consumer_role(_) ->
+    false.
+
+do_store_service_roles({User, admin} = Identity, Props, Req) ->
+    Roles = proplists:get_value(roles, Props, []),
+    UniqueRoles = lists:usort(Roles),
+    Reason = case menelaus_users:user_exists(Identity) of
+                 true -> updated;
+                 false -> added
+             end,
+    case menelaus_users:store_service_roles(Identity, UniqueRoles) of
+        ok ->
+            ns_audit:set_user(Req, Identity, UniqueRoles, undefined, undefined,
+                              false, false, Reason),
+            ?log_debug("Service roles updated for ~p.", [User]),
+            Reason;
+        {error, Error} ->
+            {error, Error}
+    end.
+
 validator_verify_security_roles_access(RolesName, Req, Permission,
                                        ExtraRolesFun, State) ->
     ExtraRoles = ExtraRolesFun(State),
@@ -1352,6 +1471,37 @@ handle_delete_user(Domain, UserId, Req) ->
                     reply_put_delete_users(Req);
                 {abort, {error, not_found}} ->
                     reply_unknown_user_error(Req)
+            end
+    end.
+
+handle_delete_service_roles(ServiceName, Req) ->
+    %% Per-service role grants are only allowed after cluster compat mode
+    %% switches to totoro. During rolling upgrade, old nodes don't recognize
+    %% these entries in chronicle.
+    case cluster_compat_mode:is_cluster_totoro() of
+        false ->
+            menelaus_util:reply_global_error(
+              Req,
+              <<"Service role management requires cluster upgrade to version "
+                "8.1 or later">>);
+        true ->
+            do_delete_service_roles(ServiceName, Req)
+    end.
+
+do_delete_service_roles(ServiceName, Req) ->
+    reject_service_caller(Req),
+    case misc:service_name_to_identity(ServiceName) of
+        error ->
+            reply_unknown_service_error(Req);
+        {ok, InternalId} ->
+            Identity = {InternalId, admin},
+            case menelaus_users:delete_user(Identity) of
+                {commit, _} ->
+                    ns_audit:delete_user(Req, Identity),
+                    reply_put_delete_users(Req);
+                {abort, {error, not_found}} ->
+                    %% No service-specific roles were found - not an error
+                    reply_put_delete_users(Req)
             end
     end.
 

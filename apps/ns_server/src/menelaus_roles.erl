@@ -844,7 +844,13 @@ ui_folders() ->
 
 internal_roles() ->
     [{<<"stats_reader">>, [], [], [{[admin, internal, stats], [read]}]},
-     {<<"metakv2_access">>, [], [], [{[admin, internal, metakv2], all}]}].
+     {<<"metakv2_access">>, [], [], [{[admin, internal, metakv2], all}]},
+     %% service_admin is an internal-only role implicitly assigned to service
+     %% users (e.g. @backup, @cbq-engine) from totoro onwards. It has all Full
+     %% Admin permissions except any credential permissions.
+     {<<"service_admin">>, [], [],
+      [{[{credentials, any}], none},
+       {[], all}]}].
 
 maybe_add_developer_preview_roles() ->
     DP = cluster_compat_mode:is_developer_preview(),
@@ -1264,7 +1270,25 @@ get_roles_for_identity(?ANONYMOUS_IDENTITY) ->
         true ->
             []
     end;
-get_roles_for_identity({_, admin}) ->
+get_roles_for_identity({[$@ | _] = User, admin}) ->
+    case cluster_compat_mode:is_cluster_totoro() of
+        true ->
+            %% service_admin omits credential permissions, but this is a soft
+            %% boundary. service_admin retains {admin, users} write (puppet-user
+            %% creation, tracked in MB-71442) and {admin, security, admin} write
+            %% (role grants to services via the service-roles endpoint, guarded
+            %% by reject_service_caller). Broader tightening to an explicit
+            %% allow-list tracked in MB-71508.
+            CanonicalUser = misc:canonical_admin_identity(User),
+            StoredRoles =
+                try menelaus_users:get_roles({CanonicalUser, admin})
+                catch _:_ ->
+                        []
+                end,
+            [<<"service_admin">> | StoredRoles];
+        false -> [<<"admin">>]
+    end;
+get_roles_for_identity({_User, admin}) ->
     [<<"admin">>];
 get_roles_for_identity({_, local_token}) ->
     [<<"admin">>];
@@ -1905,10 +1929,35 @@ compile_roles_test() ->
     TestRole1(false, [{"default", <<"wrong_id">>}, {"s", 1}]),
     TestRole1(false, [{"default", <<"default_id">>}, {"s", 2}]).
 
-admin_test__() ->
-    Roles = compile_roles([<<"admin">>], roles()),
+assert_admin_permissions(Roles) ->
     ?assertEqual(true, is_allowed({[buckets], create}, Roles)),
     ?assertEqual(true, is_allowed({[something, something], anything}, Roles)).
+
+admin_test__() ->
+    Roles = compile_roles([<<"admin">>], roles()),
+    assert_admin_permissions(Roles),
+    ?assertEqual(true, is_allowed({[{credentials, "test"}], read}, Roles)),
+    ?assertEqual(true, is_allowed({[{credentials, "test"}], write}, Roles)),
+    ?assertEqual(true, is_allowed({[{credentials, "test"}], list}, Roles)),
+    ?assertEqual(true, is_allowed({[{credentials, "test"}], consume}, Roles)).
+
+service_admin_test__() ->
+    Roles = compile_roles([<<"service_admin">>],
+                          roles() ++ internal_roles()),
+    assert_admin_permissions(Roles),
+    ?assertEqual(false, is_allowed({[{credentials, "test"}], read}, Roles)),
+    ?assertEqual(false, is_allowed({[{credentials, "test"}], write}, Roles)),
+    ?assertEqual(false, is_allowed({[{credentials, "test"}], list}, Roles)),
+    ?assertEqual(false, is_allowed({[{credentials, "test"}], consume}, Roles)).
+
+service_admin_with_credential_consumer_test__() ->
+    Roles = compile_roles(
+              [<<"service_admin">>,
+               {<<"credential_consumer">>, ["test"]}],
+              roles() ++ internal_roles()),
+    ?assertEqual(true, is_allowed({[{credentials, "test"}], consume}, Roles)),
+    ?assertEqual(false,
+                 is_allowed({[{credentials, "other"}], consume}, Roles)).
 
 cluster_admin_test__() ->
     Roles = compile_roles([<<"cluster_admin">>], roles()),
@@ -2955,6 +3004,8 @@ default_profile_test_() ->
      fun default_profile_test_setup/0,
      fun default_profile_test_teardown/1,
      [fun admin_test__/0,
+      fun service_admin_test__/0,
+      fun service_admin_with_credential_consumer_test__/0,
       fun cluster_admin_test__/0,
       fun eventing_admin_test__/0,
       fun backup_admin_test__/0,
