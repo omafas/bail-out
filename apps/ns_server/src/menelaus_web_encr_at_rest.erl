@@ -749,6 +749,7 @@ handle_import_ear_dek(Req) ->
       dek_kind_validators() ++
       [validator:validate(
          fun ({bucketDek, _}) -> ok;
+             ({serviceBucketDek, _}) -> ok;
              (_) -> {error, "only bucket DEKs can be imported"}
          end, type, _),
        validator:required(dekPaths, _),
