@@ -1010,7 +1010,7 @@ get_service_port(eventing) -> eventing_http_port;
 get_service_port(kv) -> memcached_prometheus;
 get_service_port(xdcr) -> xdcr_rest_port;
 get_service_port(backup) -> backup_http_port;
-get_service_port(cont_backup) -> cont_backup_http_port.
+get_service_port(cont_backup) -> cont_backup_stats_port.
 
 addr2re(A) ->
     Replace = fun (P,V) ->
@@ -1905,6 +1905,7 @@ default_config_test() ->
                              static_configs :=
                                [#{targets := [<<"127.0.0.1:8091">>,%% ns_server
                                               <<"127.0.0.1:9998">>,%% xdcr
+                                              <<"127.0.0.1:9125">>,%% contbk
                                               <<"127.0.0.1:11280">>]}]}, %% kv
                            #{job_name := <<"ns_server_high_cardinality">>,
                              scrape_interval := <<"60s">>,
@@ -2071,6 +2072,7 @@ prometheus_config_afamily_test() ->
                              static_configs :=
                                [#{targets := [<<"[::1]:8091">>,%% ns_server
                                               <<"[::1]:9998">>,%% xdcr
+                                              <<"[::1]:9125">>,%% contbk
                                               <<"[::1]:11280">>]}]}, %% kv
                            #{job_name := <<"ns_server_high_cardinality">>,
                              static_configs :=
