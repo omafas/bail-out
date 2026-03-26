@@ -48,7 +48,8 @@
          get_supported_tls_versions/2,
          remove_node_certs/0,
          update_certs_epoch/0,
-         config_upgrade_to_76/1]).
+         config_upgrade_to_76/1,
+         cleanup_options/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -540,6 +541,7 @@ tls_option_versions(srp_identity) -> ['tlsv1','tlsv1.1','tlsv1.2'];
 tls_option_versions(supported_groups) -> ['tlsv1.3'];
 tls_option_versions(use_ticket) -> ['tlsv1.3'];
 tls_option_versions(user_lookup_fun) -> ['tlsv1','tlsv1.1','tlsv1.2'];
+tls_option_versions(middlebox_comp_mode) -> ['tlsv1.3'];
 tls_option_versions(_) -> all.
 
 read_ca_certs(File) ->
