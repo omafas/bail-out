@@ -21,6 +21,7 @@
          current_items_total/1,
          current_items_total/2,
          failover_safeness_level/1,
+         for_backup_failures/0,
          latest/2]).
 
 -define(DEFAULT_TIMEOUT, ?get_timeout(default, 5000)).
@@ -240,6 +241,23 @@ for_resource_management(Keys) ->
         fun({{Group, _}, _}) -> Group end,
         fun({{_, Name}, Value}) -> {Name, Value} end,
         Res)).
+
+for_backup_failures() ->
+    Query = <<"{name=~`backup_task_run`}">>,
+    latest(Query,
+           fun ([]) ->
+                   false;
+               (Props) ->
+                   case proplists:get_value(<<"result">>, Props) of
+                       <<"failure">> ->
+                           Task = proplists:get_value(<<"task_type">>, Props),
+                           Repository = proplists:get_value(<<"repository">>,
+                                                            Props),
+                           {true, {backup_failure, Task, Repository}};
+                       _ ->
+                           false
+                   end
+           end).
 
 -spec total_active_logical_data_size([node()]) -> #{bucket_name() => number()}.
 total_active_logical_data_size(Nodes) ->

@@ -12,6 +12,11 @@ import os
 import re
 import random
 import time
+import tempfile
+import getpass
+import subprocess
+import signal
+import shutil
 from cryptography import x509
 import urllib.parse
 from testsets.native_encryption_tests import create_secret, \
@@ -23,6 +28,7 @@ from testsets.native_encryption_tests import create_secret, \
 
 from testlib.mock_smtp_server import start_mock_smtp_server
 from testlib.test_tag_decorator import tag, Tag
+from testlib.util import Service
 
 import sys
 sys.path.append(testlib.get_pylib_dir())
@@ -38,6 +44,7 @@ class AlertTests(testlib.BaseTestSet):
         return testlib.ClusterRequirements(
             num_nodes=2,
             num_connected=1,
+            include_services=[Service.KV, Service.BACKUP],
             afamily="ipv4",
             buckets=[{"name": "A",
                       "ramQuota": 128}])
@@ -339,6 +346,78 @@ class AlertTests(testlib.BaseTestSet):
                               data={"certExpirationDays":
                                     str(prev_cert_expiration)})
 
+    # Return the pid of the cbbackupmgr which is started by the backup
+    # service.
+    def get_cbbackupmgr_pid(self):
+        current_user = getpass.getuser()
+        def check_cbbackupmgr_up():
+            result = subprocess.run(
+                ['pgrep', '-x', '-u', current_user, 'cbbackupmgr'],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                return result
+            return None
+
+        result = testlib.poll_for_condition(check_cbbackupmgr_up, sleep_time=1,
+                                            retry_value=None, timeout=20)
+        lines = result.stdout.splitlines()
+        return int(lines[0].strip())
+
+    # Test for a backup failure notification. This test starts a backup and
+    # then kills the cbbackupmgr. The backup service will then emit a task
+    # failure stat which ns_server will detect and create the alert.
+    def backup_failure_alert_test(self):
+        def check_backup_up():
+            r = testlib.get(self.cluster, "/_p/backup/api/v1/cluster/self")
+            return r.status_code == 200
+
+        # Wait for the backup service to complete starting up
+        testlib.poll_for_condition(check_backup_up, sleep_time=1, timeout=30)
+
+        repo_name = "TestRepository"
+        api = "/_p/backup/api/v1/cluster/self/repository"
+        api_active = f"{api}/active"
+        api_archived = f"{api}/archived"
+        repo_path = tempfile.mkdtemp(prefix="backup_repo_")
+
+        try:
+            # Create the backup repository
+            testlib.post_succ(self.cluster, f"{api_active}/{repo_name}",
+                              json={"id": repo_name,
+                                    "plan": "_daily_backups",
+                                    "archive": repo_path})
+            # Start the backup...
+            testlib.post_succ(self.cluster, f"{api_active}/{repo_name}/backup",
+                              json={"full_backup": True})
+            # ...which starts cbbackupmgr
+            pid = self.get_cbbackupmgr_pid()
+
+            # Kill it, which should trigger the alert getting emitted
+            os.kill(pid, signal.SIGTERM)
+            alert_re = (
+                    ".*A 'BACKUP' task failed for the repository "
+                    f"'{repo_name}'. Please see the UI for more information.")
+
+            testlib.poll_for_condition(
+                    lambda: assert_alerts(
+                        self.cluster, [alert_re], verify_email=True,
+                        mock_smtp_server=self.mock_smtp_server),
+                    sleep_time=1, timeout=120, verbose=True,
+                    retry_on_assert=True,
+                    msg="wait for backup failure alert")
+        finally:
+            # Remove the backup repository. This requires archiving it then
+            # deleting the archive.
+            archived_name= f"{repo_name}Archive"
+            testlib.post_succ(self.cluster, f"{api_active}/{repo_name}/archive",
+                              json={"id": archived_name})
+            path2del = f"{api_archived}/{archived_name}?remove_repository=true"
+            testlib.delete_succ(self.cluster, path2del)
+            # Remove the temporary directory used for the repository
+            shutil.rmtree(repo_path)
+
     def to_node(self):
         return self.cluster._nodes[1]
 
@@ -526,7 +605,6 @@ def assert_alerts(cluster, expected_alerts_regexps, verify_email=False,
                   mock_smtp_server=None):
     r = testlib.get_succ(cluster, "/pools/default").json()
     alerts = r["alerts"]
-    print(f"alerts: {alerts}")
     expected_alerts_count = len(expected_alerts_regexps)
     assert len(alerts) >= expected_alerts_count, \
            f"Alert check failed, expected {expected_alerts_count} " \

@@ -175,6 +175,8 @@ short_description(encr_at_rest_errors_total) ->
     "encryption-at-rest error";
 short_description(cm_bucket_autoreprovision_total) ->
     "bucket auto-reprovisioning has occurred";
+short_description(backup_failure) ->
+    "A backup service task failed";
 short_description(Other) ->
     %% this case is needed for tests to work
     couch_util:to_list(Other).
@@ -281,7 +283,10 @@ errors(encr_at_rest_errors_total) ->
     "Please check the logs for more details.";
 errors(cm_bucket_autoreprovision_total) ->
     "Bucket auto-reprovisioning has occurred on node: ~p. A rebalance may be "
-    "necessary to rebuild replicas.".
+    "necessary to rebuild replicas.";
+errors(backup_failure) ->
+    "A '~s' task failed for the repository '~s'. Please see the UI for more "
+    "information.".
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -555,6 +560,7 @@ alert_keys_default() ->
 alert_keys_added_in_totoro() ->
     [xdcr_replication_deleted,
      encr_at_rest_errors_total,
+     backup_failure,
      cm_bucket_autoreprovision_total].
 
 -spec alert_keys_disabled_by_default() -> [atom()].
@@ -603,7 +609,8 @@ global_checks() ->
      memory_threshold, history_size_warning, indexer_low_resident_percentage,
      stuck_rebalance, memcached_connections, disk_guardrail,
      indexer_diverging_replicas, xdcr_replication_deleted, encr_at_rest,
-     cm_bucket_autoreprovision_total, indexer_lost_replicas].
+     cm_bucket_autoreprovision_total, indexer_lost_replicas,
+     backup_failure].
 
 %% @doc fires off various checks
 check_alerts(Opaque, Hist, Stats) ->
@@ -1152,6 +1159,41 @@ check(xdcr_replication_deleted, Opaque, _History, _Stats) ->
                   end
               end, Rs),
     dict:store(xdcr_replications, NewRs, Opaque);
+check(backup_failure, Opaque, _History, _Stats) ->
+    case stats_interface:for_backup_failures() of
+        [] ->
+            %% Stat not yet emitted
+            Opaque;
+        Failures ->
+            lists:foldl(
+              fun ({{backup_failure, Task, Repository}, NumFailures}, Acc) ->
+                      Key = {backup_failure, Task, Repository},
+                      PriorNum = case dict:find(Key, Acc) of
+                                     {ok, Prior} -> Prior;
+                                     error -> 0
+                                 end,
+                      case NumFailures of
+                          PriorNum ->
+                              Acc;
+                          0 ->
+                              %% Reset?
+                              dict:store(Key, 0, Acc);
+                          NumFailures when NumFailures < PriorNum ->
+                              %% Not sure this can happen.
+                              ?log_debug("Number of backup failures for '~p' "
+                                         "has unexpectedly gone down from ~p "
+                                         "to ~p.",
+                                         [Key, PriorNum, NumFailures]),
+                              %% Use the new, lower number
+                              dict:store(Key, NumFailures, Acc);
+                          _ ->
+                              Msg = fmt_to_bin(errors(backup_failure),
+                                               [Task, Repository]),
+                              global_alert(backup_failure, Msg),
+                              dict:store(Key, NumFailures, Acc)
+                      end
+              end, Opaque, Failures)
+    end;
 check(encr_at_rest, Opaque, _History, Stats) ->
     check_global_stat_increased(Stats, encr_at_rest_errors_total, Opaque).
 

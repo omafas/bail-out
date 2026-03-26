@@ -48,7 +48,8 @@ let knownAlerts = [
   'encr_at_rest_key_test_failed',
   'encr_at_rest_errors_total',
   'cm_bucket_autoreprovision_total',
-  'indexer_lost_replicas'
+  'indexer_lost_replicas',
+  'backup_failure'
 ];
 
 let timeUnitToSeconds = {
