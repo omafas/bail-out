@@ -511,7 +511,7 @@ build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx) ->
             BucketUUID = ns_bucket:uuid(Id, Snapshot),
             [{encryptionAtRestInfo,
               menelaus_web_encr_at_rest:build_bucket_encr_at_rest_info(
-                BucketUUID, BucketConfig)}];
+                BucketUUID)}];
          false ->
             []
      end,

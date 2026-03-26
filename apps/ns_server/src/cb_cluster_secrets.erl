@@ -149,6 +149,7 @@
          diag_info/0,
          reencrypt_deks/0,
          node_supports_encryption_at_rest/1,
+         node_supports_encryption_type/2,
          max_local_dek_num/1,
          fetch_snapshot_in_txn/1,
          recalculate_deks_info/0,
@@ -1005,6 +1006,19 @@ node_supports_encryption_at_rest(NodeInfo) ->
             no_info;
         SupportedVersion ->
             cluster_compat_mode:is_version_79(SupportedVersion)
+    end.
+
+node_supports_encryption_type(EncryptionType, NodeInfo) ->
+    case node_supports_encryption_at_rest(NodeInfo) of
+        no_info -> no_info;
+        false -> false;
+        true when EncryptionType == other_encryption ->
+            case proplists:get_value(supported_compat_version, NodeInfo) of
+                undefined -> no_info;
+                SupportedVersion ->
+                    cluster_compat_mode:is_version_totoro(SupportedVersion)
+            end;
+        true -> true
     end.
 
 nodes_with_encryption_at_rest(Nodes) ->

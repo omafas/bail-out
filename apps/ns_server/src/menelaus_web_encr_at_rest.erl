@@ -15,7 +15,7 @@
 
 -export([handle_get/2, handle_post/2, get_settings/1, handle_drop_keys/2,
          handle_bucket_drop_keys/2, handle_deks_drop_complete/1,
-         build_bucket_encr_at_rest_info/2,
+         build_bucket_encr_at_rest_info/1,
          format_encr_at_rest_info/1, handle_force_encr/2,
          handle_bucket_force_encr/2, min_dek_rotation_interval_in_sec/0,
          min_dek_lifetime_in_sec/0, dek_interval_error/1,
@@ -433,9 +433,9 @@ handle_bucket_drop_keys(Bucket, ApplySettings, AuditPropsFun, Req) ->
           end
       end, Req).
 
-build_bucket_encr_at_rest_info(BucketUUID, BucketConfig) ->
+build_bucket_encr_at_rest_info(BucketUUID) ->
     NodesInfo = ns_doctor:get_nodes(),
-    Nodes = ns_bucket:get_servers(BucketConfig),
+    Nodes = ns_cluster_membership:nodes_wanted(),
     I = aggregated_EAR_info({bucket_encryption, BucketUUID}, NodesInfo, Nodes),
     format_encr_at_rest_info(I).
 
@@ -666,7 +666,7 @@ aggregated_EAR_info(Type, NodesInfo, Nodes) ->
 extract_node_EAR_info(Type, NodesInfo, Node) ->
     maybe
         {ok, NodeInfo} ?= dict:find(Node, NodesInfo),
-        case cb_cluster_secrets:node_supports_encryption_at_rest(NodeInfo) of
+        case cb_cluster_secrets:node_supports_encryption_type(Type, NodeInfo) of
             false ->
                 [{issues, []}];
             _ ->
