@@ -155,7 +155,77 @@
         }
       },
       "put": {
-        "summary": "Modify an external catalog",
+        "summary": "Modify (replace) an external catalog",
+        "operationId": "replaceExternalCatalog",
+        "tags": [
+          "External Catalogs"
+        ],
+        "security": [
+          {
+            "basicAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogInput"
+              },
+              "example": {
+                "name": "new-name"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated external catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                },
+                "example": {
+                  "name": "new-name"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input. The name is missing, empty, too long, or contains invalid characters.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "A catalog with the new name already exists.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "External catalog 'new-name' already exists"
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Modify (update) an external catalog",
         "operationId": "updateExternalCatalog",
         "tags": [
           "External Catalogs"

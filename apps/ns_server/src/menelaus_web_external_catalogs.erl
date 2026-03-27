@@ -19,6 +19,7 @@
          handle_get_catalog/2,
          handle_post_catalog/1,
          handle_put_catalog/2,
+         handle_patch_catalog/2,
          handle_delete_catalog/2]).
 
 -define(CHRONICLE_KEY, external_catalogs).
@@ -96,6 +97,45 @@ handle_put_catalog(Name, Req) ->
                         Req, Errors)
               end
       end, Req, form, [validator:prohibited(name, _)]).
+
+handle_patch_catalog(Name, Req) ->
+    menelaus_util:assert_is_totoro(),
+    validator:handle(
+      fun (Params) ->
+              %% Name is prohibited in params, so we can append it safely.
+              BinaryParams = binary_params([{name, Name} | Params]),
+              BinName = proplists:get_value(name, BinaryParams),
+
+              maybe
+                  Catalogs = get_catalogs(),
+                  {ok, ExistingCatalog} ?= find_catalog(BinName, Catalogs),
+
+                  ExistingExtra =
+                      proplists:get_value(
+                        extra_params, ExistingCatalog, []),
+                  AllProps = misc:update_proplist(ExistingExtra, BinaryParams),
+
+                  {ok, ServiceOKs} ?= validate_with_service(AllProps),
+
+                  Updated = build_catalog(ServiceOKs, AllProps),
+
+                  %% TODO: This is racy, someone else could update the catalog
+                  %% in the mean time. We are adding a rev in a future change
+                  %% though, and we can use that to either retry or fail.
+                  {ok, _} ?= replace_catalog(BinName, Updated),
+
+                  menelaus_util:reply_json(Req,
+                                           format_catalog(Updated),
+                                           200)
+              else
+                  not_found ->
+                      menelaus_util:reply_not_found(Req);
+                  {errors, Errors} ->
+                      reply_validation_errors(Req, Errors)
+              end
+      end,
+      Req, form,
+      [validator:prohibited(name, _)]).
 
 handle_delete_catalog(Name, Req) ->
     menelaus_util:assert_is_totoro(),

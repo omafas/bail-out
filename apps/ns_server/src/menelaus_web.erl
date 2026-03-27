@@ -1565,6 +1565,10 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                       write},
                      fun menelaus_web_collections:handle_patch_collection/4,
                      [Id, Scope, CollectionId]};
+                ["pools", "default", "externalCatalogs", Name] ->
+                    {{[external_catalog], write},
+                     fun menelaus_web_external_catalogs:handle_patch_catalog/2,
+                     [Name]};
                 _ ->
                     {done, reply_text(Req, "Object Not Found", 404)}
             end;

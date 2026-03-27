@@ -32,8 +32,9 @@ class ExternalCatalogTests(testlib.BaseTestSet):
                                True)
         testlib.diag_eval(self.cluster,
                           'ns_config:set('\
-                          'forced_external_catalog_validation_results,'\
-                          ' #{<<"param">> => <<"value">>})')
+                          'forced_external_catalog_validation_results, '\
+                          '#{<<"param1">> => <<"value1">>,'\
+                          '  <<"param2">> => <<"value2">>})')
 
     def teardown(self):
         pass
@@ -104,11 +105,11 @@ class ExternalCatalogTests(testlib.BaseTestSet):
 
         testlib.put_succ(
             self.cluster, catalog_path("modify-catalog"),
-            data={"param": "value"}),
+            data={"param1": "value1"}),
 
         r = testlib.get_succ(
             self.cluster, catalog_path("modify-catalog"))
-        testlib.assert_eq("value", r.json()["param"])
+        testlib.assert_eq("value1", r.json()["param1"])
 
     def modify_nonexistent_catalog_test(self):
         testlib.put_fail(
@@ -116,6 +117,59 @@ class ExternalCatalogTests(testlib.BaseTestSet):
             catalog_path("nonexistent"),
             expected_code=404,
             data={})
+
+    def patch_catalog_test(self):
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "patch-catalog"})
+
+        r = testlib.patch_succ(
+            self.cluster,
+            catalog_path("patch-catalog"),
+            data={"param1": "value1"})
+        body = r.json()
+        testlib.assert_eq("value1", body["param1"])
+
+        r = testlib.get_succ(
+            self.cluster,
+            catalog_path("patch-catalog"))
+        testlib.assert_eq("value1", r.json()["param1"])
+
+    def patch_catalog_preserves_existing_params_test(self):
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "patch-preserve",
+                  "param1": "value1"})
+
+        testlib.patch_succ(
+            self.cluster,
+            catalog_path("patch-preserve"),
+            data={"param2": "value2"})
+
+        r = testlib.get_succ(
+            self.cluster,
+            catalog_path("patch-preserve"))
+        body = r.json()
+        testlib.assert_eq("value1", body["param1"])
+        testlib.assert_eq("value2", body["param2"])
+
+    def patch_nonexistent_catalog_test(self):
+        testlib.patch_fail(
+            self.cluster,
+            catalog_path("nonexistent"),
+            expected_code=404,
+            data={"param": "value"})
+
+    def patch_catalog_name_prohibited_test(self):
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "no-rename"})
+
+        testlib.patch_fail(
+            self.cluster,
+            catalog_path("no-rename"),
+            expected_code=400,
+            data={"name": "new-name"})
 
     def delete_catalog_test(self):
         testlib.post_succ(
