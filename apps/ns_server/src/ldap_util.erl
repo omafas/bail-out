@@ -82,8 +82,9 @@ ssl_options(Host, Settings) ->
                   fun ({K, {password, V}}) -> {K, V};
                       (KV) -> KV
                   end, ExtraOptsUnprepared),
-    misc:update_proplist(ClientAuthOpts ++ PeerVerificationOpts
-                         ++ MaxTlsVersion ++ MiddleboxCompat, ExtraOpts).
+    All = misc:update_proplist(ClientAuthOpts ++ PeerVerificationOpts
+                               ++ MaxTlsVersion ++ MiddleboxCompat, ExtraOpts),
+    ns_ssl_services_setup:cleanup_options(All).
 
 client_cert_auth_enabled(Settings) ->
     Encryption = proplists:get_value(encryption, Settings),

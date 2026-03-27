@@ -54,7 +54,8 @@
          update_certs_epoch/0,
          get_key_ids_in_use/0,
          resave_encrypted_files/0,
-         config_upgrade_to_76/1]).
+         config_upgrade_to_76/1,
+         cleanup_options/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
