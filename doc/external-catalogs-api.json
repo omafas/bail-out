@@ -242,6 +242,7 @@
                 "$ref": "#/components/schemas/CatalogUpdateInput"
               },
               "example": {
+                "rev": 2,
                 "param1": "value1"
               }
             }

@@ -340,6 +340,111 @@ class ExternalCatalogTests(testlib.BaseTestSet):
             catalog_path("cas-update"),
             data={"rev": rev2})
 
+    def patch_returns_rev_test(self):
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "patch-rev"})
+
+        r = testlib.patch_succ(
+            self.cluster,
+            catalog_path("patch-rev"),
+            data={"param1": "value1"})
+        testlib.assert_in("rev", r.json())
+
+    def patch_advances_rev_test(self):
+        r1 = testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "patch-adv"})
+        rev1 = r1.json()["rev"]
+
+        r2 = testlib.patch_succ(
+            self.cluster,
+            catalog_path("patch-adv"),
+            data={"param1": "value1"})
+        rev2 = r2.json()["rev"]
+
+        assert rev1 != rev2, \
+            "rev should change after patch"
+
+    def cas_patch_with_correct_rev_test(self):
+        r1 = testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "cas-patch-ok"})
+        rev = r1.json()["rev"]
+
+        r2 = testlib.patch_succ(
+            self.cluster,
+            catalog_path("cas-patch-ok"),
+            data={"param1": "value1", "rev": rev})
+        body = r2.json()
+        testlib.assert_eq("value1", body["param1"])
+        testlib.assert_in("rev", body)
+
+    def cas_patch_with_stale_rev_test(self):
+        r1 = testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "cas-patch-stale"})
+        stale_rev = r1.json()["rev"]
+
+        # Advance the revision
+        testlib.patch_succ(
+            self.cluster,
+            catalog_path("cas-patch-stale"),
+            data={"param1": "value1"})
+
+        # The stale rev should cause a 409
+        testlib.patch_fail(
+            self.cluster,
+            catalog_path("cas-patch-stale"),
+            expected_code=409,
+            data={"param1": "value2",
+                  "rev": stale_rev})
+
+    def cas_patch_without_rev_test(self):
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "cas-patch-none"})
+
+        # PATCH without rev should succeed
+        r = testlib.patch_succ(
+            self.cluster,
+            catalog_path("cas-patch-none"),
+            data={"param1": "value1"})
+        testlib.assert_eq("value1", r.json()["param1"])
+
+    def cas_patch_rev_chains_test(self):
+        r1 = testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "cas-patch-chain"})
+        rev1 = r1.json()["rev"]
+
+        r2 = testlib.patch_succ(
+            self.cluster,
+            catalog_path("cas-patch-chain"),
+            data={"param1": "value1", "rev": rev1})
+        rev2 = r2.json()["rev"]
+
+        assert rev1 != rev2, \
+            "rev should change after patch"
+
+        # The new rev should work for the next CAS
+        r3 = testlib.patch_succ(
+            self.cluster,
+            catalog_path("cas-patch-chain"),
+            data={"param2": "value2", "rev": rev2})
+        rev3 = r3.json()["rev"]
+
+        assert rev2 != rev3, \
+            "rev should change after second patch"
+
+        # Verify both params are present
+        r = testlib.get_succ(
+            self.cluster,
+            catalog_path("cas-patch-chain"))
+        body = r.json()
+        testlib.assert_eq("value1", body["param1"])
+        testlib.assert_eq("value2", body["param2"])
+
     def pools_default_includes_catalogs_test(self):
         r = testlib.get_succ(
             self.cluster, "/pools/default")

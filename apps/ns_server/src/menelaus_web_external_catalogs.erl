@@ -119,16 +119,26 @@ handle_patch_catalog(Name, Req) ->
               %% Name is prohibited in params, so we can append it safely.
               BinaryParams = binary_params([{name, Name} | Params]),
               BinName = proplists:get_value(name, BinaryParams),
+              UserRev = proplists:get_value(rev, Params),
 
-              maybe_patch_catalog(BinName, BinaryParams, Req, ?PATCH_RETRIES)
+
+              maybe_patch_catalog(BinName, BinaryParams, UserRev, Req,
+                                  ?PATCH_RETRIES)
       end,
       Req, form,
-      [validator:prohibited(name, _)]).
+      [validator:prohibited(name, _),
+       validator:integer(rev, _)]).
 
-maybe_patch_catalog(Name, Params, Req, Retries) ->
+maybe_patch_catalog(Name, Params, UserRev, Req, Retries) ->
     maybe
         Catalogs = get_catalogs(get_state()),
         {ok, ExistingCatalog} ?= find_catalog(Name, Catalogs),
+
+        RevToCheck =
+            case UserRev of
+                undefined -> proplists:get_value(rev, ExistingCatalog);
+                _ -> UserRev
+            end,
 
         ExistingExtra =
             proplists:get_value(
@@ -139,7 +149,7 @@ maybe_patch_catalog(Name, Params, Req, Retries) ->
 
         Updated = build_catalog(ServiceOKs, AllProps),
         {ok, _, CommittedCatalog} ?=
-            replace_catalog(Name, Updated, proplists:get_value(rev, Updated)),
+            replace_catalog(Name, Updated, RevToCheck),
 
         menelaus_util:reply_json(Req, format_catalog(CommittedCatalog), 200)
     else
@@ -148,11 +158,11 @@ maybe_patch_catalog(Name, Params, Req, Retries) ->
         {errors, Errors} ->
             reply_validation_errors(Req, Errors);
         rev_mismatch ->
-            case Retries of
-                0 ->
+            case UserRev =/= undefined orelse Retries =:= 0 of
+                true ->
                     reply_rev_mismatch(Req);
-                _ ->
-                    maybe_patch_catalog(Name, Params, Req, Retries - 1)
+                false ->
+                    maybe_patch_catalog(Name, Params, UserRev, Req, Retries - 1)
             end
     end.
 
