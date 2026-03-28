@@ -15,6 +15,8 @@
 -include("ns_common.hrl").
 -include_lib("ns_common/include/cut.hrl").
 
+-define(PATCH_RETRIES, ?get_param(patch_retries, 5)).
+
 -export([handle_get_catalogs/1,
          handle_get_catalog/2,
          handle_post_catalog/1,
@@ -118,39 +120,41 @@ handle_patch_catalog(Name, Req) ->
               BinaryParams = binary_params([{name, Name} | Params]),
               BinName = proplists:get_value(name, BinaryParams),
 
-              UserRev = proplists:get_value(rev, Params, undefined),
-
-              maybe
-                  Catalogs = get_catalogs(get_state()),
-                  {ok, ExistingCatalog} ?= find_catalog(BinName, Catalogs),
-
-                  ExistingExtra =
-                      proplists:get_value(
-                        extra_params, ExistingCatalog, []),
-                  AllProps = misc:update_proplist(ExistingExtra, BinaryParams),
-
-                  {ok, ServiceOKs} ?= validate_with_service(AllProps),
-
-                  Updated = build_catalog(ServiceOKs, AllProps),
-
-                  {ok, _, CommittedCatalog} ?=
-                      replace_catalog(BinName, Updated, UserRev),
-
-                  menelaus_util:reply_json(
-                      Req, format_catalog(CommittedCatalog), 200)
-              else
-                  not_found ->
-                      menelaus_util:reply_not_found(Req);
-                  {errors, Errors} ->
-                      reply_validation_errors(Req, Errors);
-                  rev_mismatch ->
-                      %% TODO: If the user did not pass any rev, this should
-                      %% retry some sensible number of times
-                      reply_rev_mismatch(Req)
-              end
+              maybe_patch_catalog(BinName, BinaryParams, Req, ?PATCH_RETRIES)
       end,
       Req, form,
       [validator:prohibited(name, _)]).
+
+maybe_patch_catalog(Name, Params, Req, Retries) ->
+    maybe
+        Catalogs = get_catalogs(get_state()),
+        {ok, ExistingCatalog} ?= find_catalog(Name, Catalogs),
+
+        ExistingExtra =
+            proplists:get_value(
+              extra_params, ExistingCatalog, []),
+        AllProps = misc:update_proplist(ExistingExtra, Params),
+
+        {ok, ServiceOKs} ?= validate_with_service(AllProps),
+
+        Updated = build_catalog(ServiceOKs, AllProps),
+        {ok, _, CommittedCatalog} ?=
+            replace_catalog(Name, Updated, proplists:get_value(rev, Updated)),
+
+        menelaus_util:reply_json(Req, format_catalog(CommittedCatalog), 200)
+    else
+        not_found ->
+            menelaus_util:reply_not_found(Req);
+        {errors, Errors} ->
+            reply_validation_errors(Req, Errors);
+        rev_mismatch ->
+            case Retries of
+                0 ->
+                    reply_rev_mismatch(Req);
+                _ ->
+                    maybe_patch_catalog(Name, Params, Req, Retries - 1)
+            end
+    end.
 
 handle_delete_catalog(Name, Req) ->
     menelaus_util:assert_is_totoro(),
