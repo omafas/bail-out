@@ -34,7 +34,8 @@ function mnLDAPController($scope, mnUserRolesService, mnPromiseHelper, mnPoolDef
       bindDN: "",
       bindPass: "",
       clientTLSCert: "",
-      clientTLSKey: ""
+      clientTLSKey: "",
+      maxTLSVersion: ""
     },
     authType: "anon",
     userDnMapping: "template",
@@ -176,6 +177,9 @@ function mnLDAPController($scope, mnUserRolesService, mnPromiseHelper, mnPoolDef
             acc[key] = "true";
           }
           break;
+        case "maxTLSVersion":
+          acc[key] = config[key] || '';
+          break;
         default:
           if (config[key] !== undefined) {
             acc[key] = config[key].toString();
@@ -287,6 +291,11 @@ function mnLDAPController($scope, mnUserRolesService, mnPromiseHelper, mnPoolDef
     } else {
       delete config.cacert;
     }
+    config.middleboxCompMode = vm.config.advanced.middleboxCompMode
+    // Only include maxTLSVersion if encryption is TLS
+    if (!['TLS','StartTLSExtension'].includes(config.encryption)) {
+      delete config.maxTLSVersion;
+    }
     return config;
   }
 
@@ -336,6 +345,7 @@ function mnLDAPController($scope, mnUserRolesService, mnPromiseHelper, mnPoolDef
 
   function checkConnectivity() {
     removeErrors();
+
     mnPromiseHelper(
       vm,
       mnUserRolesService.ldapConnectivityValidate(getConnectivitySettings(), vm.config))
@@ -345,9 +355,10 @@ function mnLDAPController($scope, mnUserRolesService, mnPromiseHelper, mnPoolDef
 
   function checkAuthentication() {
     removeErrors();
-    var settings = Object.assign({}, getConnectivitySettings(),
+    var settings = Object.assign({requestTimeout: vm.config.advanced.requestTimeout},getConnectivitySettings(),
                                  getAuthenticationSettings(),
                                  vm.config.cred);
+
     mnPromiseHelper(vm,
                     mnUserRolesService.ldapAuthenticationValidate(settings, vm.config))
       .applyToScope("authenticationSuccessResult")
@@ -356,7 +367,9 @@ function mnLDAPController($scope, mnUserRolesService, mnPromiseHelper, mnPoolDef
 
   function checkGroupsQuery() {
     removeErrors();
-    var settings = Object.assign({groupsQueryUser: vm.config.groupsQueryUser},
+    var settings = Object.assign({requestTimeout: vm.config.advanced.requestTimeout,
+                                  groupsQueryUser: vm.config.groupsQueryUser,
+                                  nestedGroupsMaxDepth: vm.config.advanced.nestedGroupsMaxDepth},
                                  getConnectivitySettings(),
                                  getAuthenticationSettings(),
                                  getQueryForGroupsSettings());

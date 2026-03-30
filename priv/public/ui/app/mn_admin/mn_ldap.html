@@ -141,7 +141,16 @@ licenses/APL2.txt.
                 </div>
               </span>
             </div>
-            <div
+             <div ng-if="['TLS', 'StartTLSExtension'].includes(mnLDAPCtl.config.connect.encryption)" class="formrow">
+                <label for="max_tls_version">Max TLS Version</label>
+                <select id="max_tls_version" class="form-control"
+                        ng-model="mnLDAPCtl.config.connect.maxTLSVersion">
+                   <option value="">Unset</option>
+                   <option value="tlsv1.2">TLS v1.2</option>
+                   <option value="tlsv1.3">TLS v1.3</option>
+                </select>
+             </div>
+             <div
                class="formrow"
                ng-if="mnLDAPCtl.config.connect.serverCertValidation == 'pasteCert'">
               <label
