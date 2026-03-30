@@ -82,9 +82,10 @@ with_code_coverage(Fun, false, _Modules, _OutputDir) ->
     Fun();
 with_code_coverage(Fun, true, Modules, OutputDir) ->
     try
-        cover_init(Modules),
+        CovModules = scan_modules_for_coverage(Modules),
+        cover_init(CovModules),
         Res = Fun(),
-        cover_analyze(Modules, OutputDir),
+        cover_analyze(CovModules, OutputDir),
         Res
     after
         cover_stop()
@@ -92,6 +93,12 @@ with_code_coverage(Fun, true, Modules, OutputDir) ->
 
 cover_init(Modules) ->
     io:format("Code coverage is enabled~n"),
+    case code:coverage_support() of
+        true ->
+            code:set_coverage_mode(line_counters);
+        false ->
+            io:format("Native code coverage is not supported~n")
+    end,
     {ok, _} = cover:start(),
     %% From documentation:
     %% When running in this mode, modules will be Cover compiled in a more
@@ -185,6 +192,14 @@ test_runners(Enabled) when is_list(Enabled) ->
         fun ({Name, _}) ->
                 lists:member(Name, Enabled)
         end, all_test_runners()).
+
+scan_modules_for_coverage(UnitTestModules) ->
+    Wildcard = "./apps/*/src/**/*.erl",
+    Files = filelib:wildcard(Wildcard, config(root_dir)),
+    Candidates = [list_to_atom(filename:basename(F, ".erl")) || F <- Files],
+    Modules = sets:to_list(sets:intersection(sets:from_list(UnitTestModules),
+                                             sets:from_list(Candidates))),
+    Modules -- [ale_transform, cut, ns_server_testrunner_api].
 
 get_modules(Filter) ->
     Ext = code:objfile_extension(),
