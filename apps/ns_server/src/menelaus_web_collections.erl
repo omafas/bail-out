@@ -149,8 +149,9 @@ collection_validators(DefaultAllowed, BucketConfig) ->
         scope_validators(DefaultAllowed).
 
 external_collection_validators() ->
-    [validator:no_duplicate_keys(_)] ++
-        scope_validators_without_unsupported([]).
+    [validator:no_duplicate_keys(_),
+     validator:prohibited(rev, _)]
+        ++ scope_validators_without_unsupported([]).
 
 handle_post_collection(Bucket, Scope, Req) ->
     assert_api_available(Bucket),
@@ -274,6 +275,7 @@ handle_patch_external_collection(Bucket, Scope, Name, Req) ->
               end
       end, Req, form,
       [validator:prohibited(name, _),
+       validator:prohibited(rev, _),
        validator:no_duplicate_keys(_)]).
 
 handle_delete_scope(Bucket, Name, Req) ->

@@ -136,6 +136,8 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             self.cluster, bucket_name, scope_name,
             collection_name, external=True)
         testlib.assert_eq(collection_name, col["name"])
+        testlib.assert_in("rev", col)
+        testlib.assert_eq(0, col["rev"])
 
     def create_regular_collection_test(self):
         bucket_name = "regular-bucket"
@@ -189,6 +191,7 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             self.cluster, bucket_name, scope_name,
             collection_name, external=True)
         testlib.assert_eq(collection_name, col["name"])
+        testlib.assert_eq(0, col["rev"])
 
     def create_external_collection_in_default_scope_test(self):
         bucket_name = "default-scope-bucket"
@@ -215,6 +218,7 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             self.cluster, bucket_name, "_default",
             collection_name, external=True)
         testlib.assert_eq(collection_name, col["name"])
+        testlib.assert_eq(0, col["rev"])
 
     def create_duplicate_external_collection_test(self):
         bucket_name = "dup-bucket"
@@ -365,12 +369,13 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             get_manifest_uid(self.cluster, bucket_name,
                              external=True))
 
-        # Collection should still exist
+        # Collection should still exist with rev unchanged
         col = get_collection_from_manifest(
             self.cluster, bucket_name, scope_name,
             collection_name, external=True)
         testlib.assert_eq(collection_name,
                           col["name"])
+        testlib.assert_eq(0, col["rev"])
 
     def scope_not_found_test(self):
         bucket_name = "scope-not-found-bucket"
@@ -415,6 +420,7 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             self.cluster, bucket_name,
             scope_name, collection_name, external=True)
         testlib.assert_eq("value1", col["param1"])
+        testlib.assert_eq(1, col["rev"])
 
     def patch_external_collection_multiple_params_test(self):
         bucket_name = "patch-multi-bucket"
@@ -441,6 +447,7 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             scope_name, collection_name, external=True)
         testlib.assert_eq("value1", col["param1"])
         testlib.assert_eq("value2", col["param2"])
+        testlib.assert_eq(1, col["rev"])
 
     def patch_external_collection_preserves_props_test(self):
         bucket_name = "patch-preserve-bucket"
@@ -463,12 +470,13 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             "?external=1",
             data={"param2": "value2"})
 
-        # Both params should be present
+        # Both params should be present, rev bumped
         col = get_collection_from_manifest(
             self.cluster, bucket_name,
             scope_name, collection_name, external=True)
         testlib.assert_eq("value1", col["param1"])
         testlib.assert_eq("value2", col["param2"])
+        testlib.assert_eq(1, col["rev"])
 
     def patch_external_collection_overwrites_prop_test(self):
         bucket_name = "patch-overwrite-bucket"
@@ -495,6 +503,8 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             self.cluster, bucket_name,
             scope_name, collection_name, external=True)
         testlib.assert_eq("value1", col["param1"])
+        # Same values, so rev should not increment
+        testlib.assert_eq(0, col["rev"])
 
     def patch_nonexistent_external_collection_test(self):
         bucket_name = "patch-404-bucket"
@@ -625,3 +635,4 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             self.cluster, bucket_name,
             scope_name, collection_name, external=True)
         testlib.assert_eq("value1", col["param1"])
+        testlib.assert_eq(0, col["rev"])

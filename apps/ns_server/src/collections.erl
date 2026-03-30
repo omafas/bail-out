@@ -1197,10 +1197,8 @@ add_collection(Manifest, Name, ScopeName, SuppliedProps, BucketConf) ->
 
 add_external_collection(Manifest, Name, ScopeName, SuppliedProps) ->
     Uid = proplists:get_value(next_coll_uid, Manifest),
-    on_collections([{Name,
-                     [{uid, Uid},
-                      {external, true}] ++ SuppliedProps} | _],
-                   ScopeName,
+    AllProps = [{uid, Uid}, {external, true}, {rev, 0}] ++ SuppliedProps,
+    on_collections([{Name, AllProps} | _], ScopeName,
                    Manifest).
 
 maybe_add_metered(Props, ScopeName) ->
@@ -1235,10 +1233,16 @@ modify_external_collection_props(Manifest, Name, ScopeName, DesiredProps) ->
     on_collections(
       fun (Collections) ->
               {Name, CurrentProps} = lists:keyfind(Name, 1, Collections),
+              Rev = proplists:get_value(rev, CurrentProps),
               NewProps = misc:update_proplist(CurrentProps, DesiredProps),
               case lists:sort(NewProps) =:= lists:sort(CurrentProps) of
                   false ->
-                      lists:keyreplace(Name, 1, Collections, {Name, NewProps});
+                      lists:keyreplace(
+                        Name, 1, Collections,
+                        %% Above check must be before rev update or it will
+                        %% fail to detect the same props
+                        {Name, misc:update_proplist(NewProps,
+                                                    [{rev, Rev + 1}])});
                   true ->
                       %% Don't update the collection if there is no change
                       Collections
