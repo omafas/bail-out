@@ -78,7 +78,8 @@
          non_empty_string/2,
          report_errors_for_one/3,
          validate_field_path/2,
-         no_duplicate_values/1]).
+         no_duplicate_values/1,
+         validate_decoded_object/2]).
 
 %% Used for testing validators.
 -ifdef(TEST).
