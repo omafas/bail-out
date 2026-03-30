@@ -13,3 +13,36 @@
 
 -type credential_type() :: aws | azure_shared | azure_ad | azure_sas |
                            azure_managed | gcp | http | couchbase.
+
+-type credential_author() :: #{user := binary(), domain := atom()}.
+-type credential_error_reason() :: config_encryption_required |
+                                   n2n_encryption_required |
+                                   not_found |
+                                   already_exists |
+                                   already_expired |
+                                   unsupported_schema_version |
+                                   invalid_type |
+                                   {txn_failed, Reason :: term()}.
+-type credential_id() :: string().
+
+-type credential_meta() :: #{created_at := integer(),
+                             created_by := credential_author(),
+                             updated_at => integer(),
+                             updated_by => credential_author(),
+                             expires_at => integer(),
+                             description => binary() | string(),
+                             guardrails => map(),
+                             payload_version := chronicle:revision()}.
+
+-type credential_fields() :: #{atom() => string() | integer() | boolean() |
+                               binary()}.
+
+-type credentials_map() :: #{id := string(),
+                             schema_version := pos_integer(),
+                             type := credential_type(),
+                             meta := credential_meta(),
+                             fields := credential_fields()}.
+
+-type credential_public_view() :: credentials_map().
+-type credential_full_view() :: credentials_map().
+

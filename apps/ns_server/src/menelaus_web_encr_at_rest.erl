@@ -20,7 +20,8 @@
          handle_bucket_force_encr/2, min_dek_rotation_interval_in_sec/0,
          min_dek_lifetime_in_sec/0, dek_interval_error/1,
          bypass_encr_cfg_restrictions/0, handle_import_ear_dek/1,
-         get_master_password_warning/0]).
+         get_master_password_warning/0,
+         is_encryption_enabled/2]).
 
 encr_method(Param, SecretIdName, EncrType) ->
     AllowedInMixedClusters = case EncrType of
