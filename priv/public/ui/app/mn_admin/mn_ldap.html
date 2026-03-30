@@ -77,6 +77,15 @@ licenses/APL2.txt.
                   ng-show="mnLDAPCtl.errors.encryption">
                   {{mnLDAPCtl.errors.encryption}}
                 </div>
+                <div ng-if="['TLS', 'StartTLSExtension'].includes(addLdapDialogCtl.config.connect.encryption)" class="margin-top-1">
+                  <label for="max_tls_version">Max TLS Version</label>
+                  <select id="max_tls_version" class="form-control"
+                          ng-model="addLdapDialogCtl.config.connect.maxTLSVersion">
+                    <option value="">Unset</option>
+                    <option value="tlsv1.2">TLS v1.2</option>
+                    <option value="tlsv1.3">TLS v1.3</option>
+                  </select>
+                </div>
               </span>
               <span class="width-8">
                 <label
