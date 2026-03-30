@@ -216,7 +216,8 @@ build_short_bucket_info(Id, BucketConfig, Snapshot) ->
      {streamingUri, build_pools_uri(["bucketsStreaming", Id], BucketUUID)},
      build_num_vbuckets(BucketConfig),
      build_bucket_capabilities(BucketConfig),
-     build_collections_manifest_id(Id, Snapshot)].
+     build_collections_manifest_id(Id, Snapshot),
+     build_external_collections_manifest_id(Id, Snapshot)].
 
 build_storage_backend(BucketConfig) ->
     Is76 = cluster_compat_mode:is_cluster_76(),
@@ -299,6 +300,14 @@ build_collections_manifest_id(Id, Snapshot) ->
             [];
         Uid ->
             {collectionsManifestUid, Uid}
+    end.
+
+build_external_collections_manifest_id(Id, Snapshot) ->
+    case collections:external_uid(Id, Snapshot) of
+        undefined ->
+            [];
+        Uid ->
+            {externalCollectionsManifestUid, Uid}
     end.
 
 build_pools_uri(Tail) ->

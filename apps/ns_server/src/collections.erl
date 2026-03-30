@@ -25,6 +25,7 @@
          default_manifest/1,
          uid/1,
          uid/2,
+         external_uid/2,
          num_collections/2,
          manifest_json_for_memcached/2,
          manifest_json_for_rest_response/4,
@@ -308,11 +309,17 @@ get_collection_uid(Bucket, ScopeName, CollectionName) ->
                     CollectionName, Manifest).
 
 uid(Bucket, Snapshot) ->
+    get_uid(Bucket, Snapshot, fun uid/1).
+
+external_uid(Bucket, Snapshot) ->
+    get_uid(Bucket, Snapshot, fun external_uid/1).
+
+get_uid(Bucket, Snapshot, GetterFun) ->
     case get_manifest(Bucket, Snapshot) of
         undefined ->
             undefined;
         Manifest ->
-            uid(Manifest)
+            GetterFun(Manifest)
     end.
 
 get_uid(Props) ->
