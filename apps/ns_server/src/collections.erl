@@ -1035,9 +1035,18 @@ verify_oper({create_external_collection, ?SYSTEM_SCOPE_NAME, _Name,
 verify_oper({create_external_collection, ScopeName, Name, _Props},
             Manifest, _BucketConf) ->
     create_collection_allowed(Name, ScopeName, Manifest);
-verify_oper({modify_external_collection, ScopeName, Name, _SuppliedProps},
+verify_oper({modify_external_collection, ScopeName, Name, SuppliedProps},
             Manifest, _BucketConf) ->
-    with_collection(fun (_) -> ok end, ScopeName, Name, Manifest, true);
+    with_collection(
+      fun (ExistingProps) ->
+              UserRev = proplists:get_value(rev, SuppliedProps),
+              ExistingRev = proplists:get_value(rev, ExistingProps),
+              case UserRev =:= undefined orelse
+                  UserRev =:= ExistingRev of
+                  false -> rev_mismatch;
+                  true -> ok
+              end
+      end, ScopeName, Name, Manifest, true);
 verify_oper({drop_external_collection, ?SYSTEM_SCOPE_NAME,
              "_" ++ _ = CollectionName},
             _Manifest, _BucketConf) ->

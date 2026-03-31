@@ -31,6 +31,8 @@
          handle_ensure_manifest/3,
          name_validator/1]).
 
+-define(PATCH_RETRIES, ?get_param(patch_retries, 5)).
+
 handle_get(Bucket, Req) ->
     External = is_req_external(Req),
     menelaus_util:reply_json(
@@ -261,33 +263,40 @@ handle_patch_external_collection(Bucket, Scope, Name, Req) ->
     menelaus_util:assert_is_totoro(),
     validator:handle(
       fun (Values) ->
-              maybe
-                  {ok, ExistingCollection} ?=
-                      collections:get_collection(Bucket, Scope, Name, true),
-
-                  CollectionParams =
-                      collection_params(
-                        misc:update_proplist(ExistingCollection, Values)),
-
-                  {ok, ServiceOKs} ?=
-                      validate_external_collection_with_service(
-                        Bucket, Scope, CollectionParams),
-                  Props = build_collection_props(
-                            Values,
-                            ServiceOKs),
-                  RV = collections:modify_external_collection(
-                         Bucket, Scope, Name, Props),
-                  process_patch_return_value(RV, Bucket, Scope, Name, Req)
-              else
-                  {errors, Errors} ->
-                      reply_validation_errors(Req, Errors);
-                  RV1 ->
-                      process_patch_return_value(RV1, Bucket, Scope, Name, Req)
-              end
+              maybe_patch_collection(Bucket, Scope, Name, Values, Req,
+                                     ?PATCH_RETRIES)
       end, Req, form,
       [validator:prohibited(name, _),
        validator:prohibited(rev, _),
        validator:no_duplicate_keys(_)]).
+
+maybe_patch_collection(Bucket, Scope, Name, Values, Req, Retries) ->
+    maybe
+        {ok, ExistingCollection} ?=
+            collections:get_collection(Bucket, Scope, Name, true),
+
+        CollectionParams =
+            collection_params(misc:update_proplist(ExistingCollection, Values)),
+
+        Rev = proplists:get_value(rev, CollectionParams),
+
+        {ok, ServiceOKs} ?= validate_external_collection_with_service(
+                              Bucket, Scope, CollectionParams),
+
+        Props = build_collection_props(Values, ServiceOKs),
+
+        RV = collections:modify_external_collection(
+               Bucket, Scope, Name, [{rev, Rev} | Props]),
+        process_patch_return_value(RV, Bucket, Scope, Name, Req)
+    else
+        {errors, Errors} ->
+            reply_validation_errors(Req, Errors);
+        rev_mismatch when Retries =/= 0 ->
+            maybe_patch_collection(Bucket, Scope, Name, Values, Req,
+                                   Retries - 1);
+        RV1 ->
+            process_patch_return_value(RV1, Bucket, Scope, Name, Req)
+    end.
 
 handle_delete_scope(Bucket, Name, Req) ->
     assert_api_available(Bucket),
@@ -525,6 +534,8 @@ get_err_code_msg(unfinished_failover) ->
     {"Operation is not possible during unfinished failover.", 503};
 get_err_code_msg({bucket_not_found, Bucket}) ->
     {"Bucket with name ~p not found", [Bucket], 404};
+get_err_code_msg(rev_mismatch) ->
+    {"Invalid revision for operation", 409};
 get_err_code_msg(Error) ->
     {"Unknown error ~p", [Error], 400}.
 
@@ -627,7 +638,6 @@ collection_params(Values) ->
     lists:filter(
       fun ({name, _}) -> false;
           ({uid, _}) -> false;
-          ({rev, _}) -> false;
           ({external, _}) -> false;
           (_) -> true
       end, Values).
