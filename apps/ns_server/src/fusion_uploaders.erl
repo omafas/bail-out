@@ -1283,14 +1283,17 @@ generate_initial_map(NVBuckets, NReplicas, Nodes) ->
     mb_map:generate_map(mb_map:no_nodes_map(NVBuckets, NReplicas),
                         NReplicas, Nodes, []).
 
-uploaders_assignment_test() ->
-    erlang:erase(),
-    AllNodes = [a, b, c, d, e, f],
-    [do_moves(AllNodes, NNodes, NVBuckets, NReplicas, 5) ||
-        NNodes <- [1, 2, 3, 4, 5, 6],
-        NVBuckets <- [128],
-        NReplicas <- [1, 2]],
-    ?log_debug("Test reports:~n~p", [erlang:get()]).
+uploaders_assignment_test_() ->
+    {timeout, 60,
+     fun () ->
+         erlang:erase(),
+         AllNodes = [a, b, c, d, e, f],
+         [do_moves(AllNodes, NNodes, NVBuckets, NReplicas, 5) ||
+             NNodes <- [1, 2, 3, 4, 5, 6],
+             NVBuckets <- [128],
+             NReplicas <- [1, 2]],
+         ?log_debug("Test reports:~n~p", [erlang:get()])
+     end}.
 
 do_moves(AllNodes, NumInitialNodes, NVBuckets, NReplicas, Iterations) ->
     TestKey = lists:flatten(io_lib:format(
