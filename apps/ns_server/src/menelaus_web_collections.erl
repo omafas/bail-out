@@ -263,17 +263,18 @@ handle_patch_external_collection(Bucket, Scope, Name, Req) ->
     menelaus_util:assert_is_totoro(),
     validator:handle(
       fun (Values) ->
-              maybe_patch_collection(Bucket, Scope, Name, Values, Req,
+              UserRev = proplists:get_value(rev, Values),
+              maybe_patch_collection(Bucket, Scope, Name, Values, UserRev, Req,
                                      ?PATCH_RETRIES)
       end, Req, form,
       [validator:prohibited(name, _),
-       validator:prohibited(rev, _),
+       validator:integer(rev, _),
        validator:no_duplicate_keys(_)]).
 
-maybe_patch_collection(Bucket, Scope, Name, Values, Req, Retries) ->
+maybe_patch_collection(Bucket, Scope, Name, Values, UserRev, Req, Retries) ->
     maybe
         {ok, ExistingCollection} ?=
-            collections:get_collection(Bucket, Scope, Name, true),
+            collections:get_collection(Bucket, Scope, Name, UserRev, true),
 
         CollectionParams =
             collection_params(misc:update_proplist(ExistingCollection, Values)),
@@ -291,8 +292,8 @@ maybe_patch_collection(Bucket, Scope, Name, Values, Req, Retries) ->
     else
         {errors, Errors} ->
             reply_validation_errors(Req, Errors);
-        rev_mismatch when Retries =/= 0 ->
-            maybe_patch_collection(Bucket, Scope, Name, Values, Req,
+        rev_mismatch when UserRev =:= undefined andalso Retries =/= 0 ->
+            maybe_patch_collection(Bucket, Scope, Name, Values, UserRev, Req,
                                    Retries - 1);
         RV1 ->
             process_patch_return_value(RV1, Bucket, Scope, Name, Req)
@@ -648,7 +649,9 @@ build_collection_props(Values, ServiceOKs) ->
     %% to set, since the returned list is all parameters, not just
     %% the ones we wanted to set.
     lists:filtermap(
-      fun ({Key, Value}) ->
+      fun ({rev, Value}) ->
+              {true, {rev, Value}};
+          ({Key, Value}) ->
               BKey = list_to_binary(Key),
               case maps:is_key(BKey, ServiceOKs) of
                   false -> false;

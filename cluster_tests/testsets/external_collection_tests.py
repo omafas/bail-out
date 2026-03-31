@@ -636,3 +636,150 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             scope_name, collection_name, external=True)
         testlib.assert_eq("value1", col["param1"])
         testlib.assert_eq(0, col["rev"])
+
+    def cas_patch_with_correct_rev_test(self):
+        bucket_name = "cas-ok-bucket"
+        scope_name = "cas-ok-scope"
+        collection_name = "cas-ok-col"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+        testlib.post_succ(
+            self.cluster,
+            f"{collections_path(bucket_name, scope_name)}"
+            "?external=1",
+            data={"name": collection_name})
+
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name,
+            external=True)
+        rev = col["rev"]
+
+        # PATCH with the correct rev should succeed
+        testlib.patch_succ(
+            self.cluster,
+            f"{collection_path(bucket_name, scope_name, collection_name)}"
+            "?external=1",
+            data={"param1": "value1",
+                  "rev": rev})
+
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name,
+            external=True)
+        testlib.assert_eq("value1", col["param1"])
+        testlib.assert_eq(rev + 1, col["rev"])
+
+    def cas_patch_with_stale_rev_test(self):
+        bucket_name = "cas-stale-bucket"
+        scope_name = "cas-stale-scope"
+        collection_name = "cas-stale-col"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+        testlib.post_succ(
+            self.cluster,
+            f"{collections_path(bucket_name, scope_name)}"
+            "?external=1",
+            data={"name": collection_name})
+
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name,
+            external=True)
+        stale_rev = col["rev"]
+
+        # Advance the rev
+        testlib.patch_succ(
+            self.cluster,
+            f"{collection_path(bucket_name, scope_name, collection_name)}"
+            "?external=1",
+            data={"param1": "value1"})
+
+        # PATCH with the stale rev should fail
+        testlib.patch_fail(
+            self.cluster,
+            f"{collection_path(bucket_name, scope_name, collection_name)}"
+            "?external=1",
+            expected_code=409,
+            data={"param2": "value2",
+                  "rev": stale_rev})
+
+    def cas_patch_without_rev_test(self):
+        bucket_name = "cas-none-bucket"
+        scope_name = "cas-none-scope"
+        collection_name = "cas-none-col"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+        testlib.post_succ(
+            self.cluster,
+            f"{collections_path(bucket_name, scope_name)}"
+            "?external=1",
+            data={"name": collection_name})
+
+        # PATCH without rev should succeed
+        testlib.patch_succ(
+            self.cluster,
+            f"{collection_path(bucket_name, scope_name, collection_name)}"
+            "?external=1",
+            data={"param1": "value1"})
+
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name,
+            external=True)
+        testlib.assert_eq("value1", col["param1"])
+
+    def cas_patch_rev_chains_test(self):
+        bucket_name = "cas-chain-bucket"
+        scope_name = "cas-chain-scope"
+        collection_name = "cas-chain-col"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+        testlib.post_succ(
+            self.cluster,
+            f"{collections_path(bucket_name, scope_name)}"
+            "?external=1",
+            data={"name": collection_name})
+
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name,
+            external=True)
+        rev0 = col["rev"]
+
+        # First CAS patch
+        testlib.patch_succ(
+            self.cluster,
+            f"{collection_path(bucket_name, scope_name, collection_name)}"
+            "?external=1",
+            data={"param1": "value1",
+                  "rev": rev0})
+
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name,
+            external=True)
+        rev1 = col["rev"]
+        assert rev0 != rev1, \
+            "rev should change after patch"
+
+        # Second CAS patch using the new rev
+        testlib.patch_succ(
+            self.cluster,
+            f"{collection_path(bucket_name, scope_name, collection_name)}"
+            "?external=1",
+            data={"param2": "value2",
+                  "rev": rev1})
+
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name,
+            external=True)
+        assert rev1 != col["rev"], \
+            "rev should change after second patch"
+        testlib.assert_eq("value1", col["param1"])
+        testlib.assert_eq("value2", col["param2"])
