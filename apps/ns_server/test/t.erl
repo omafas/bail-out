@@ -42,6 +42,8 @@
 %% Used by cluster_run --dont-start.
 -export([fake_loggers/0]).
 
+-define(DEPTH, 100).
+
 start() ->
     run_tests(all).
 
@@ -231,7 +233,8 @@ run_eunit_tests(Modules0) ->
     Modules  = filter_out_unneeded_tests_modules(Modules0),
     Listener = spawn_listener(),
     TestResult = eunit:test([{spawn, M} || M <- Modules],
-                            [verbose, {report, Listener}, {print_depth, 100}]),
+                            [verbose, {report, Listener},
+                             {print_depth, ?DEPTH}]),
 
     receive
         {failed_tests, FailedTests} ->
@@ -398,6 +401,12 @@ listener_loop(Parent, FailedTests) ->
         {status, Id, {progress, 'begin', {test, TestProps}}} ->
             NewFailedTests = handle_test_progress(Id, TestProps, FailedTests),
             listener_loop(Parent, NewFailedTests);
+        {status, _Id, {cancel, {blame, _}}} ->
+            %% Canceled because of a child; will be reported by the child.
+            listener_loop(Parent, FailedTests);
+        {status, _Id, {cancel, Reason}} ->
+            %% Test group is canceled
+            listener_loop(Parent, [{group_canceled, Reason} | FailedTests]);
         _ ->
             listener_loop(Parent, FailedTests)
     end.
@@ -433,6 +442,10 @@ handle_failed_tests(FailedTests) ->
     io:format("=======================================================~n"),
     failed.
 
+format_test_props({group_canceled, {abort, Reason}}) ->
+    eunit_lib:format_error(Reason, ?DEPTH);
+format_test_props({group_canceled, Reason}) ->
+    io_lib:format("*** Test group canceled ***~n~p", [Reason]);
 format_test_props([{_, _}|_]=TestProps) ->
     MFA = proplists:get_value(source, TestProps),
     Desc = proplists:get_value(desc, TestProps),
