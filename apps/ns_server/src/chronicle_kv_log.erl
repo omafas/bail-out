@@ -69,6 +69,8 @@ sanitize(jwt_settings, V) ->
     menelaus_web_jwt:sanitize_chronicle_cfg(V);
 sanitize(?JWT_SIGNING_KEYS_KEY, _V) ->
     masked();
+sanitize({credentials, _}, V) ->
+    menelaus_web_credentials:sanitize_chronicle_cfg(V);
 sanitize(_, V) ->
     V.
 

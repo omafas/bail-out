@@ -73,6 +73,8 @@
          handle_put/2,
          handle_delete/2]).
 
+-export([sanitize_chronicle_cfg/1]).
+
 %% Settings endpoint – /settings/credentialStore
 %% @doc Parameters and their descriptions:
 %% config_encryption_override - By default, config encryption is required.
@@ -743,6 +745,22 @@ reply_store_error(Req, Reason) ->
     reply_json_ok(Req,
                   encode_response(#{error => <<"Internal error">>}), 500).
 
+-spec sanitize_chronicle_cfg(credential_full_view()) -> credential_public_view().
+sanitize_chronicle_cfg(#{type := Type, fields := Fields} = Cred) ->
+    Sensitive = cb_credential_types:sensitive_fields(Type),
+    Masked = chronicle_kv_log:masked(),
+    SanitizedFields =
+        maps:map(
+          fun (K, V) ->
+                  case lists:member(K, Sensitive) of
+                      true  -> Masked;
+                      false -> V
+                  end
+          end, Fields),
+    Cred#{fields => SanitizedFields};
+sanitize_chronicle_cfg(Value) ->
+    Value.
+
 -ifdef(TEST).
 roundtrip_test() ->
     Settings = #{config_encryption_override => false,
@@ -836,4 +854,17 @@ validated_guardrails_to_store_test() ->
     %% allowedResources was not present in Props, so must be absent
     ?assertNot(maps:is_key(allowed_resources, Got)).
 
+sanitize_chronicle_cfg_test() ->
+    Cred = #{type => aws,
+             fields => #{access_key_id => <<"AK">>,
+                         secret_access_key => <<"SK">>,
+                         region => <<"us-east-1">>},
+             meta => #{created_at => 0}},
+    Sanitized = sanitize_chronicle_cfg(Cred),
+    Expected = Cred#{fields =>
+                         #{access_key_id => <<"AK">>,
+                           secret_access_key =>
+                               chronicle_kv_log:masked(),
+                           region => <<"us-east-1">>}},
+    ?assertEqual(Expected, Sanitized).
 -endif.
