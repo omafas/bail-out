@@ -397,14 +397,22 @@ build_catalog(ServiceOKs, Params) ->
     [{extra_params, ExtraParams}].
 
 binary_params(Params) ->
+    MaybeConvert =
+        fun(V) when is_binary(V) ->
+                V;
+           (V) when is_list(V) ->
+                list_to_binary(V)
+        end,
+
+
     lists:foldl(
-        fun({name, V}, Acc) ->
-                [{name, list_to_binary(V)} | Acc];
-            ({rev, V}, Acc) ->
-                [{rev, V} | Acc];
-            ({K, V}, Acc) ->
-                [{list_to_binary(K), list_to_binary(V)} | Acc]
-            end, [], Params).
+      fun({name, V}, Acc) ->
+              [{name, list_to_binary(V)} | Acc];
+         ({rev, V}, Acc) ->
+              [{rev, V} | Acc];
+         ({K, V}, Acc) ->
+              [{MaybeConvert(K), MaybeConvert(V)} | Acc]
+      end, [], Params).
 
 reply_conflict(Req, Name) ->
     menelaus_util:reply_json(

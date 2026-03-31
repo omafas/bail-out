@@ -249,29 +249,40 @@ handle_patch_couchbase_collection(Bucket, Scope, Name, Req, BucketConf) ->
           %% Don't allow any other params
           [validator:unsupported(_)]).
 
+process_patch_return_value(RV, Bucket, Scope, Name, Req) ->
+    maybe_audit(
+      RV, Req,
+      ns_audit:modify_collection(
+        _, Bucket, Scope, Name, _)),
+    maybe_add_event_log(RV, Bucket, []),
+    handle_rv(RV, collection_patch, Req).
+
 handle_patch_external_collection(Bucket, Scope, Name, Req) ->
     menelaus_util:assert_is_totoro(),
     validator:handle(
       fun (Values) ->
-              CollectionParams =
-                  collection_params(
-                    [{name, Name} | Values]),
-              case validate_external_collection_with_service(
-                     Bucket, Scope, CollectionParams) of
-                  {ok, ServiceOKs} ->
-                      Props = build_collection_props(
-                                Values,
-                                ServiceOKs),
-                      RV = collections:modify_external_collection(
-                             Bucket, Scope, Name, Props),
-                      maybe_audit(
-                        RV, Req,
-                        ns_audit:modify_collection(
-                          _, Bucket, Scope, Name, _)),
-                      maybe_add_event_log(RV, Bucket, []),
-                      handle_rv(RV, collection_patch, Req);
+              maybe
+                  {ok, ExistingCollection} ?=
+                      collections:get_collection(Bucket, Scope, Name, true),
+
+                  CollectionParams =
+                      collection_params(
+                        misc:update_proplist(ExistingCollection, Values)),
+
+                  {ok, ServiceOKs} ?=
+                      validate_external_collection_with_service(
+                        Bucket, Scope, CollectionParams),
+                  Props = build_collection_props(
+                            Values,
+                            ServiceOKs),
+                  RV = collections:modify_external_collection(
+                         Bucket, Scope, Name, Props),
+                  process_patch_return_value(RV, Bucket, Scope, Name, Req)
+              else
                   {errors, Errors} ->
-                      reply_validation_errors(Req, Errors)
+                      reply_validation_errors(Req, Errors);
+                  RV1 ->
+                      process_patch_return_value(RV1, Bucket, Scope, Name, Req)
               end
       end, Req, form,
       [validator:prohibited(name, _),
@@ -615,7 +626,9 @@ validate_collection_against_query_nodes([FirstNode | _], CollectionConfig,
 collection_params(Values) ->
     lists:filter(
       fun ({name, _}) -> false;
-          ({external_collection, _}) -> false;
+          ({uid, _}) -> false;
+          ({rev, _}) -> false;
+          ({external, _}) -> false;
           (_) -> true
       end, Values).
 

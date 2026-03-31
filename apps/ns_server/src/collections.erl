@@ -50,6 +50,7 @@
          set_manifest/4,
          get_scope/2,
          get_collection/2,
+         get_collection/4,
          get_max_supported/1,
          get_maxTTL_min_value/0,
          get_uid/1,
@@ -298,6 +299,15 @@ with_collection(Fun, ScopeName, CollectionName, Manifest, IsExternal) ->
                       end
               end
       end, ScopeName, Manifest).
+
+get_collection(Bucket, ScopeName, CollectionName, IsExternal) ->
+    Manifest = get_manifest(Bucket, direct, undefined),
+    case Manifest of
+        undefined -> not_found;
+        _ ->
+            with_collection(?cut({ok, _}), ScopeName, CollectionName,
+                            Manifest, IsExternal)
+    end.
 
 -spec get_collection_uid(bucket_name(), string(), string()) ->
           {ok, integer()} |
