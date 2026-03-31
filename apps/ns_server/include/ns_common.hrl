@@ -425,6 +425,14 @@
 %% error reports. It is generally good practice to rename the variable(s) in
 %% between hide/unhide points so that it's obvious that the value has been
 %% wrapped and cannot be used directly.
+%%
+%% WARNING: ?HIDE wraps values in anonymous functions.
+%% 1. Do not persist ?HIDE-wrapped values to disk or database (e.g. chronicle).
+%% 2. Do not send ?HIDE-wrapped values to remote nodes.
+%%
+%% Serialized anonymous funs embed a build-specific hash. Deserialization on
+%% a node running a different build (e.g., during a rolling upgrade) can
+%% fail with 'badfun'. Use only for node-local memory protection. See MB-53478.
 -define(HIDE(__V), fun () -> __V end).
 -define(UNHIDE(__V), __V()).
 -define(HIDDEN_DATA(Type), fun(() -> Type)).
