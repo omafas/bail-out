@@ -225,7 +225,7 @@ get_modules(Filter) ->
         end,
 
     Files = filelib:wildcard(FullWildcard, config(root_dir)),
-    [list_to_atom(filename:basename(F, Ext)) || F <- Files].
+    lists:uniq([list_to_atom(filename:basename(F, Ext)) || F <- Files]).
 
 run_eunit_tests(Modules0) ->
     %% eunit:test(module) will also run tests defined in module_tests. This
