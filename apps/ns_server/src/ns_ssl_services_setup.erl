@@ -1855,6 +1855,7 @@ config_upgrade_test() ->
         test_upgrade_config(Config6, Expected6),
         ok
     after
+        meck:unload(ns_config),
         meck:unload(cluster_compat_mode)
     end.
 
