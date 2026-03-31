@@ -320,15 +320,10 @@ class NodeAdditionWithCertsBase:
         # will hit the window where it's occuring (and receive a connection
         # closed error).
         def try_node_add_with_bad_user(node):
-            self.cluster.wait_for_web_service(node)
             r = self.cluster.add_node(node, use_client_cert_auth=False,
                                       auth=("BadUser", "password"),
                                       expected_code=400).json()
-            msg = "Error connection_closed happened during REST call"
-            if msg in r[0]:
-                return False
             self.assert_cluster_requires_per_node_cert(r)
-            return True
 
         self.provision_cluster_node()
         self.provision_new_node()
@@ -364,7 +359,7 @@ class NodeAdditionWithCertsBase:
 
         testlib.poll_for_condition(
                 lambda: try_node_add_with_bad_user(self.new_node()),
-                sleep_time=1, attempts=10,
+                sleep_time=1, attempts=10, retry_on_assert=True,
                 msg='wait for add node failure')
 
         # Need to clean up the node that was /clusterInit'd so subsequent
@@ -620,15 +615,11 @@ class NodeAdditionWithCertsBase:
         # start/end of the restart occurs so it's possible the node join
         # will hit the window where it's occuring (and receive a connection
         # closed error).
-        def try_join_cluster_with_bad_user(cluster_node, joining_node):
-            self.cluster.wait_for_web_service(cluster_node)
+        def try_join_cluster_with_bad_user(joining_node):
             r = self.cluster.do_join_cluster(joining_node,
                                              use_client_cert_auth=False,
                                              auth=("baduser", "password"),
                                              expected_code=400).json()
-            msg = "Error connection_closed happened during REST call"
-            if msg in r[0]:
-                return False
             self.assert_added_node_must_use_client_cert(r)
             return True
 
@@ -655,9 +646,8 @@ class NodeAdditionWithCertsBase:
                                         enabled=True, mandatory=True)
 
         testlib.poll_for_condition(
-                lambda: try_join_cluster_with_bad_user(
-                    self.cluster_node(), self.new_node()),
-                sleep_time=1, attempts=10,
+                lambda: try_join_cluster_with_bad_user(self.new_node()),
+                sleep_time=1, attempts=10, retry_on_assert=True,
                 msg='wait for cluster join failure')
 
     def provision_cluster_node(self, should_load_client_cert=False):
