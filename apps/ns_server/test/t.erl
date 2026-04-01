@@ -85,7 +85,7 @@ with_code_coverage(Fun, true, Modules, OutputDir) ->
         CovModules = scan_modules_for_coverage(Modules),
         cover_init(CovModules),
         Res = Fun(),
-        cover_analyze(CovModules, OutputDir),
+        cover_analyze(OutputDir),
         Res
     after
         cover_stop()
@@ -131,50 +131,33 @@ cover_init(Modules) ->
             erlang:error({cover_compilation, Errors})
     end.
 
--define(COV_IGNORE_FUN(F, A), F == '__call_logger'; {F, A} == {'test', 0}).
-
-cover_analyze(Modules, Dir) ->
+cover_analyze(Dir) ->
+    file:del_dir_r(Dir),
+    io:format("Exporting code coverage data...~n"),
+    Filename = io_lib:format("unittests_~s_~b_~b.coverdata",
+                             [os:getpid(),
+                              os:system_time(microsecond),
+                              rand:uniform(1000000)]),
+    ExportFile = filename:join([Dir, "raw", Filename]),
+    ok = filelib:ensure_dir(ExportFile),
+    ok = cover:export(ExportFile),
     io:format("Analyzing code coverage...~n"),
-    %% Calling analyze with 'function' just because we want to skip counting
-    %% coverage for some functions below.
-    {result, ModRes, ModErr} = cover:analyse(Modules, coverage, function),
-
-    ModErr == [] orelse
-        io:format("Code coverage failed for the following modules: ~0p~n",
-                  [ModErr]),
-
-    {TotalCov, TotalNotCov} =
-        lists:foldl(
-          fun ({{_M, F, A}, {_Cov, _NCov}}, Acc) when ?COV_IGNORE_FUN(F, A) ->
-                  Acc;
-              ({{_M, _F, _A}, {Cov, NCov}}, {ACov, ANCov}) ->
-                  {ACov + Cov, ANCov + NCov}
-          end, {0, 0}, ModRes),
-
-    Coverage = case TotalCov + TotalNotCov of
-                   0 -> 0;
-                   Sum -> TotalCov * 100 / Sum
-               end,
-
+    Script = filename:join(config(root_dir),
+                           "scripts/generate_coverage_report.escript"),
+    Cmd = io_lib:format("(~s --report-dir ~s --import-dirs ~s) 2>/dev/null",
+                        [Script, Dir, filename:dirname(ExportFile)]),
+    Result = os:cmd(Cmd),
+    Summary = json:decode(list_to_binary(Result)),
+    Coverage = maps:get(<<"total_coverage">>, Summary, 0.0),
+    TotalCov = maps:get(<<"total_covered_lines">>, Summary, 0),
+    TotalLines = maps:get(<<"total_lines">>, Summary, 0),
     io:format("Total code coverage: ~.2f% lines~n"
               "Covered lines:       ~b~n"
               "Total lines:         ~b~n"
-              "See detailed per module report here: "
-              "file://~s~n",
-              [Coverage, TotalCov, TotalCov + TotalNotCov, Dir]),
-    file:del_dir_r(Dir),
-    ok = filelib:ensure_path(Dir),
-    lists:foreach(
-        fun (?MODULE) -> ok;
-            (M) ->
-                F = filename:join(Dir, atom_to_list(M) ++ ".COVER.html"),
-                case cover:analyze_to_file(M, [html, {outfile, F}]) of
-                    {ok, _} -> ok;
-                    {error, R} ->
-                        io:format("Failed to analyze coverage for ~p: ~p~n",
-                                  [M, R])
-                end
-        end, Modules),
+              "Full coverage report is available at: file://~s~n"
+              "Raw coverage data exported to: ~s~n",
+              [float(Coverage), TotalCov, TotalLines,
+               filename:join(Dir, "html"), ExportFile]),
     io:format("Analyzing code coverage finished~n").
 
 cover_stop() -> catch cover:stop().
