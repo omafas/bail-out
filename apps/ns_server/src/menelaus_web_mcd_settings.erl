@@ -24,7 +24,8 @@
          handle_node_setting_get/3,
          handle_node_setting_delete/3,
          config_upgrade_to_79/1,
-         config_upgrade_to_80/1]).
+         config_upgrade_to_80/1,
+         get_effective_node_capacity/2]).
 
 -import(menelaus_util,
         [reply_json/2,
@@ -340,54 +341,59 @@ continue_handle_post(Req, Params, ConfigType) ->
                                    {ok, _} -> false;
                                    _ -> true
                                end],
-    case InvalidParams of
-        [_|_] ->
-            reply_json(Req, {InvalidParams}, 400);
-        [] ->
-            KVs0 = [{K, V} || {K, {ok, V}} <- ParsedParams],
-            %% We are encoding our base64 parameters directly into the config
-            %% rather than storing the raw value. This lets us handle parameters
-            %% on this node even if other nodes in the cluster are an older
-            %% version correctly, as the base64 encoded version will still be
-            %% sent to memcached on those nodes, rather than a non-encoded
-            %% version.
-            KVs = lists:map(
-                    fun ({Name, Value}) ->
-                            case lists:member(Name, ?BASE64_PARAMS) of
-                                true ->
-                                    {Name, base64:encode(Value)};
-                                false ->
-                                    {Name, Value}
-                            end
-                    end, KVs0),
-            {COS, CNS} =
-                case update_chronicle_config(
-                       chronicle_setting_names(), ChronicleKey, KVs) of
-                    {updated, {COS0, CNS0}} ->
-                        {COS0, CNS0};
-                    unchanged ->
-                        {[], []}
-                end,
-            {OS, NS} =
-                case update_config(
-                       ns_config_setting_names(), SettingsKey, KVs) of
-                    {commit, _, {OS0, NS0}} ->
-                        {OS0, NS0};
-                    _ ->
-                        {[], []}
-                end,
-            {EOS, ENS} =
-                case update_config(
-                       extra_ns_config_setting_names(), ExtraConfigKey, KVs) of
-                    {commit, _, {EOS0, ENS0}} ->
-                        {EOS0, ENS0};
-                    _ ->
-                        {[], []}
-                end,
-            %% Merge both the old settings and extra old settings, so that we
-            %% can add a single event log.
-            OldSettings = OS ++ EOS ++ COS,
-            NewSettings = NS ++ ENS ++ CNS,
+    maybe
+        [] ?= InvalidParams,
+        KVs0 = [{K, V} || {K, {ok, V}} <- ParsedParams],
+        %% We are encoding our base64 parameters directly into the config
+        %% rather than storing the raw value. This lets us handle parameters
+        %% on this node even if other nodes in the cluster are an older
+        %% version correctly, as the base64 encoded version will still be
+        %% sent to memcached on those nodes, rather than a non-encoded
+        %% version.
+        KVs = lists:map(
+                fun ({Name, Value}) ->
+                        case lists:member(
+                               Name, ?BASE64_PARAMS) of
+                            true ->
+                                {Name,
+                                 base64:encode(Value)};
+                            false ->
+                                {Name, Value}
+                        end
+                end, KVs0),
+
+        ChronicleKVs =
+            lists:filter(
+              fun ({K, _}) ->
+                      lists:member(
+                        K, [Name || {Name, _} <- chronicle_setting_names()])
+              end, KVs),
+
+        {COS, CNS, [] = _Errors} ?= update_chronicle_config(ChronicleKey,
+                                                            ChronicleKVs),
+
+        {OS, NS} =
+            case update_ns_config(
+                ns_config_setting_names(), SettingsKey, KVs) of
+                {commit, _, {OS0, NS0}} ->
+                    {OS0, NS0};
+                _ ->
+                    {[], []}
+            end,
+
+        {EOS, ENS} =
+            case update_ns_config(
+                    extra_ns_config_setting_names(), ExtraConfigKey, KVs) of
+                {commit, _, {EOS0, ENS0}} ->
+                    {EOS0, ENS0};
+                _ ->
+                    {[], []}
+            end,
+
+        %% Merge both the old settings and extra old settings, so that we
+        %% can add a single event log.
+        OldSettings = lists:sort(COS ++ OS ++ EOS),
+        NewSettings = lists:sort(CNS ++ NS ++ ENS),
 
             if
                 NewSettings =/= [] andalso NewSettings =/= OldSettings ->
@@ -399,10 +405,15 @@ continue_handle_post(Req, Params, ConfigType) ->
                     ok
             end,
 
-            handle_get(Req, ConfigType, 202)
+        handle_get(Req, ConfigType, 202)
+    else
+        [_|_] = InvalidParamsErrors ->
+            reply_json(Req, {InvalidParamsErrors}, 400);
+        {_, _, [_|_] = InvalidParamsErrors}  ->
+            reply_json(Req, {InvalidParamsErrors}, 400)
     end.
 
-update_config(Settings, ConfigKey, KVs) ->
+update_ns_config(Settings, ConfigKey, KVs) ->
     ns_config:run_txn(
       fun (OldConfig, SetFn) ->
               OldValue = ns_config:search(OldConfig, ConfigKey, []),
@@ -425,26 +436,48 @@ update_config(Settings, ConfigKey, KVs) ->
               {commit, NewConfig, {OldValue, NewValue}}
       end).
 
-update_chronicle_config(Settings, ChronicleKey, KVs) ->
-    OldValue = chronicle_compat:get(
-                 direct, ChronicleKey, #{default => []}),
-    NewValue =
-        lists:foldl(
-          fun ({K, V}, Acc) ->
-                  case lists:keyfind(K, 1, Settings)
-                           =/= false of
-                      true ->
-                          lists:keystore(K, 1, Acc, {K, V});
-                      false ->
-                          Acc
-                  end
-          end, OldValue, KVs),
-    case NewValue =/= OldValue of
-        true ->
-            {ok, _} = chronicle_kv:set(kv, ChronicleKey, NewValue),
-            {updated, {OldValue, NewValue}};
-        false ->
-            unchanged
+update_chronicle_config(McdSettingsKey, ChronicleKVs) ->
+    ValidateTxn =
+        fun (Txn) ->
+                BucketsSnapshot =
+                    ns_bucket:fetch_snapshot(all, Txn, [props]),
+                SettingsSnapshot =
+                    chronicle_compat:txn_get_many([McdSettingsKey], Txn),
+                Snapshot =
+                    maps:merge(BucketsSnapshot, SettingsSnapshot),
+                OldSettings =
+                    chronicle_compat:get(Snapshot, McdSettingsKey,
+                                         #{default => []}),
+                NewSettings = misc:update_proplist(OldSettings, ChronicleKVs),
+
+                maybe
+                    [_|_] ?= ChronicleKVs,
+                    ok ?= validate_node_capacity(
+                            proplists:get_value(node_capacity, NewSettings),
+                            Snapshot),
+                    {commit,
+                     [{set, McdSettingsKey, NewSettings}],
+                     {OldSettings, NewSettings}}
+                else
+                    [] ->
+                        {abort, {unchanged, OldSettings}};
+                    {error, _} = Error ->
+                        {abort, Error}
+                end
+        end,
+
+    case chronicle_compat:txn(ValidateTxn) of
+        {ok, _, {OldSettings, NewSettings}} ->
+            {OldSettings, NewSettings, []};
+        {unchanged, OldSettings} ->
+            {OldSettings, OldSettings, []};
+        {error, {_key, _ErrMsg} = Error} ->
+            {[], [], [Error]};
+        {error, Error} ->
+            Msg = io_lib:format(
+                    "Config value cannot be set because of error:  ~p",
+                    [Error]),
+            {[], [], [{Key, iolist_to_binary(Msg)} || {Key, _} <- ChronicleKVs]}
     end.
 
 handle_node_setting_get(NodeName, SettingName, Req) ->
@@ -536,6 +569,45 @@ do_delete_txn(Key, Setting) ->
         {abort, _} ->
             missing;
         {commit, _} ->
+            ok
+    end.
+
+get_effective_node_capacity(Node, Snapshot) ->
+    GlobalChronicleSettings =
+        chronicle_compat:get(
+            Snapshot, memcached_config_settings,
+            #{default => []}),
+
+    NodeChronicleSettings =
+        chronicle_compat:get(
+            Snapshot, {node, Node, memcached_config_settings},
+            #{default => []}),
+
+    case proplists:get_value(node_capacity, NodeChronicleSettings) of
+        undefined ->
+            WithDefaults =
+                misc:update_proplist(?MCD_SETTINGS_CHRONICLE_DEFAULTS,
+                                     GlobalChronicleSettings),
+            proplists:get_value(node_capacity, WithDefaults);
+        V ->
+            V
+    end.
+
+validate_node_capacity(undefined, _Snapshot) ->
+    ok;
+validate_node_capacity(CapacityValue, Snapshot) ->
+    Buckets = ns_bucket:get_buckets(Snapshot),
+    TotalReserved =
+        lists:sum([ns_bucket:get_throttle_reserved(Config) ||
+            {_Name, Config} <- Buckets]),
+    case TotalReserved > CapacityValue of
+        true ->
+            Msg = io_lib:format(
+                    "node_capacity (~p) cannot be less than the sum of "
+                    "throttleReserved across all buckets (~p)",
+                    [CapacityValue, TotalReserved]),
+            {error, {node_capacity, iolist_to_binary(Msg)}};
+        false ->
             ok
     end.
 

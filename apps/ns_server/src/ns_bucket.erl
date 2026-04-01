@@ -239,7 +239,9 @@
          validate_encryption_secret/3,
          is_encryption_enabled/1,
          is_data_service_file_based_rebalance_enabled/1,
-         get_data_service_rebalance_type/1]).
+         get_data_service_rebalance_type/1,
+         get_throttle_reserved/1,
+         get_throttle_hard_limit/1]).
 
 %% fusion
 -export([is_fusion/1,
@@ -728,7 +730,10 @@ attribute_default(Name) ->
         dcp_backfill_idle_limit_seconds ->  % seconds (12 minutes)
             720;
         dcp_backfill_idle_disk_threshold -> % percentage
-            90
+            90;
+        throttle_reserved -> 0;             % ops/sec
+        throttle_hard_limit ->              % ops/sec
+            ?MAX_64BIT_UNSIGNED_INT
     end.
 
 %% The minimum value of the attribute.
@@ -746,7 +751,9 @@ attribute_min(Name) ->
         dcp_backfill_idle_limit_seconds ->  % seconds
             0;
         dcp_backfill_idle_disk_threshold -> % percentage
-            0
+            0;
+        throttle_reserved -> 0;             % ops/sec
+        throttle_hard_limit -> 0            % ops/sec
     end.
 
 %% The maximum value of the attribute.
@@ -767,7 +774,10 @@ attribute_max(Name) ->
         dcp_connections_between_nodes -> 64;          % pos_integer
         dcp_backfill_idle_limit_seconds ->
             ?MAX_64BIT_UNSIGNED_INT;                  % unit seconds
-        dcp_backfill_idle_disk_threshold -> 100       % percentage
+        dcp_backfill_idle_disk_threshold -> 100;      % percentage
+        throttle_reserved -> ?MAX_64BIT_UNSIGNED_INT; % ops/sec
+        throttle_hard_limit ->
+            ?MAX_64BIT_UNSIGNED_INT                  % ops/sec
     end.
 
 membase_bucket_config_value_getter(Key, BucketConfig) ->
@@ -2862,6 +2872,14 @@ is_data_service_file_based_rebalance_enabled_for_bucket(BucketConfig) ->
 get_data_service_rebalance_type(BucketConfig) ->
     proplists:get_value(data_service_rebalance_type, BucketConfig, auto).
 
+get_throttle_reserved(BucketConfig) ->
+    proplists:get_value(throttle_reserved, BucketConfig,
+                        attribute_default(throttle_reserved)).
+
+get_throttle_hard_limit(BucketConfig) ->
+    proplists:get_value(throttle_hard_limit, BucketConfig,
+                        attribute_default(throttle_hard_limit)).
+
 get_view_nodes(BucketConfig) ->
     case can_have_views(BucketConfig) of
         true ->
@@ -3050,6 +3068,10 @@ props_to_add_for_totoro(BucketConfig) ->
         memcached ->
             [];
         membase ->
+            [{throttle_reserved,
+              attribute_default(throttle_reserved)},
+             {throttle_hard_limit,
+              attribute_default(throttle_hard_limit)}] ++
             case ns_bucket:is_magma(BucketConfig) of
                 true ->
                     [{continuous_backup_retention_period,
@@ -3200,6 +3222,7 @@ extract_bucket_props(Props) ->
                          dcp_backfill_idle_disk_threshold,
                          magma_fusion_state,
                          dcp_backfill_idle_protection_enabled,
+                         throttle_reserved, throttle_hard_limit,
                          extra_params]],
           X =/= false].
 
@@ -4131,6 +4154,10 @@ upgrade_to_totoro_test() ->
     ?assertEqual(attribute_default(continuous_backup_retention_period),
                  proplists:get_value(continuous_backup_retention_period,
                                      NewBC1)),
+    ?assertEqual(attribute_default(throttle_reserved),
+                 proplists:get_value(throttle_reserved, NewBC1)),
+    ?assertEqual(attribute_default(throttle_hard_limit),
+                 proplists:get_value(throttle_hard_limit, NewBC1)),
 
     %% Bucket with preset values.
     BC2 = [{type, membase},
@@ -4139,11 +4166,15 @@ upgrade_to_totoro_test() ->
            {ram_quota, 100 * ?MIB},
            {storage_mode, magma},
            %% Preset values
-           {continuous_backup_retention_period, 147}],
+           {continuous_backup_retention_period, 147},
+           {throttle_reserved, 500},
+           {throttle_hard_limit, 1000}],
     AddProps2 = props_to_add_for_totoro(BC2),
     NewBC2 = check_for_preset_bucket_settings(AddProps2, BC2),
     ?assertEqual(147, proplists:get_value(continuous_backup_retention_period,
                                           NewBC2)),
+    ?assertEqual(500, proplists:get_value(throttle_reserved, NewBC2)),
+    ?assertEqual(1000, proplists:get_value(throttle_hard_limit, NewBC2)),
 
     meck:unload().
 -endif.

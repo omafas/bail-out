@@ -311,8 +311,19 @@ build_bucket_info(Id, Ctx, InfoLevel, SkipMap) ->
     case cluster_compat_mode:is_cluster_totoro() of
         true ->
             %% Collect additional parameters from memcached.
-            ExtraParams = maps:from_list(
-                            build_extra_params_bucket_info(Id, BucketConfig)),
+            ExtraParams0 = maps:from_list(
+                             build_extra_params_bucket_info(Id, BucketConfig)),
+
+            %% TODO: For now we ignore the conflict check for these two
+            %% parameters by just removing the duplicates because they are
+            %% set to public in memcached so also end up in extra_params, but
+            %% we need to validate them on our side so we are also including
+            %% them. Once memcached changes are made to to update this, we
+            %% can remove this code.
+            ExtraParams = maps:without(
+                            [throttleReserved, throttleHardLimit],
+                            ExtraParams0),
+
             %% Keys that are present in both BucketInfo and ExtraParams.
             ConflictMap = maps:intersect(BucketInfo, ExtraParams),
             case maps:size(ConflictMap) of
@@ -519,7 +530,11 @@ build_dynamic_bucket_info(InfoLevel, Id, BucketConfig, Ctx) ->
          true ->
              [{chronicleRev, menelaus_web_pools:get_chronicle_revision()},
               {dataServiceRebalanceType,
-               build_data_service_rebalance_type(BucketConfig)}];
+               build_data_service_rebalance_type(BucketConfig)},
+              {throttleReserved,
+               ns_bucket:get_throttle_reserved(BucketConfig)},
+              {throttleHardLimit,
+               ns_bucket:get_throttle_hard_limit(BucketConfig)}];
          false ->
              []
      end].
@@ -1748,6 +1763,7 @@ additional_bucket_params_validation(Params, Ctx) ->
     lists:append([maybe_validate_replicas_and_durability(Params, Ctx),
                   validate_magma_ram_quota(Params, Ctx),
                   validate_watermarks(Params, Ctx),
+                  validate_throttle_params(Params, Ctx),
                   validate_encr_lifetime_and_rotation_intrvl(
                     Params, Ctx, BypassAddnlEncrChecks)]).
 
@@ -1851,6 +1867,58 @@ validate_watermarks(Params, Ctx) ->
                              memory_high_watermark,
                              memoryHighWatermark,
                              less_than).
+
+
+validate_throttle_params(Params, Ctx) ->
+    validate_throttle_reserved_vs_hard_limit(Params, Ctx) ++
+        validate_throttle_reserved_vs_node_capacity(Params, Ctx).
+
+validate_throttle_reserved_vs_hard_limit(Params, Ctx) ->
+    Reserved = get_value_from_params_or_bucket(
+                 throttle_reserved, Params, Ctx),
+    HardLimit = get_value_from_params_or_bucket(
+                  throttle_hard_limit, Params, Ctx),
+
+    case {Reserved, HardLimit} of
+        {undefined, _} -> [];
+        {_, undefined} -> [];
+        _ when Reserved > HardLimit ->
+            [{throttleReserved,
+                <<"throttleReserved cannot exceed throttleHardLimit">>}];
+        _ -> []
+    end.
+
+validate_throttle_reserved_vs_node_capacity(
+  Params,
+  #bv_ctx{all_buckets = AllBuckets,
+          bucket_name = BucketName} = Ctx) ->
+    Reserved = get_value_from_params_or_bucket(throttle_reserved, Params, Ctx),
+    Nodes = ns_cluster_membership:nodes_wanted(),
+    KvNodes = ns_cluster_membership:service_nodes(Nodes, kv),
+    case {Reserved, KvNodes} of
+        {undefined, _} -> [];
+        {0, _} -> [];
+        {_, []} -> [];
+        {_, KvNodes} ->
+            OtherReserved =
+                lists:sum(
+                  [ns_bucket:get_throttle_reserved(Config) ||
+                      {Name, Config} <- AllBuckets, Name =/= BucketName]),
+            TotalReserved = OtherReserved + Reserved,
+            MinCapacity =
+                lists:min(
+                    [menelaus_web_mcd_settings:get_effective_node_capacity(
+                        Node, direct) || Node <- KvNodes]),
+            case TotalReserved > MinCapacity of
+                true ->
+                    Msg = io_lib:format(
+                            "Sum of throttleReserved across all buckets (~p) "
+                            "exceeds node_capacity (~p)", [TotalReserved,
+                                                           MinCapacity]),
+                    [{throttleReserved, iolist_to_binary(Msg)}];
+                false -> []
+            end
+    end.
 
 validate_lifetime_with_rotation_intrvl(undefined, _CurrRotIntrvl, _MaxDeks) ->
     [];
@@ -2134,6 +2202,10 @@ validate_membase_bucket_params(CommonParams, Params, Name,
          parse_validate_dcp_backfill_idle_disk_threshold(Params, IsNew,
                                                          Is79),
          parse_validate_data_service_rebalance_type(Params, IsNew, IsTotoro),
+         parse_validate_throttle_reserved(Params, IsNew, IsTotoro,
+                                          IsEnterprise),
+         parse_validate_throttle_hard_limit(Params, IsNew, IsTotoro,
+                                            IsEnterprise),
          parse_validate_workload_pattern_default(Params)
         | validate_bucket_auto_compaction_settings(Params)] ++
         parse_validate_limits(
@@ -3892,6 +3964,28 @@ parse_validate_data_service_rebalance_type(_Other) ->
      <<"Data service rebalance type must be 'auto', 'preferFileBased' or "
        "'preferDcp'">>}.
 
+parse_validate_throttle_reserved(Params, _IsNew, _IsTotoro,
+                                 false = _IsEnterprise) ->
+    parse_validate_param_not_enterprise("throttleReserved", Params);
+parse_validate_throttle_reserved(Params, _IsNew, false = _IsTotoro,
+                                 _IsEnterprise) ->
+    parse_validate_param_not_supported("throttleReserved", Params,
+                                       fun not_supported_until_totoro_error/1);
+parse_validate_throttle_reserved(Params, IsNew, _IsTotoro, _IsEnterprise) ->
+    parse_validate_numeric_param(Params, throttleReserved, throttle_reserved,
+                                 IsNew).
+
+parse_validate_throttle_hard_limit(Params, _IsNew, _IsTotoro,
+                                   false = _IsEnterprise) ->
+    parse_validate_param_not_enterprise("throttleHardLimit", Params);
+parse_validate_throttle_hard_limit(Params, _IsNew, false = _IsTotoro,
+                                   _IsEnterprise) ->
+    parse_validate_param_not_supported("throttleHardLimit", Params,
+                                       fun not_supported_until_totoro_error/1);
+parse_validate_throttle_hard_limit(Params, IsNew, _IsTotoro, _IsEnterprise) ->
+    parse_validate_numeric_param(Params, throttleHardLimit, throttle_hard_limit,
+                                 IsNew).
+
 parse_validate_threads_number(NumThreads) ->
     case menelaus_util:parse_validate_number(NumThreads,
                                              ?MIN_NUM_WORKER_THREADS,
@@ -4421,8 +4515,10 @@ basic_bucket_params_screening(IsNew, Name, Params, AllBuckets,
 
 basic_bucket_params_screening_setup() ->
     Modules = [config_profile, ns_config, cluster_compat_mode, collections,
-               ns_bucket, fusion_uploaders],
+               ns_bucket, fusion_uploaders, ns_cluster_membership],
     meck:new(Modules, [passthrough]),
+    meck:expect(ns_cluster_membership, nodes_wanted,
+                fun () -> [] end),
     meck:expect(config_profile, search,
                 fun (_, Default) ->
                         Default
@@ -5687,6 +5783,9 @@ validate_ram_quota_before_server_list_populated_test() ->
 
 validate_dura_min_level_before_server_list_populated_test() ->
     config_profile:load_default_profile_for_test(),
+    meck:new(ns_cluster_membership, [passthrough]),
+    meck:expect(ns_cluster_membership, nodes_wanted,
+                fun () -> [] end),
     meck:new(ns_config, [passthrough]),
     meck:expect(ns_config,
                 read_key_fast, fun(_, Default) -> Default end),
@@ -5712,10 +5811,14 @@ validate_dura_min_level_before_server_list_populated_test() ->
                      "durability level">>}],
                  Errors),
     config_profile:unload_profile_for_test(),
+    meck:unload(ns_cluster_membership),
     meck:unload(ns_config).
 
 validate_dura_min_level_change_when_only_one_kv_node_active_test() ->
     config_profile:load_default_profile_for_test(),
+    meck:new(ns_cluster_membership, [passthrough]),
+    meck:expect(ns_cluster_membership, nodes_wanted,
+                fun () -> [] end),
     meck:new(ns_config, [passthrough]),
     meck:expect(ns_config,
                 read_key_fast, fun(_, Default) -> Default end),
@@ -5780,6 +5883,7 @@ validate_dura_min_level_change_when_only_one_kv_node_active_test() ->
     Errors7 = additional_bucket_params_validation(Params7, Ctx),
     ?assertEqual([], Errors7),
 
+    meck:unload(ns_cluster_membership),
     meck:unload(ns_config),
     config_profile:unload_profile_for_test().
 
@@ -6104,10 +6208,13 @@ build_dynamic_bucket_info_test_() ->
         [{Test, TestFun} || Test <- Tests]}.
 
 storage_mode_migration_meck_modules() ->
-    [ns_config, config_profile, cluster_compat_mode, collections].
+    [ns_config, config_profile, cluster_compat_mode, collections,
+     ns_cluster_membership].
 
 storage_mode_migration_meck_setup(Version) ->
     meck:new(storage_mode_migration_meck_modules(), [passthrough]),
+    meck:expect(ns_cluster_membership, nodes_wanted,
+                fun () -> [] end),
     meck:expect(ns_config, read_key_fast,
                 fun (_, Default) ->
                         Default
@@ -6534,7 +6641,9 @@ num_replicas_guardrail_validation_test_() ->
                          fun ([Stats], _) -> {ok, Stats};
                              ([], _) -> none end),
              meck:expect(ns_config, get_timeout,
-                         fun (_, Default) -> Default end)
+                         fun (_, Default) -> Default end),
+             meck:expect(ns_cluster_membership, nodes_wanted,
+                         fun () -> [] end)
      end,
      fun (_) ->
              meck:unload(),
