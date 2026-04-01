@@ -2022,6 +2022,180 @@
               },
               "sessionid": ""
           }
+      },
+      {
+          "id" : 8292,
+          "name" : "create credential",
+          "description" : "A credential was created in the credential store.",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields": {
+              "timestamp"  : "",
+              "real_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "remote": {
+                  "ip": "",
+                  "port": 1
+              },
+              "local": {
+                  "ip": "",
+                  "port": 1
+              },
+              "id"         : "",
+              "type"       : "",
+              "created_at" : 1,
+              "created_by" : {"domain" : "", "user" : ""}
+          },
+          "optional_fields": {
+              "expires_at"  : 1,
+              "description" : "",
+              "error"       : "",
+              "authenticated_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "sessionid": ""
+          }
+      },
+      {
+          "id" : 8293,
+          "name" : "list credentials",
+          "description" : "Credentials were listed from the credential store.",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields": {
+              "timestamp": "",
+              "real_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "remote": {
+                  "ip": "",
+                  "port": 1
+              },
+              "local": {
+                  "ip": "",
+                  "port": 1
+              }
+          },
+          "optional_fields": {
+              "prefix" : "",
+              "count"  : 1,
+              "error"  : "",
+              "authenticated_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "sessionid": ""
+          }
+      },
+      {
+          "id" : 8294,
+          "name" : "read credential",
+          "description" : "Credential metadata was read from the store.",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields": {
+              "timestamp": "",
+              "real_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "remote": {
+                  "ip": "",
+                  "port": 1
+              },
+              "local": {
+                  "ip": "",
+                  "port": 1
+              },
+              "id" : ""
+          },
+          "optional_fields": {
+              "type"  : "",
+              "error" : "",
+              "authenticated_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "sessionid": ""
+          }
+      },
+      {
+          "id" : 8295,
+          "name" : "update credential",
+          "description" : "An existing credential was updated in the store.",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields": {
+              "timestamp"  : "",
+              "real_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "remote": {
+                  "ip": "",
+                  "port": 1
+              },
+              "local": {
+                  "ip": "",
+                  "port": 1
+              },
+              "id" : ""
+          },
+          "optional_fields": {
+              "type"        : "",
+              "created_at"  : 1,
+              "created_by"  : {"domain" : "", "user" : ""},
+              "updated_at"  : 1,
+              "updated_by"  : {"domain" : "", "user" : ""},
+              "expires_at"  : 1,
+              "description" : "",
+              "error"       : "",
+              "authenticated_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "sessionid": ""
+          }
+      },
+      {
+          "id" : 8296,
+          "name" : "delete credential",
+          "description" : "A credential was deleted from the store.",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields": {
+              "timestamp"  : "",
+              "real_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "remote": {
+                  "ip": "",
+                  "port": 1
+              },
+              "local": {
+                  "ip": "",
+                  "port": 1
+              },
+              "id" : ""
+          },
+          "optional_fields": {
+              "error" : "",
+              "authenticated_userid": {
+                  "domain": "",
+                  "user": ""
+              },
+              "sessionid": ""
+          }
       }
     ]
 }

@@ -96,7 +96,9 @@
          request_fusion_state/3,
          prepare_fusion_rebalance/2,
          abort_prepared_fusion_rebalance/2,
-         upload_mounted_volumes/3
+         upload_mounted_volumes/3,
+         credential_event/3,
+         get_identity/1
         ]).
 
 -export([start_link/0, stats/0]).
@@ -528,7 +530,17 @@ code(abort_prepared_fusion_rebalance) ->
 code(upload_mounted_volumes) ->
     8290;
 code(modify_credential_store_settings) ->
-    8291.
+    8291;
+code(create_credential) ->
+    8292;
+code(list_credentials) ->
+    8293;
+code(read_credential) ->
+    8294;
+code(update_credential) ->
+    8295;
+code(delete_credential) ->
+    8296.
 
 send_to_memcached(ParentPID, {Code, EncodedBody, IsSync}) ->
     case (catch ns_memcached_sockets_pool:executing_on_socket(
@@ -1188,6 +1200,9 @@ upload_mounted_volumes(Req, PlanUUID, NodesVolumes) ->
     put(upload_mounted_volumes, Req,
         [{plan_uuid, list_to_binary(PlanUUID)},
          {volumes, {json, {PreparedNodes}}}]).
+
+credential_event(Req, EventName, Params) ->
+    put(EventName, Req, Params).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

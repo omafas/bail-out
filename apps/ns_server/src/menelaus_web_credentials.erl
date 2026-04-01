@@ -52,6 +52,18 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+-type credential_audit_event() :: create_credential | list_credentials |
+                                  read_credential | update_credential |
+                                  delete_credential.
+
+-type credential_audit_args() ::
+        {credential_id(), credential_type(),
+         credential_public_view() | undefined} | % create
+        {string(), non_neg_integer()} |  % list
+        {credential_id(), credential_type() | undefined} | % read
+        {credential_id(), credential_public_view() | undefined} | % update
+        credential_id(). % delete
+
 -export([handle_settings/2]).
 
 %% Credential CRUD endpoints
@@ -204,6 +216,103 @@ validated_to_storage_format(Props) ->
 
 -define(MAX_CRED_ID_LENGTH, 128).
 
+%% Audit helpers
+
+-spec audit_credential(term(), credential_audit_event(),
+                       credential_audit_args(),
+                       ok | credential_error_reason()) -> ok.
+audit_credential(Req, EventName, Args, Error) ->
+    Params = format_audit_params(EventName, Args, Error),
+    ns_audit:credential_event(Req, EventName, Params).
+
+%% @doc Format audit event parameters based on the event type.
+%% Each clause handles a specific credential_audit_event().
+-spec format_audit_params(credential_audit_event(),
+                          credential_audit_args(),
+                          ok | credential_error_reason()) ->
+          [{atom(), term()}].
+
+format_audit_params(create_credential, {Id, Type, Cred}, Error) ->
+    Meta = case Cred of
+               #{meta := M} -> M;
+               undefined    -> #{}
+           end,
+    [{id,         list_to_binary(Id)},
+     {type,       Type},
+     {created_at, maps:get(created_at, Meta, undefined)},
+     {created_by, format_identity(maps:get(created_by, Meta, undefined))}]
+        ++ optional_meta(Meta)
+        ++ format_error(Error);
+
+format_audit_params(list_credentials, {Prefix, Count}, Error) ->
+    prefix_param(Prefix)
+        ++ case Error of
+               ok -> [{count, Count}];
+               _ -> []
+           end
+        ++ format_error(Error);
+
+format_audit_params(read_credential, {Id, Type}, Error) ->
+    [{id, list_to_binary(Id)}]
+        ++ case Type of
+               undefined -> [];
+               _ -> [{type, Type}]
+           end
+        ++ format_error(Error);
+
+format_audit_params(update_credential, {Id, Cred}, Error) ->
+    MetaParams =
+        case {Error, Cred} of
+            {ok, #{meta := Meta, type := Type}} ->
+                [{type,       Type},
+                 {created_at, maps:get(created_at, Meta, undefined)},
+                 {created_by, format_identity(
+                                maps:get(created_by, Meta, undefined))},
+                 {updated_at, maps:get(updated_at, Meta, undefined)},
+                 {updated_by, format_identity(
+                                maps:get(updated_by, Meta, undefined))}]
+                    ++ optional_meta(Meta);
+            _ ->
+                []
+        end,
+    [{id, list_to_binary(Id)}] ++ MetaParams ++ format_error(Error);
+
+format_audit_params(delete_credential, Id, Error) ->
+    [{id, list_to_binary(Id)}] ++ format_error(Error).
+
+%% Convert an author() map to the ejson identity shape used in audit events.
+%% Delegates to ns_audit:get_identity/1 which handles domain conversion
+%% (e.g. admin → builtin) and user binary formatting.
+-spec format_identity(credential_author() | undefined) ->
+          undefined | {[{atom(), term()}]}.
+format_identity(undefined) ->
+    undefined;
+format_identity(#{user := User, domain := Domain}) ->
+    ns_audit:get_identity({User, Domain}).
+
+%% Optional metadata fields shared by create/update.
+-spec optional_meta(map()) -> [{atom(), term()}].
+optional_meta(Meta) ->
+    [{K, V} || {K, V} <-
+                   [{expires_at,  maps:get(expires_at,  Meta, undefined)},
+                    {description, maps:get(description, Meta, undefined)}],
+               V =/= undefined].
+
+%% Prefix param for list.
+-spec prefix_param(string()) -> [{prefix, binary()}].
+prefix_param("") -> [];
+prefix_param(P)  -> [{prefix, list_to_binary(P)}].
+
+%% Error field — absent on success, human-readable binary on failure.
+-spec format_error(ok | credential_error_reason()) ->
+          [{error, binary()}].
+format_error(ok) -> [];
+format_error(Reason) when is_atom(Reason) ->
+    [{error, atom_to_binary(Reason)}];
+format_error({txn_failed, Detail}) ->
+    [{error, iolist_to_binary(["txn_failed: ",
+                               io_lib:format("~p", [Detail])])}].
+
 %% @doc Validate a credential ID extracted from the URL path or query string.
 -spec validate_credential_id(credential_id()) -> ok | {error, iolist()}.
 validate_credential_id([]) ->
@@ -242,23 +351,29 @@ handle_list(Req) ->
         ok ->
             case cb_credentials_store:list(Prefix) of
                 {ok, Creds} ->
+                    audit_credential(Req, list_credentials,
+                                     {Prefix, length(Creds)}, ok),
                     JsonBin = encode_response(
                                 [export_credential(C) || C <- Creds]),
                     reply_json_ok(Req, JsonBin, 200);
                 {error, Reason2} ->
+                    audit_credential(Req, list_credentials,
+                                     {Prefix, 0}, Reason2),
                     reply_store_error(Req, Reason2)
             end
     end.
 
 handle_get(IdStr, Req) ->
     case cb_credentials_store:get(IdStr) of
-        {ok, Cred} ->
-            reply_json_ok(Req,
-                          encode_response(export_credential(Cred)),
-                          200);
+        {ok, #{type := Type} = Cred} ->
+            audit_credential(Req, read_credential, {IdStr, Type}, ok),
+            reply_json_ok(Req, encode_response(export_credential(Cred)), 200);
         {error, not_found} ->
+            audit_credential(Req, read_credential, {IdStr, undefined},
+                             not_found),
             menelaus_util:reply_not_found(Req);
         {error, Reason} ->
+            audit_credential(Req, read_credential, {IdStr, undefined}, Reason),
             reply_store_error(Req, Reason)
     end.
 
@@ -278,16 +393,24 @@ handle_post(IdStr, Req) ->
                       case cb_credentials_store:create(IdStr, Type, Fields,
                                                        MetaExtra, Author) of
                           {ok, Cred} ->
+                              audit_credential(Req, create_credential,
+                                               {IdStr, Type, Cred}, ok),
                               reply_json_ok(Req,
                                             encode_response(
                                               export_credential(Cred)), 201);
                           {error, already_exists} ->
+                              audit_credential(Req, create_credential,
+                                               {IdStr, Type, undefined},
+                                               already_exists),
                               reply_json_ok(Req,
                                             encode_response(
                                               #{error => <<"Credential already "
                                                            "exists">>}),
                                             409);
                           {error, Reason2} ->
+                              audit_credential(Req, create_credential,
+                                               {IdStr, Type, undefined},
+                                               Reason2),
                               reply_store_error(Req, Reason2)
                       end
               end,
@@ -305,12 +428,18 @@ handle_put(IdStr, Req) ->
               case cb_credentials_store:update(IdStr, Type, Fields,
                                                MetaExtra, Author) of
                   {ok, Cred} ->
+                      audit_credential(Req, update_credential, {IdStr, Cred},
+                                       ok),
                       reply_json_ok(Req,
                                     encode_response(export_credential(Cred)),
                                     200);
                   {error, not_found} ->
+                      audit_credential(Req, update_credential,
+                                       {IdStr, undefined}, not_found),
                       menelaus_util:reply_not_found(Req);
                   {error, Reason} ->
+                      audit_credential(Req, update_credential,
+                                       {IdStr, undefined}, Reason),
                       reply_store_error(Req, Reason)
               end
       end,
@@ -319,10 +448,13 @@ handle_put(IdStr, Req) ->
 handle_delete(IdStr, Req) ->
     case cb_credentials_store:delete(IdStr) of
         ok ->
+            audit_credential(Req, delete_credential, IdStr, ok),
             menelaus_util:reply(Req, 200);
         {error, not_found} ->
+            audit_credential(Req, delete_credential, IdStr, not_found),
             menelaus_util:reply_not_found(Req);
         {error, Reason} ->
+            audit_credential(Req, delete_credential, IdStr, Reason),
             reply_store_error(Req, Reason)
     end.
 
