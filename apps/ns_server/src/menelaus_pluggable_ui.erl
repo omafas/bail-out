@@ -13,28 +13,20 @@
          proxy_req/4]).
 
 -include("ns_common.hrl").
--include_lib("ns_common/include/cut.hrl").
 
 -define(CONFIG_DIR, etc).
--define(DOCROOTS_DIR, lib).
 -define(PLUGIN_FILE_PATTERN, "pluggable-ui-*.json").
 
 -define(TIMEOUT, 60000).
 -define(DEF_REQ_HEADERS_FILTER, {drop, ["content-length",
                                         "transfer-encoding",
                                         "ns-server-proxy-timeout"]}).
--type module_name()    :: string() | undefined.
 -type proxy_strategy() :: local | sticky.
 -type filter_op()      :: keep | drop.
--type ui_compat_version() :: [integer()].
 -record(plugin,
         {proxy_strategy         :: proxy_strategy(),
          module_prefix          :: string(),
-         doc_roots              :: [string()],
-         version_dirs           :: undefined |
-                                   [{ui_compat_version(), string()}],
-         request_headers_filter :: {filter_op(), [string()]},
-         module                 :: module_name()}).
+         request_headers_filter :: {filter_op(), [string()]}}).
 -record(prefix, {port_name :: atom(),
                  service   :: atom()}).
 -record(config, {prefixes :: dict:dict(), plugins  :: dict:dict()}).
@@ -53,7 +45,6 @@ hardcoded_plugins() ->
                 dict:from_list([{views,
                                  #plugin{proxy_strategy = sticky,
                                          module_prefix = "couchBase",
-                                         doc_roots = [],
                                          request_headers_filter =
                                              {keep, ["accept",
                                                      "accept-encoding",
@@ -122,7 +113,7 @@ read_and_validate_plugin_spec(File, #config{plugins = Plugins,
         {Service, PrefixesList, NewPlugin} = validate_plugin_spec(KVs, Plugins),
 
         NewPrefixes =
-            lists:foldl(add_prefix(Service, _, _), Prefixes, PrefixesList),
+            lists:foldl(fun(Prefix, Acc) -> add_prefix(Service, Prefix, Acc) end, Prefixes, PrefixesList),
         ?log_info("Loaded pluggable UI specification for ~p from ~p",
                   [Service, File]),
         #config{prefixes = NewPrefixes,
@@ -153,21 +144,14 @@ validate_plugin_spec(KVs, Plugins) ->
     {RestApiPrefixes, ModulePrefix} =
         decode_prefixes(ServiceName, get_element(<<"rest-api-prefixes">>, KVs)),
 
-    DocRoots = decode_docroots(get_element(<<"doc-root">>, KVs)),
-    VersionDirs = get_element(<<"version-dirs">>, KVs,
-                              fun decode_version_dirs/1, []),
     ReqHdrFilter = get_element(<<"request-headers-filter">>, KVs,
                                fun decode_request_headers_filter/1,
                                ?DEF_REQ_HEADERS_FILTER),
-    Module = proplists:get_value(<<"module">>, KVs),
 
     {ServiceName, RestApiPrefixes,
      #plugin{proxy_strategy = ProxyStrategy,
              module_prefix = ModulePrefix,
-             doc_roots = DocRoots,
-             version_dirs = VersionDirs,
-             request_headers_filter = ReqHdrFilter,
-             module = Module}}.
+             request_headers_filter = ReqHdrFilter}}.
 
 decode_prefixes(Service, {KeyValues}) ->
     case do_decode_prefixes(Service, KeyValues) of
@@ -186,7 +170,7 @@ do_decode_prefixes(Service, KeyValues) ->
       fun ({PrefixBin, {Props}}, {Acc, ModulePrefix}) ->
               Prefix = binary_to_list(PrefixBin),
               Port =
-                  get_element(<<"portName">>, Props, binary_to_atom(_, latin1),
+                  get_element(<<"portName">>, Props, fun(X) -> binary_to_atom(X, latin1) end,
                               port_name_by_service_name(Service)),
               IsModulePrefix =
                   get_element(
@@ -239,26 +223,6 @@ get_element(Key, KVs, Decode, Default) ->
 
 decode_proxy_strategy(<<"sticky">>) -> sticky;
 decode_proxy_strategy(<<"local">>) -> local.
-
-%% When run from cluster_run doc-root may be a list of directories.
-%% DocRoot has to be a list in order for mochiweb to be able to guess
-%% the MIME type.
-decode_docroots(Roots) ->
-    Prefix = path_config:component_path(?DOCROOTS_DIR),
-    decode_docroots(Prefix, Roots).
-
-decode_docroots(Prefix, Roots) when is_list(Roots) ->
-    [create_docroot(Prefix, Root) || Root <- Roots];
-decode_docroots(Prefix, Root) ->
-    [create_docroot(Prefix, Root)].
-
-create_docroot(Prefix, Root) ->
-    filename:join(Prefix, binary_to_list(Root)).
-
-decode_version_dirs(VersionDirs) ->
-    [{get_element(<<"version">>, VersionDir),
-      binary_to_list(get_element(<<"dir">>, VersionDir))} ||
-        {VersionDir} <- VersionDirs].
 
 decode_request_headers_filter({[{Op, BinNames}]}) ->
     Names = [string:to_lower(binary_to_list(Name)) || Name <- BinNames],
@@ -354,7 +318,7 @@ choose_node(Service, #plugin{proxy_strategy = sticky}, Req) ->
 service_nodes(Service) ->
     Nodes = ns_cluster_membership:service_active_nodes(Service),
     NodesInfoDict = ns_doctor:get_nodes(),
-    Versions = dict:map(?cut(proplists:get_value(advertised_version, _2)),
+    Versions = dict:map(fun(_K, V) -> proplists:get_value(advertised_version, V) end,
                         NodesInfoDict),
     {ok, LocalVsn} = dict:find(node(), Versions),
     SameVersionNodes = lists:usort(

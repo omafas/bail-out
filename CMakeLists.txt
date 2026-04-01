@@ -4,7 +4,6 @@ PROJECT (ns_server)
 INCLUDE (FindCouchbaseErlang)
 INCLUDE (FindCouchbaseGo)
 INCLUDE (FindCouchbaseOpenSSL)
-INCLUDE (CouchbasePlugInUI)
 INCLUDE (ParseArguments)
 INCLUDE (CTest)
 INCLUDE (FindCouchbaseLibsodium)
@@ -66,97 +65,27 @@ FILE (WRITE "${PROJECT_BINARY_DIR}/config.mk"
   "COUCHDB_SRC_DIR = ${_couchdb_src}\n"
   "COUCHDB_BIN_DIR = ${_couchdb_bin}\n")
 
-#
-# build old UI
-#
-IF (BUILD_COLUMNAR)
-  SET (NS_UI_SRC "${PROJECT_SOURCE_DIR}/../columnar-ui-v1/src/ui")
-ELSE (BUILD_COLUMNAR)
-  SET (NS_UI_SRC "${PROJECT_SOURCE_DIR}/priv/public/ui")
-ENDIF (BUILD_COLUMNAR)
-SET (NS_UI_STAMP "${NS_UI_BUILD_DIR}/ns")
-SET (NS_UI_BIN "${NS_UI_PUB_DIR}/ui")
-SET (NS_UI_PUB_SRC "${NS_UI_SRC}/..")
-
-FILE (MAKE_DIRECTORY "${NS_UI_PUB_DIR}")
-
-SET (_out_js_stamp_depends "${NS_UI_STAMP}.js.stamp")
-FUNCTION (_maybe_add_pluggable_ui_stamp p_ui_dir p_ui_stamp)
-  IF (EXISTS "${CMAKE_SOURCE_DIR}/${p_ui_dir}")
-    SET (_out_js_stamp_depends ${_out_js_stamp_depends} "${NS_UI_BUILD_DIR}/${p_ui_stamp}" PARENT_SCOPE)
-  ENDIF()
-ENDFUNCTION (_maybe_add_pluggable_ui_stamp)
-
-_maybe_add_pluggable_ui_stamp("cbft" "fts.js.stamp")
-_maybe_add_pluggable_ui_stamp("query-ui" "query.js.stamp")
-
-IF (BUILD_ENTERPRISE)
-  _maybe_add_pluggable_ui_stamp("goproj/src/github.com/couchbase/eventing" "event.js.stamp")
-  _maybe_add_pluggable_ui_stamp("cbbs" "backup.js.stamp")
-  _maybe_add_pluggable_ui_stamp("cbas-ui" "cbas.js.stamp")
-ENDIF()
-
-SET(NS_UI_PUB_JS_OUT_DIR "${NS_UI_PUB_DIR}/jsout")
-SET(NS_UI_PUB_CSS_OUT_DIR "${NS_UI_PUB_DIR}/cssout")
-FILE (GLOB_RECURSE UI_SRC_CSS_FILES CONFIGURE_DEPENDS "${NS_UI_SRC}/*.css")
-
-ADD_CUSTOM_COMMAND (OUTPUT "${NS_UI_BUILD_DIR}/out.js.stamp"
-  COMMAND "${CMAKE_COMMAND}" -E rm -rf "${NS_UI_PUB_JS_OUT_DIR}"
-  COMMAND "${PROJECT_BINARY_DIR}/deps/gocode/minify_js"
-  "--in-dir=${NS_UI_PUB_DIR}"
-  "--out-dir=${NS_UI_PUB_JS_OUT_DIR}"
-  "--importmap-path=${NS_UI_SRC}/importmap.json"
-  COMMAND "${CMAKE_COMMAND}" -E touch "${NS_UI_BUILD_DIR}/out.js.stamp"
-  DEPENDS ns_minify_js
-  DEPENDS "${_out_js_stamp_depends}"
-  VERBATIM)
-ADD_CUSTOM_COMMAND (OUTPUT "${NS_UI_BUILD_DIR}/out.css.stamp"
-  COMMAND "${CMAKE_COMMAND}" -E rm -rf "${NS_UI_PUB_CSS_OUT_DIR}"
-  COMMAND "${PROJECT_BINARY_DIR}/deps/gocode/minify_css"
-  "--in-path=${NS_UI_PUB_DIR}/ui/index.css"
-  "--out-dir=${NS_UI_PUB_CSS_OUT_DIR}"
-  COMMAND "${CMAKE_COMMAND}" -E touch "${NS_UI_BUILD_DIR}/out.css.stamp"
-  DEPENDS ns_minify_css
-  DEPENDS ${UI_SRC_CSS_FILES}
-  VERBATIM)
-
-ADD_CUSTOM_TARGET (ui_build ALL
-  DEPENDS "${NS_UI_BUILD_DIR}/out.js.stamp" "${NS_UI_BUILD_DIR}/out.css.stamp"
-  VERBATIM)
-WATCH_AND_COPY_SOURCES (${NS_UI_SRC} ${NS_UI_BIN} ${NS_UI_STAMP} "ns")
-
-FILE (GLOB NS_UI_ICONS_IMGS_ETC "${NS_UI_PUB_SRC}/*.*")
-FILE (COPY ${NS_UI_ICONS_IMGS_ETC} DESTINATION "${NS_UI_PUB_DIR}")
-CONFIGURE_FILE ("${NS_UI_SRC}/index-deprecated.html" "${NS_UI_SRC}/index.html" COPYONLY)
-
-INSTALL (DIRECTORY "${NS_UI_PUB_SRC}/"
-  DESTINATION "${NS_UI_INSTALL_DIR}"
-  PATTERN "*_license_agreement.txt" EXCLUDE
-  PATTERN "*-dev.html" EXCLUDE
-  PATTERN "node_modules/" EXCLUDE
-  PATTERN "*.js" EXCLUDE)
-INSTALL (DIRECTORY "${NS_UI_PUB_DIR}/jsout"
-  DESTINATION "${NS_UI_INSTALL_DIR}")
-INSTALL (DIRECTORY "${NS_UI_PUB_DIR}/cssout"
-  DESTINATION "${NS_UI_INSTALL_DIR}")
-INSTALL (FILES
-  "${NS_UI_SRC}/libs/reflect-metadata.js"
-  "${NS_UI_SRC}/libs/zone.js"
-  DESTINATION "${NS_UI_INSTALL_DIR}/ui/libs")
-INSTALL (FILES
-  "${NS_UI_SRC}/libs/ace/worker-javascript.js"
-  "${NS_UI_SRC}/libs/ace/worker-json.js"
-  DESTINATION "${NS_UI_INSTALL_DIR}/ui/libs/ace")
 
 #
 # build new UI
 #
 
 set (SERVER_UI_SRC "${PROJECT_SOURCE_DIR}/../server-ui")
-# NPM can only run on Linux with glibc 2.28 or higher, which is only
-# currently available for Totoro production builds (not CV). So for the
-# moment, only attempt it for production builds when on Linux.
-if ( ( WIN32 OR APPLE OR CB_PRODUCTION_BUILD ) AND IS_DIRECTORY "${SERVER_UI_SRC}")
+
+if (IS_DIRECTORY "${SERVER_UI_SRC}")
+  # Setup build directory
+  set (NS_UI_BUILD_DIR "${CMAKE_BINARY_DIR}/ui-build")
+  set (NS_UI_INSTALL_DIR "lib/ns_server/erlang/lib/ns_server/priv/public")
+  set (NS_UI_PUB_DIR "${NS_UI_BUILD_DIR}/public")
+  set (NS_UI_BIN "${NS_UI_PUB_DIR}/ui")
+  file (MAKE_DIRECTORY "${NS_UI_BIN}")
+
+  set (SERVER_UI_PUB_SRC "${SERVER_UI_SRC}/public")
+  # Copy assets
+  FILE (GLOB NS_UI_ICONS_IMGS_ETC "${SERVER_UI_PUB_SRC}/*.*")
+  FILE (GLOB NS_UI_LICENSES "${SERVER_UI_PUB_SRC}/ui/*_license_agreement.txt")
+  FILE (COPY ${NS_UI_ICONS_IMGS_ETC} DESTINATION "${NS_UI_PUB_DIR}")
+  FILE (COPY ${NS_UI_LICENSES} DESTINATION "${NS_UI_PUB_DIR}/ui")
   # Extract the version of Node
   file (READ "${SERVER_UI_SRC}/package.json" PACKAGE_JSON)
   string (JSON ENGINES GET "${PACKAGE_JSON}" "engines")
@@ -191,8 +120,7 @@ if ( ( WIN32 OR APPLE OR CB_PRODUCTION_BUILD ) AND IS_DIRECTORY "${SERVER_UI_SRC
   # Unix and ;-separated on Windows, which is what we need.
   cmake_path (CONVERT "${NODE_PATH};$ENV{PATH}" TO_NATIVE_PATH_LIST CMD_PATH NORMALIZE)
 
-  # Invoke build command - this has to run after the `ui_build` step
-  # because that sets up the target `ui-build/public/ui` directory.
+  # Invoke build command
   ADD_CUSTOM_TARGET (server-ui ALL
     COMMAND "${CMAKE_COMMAND}" -E env
       "PATH=${CMD_PATH}"
@@ -205,13 +133,19 @@ if ( ( WIN32 OR APPLE OR CB_PRODUCTION_BUILD ) AND IS_DIRECTORY "${SERVER_UI_SRC
       "${NPM_EXE}" run build:combined
     WORKING_DIRECTORY "${SERVER_UI_SRC}"
     COMMENT "Building server-ui with Node.js ${NODE_VERSION}"
-    DEPENDS ui_build
     VERBATIM
   )
 
   # Install the output directory
   INSTALL (DIRECTORY "${NS_UI_PUB_DIR}/output"
     DESTINATION "${NS_UI_INSTALL_DIR}")
+
+  INSTALL (DIRECTORY "${SERVER_UI_PUB_SRC}/"
+    DESTINATION "${NS_UI_INSTALL_DIR}"
+    PATTERN "*_license_agreement.txt" EXCLUDE
+    PATTERN "*-dev.html" EXCLUDE
+    PATTERN "node_modules/" EXCLUDE
+    PATTERN "*.js" EXCLUDE)
 endif ()
 
 
@@ -367,11 +301,6 @@ discover_eunit_tests()
 NS_SERVER_TEST (NAME ns_test TEST_TARGET start)
 NS_SERVER_TEST (NAME ns_test_eunit TEST_TARGET start_eunit EXPLICIT)
 NS_SERVER_TEST (NAME ns_test_triq TEST_TARGET start_triq EXPLICIT)
-
-# Add custom target allowing folks to easily run the tests via
-# make (and not via directly invoking ctest).
-ADD_CUSTOM_TARGET(ns_ui_test COMMAND karma start karma.conf.js --single-run
-         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/priv/public/ui)
 
 # cbcollect_tests
 ADD_CUSTOM_TARGET(ns_cbcollect_tests

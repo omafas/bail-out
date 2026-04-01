@@ -1,7 +1,0 @@
-cluster_run (Enterprise Edition)
-
-IMPORTANT-READ CAREFULLY: THIS IS NOT THE REAL LICENSE FILE
-
-This file is only displayed when using "cluster_run". The canonical license text is located at git://github.com/couchbase/product-texts, and is embedded into the Couchbase Server product during the build process.
-
-"cluster_run" consumes UI elements including this license file from the ns_server source directory, so we leave this stub file in place to ensure people don't believe it is the canonical license file.
