@@ -213,15 +213,15 @@ get_kinds_for_label(Label) ->
 get_cbauth_services(logDek) -> 
     [
       index,
-      eventing
-    %% n1ql %% uncomment to pass log keys to n1ql
+      eventing,
+      n1ql
     %% fts %% uncomment to pass log keys to fts
     %% cbas %% uncomment to pass log keys to cbas
     ];
 get_cbauth_services(otherDek) ->
     [
-      index
-    %% n1ql %% uncomment to pass other keys to n1ql
+      index,
+      n1ql
     %% fts %% uncomment to pass other keys to fts
     %% projector %% uncomment to pass other keys to projector
     %% cbas %% uncomment to pass other keys to cbas
@@ -229,8 +229,8 @@ get_cbauth_services(otherDek) ->
     ];
 get_cbauth_services({serviceBucketDek, _}) ->
     [
-      index
-    %% n1ql %% uncomment to pass service bucket keys to n1ql
+      index,
+      n1ql
     %% fts %% uncomment to pass service bucket keys to fts
     %% cbas %% uncomment to pass service bucket keys to cbas
     %% eventing %% uncomment to pass service bucket keys to eventing
