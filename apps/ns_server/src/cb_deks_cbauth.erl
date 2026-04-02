@@ -217,7 +217,7 @@ get_cbauth_services(logDek) ->
     %% index %% uncomment to pass log keys to index
     %% projector %% uncomment to pass log keys to projector
     %% cbas %% uncomment to pass log keys to cbas
-    %% eventing %% uncomment to pass log keys to eventing
+    eventing %% uncomment to pass log keys to eventing
     ];
 get_cbauth_services(otherDek) ->
     [
