@@ -16,6 +16,8 @@ from couchbase.cluster import Cluster
 from couchbase.options import ClusterOptions
 from couchbase.exceptions import AuthenticationException
 
+from testsets.resource_management_test import wait_for_stat
+
 BUCKET_NAME = "test"
 
 
@@ -1142,7 +1144,139 @@ class UsersTestSet(testlib.BaseTestSet):
                                               scope_and_collection=(scope_name,
                                                                     coll_name),
                                               check_document=test_doc),
-                                  expected_result)
+                                  expected_result, f"kv access for {bucket}:"
+                                                   f"{scope_name}:{coll_name}")
+        finally:
+            # Delete the created user
+            delete_user(self.cluster, 'local', user, expected_code=None)
+            # Delete the scopes if they were created
+            testlib.ensure_deleted(
+                self.cluster, f'/pools/default/buckets/{BUCKET_NAME}/scopes/s1')
+            testlib.ensure_deleted(
+                self.cluster, f'/pools/default/buckets/{BUCKET_NAME}/scopes/s2')
+
+    def custom_role_complex_exclusion_test(self):
+        user = 'custom_bucket_user'
+        try:
+            # Create a custom admin role
+            testlib.put_succ(
+                self.cluster,
+                '/settings/rbac/customRoles/custom_bucket_role',
+                json={'name': 'Bucket User',
+                      'description': 'Customised bucket user role',
+                      'permissions': {
+                          'cluster.pools': ['read'],
+                          'cluster.bucket[test]': 'all',
+
+                          'cluster.collection[test:s1:c1].data': 'none',
+                          'cluster.collection[test:s2:.].data': 'none',
+                          'cluster.collection[test:s2:c1].data': 'all',
+
+                          'cluster.collection[test:s1:.].stats': 'none',
+                          'cluster.collection[test:s1:c1].stats': 'all',
+                          'cluster.collection[test:s2:c1].stats': 'none'
+                      }})
+
+            # Create a custom admin user
+            name = testlib.random_str(10)
+            password = testlib.random_str(10)
+            put_user(self.cluster, 'local', user, password,
+                     roles='custom_bucket_role', full_name=name,
+                     validate_user_props=True)
+
+            # The custom bucket user can create a scope where a collection's
+            # data is being excluded
+            testlib.post_succ(self.cluster,
+                              f'/pools/default/buckets/{BUCKET_NAME}/scopes',
+                              data={'name': 's1'}, auth=(user, password))
+
+            # The custom bucket user can also create a scope without data access
+            # for that scope
+            testlib.post_succ(self.cluster,
+                              f'/pools/default/buckets/{BUCKET_NAME}/scopes',
+                              data={'name': 's2'}, auth=(user, password))
+
+            # The custom bucket user can create collections in the excluded
+            # scope
+            testlib.post_succ(
+                self.cluster,
+                f'/pools/default/buckets/{BUCKET_NAME}/scopes/s2/collections',
+                data={'name': 'c1'}, auth=(user, password))
+
+            # The custom bucket user can create an excluded collection in a
+            # scope that isn't excluded
+            testlib.post_succ(
+                self.cluster,
+                f'/pools/default/buckets/{BUCKET_NAME}/scopes/s1/collections',
+                data={'name': 'c1'}, auth=(user, password))
+
+            # Create more collections to test attempting to write via kv
+            testlib.post_succ(
+                self.cluster,
+                f'/pools/default/buckets/{BUCKET_NAME}/scopes/s1/collections',
+                data={'name': 'c2'})
+            testlib.post_succ(
+                self.cluster,
+                f'/pools/default/buckets/{BUCKET_NAME}/scopes/s2/collections',
+                data={'name': 'c2'})
+
+            test_doc = "test"
+
+            # Start SDK/KV session
+            kv_url = self.cluster.connected_nodes[0].service_url(Service.KV)
+            admin_user_auth = PasswordAuthenticator(*self.cluster.auth)
+            admin_sdk_cluster = assert_sdk_pass(kv_url, admin_user_auth)
+            admin_sdk_bucket = admin_sdk_cluster.bucket(BUCKET_NAME)
+
+            custom_user_auth = PasswordAuthenticator(user, password)
+            custom_user_sdk_cluster = assert_sdk_pass(kv_url, custom_user_auth)
+
+            # Test cases for kv collection access
+            kv_test_cases = [("s1", "c1", False),
+                             ("s1", "c2", True),
+                             ("s2", "c1", True),
+                             ("s2", "c2", False)]
+
+            for scope_name, coll_name, expected_result in kv_test_cases:
+                admin_sdk_collection = (admin_sdk_bucket
+                                        .scope(scope_name)
+                                        .collection(coll_name))
+                testlib.assert_eq(admin_sdk_collection
+                                  .upsert(test_doc, {})
+                                  .success, True)
+                # Test kv handles the privilege correctly
+                testlib.assert_eq(test_sdk_kv(custom_user_sdk_cluster,
+                                              scope_and_collection=(scope_name,
+                                                                    coll_name),
+                                              check_document=test_doc),
+                                  expected_result,
+                                  f"kv access for {BUCKET_NAME}:{scope_name}"
+                                  f":{coll_name}")
+
+            # Test cases for collection inclusion in stats
+            stats_test_cases = [("s1", "c1", True),
+                                ("s1", "c2", False),
+                                ("s2", "c1", False),
+                                ("s2", "c2", True)]
+
+            for (scope_name, coll_name, expected_result) in stats_test_cases:
+                stat_name = "kv_collection_history"
+                # Wait for the stat to be visible to the admin user
+                wait_for_stat(self.cluster, stat_name,
+                              labels={
+                                  "bucket": BUCKET_NAME,
+                                  "scope": scope_name,
+                                  "collection": coll_name
+                              })
+                stats = testlib.get_succ(
+                        self.cluster,
+                        f'/pools/default/stats/range/{stat_name}',
+                        auth=(user, password)).json()
+                # Test the stats API handles the privilege correctly
+                testlib.assert_eq(
+                    stats_contains(stats, BUCKET_NAME, scope_name, coll_name),
+                    expected_result,
+                    f"stats access for {BUCKET_NAME}:{scope_name}:{coll_name}")
         finally:
             # Delete the created user
             delete_user(self.cluster, 'local', user, expected_code=None)
@@ -1402,6 +1536,12 @@ def test_sdk_kv(sdk_cluster: Cluster, bucket_name=BUCKET_NAME,
         return doc_exists.exists or check_document is None
     except AuthenticationException:
         return False
+
+def stats_contains(stats, bucket_name, scope_name, coll_name):
+    return any(stat['metric']['bucket'] == bucket_name and
+               stat['metric']['scope'] == scope_name and
+               stat['metric']['collection'] == coll_name
+               for stat in stats.get("data", {}))
 
 
 class RbacCommunityTests(testlib.BaseTestSet):

@@ -897,12 +897,16 @@ def assert_cant_write(cluster, bucket, exp_error):
             f"Expected '{exp_error}'"
 
 
-def wait_for_stat(cluster, stat, n=1):
+def wait_for_stat(cluster, stat, labels=None, n=1):
 
     def got_stats():
         params = stats_range_common_params()
         data = range_api_get(cluster, stat,
                              params=params)
+        if labels is not None:
+            data = [s for s in data
+                    if all(s['metric'].get(k) == v
+                           for k, v in labels.items())]
         return len(data) >= n
 
     testlib.poll_for_condition(got_stats, 1, attempts=60,
