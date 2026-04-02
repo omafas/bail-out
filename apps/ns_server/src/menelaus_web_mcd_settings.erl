@@ -137,16 +137,23 @@ with_parsed_node(Name, Req, Body) ->
             Body(Node)
     end.
 
+%% Resolves the logical config type to the pair of actual config keys used
+%% for settings and extra settings respectively.
+config_keys(memcached_config_global) ->
+    {memcached, memcached_config_extra};
+config_keys({memcached_config_node, Node}) ->
+    {{node, Node, memcached},
+     {node, Node, memcached_config_extra}}.
+
 handle_global_get(Req) ->
-    handle_get(Req, memcached, memcached_config_extra, 200).
+    handle_get(Req, memcached_config_global, 200).
 
 handle_effective_get(Name, Req) ->
     with_parsed_node(
       Name, Req,
       fun (Node) ->
-              KVsGlobal = build_setting_kvs(memcached, memcached_config_extra),
-              KVsLocal = build_setting_kvs({node, Node, memcached},
-                                           {node, Node, memcached_config_extra}),
+              KVsGlobal = build_setting_kvs(memcached_config_global),
+              KVsLocal = build_setting_kvs({memcached_config_node, Node}),
               KVsDefault = build_setting_kvs({node, Node, memcached_defaults},
                                              erlang:make_ref()),
               KVs = lists:foldl(
@@ -160,10 +167,7 @@ handle_node_get(Name, Req) ->
     with_parsed_node(
       Name, Req,
       fun (Node) ->
-              handle_get(Req,
-                         {node, Node, memcached},
-                         {node, Node, memcached_config_extra},
-                         200)
+              handle_get(Req, {memcached_config_node, Node}, 200)
       end).
 
 map_settings(SettingNames, Settings) ->
@@ -189,29 +193,32 @@ map_settings(SettingNames, Settings) ->
               end
       end, SettingNames).
 
+build_setting_kvs(ConfigType) when ConfigType =:= memcached_config_global;
+                                   element(1, ConfigType) =:= memcached_config_node ->
+    {SettingsKey, ExtraConfigKey} = config_keys(ConfigType),
+    build_setting_kvs(SettingsKey, ExtraConfigKey).
+
 build_setting_kvs(SettingsKey, ExtraConfigKey) ->
     {value, McdSettings} = ns_config:search(ns_config:latest(), SettingsKey),
     ExtraSettings = ns_config:search(ns_config:latest(), ExtraConfigKey, []),
     map_settings(supported_setting_names(), McdSettings)
         ++ map_settings(supported_extra_setting_names(), ExtraSettings).
 
-handle_get(Req, SettingsKey, ExtraConfigKey, Status) ->
-    KVs = build_setting_kvs(SettingsKey, ExtraConfigKey),
+handle_get(Req, ConfigType, Status) ->
+    KVs = build_setting_kvs(ConfigType),
     reply_json(Req, {KVs}, Status).
 
 handle_global_post(Req) ->
-    handle_post(Req, memcached, memcached_config_extra).
+    handle_post(Req, memcached_config_global).
 
 handle_node_post(Name, Req) ->
     with_parsed_node(
       Name, Req,
       fun (Node) ->
-              handle_post(Req,
-                          {node, Node, memcached},
-                          {node, Node, memcached_config_extra})
+              handle_post(Req, {memcached_config_node, Node})
       end).
 
-handle_post(Req, SettingsKey, ExtraConfigKey) ->
+handle_post(Req, ConfigType) ->
     KnownNames = lists:map(fun ({A, _}) -> atom_to_list(A) end,
                            supported_setting_names() ++ supported_extra_setting_names()),
     Params = mochiweb_request:parse_post(Req),
@@ -219,7 +226,7 @@ handle_post(Req, SettingsKey, ExtraConfigKey) ->
                           not lists:member(K, KnownNames)],
     case UnknownParams of
         [] ->
-            continue_handle_post(Req, Params, SettingsKey, ExtraConfigKey);
+            continue_handle_post(Req, Params, ConfigType);
         _ ->
             Msg = io_lib:format("Unknown POST parameters: ~p", [UnknownParams]),
             reply_json(Req, {[{'_', iolist_to_binary(Msg)}]}, 400)
@@ -261,7 +268,8 @@ validate_num_threads(Value) -> validate_param(Value, {int, 1, 64}).
 validate_num_storage_auxio_nonio_threads("default") -> {ok, <<"default">>};
 validate_num_storage_auxio_nonio_threads(Value) -> validate_param(Value, {int, 1, 64}).
 
-continue_handle_post(Req, Params, SettingsKey, ExtraConfigKey) ->
+continue_handle_post(Req, Params, ConfigType) ->
+    {SettingsKey, ExtraConfigKey} = config_keys(ConfigType),
     ParsedParams =
         lists:flatmap(
           fun ({Name, ValidationType}) ->
@@ -328,7 +336,7 @@ continue_handle_post(Req, Params, SettingsKey, ExtraConfigKey) ->
                     ok
             end,
 
-            handle_get(Req, SettingsKey, ExtraConfigKey, 202)
+            handle_get(Req, ConfigType, 202)
     end.
 
 update_config(Settings, ConfigKey, KVs) ->
@@ -358,8 +366,7 @@ handle_node_setting_get(NodeName, SettingName, Req) ->
     with_parsed_node(
       NodeName, Req,
       fun (Node) ->
-              KVs = build_setting_kvs({node, Node, memcached},
-                                      {node, Node, memcached_config_extra}),
+              KVs = build_setting_kvs({memcached_config_node, Node}),
               MaybeProp = [V || {K, V} <- KVs,
                                 atom_to_list(K) =:= SettingName],
               case MaybeProp of
@@ -382,7 +389,8 @@ handle_global_delete(Setting, Req) ->
             Msg = io_lib:format("Unknown/unsupported setting: ~p", [Setting]),
             reply_json(Req, {[{'_', iolist_to_binary(Msg)}]}, 404);
         _ ->
-            case do_delete_txn(memcached_config_extra, hd(MaybeExtra)) of
+            {_, ExtraConfigKey} = config_keys(memcached_config_global),
+            case do_delete_txn(ExtraConfigKey, hd(MaybeExtra)) of
                 ok ->
                     reply_json(Req, [], 202);
                 missing ->
@@ -407,11 +415,12 @@ perform_delete_txn(Node, SettingName) ->
                          atom_to_list(K) =:= SettingName],
     MaybeExtra = [K || {K, _} <- supported_extra_setting_names(),
                        atom_to_list(K) =:= SettingName],
+    {SettingsKey, ExtraConfigKey} = config_keys({memcached_config_node, Node}),
     if
         MaybeSetting =/= [] ->
-            do_delete_txn({node, Node, memcached}, hd(MaybeSetting));
+            do_delete_txn(SettingsKey, hd(MaybeSetting));
         MaybeExtra =/= [] ->
-            do_delete_txn({node, Node, memcached_config_extra}, hd(MaybeExtra));
+            do_delete_txn(ExtraConfigKey, hd(MaybeExtra));
         true ->
             missing
     end.
