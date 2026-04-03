@@ -596,4 +596,10 @@
 
 -define(SECRETS_TEST_INTERVAL_DEFAULT_S, 300).
 
+-define(MCD_SETTINGS_CHRONICLE_DEFAULTS, [{throttle_enabled, false},
+                                          {read_unit_size, 4096},
+                                          {write_unit_size, 1024},
+                                          {node_capacity,
+                                             ?MAX_64BIT_UNSIGNED_INT}]).
+
 -endif.

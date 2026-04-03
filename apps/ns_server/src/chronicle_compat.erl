@@ -201,7 +201,8 @@ node_keys(Node, Buckets) ->
      {node, Node, services},
      {node, Node, recovery_type},
      {node, Node, failover_vbuckets},
-     {node, Node, buckets_with_data} |
+     {node, Node, buckets_with_data},
+     {node, Node, memcached_config_settings},
      [collections:last_seen_ids_key(Node, Bucket) || Bucket <- Buckets]].
 
 service_keys(Service) ->

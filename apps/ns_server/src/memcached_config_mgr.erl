@@ -221,6 +221,9 @@ delete_prev_config_file() ->
             erlang:error({failed_to_delete_prev_config, Other})
     end.
 
+is_notable_chronicle_key(memcached_config_settings) -> true;
+is_notable_chronicle_key({node, N, memcached_config_settings})
+  when N =:= node() -> true;
 is_notable_chronicle_key(rebalance_status) -> true;
 is_notable_chronicle_key(jwt_settings) -> true;
 is_notable_chronicle_key(?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY) -> true;
@@ -594,13 +597,36 @@ do_read_current_memcached_config([Path | Rest]) ->
             do_read_current_memcached_config(Rest)
     end.
 
+%% Gets the memcached config parameters in the following order of precedence
+%% (higher precedence first):
+%% 1. Node Specific
+%% 2. Global
+%% 3. Defaults
+%%
+%% So essentially node specific ones take priority over global, which take
+%% priority over defaults
 memcached_params(Config) ->
-    {value, McdParams0} = ns_config:search(Config, {node, node(), memcached}),
-    GlobalMcdParams = ns_config:search(Config, memcached, []),
-    DefaultMcdParams = ns_config:search(Config,
-                                        {node, node(), memcached_defaults}, []),
+    {value, NodeNsCfgParams} =
+        ns_config:search(Config, {node, node(), memcached}),
+    GlobalNsCfgParams = ns_config:search(Config, memcached, []),
 
-    McdParams0 ++ GlobalMcdParams ++ DefaultMcdParams.
+    GlobalChronicleParams =
+        chronicle_compat:get(
+          direct, memcached_config_settings,
+          #{default => []}),
+    NodeChronicleParams =
+        chronicle_compat:get(
+          direct, {node, node(), memcached_config_settings},
+          #{default => []}),
+
+    DefaultCfgMcdParams =
+        ?MCD_SETTINGS_CHRONICLE_DEFAULTS ++
+        ns_config:search(Config, {node, node(), memcached_defaults}, []),
+
+    GlobalMcdParams = GlobalChronicleParams ++ GlobalNsCfgParams,
+    NodeMcdParams = NodeChronicleParams ++ NodeNsCfgParams,
+
+    NodeMcdParams ++ GlobalMcdParams ++ DefaultCfgMcdParams.
 
 get_config_profile([], _Params) ->
     list_to_binary(config_profile:name()).

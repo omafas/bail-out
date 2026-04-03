@@ -41,7 +41,7 @@
 %% 'memcached' keys depending on whether the write is per-node or global.
 %% These change values of keys in memcached.json.
 
-supported_setting_names() ->
+ns_config_setting_names() ->
     [{max_connections, {int, 2000, ?MAX_32BIT_SIGNED_INT}},
      {num_reader_threads, fun validate_num_threads/1},
      {num_writer_threads, fun validate_num_threads/1},
@@ -76,11 +76,7 @@ supported_setting_names() ->
      {subdoc_multi_max_paths, {int, 16, ?MAX_32BIT_SIGNED_INT}},
      {subdoc_offload_size_threshold, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {subdoc_offload_paths_threshold, {int, 0, ?MAX_32BIT_SIGNED_INT}},
-     {snapshot_download_throttle_bytes, {int, 0, ?MAX_64BIT_UNSIGNED_INT}},
-     {throttle_enabled, bool},
-     {read_unit_size, {int, 0, ?MAX_32BIT_SIGNED_INT}},
-     {write_unit_size, {int, 0, ?MAX_32BIT_SIGNED_INT}},
-     {node_capacity, {int, 0, ?MAX_64BIT_UNSIGNED_INT}}]
+     {snapshot_download_throttle_bytes, {int, 0, ?MAX_64BIT_UNSIGNED_INT}}]
         ++
         %% KV stopped supporting this is 7.6, they just ignore it, but we
         %% should probably support it in mixed mode. Even though we "support" it
@@ -96,7 +92,7 @@ supported_setting_names() ->
 %% or 'memcached_config_extra' keys depending on whether the write is per-node
 %% or global. These add new keys to memcached.json.
 
-supported_extra_setting_names() ->
+extra_ns_config_setting_names() ->
     [{default_reqs_per_event, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {reqs_per_event_high_priority, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {reqs_per_event_med_priority, {int, 0, ?MAX_32BIT_SIGNED_INT}},
@@ -114,6 +110,20 @@ supported_extra_setting_names() ->
      {file_fragment_checksum_length, {int, 0, ?MAX_64BIT_UNSIGNED_INT}},
      {snapshot_download_fsync_interval, {int, 0, ?MAX_64BIT_UNSIGNED_INT}},
      {snapshot_download_write_size, {int, 0, ?MAX_64BIT_UNSIGNED_INT}}].
+
+%% Updates to these settings go to chronicle keys 'memcached_config_settings'
+%% (global) or '{node, Node, memcached_config_settings}' (per-node).
+%% These change values of keys in memcached.json.
+
+chronicle_setting_names() ->
+    [{throttle_enabled, bool},
+     {read_unit_size, {int, 0, ?MAX_32BIT_SIGNED_INT}},
+     {write_unit_size, {int, 0, ?MAX_32BIT_SIGNED_INT}},
+     {node_capacity, {int, 0, ?MAX_64BIT_UNSIGNED_INT}}].
+
+all_setting_names() ->
+    chronicle_setting_names() ++ ns_config_setting_names() ++
+        extra_ns_config_setting_names().
 
 supported_nodes() ->
     ns_node_disco:nodes_wanted().
@@ -139,11 +149,16 @@ with_parsed_node(Name, Req, Body) ->
 
 %% Resolves the logical config type to the pair of actual config keys used
 %% for settings and extra settings respectively.
-config_keys(memcached_config_global) ->
+ns_config_keys(memcached_config_global) ->
     {memcached, memcached_config_extra};
-config_keys({memcached_config_node, Node}) ->
+ns_config_keys({memcached_config_node, Node}) ->
     {{node, Node, memcached},
      {node, Node, memcached_config_extra}}.
+
+chronicle_config_key(memcached_config_global) ->
+    memcached_config_settings;
+chronicle_config_key({memcached_config_node, Node}) ->
+    {node, Node, memcached_config_settings}.
 
 handle_global_get(Req) ->
     handle_get(Req, memcached_config_global, 200).
@@ -154,8 +169,9 @@ handle_effective_get(Name, Req) ->
       fun (Node) ->
               KVsGlobal = build_setting_kvs(memcached_config_global),
               KVsLocal = build_setting_kvs({memcached_config_node, Node}),
-              KVsDefault = build_setting_kvs({node, Node, memcached_defaults},
-                                             erlang:make_ref()),
+              KVsDefault =
+                  build_ns_config_default_setting_kvs(Node) ++
+                  ?MCD_SETTINGS_CHRONICLE_DEFAULTS,
               KVs = lists:foldl(
                       fun ({K, V}, Acc) ->
                               lists:keystore(K, 1, Acc, {K, V})
@@ -193,16 +209,31 @@ map_settings(SettingNames, Settings) ->
               end
       end, SettingNames).
 
-build_setting_kvs(ConfigType) when ConfigType =:= memcached_config_global;
-                                   element(1, ConfigType) =:= memcached_config_node ->
-    {SettingsKey, ExtraConfigKey} = config_keys(ConfigType),
-    build_setting_kvs(SettingsKey, ExtraConfigKey).
+build_ns_config_default_setting_kvs(Node) ->
+    {value, McdSettings} =
+        ns_config:search(ns_config:latest(), {node, Node, memcached_defaults}),
+    map_settings(all_setting_names(), McdSettings).
 
-build_setting_kvs(SettingsKey, ExtraConfigKey) ->
-    {value, McdSettings} = ns_config:search(ns_config:latest(), SettingsKey),
-    ExtraSettings = ns_config:search(ns_config:latest(), ExtraConfigKey, []),
-    map_settings(supported_setting_names(), McdSettings)
-        ++ map_settings(supported_extra_setting_names(), ExtraSettings).
+build_setting_kvs(ConfigType)
+  when ConfigType =:= memcached_config_global;
+       element(1, ConfigType) =:= memcached_config_node ->
+    {SettingsKey, ExtraConfigKey} = ns_config_keys(ConfigType),
+    ChronicleKey = chronicle_config_key(ConfigType),
+    build_setting_kvs(SettingsKey, ExtraConfigKey, ChronicleKey).
+
+build_setting_kvs(SettingsKey, ExtraConfigKey, ChronicleKey) ->
+    {value, McdSettings} =
+        ns_config:search(ns_config:latest(), SettingsKey),
+    ExtraSettings =
+        ns_config:search(ns_config:latest(), ExtraConfigKey, []),
+    ChronicleSettings =
+        chronicle_compat:get(
+          direct, ChronicleKey, #{default => []}),
+    map_settings(ns_config_setting_names(), McdSettings)
+        ++ map_settings(
+             extra_ns_config_setting_names(), ExtraSettings)
+        ++ map_settings(
+             chronicle_setting_names(), ChronicleSettings).
 
 handle_get(Req, ConfigType, Status) ->
     KVs = build_setting_kvs(ConfigType),
@@ -219,8 +250,9 @@ handle_node_post(Name, Req) ->
       end).
 
 handle_post(Req, ConfigType) ->
-    KnownNames = lists:map(fun ({A, _}) -> atom_to_list(A) end,
-                           supported_setting_names() ++ supported_extra_setting_names()),
+    KnownNames = lists:map(
+                   fun ({A, _}) -> atom_to_list(A) end,
+                   all_setting_names()),
     Params = mochiweb_request:parse_post(Req),
     UnknownParams = [K || {K, _} <- Params,
                           not lists:member(K, KnownNames)],
@@ -269,7 +301,9 @@ validate_num_storage_auxio_nonio_threads("default") -> {ok, <<"default">>};
 validate_num_storage_auxio_nonio_threads(Value) -> validate_param(Value, {int, 1, 64}).
 
 continue_handle_post(Req, Params, ConfigType) ->
-    {SettingsKey, ExtraConfigKey} = config_keys(ConfigType),
+    {SettingsKey, ExtraConfigKey} = ns_config_keys(ConfigType),
+    ChronicleKey = chronicle_config_key(ConfigType),
+    AllNames = all_setting_names(),
     ParsedParams =
         lists:flatmap(
           fun ({Name, ValidationType}) ->
@@ -280,7 +314,7 @@ continue_handle_post(Req, Params, ConfigType) ->
                       {_, Value} ->
                           [{Name, validate_param(Value, ValidationType)}]
                   end
-          end, supported_setting_names() ++ supported_extra_setting_names()),
+          end, AllNames),
     InvalidParams = [{K, V} || {K, V} <- ParsedParams,
                                case V of
                                    {ok, _} -> false;
@@ -306,25 +340,34 @@ continue_handle_post(Req, Params, ConfigType) ->
                                     {Name, Value}
                             end
                     end, KVs0),
-            {OS, NS} = case update_config(
-                              supported_setting_names(), SettingsKey, KVs) of
-                           {commit, _, {OS0, NS0}} ->
-                               {OS0, NS0};
-                           _ ->
-                               {[], []}
-                       end,
-            {EOS, ENS} = case update_config(
-                                supported_extra_setting_names(),
-                                ExtraConfigKey, KVs) of
-                             {commit, _, {EOS0, ENS0}} ->
-                                 {EOS0, ENS0};
-                             _ ->
-                                 {[], []}
-                         end,
+            {COS, CNS} =
+                case update_chronicle_config(
+                       chronicle_setting_names(), ChronicleKey, KVs) of
+                    {updated, {COS0, CNS0}} ->
+                        {COS0, CNS0};
+                    unchanged ->
+                        {[], []}
+                end,
+            {OS, NS} =
+                case update_config(
+                       ns_config_setting_names(), SettingsKey, KVs) of
+                    {commit, _, {OS0, NS0}} ->
+                        {OS0, NS0};
+                    _ ->
+                        {[], []}
+                end,
+            {EOS, ENS} =
+                case update_config(
+                       extra_ns_config_setting_names(), ExtraConfigKey, KVs) of
+                    {commit, _, {EOS0, ENS0}} ->
+                        {EOS0, ENS0};
+                    _ ->
+                        {[], []}
+                end,
             %% Merge both the old settings and extra old settings, so that we
             %% can add a single event log.
-            OldSettings = OS ++ EOS,
-            NewSettings = NS ++ ENS,
+            OldSettings = OS ++ EOS ++ COS,
+            NewSettings = NS ++ ENS ++ CNS,
 
             if
                 NewSettings =/= [] andalso NewSettings =/= OldSettings ->
@@ -362,6 +405,28 @@ update_config(Settings, ConfigKey, KVs) ->
               {commit, NewConfig, {OldValue, NewValue}}
       end).
 
+update_chronicle_config(Settings, ChronicleKey, KVs) ->
+    OldValue = chronicle_compat:get(
+                 direct, ChronicleKey, #{default => []}),
+    NewValue =
+        lists:foldl(
+          fun ({K, V}, Acc) ->
+                  case lists:keyfind(K, 1, Settings)
+                           =/= false of
+                      true ->
+                          lists:keystore(K, 1, Acc, {K, V});
+                      false ->
+                          Acc
+                  end
+          end, OldValue, KVs),
+    case NewValue =/= OldValue of
+        true ->
+            {ok, _} = chronicle_kv:set(kv, ChronicleKey, NewValue),
+            {updated, {OldValue, NewValue}};
+        false ->
+            unchanged
+    end.
+
 handle_node_setting_get(NodeName, SettingName, Req) ->
     with_parsed_node(
       NodeName, Req,
@@ -382,14 +447,14 @@ handle_global_delete(Setting, Req) ->
     %% we can add, so we should be able to delete them. The other settings are
     %% always present in the global config, so we should not allow their
     %% deletion.
-    MaybeExtra = [K || {K, _} <- supported_extra_setting_names(),
+    MaybeExtra = [K || {K, _} <- extra_ns_config_setting_names(),
                        atom_to_list(K) =:= Setting],
     case MaybeExtra of
         [] ->
             Msg = io_lib:format("Unknown/unsupported setting: ~p", [Setting]),
             reply_json(Req, {[{'_', iolist_to_binary(Msg)}]}, 404);
         _ ->
-            {_, ExtraConfigKey} = config_keys(memcached_config_global),
+            {_, ExtraConfigKey} = ns_config_keys(memcached_config_global),
             case do_delete_txn(ExtraConfigKey, hd(MaybeExtra)) of
                 ok ->
                     reply_json(Req, [], 202);
@@ -411,16 +476,25 @@ handle_node_setting_delete(NodeName, SettingName, Req) ->
       end).
 
 perform_delete_txn(Node, SettingName) ->
-    MaybeSetting = [K || {K, _} <- supported_setting_names(),
+    MaybeSetting = [K || {K, _} <- ns_config_setting_names(),
                          atom_to_list(K) =:= SettingName],
-    MaybeExtra = [K || {K, _} <- supported_extra_setting_names(),
+    MaybeExtra = [K || {K, _} <- extra_ns_config_setting_names(),
                        atom_to_list(K) =:= SettingName],
-    {SettingsKey, ExtraConfigKey} = config_keys({memcached_config_node, Node}),
+    MaybeChronicle =
+        [K || {K, _} <- chronicle_setting_names(),
+              atom_to_list(K) =:= SettingName],
+    {SettingsKey, ExtraConfigKey} =
+        ns_config_keys({memcached_config_node, Node}),
     if
         MaybeSetting =/= [] ->
             do_delete_txn(SettingsKey, hd(MaybeSetting));
         MaybeExtra =/= [] ->
             do_delete_txn(ExtraConfigKey, hd(MaybeExtra));
+        MaybeChronicle =/= [] ->
+            ChronicleKey = chronicle_config_key(
+                             {memcached_config_node, Node}),
+            do_delete_chronicle(
+              ChronicleKey, hd(MaybeChronicle));
         true ->
             missing
     end.
@@ -443,6 +517,31 @@ do_delete_txn(Key, Setting) ->
             missing;
         {commit, _} ->
             ok
+    end.
+
+do_delete_chronicle(ChronicleKey, Setting) ->
+    Rv =
+        chronicle_kv:transaction(kv, [ChronicleKey],
+            fun (Snapshot) ->
+                OldSettings =
+                    chronicle_compat:get(Snapshot, ChronicleKey,
+                                         #{default => []}),
+                NewSettings = lists:keydelete(Setting, 1, OldSettings),
+                case OldSettings =:= NewSettings of
+                    true ->
+                        {abort, {error, missing}};
+                    false ->
+                        {commit, [{set, ChronicleKey, NewSettings}]}
+
+                end
+            end
+        ),
+
+    case Rv of
+        {ok, _} ->
+            ok;
+        {error, missing} ->
+            missing
     end.
 
 config_upgrade_to_79(Config) ->
@@ -577,6 +676,17 @@ upgrade_config_to_80_t() ->
        [{set, memcached,
          [{magma_blind_write_optimisation_enabled, false}]}], Txns2).
 
+unique_settings_test() ->
+    try
+        meck:new(cluster_compat_mode),
+        meck:expect(cluster_compat_mode,  is_cluster_79,
+                    fun () -> true end),
+        Names = [N || {N, _} <- all_setting_names()],
+        UniqueNames = lists:usort(Names),
+        ?assertEqual(length(UniqueNames), length(Names))
+    after
+        meck:unload()
+    end.
 
 upgrade_config_test_() ->
     {setup, fun upgrade_config_test_setup/0,
