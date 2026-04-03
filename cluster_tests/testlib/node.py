@@ -143,6 +143,10 @@ class Node:
         r = testlib.diag_eval(self, "os:getpid().")
         return int(r.text.replace('"',""))
 
+    def kill_ns_server(self):
+        print(f'Killing ns_server for node {self.url}...')
+        os.kill(self.get_ns_server_pid(), 9)
+
     def get_services(self):
         if self.services_cached is None:
             r = testlib.get_succ(self, '/nodes/self')
