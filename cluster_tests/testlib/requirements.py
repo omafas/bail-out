@@ -337,11 +337,12 @@ class Edition(Requirement):
     @staticmethod
     def random(req_dict):
         available_editions = Edition.editions.copy()
-        if not Edition.is_community_supported(req_dict.get('deploy', None)) \
+        services = req_dict.get('include_services', None)
+        if not Edition.is_community_supported(services) \
            or req_dict.get('encryption', False) \
            or req_dict.get('afamily', None) == 'ipv6':
             available_editions.remove('Community')
-        if not Edition.is_serverless_supported(req_dict.get('deploy', None)):
+        if not Edition.is_serverless_supported(services):
             available_editions.remove('Serverless')
         random_edition = random.choice(available_editions)
         return Edition(random_edition)
