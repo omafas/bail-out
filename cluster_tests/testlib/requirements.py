@@ -695,7 +695,7 @@ class Services(Requirement):
             services = [Service.KV] + random.sample(
                                         services,
                                         k=random.randint(0, len(services) - 1))
-        return Services(services, [], [])
+        return Services(services, None, None)
 
 
 # We are not enforcing it when creating a cluster (like by setting something
