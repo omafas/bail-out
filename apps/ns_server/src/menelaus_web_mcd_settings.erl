@@ -125,6 +125,25 @@ all_setting_names() ->
     chronicle_setting_names() ++ ns_config_setting_names() ++
         extra_ns_config_setting_names().
 
+validate_chronicle_params_for_cluster_compat(Params) ->
+    ParamNames = [K || {K, _} <- Params],
+    ChronicleParams = [K || {K, _} <- chronicle_setting_names(),
+                            lists:member(atom_to_list(K), ParamNames)],
+
+    %% We do not allow any chronicle related params to be set in
+    %% cluster on compat version prior to totoro as memcached
+    %% chronicle settings are introduced in totoro
+    case ChronicleParams =/= [] andalso
+         not cluster_compat_mode:is_cluster_totoro() of
+        true ->
+            Msg = io_lib:format(
+                    "The following parameters are not supported prior to "
+                    "version ~p: ~p", [?VERSION_TOTORO, ChronicleParams]),
+            menelaus_util:web_exception(400, iolist_to_binary(Msg));
+        false ->
+            ok
+    end.
+
 supported_nodes() ->
     ns_node_disco:nodes_wanted().
 
@@ -258,6 +277,7 @@ handle_post(Req, ConfigType) ->
                           not lists:member(K, KnownNames)],
     case UnknownParams of
         [] ->
+            validate_chronicle_params_for_cluster_compat(Params),
             continue_handle_post(Req, Params, ConfigType);
         _ ->
             Msg = io_lib:format("Unknown POST parameters: ~p", [UnknownParams]),
