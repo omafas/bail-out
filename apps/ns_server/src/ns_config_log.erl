@@ -260,6 +260,8 @@ sanitize(Config, TagUserTuples) ->
               {stop, {org_url, tag_misc_item(OrgURL)}};
           ({group, GroupName}) ->
               {stop, {group, tag_group_name(GroupName)}};
+          ({key, Bin}) when is_binary(Bin) ->
+              {stop, {key, <<"******">>}};
           (Other) ->
               Continue(Other)
       end, Config).
