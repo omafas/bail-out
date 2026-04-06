@@ -212,11 +212,11 @@ get_kinds_for_label(Label) ->
 %% for future services that may use these DEKs.
 get_cbauth_services(logDek) -> 
     [
-      index
+      index,
+      eventing
     %% n1ql %% uncomment to pass log keys to n1ql
     %% fts %% uncomment to pass log keys to fts
     %% cbas %% uncomment to pass log keys to cbas
-    eventing %% uncomment to pass log keys to eventing
     ];
 get_cbauth_services(otherDek) ->
     [
