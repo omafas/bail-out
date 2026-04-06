@@ -72,31 +72,33 @@ def get_node_urls(nodes):
 
 def build_cluster(address, auth, cluster_index, start_args, connect,
                   connect_args, disconnected_args):
-    port = cluster_run_lib.base_api_port + start_args['start_index']
-    num_nodes = start_args['num_nodes']
-    nodes = [testlib.Node(host=address,
-                          port=port + i,
-                          auth=auth)
-             for i in range(num_nodes)]
-    urls = get_node_urls(nodes)
-
-    # Start the cluster
-    print(f"Starting cluster with start args:\n{start_args}")
-    processes = cluster_run_lib.start_cluster(**start_args)
+    processes = []
+    urls = []
     try:
+        port = cluster_run_lib.base_api_port + start_args['start_index']
+        num_nodes = start_args['num_nodes']
+        nodes = [testlib.Node(host=address,
+                              port=port + i,
+                              auth=auth)
+                 for i in range(num_nodes)]
+        urls = get_node_urls(nodes)
+
+        # Start the cluster
+        print(f"Starting cluster with start args:\n{start_args}")
+        processes = cluster_run_lib.start_cluster(**start_args)
         if connect:
             try:
                 # Connect the nodes
                 print(f"Connecting cluster with connect args:\n{connect_args}")
                 error = cluster_run_lib.connect(**connect_args)
                 if error:
-                    sys.exit(f"Failed to connect node(s). Status: {error}")
+                    raise RuntimeError(f"Failed to connect node(s). Status: {error}")
                 # Prepare disconnected nodes
                 print(f"Initialising disconnected nodes with args:\n"
                       f"{disconnected_args}")
                 node_init(auth, **disconnected_args)
             except URLError as e:
-                sys.exit(f"Failed to connect node(s). {e}\n"
+                raise RuntimeError(f"Failed to connect node(s). {e}\n"
                         f"Perhaps a node has already been started at "
                         f"{address}:{port}?\n")
         cluster = get_cluster(cluster_index, port, auth, processes, nodes,
@@ -106,8 +108,9 @@ def build_cluster(address, auth, cluster_index, start_args, connect,
     except Exception as e:
         # this exception can be caught later, so we should kill the nodes
         # here to avoid leaving them running
-        kill_nodes(processes, urls, get_terminal_attrs())
-        raise e
+        if processes:
+            kill_nodes(processes, urls, get_terminal_attrs())
+        raise StartClusterError(e, cluster_index)
 
 
 def node_init(auth, num_nodes, start_index, protocol, hostname):
@@ -121,7 +124,7 @@ def node_init(auth, num_nodes, start_index, protocol, hostname):
                          data={"afamily": protocol,
                                "hostname": hostname})
         if r.status_code != 200:
-            sys.exit("Failed to initialise disconnected node. "
+            raise RuntimeError("Failed to initialise disconnected node. "
                      f"Status {r.status_code}, error: {r.text}")
 
 
@@ -916,3 +919,11 @@ def get_services_string(services: List[Service]):
 
 class InconsistentClusterError(Exception):
     pass
+
+class StartClusterError(Exception):
+    def __init__(self, error, cluster_index):
+        self.error = error
+        self.cluster_index = cluster_index
+
+    def __str__(self):
+        return f"Failed to start cluster#{self.cluster_index}: {self.error}"

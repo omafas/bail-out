@@ -38,7 +38,7 @@ sys.path.append(testlib.get_pylib_dir())
 
 import cluster_run_lib
 from testlib import UnmetRequirementsError, TestError
-from testlib.cluster import InconsistentClusterError
+from testlib.cluster import InconsistentClusterError, StartClusterError
 from testlib import test_tag_decorator
 
 from testsets import \
@@ -301,7 +301,7 @@ def main():
     random_order = False
     testset_iterations = 1
     test_iterations = 1
-    start_index = 10
+    node_start_index = 10
     stop_after_first_error = False
     collect_logs = False
     log_collection_regex = log_collection_default_regex
@@ -365,7 +365,7 @@ def main():
         elif o == '--test-iterations':
             test_iterations = int(a)
         elif o == '--start-index':
-            start_index = int(a)
+            node_start_index = int(a)
         elif o == '--stop-after-error':
             stop_after_first_error = True
         elif o == '--collect-logs-after-error':
@@ -465,6 +465,7 @@ def main():
     total_log_collection_time = 0
     start_ts = time.time_ns()
     not_ran = []
+    next_cluster_index = 0
     for (configuration, testsets) in testsets_grouped:
         if stop_after_first_error and len(errors) > 0:
             for testset in testsets:
@@ -488,12 +489,38 @@ def main():
                 continue
             cluster.set_requirements(configuration)
         else:
-            cluster = testlib.get_appropriate_cluster(cluster,
-                                                      (username, password),
-                                                      configuration,
-                                                      tmp_cluster_dir,
-                                                      reuse_clusters,
-                                                      start_index)
+            try:
+                cluster = testlib.get_appropriate_cluster(cluster,
+                                                          (username, password),
+                                                          configuration,
+                                                          tmp_cluster_dir,
+                                                          reuse_clusters,
+                                                          node_start_index,
+                                                          next_cluster_index)
+                # Sometimes we are reusing the cluster so the index doesn't need
+                # actually increase by 1
+                next_cluster_index = cluster.index + 1
+            except StartClusterError as e:
+                error_name = "Cluster Start"
+                cluster_name = f'Cluster#{e.cluster_index}'
+                if error_name not in errors:
+                    errors[error_name] = []
+                errors[error_name].append(TestError(
+                    name=error_name,
+                    error=e,
+                    cluster_name=cluster_name))
+
+                for testset in testsets:
+                    for test in testset['test_name_list']:
+                        not_ran.append(TestError(
+                            name=testlib.test_name(testset['class'],
+                                                   test['name'],
+                                                   test['iter']),
+                            error=RuntimeError('Cluster start failure'),
+                            cluster_name=cluster_name))
+                cluster = None
+                next_cluster_index += 1
+                continue
         testset_start_ts = time.time_ns()
         # Run the testsets on the cluster
         tests_executed, testset_errors, testset_not_ran, log_collection_time,\

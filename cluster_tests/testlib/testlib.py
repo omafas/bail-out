@@ -68,8 +68,7 @@ class TestError:
 
 def get_appropriate_cluster(cluster, auth, requirements,
                             tmp_cluster_dir, reuse_clusters,
-                            first_node_index):
-    cluster_index = 0
+                            first_node_index, cluster_index):
     if cluster is not None:
         if reuse_clusters:
             cluster.update_requirements(requirements)
@@ -79,8 +78,6 @@ def get_appropriate_cluster(cluster, auth, requirements,
 
         # Teardown the old cluster
         cluster.destroy()
-
-        cluster_index = cluster.index + 1
         print()
 
     # Create a new cluster satisfying the requirements
