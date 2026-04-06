@@ -829,7 +829,7 @@ def run_testsets(cluster, testsets, total_num, log_collection_regex, seed=None,
                     name=testlib.test_name(testset['class'],
                                            skip_test['name'],
                                            skip_test['iter']),
-                    error=error,
+                    error=RuntimeError(error),
                     cluster_name=cluster.short_name()))
 
         if cluster_is_unusable:
