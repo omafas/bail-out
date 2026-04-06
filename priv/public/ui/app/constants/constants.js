@@ -47,7 +47,8 @@ let knownAlerts = [
   'xdcr_replication_deleted',
   'encr_at_rest_key_test_failed',
   'encr_at_rest_errors_total',
-  'cm_bucket_autoreprovision_total'
+  'cm_bucket_autoreprovision_total',
+  'indexer_lost_replicas'
 ];
 
 let timeUnitToSeconds = {

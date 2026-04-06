@@ -165,6 +165,8 @@ short_description(stuck_rebalance) ->
     "rebalance stage appears stuck";
 short_description(indexer_diverging_replicas) ->
     "index has diverging replicas";
+short_description(indexer_lost_replicas) ->
+    "index has lost replicas";
 short_description(xdcr_replication_deleted) ->
     "XDCR replication(s) deleted";
 short_description(encr_at_rest_key_test_failed) ->
@@ -265,6 +267,11 @@ errors(indexer_diverging_replicas) ->
     "the index with GET "
     "/pools/default/stats/range/index_partn_is_diverging_replica and "
     "consider dropping and re-creating it to resolve this";
+errors(indexer_lost_replicas) ->
+    "Lost index replicas have been detected. Some index partitions have fewer "
+    "replicas than expected. Please identify the affected indexes with GET "
+    "on indexer endpoint /api/v1/stats/getLostReplica and consider "
+    "rebuilding them to resolve this";
 errors(xdcr_replication_deleted) ->
     "Warning: The XDCR replication link between the local bucket ~s and the "
     "remote bucket ~s on cluster UUID ~s has been removed. Data is no longer "
@@ -552,7 +559,7 @@ alert_keys_added_in_totoro() ->
 
 -spec alert_keys_disabled_by_default() -> [atom()].
 alert_keys_disabled_by_default() ->
-    [stuck_rebalance, indexer_diverging_replicas].
+    [stuck_rebalance, indexer_diverging_replicas, indexer_lost_replicas].
 
 %% Returns a list of all alerts that might send out an email notification.
 %% Alerts that are disabled by default must be included, so that they may be
@@ -596,7 +603,7 @@ global_checks() ->
      memory_threshold, history_size_warning, indexer_low_resident_percentage,
      stuck_rebalance, memcached_connections, disk_guardrail,
      indexer_diverging_replicas, xdcr_replication_deleted, encr_at_rest,
-     cm_bucket_autoreprovision_total].
+     cm_bucket_autoreprovision_total, indexer_lost_replicas].
 
 %% @doc fires off various checks
 check_alerts(Opaque, Hist, Stats) ->
@@ -1105,6 +1112,23 @@ check(indexer_diverging_replicas, Opaque, _History, Stats) ->
                 _ ->
                     Msg = fmt_to_bin(errors(indexer_diverging_replicas), []),
                     global_alert(indexer_diverging_replicas, Msg)
+            end
+    end,
+    Opaque;
+check(indexer_lost_replicas, Opaque, _History, Stats) ->
+    case proplists:get_value("@index", Stats) of
+        undefined ->
+            ok;
+        IndexStats ->
+            NumLost =
+                proplists:get_value(index_num_lost_replica_indexes,
+                                    IndexStats, 0),
+            case NumLost of
+                0 ->
+                    ok;
+                _ ->
+                    Msg = fmt_to_bin(errors(indexer_lost_replicas), []),
+                    global_alert(indexer_lost_replicas, Msg)
             end
     end,
     Opaque;

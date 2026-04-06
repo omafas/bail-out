@@ -209,6 +209,7 @@ class MnSettingsAlertsComponent extends MnLifeCycleHooksToStream {
       case knownAlerts[26]: return 'Encryption-at-Rest key validation event failed';
       case knownAlerts[27]: return 'Encryption-at-Rest error';
       case knownAlerts[28]: return 'Bucket reprovisioned'
+      case knownAlerts[29]: return 'Index has lost replicas';
     }
   }
 }
