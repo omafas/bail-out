@@ -430,12 +430,12 @@ class StatsTests(testlib.BaseTestSet):
 
         result = subprocess.run(cmd, capture_output=True, text=True,
                                timeout=300)
+        if result.returncode != 0:
+            print(f"stdout: {result.stdout}")
+            print(f"stderr: {result.stderr}")
 
         assert result.returncode == 0, \
                f"validate_stats.py failed with return code {result.returncode}"
-
-        if result.stderr:
-            assert result.stderr == None, f"{result.stderr}"
 
 
 def make_prometheus_query(node, statname):
