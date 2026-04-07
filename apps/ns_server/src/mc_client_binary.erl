@@ -125,6 +125,7 @@
                      ?CMD_START_FUSION_UPLOADER |
                      ?CMD_STOP_FUSION_UPLOADER |
                      ?CMD_SYNC_FUSION_LOGSTORE |
+                     ?CMD_DELETE_FUSION_NAMESPACE |
                      ?CMD_GET_FUSION_NAMESPACES |
                      ?DOWNLOAD_SNAPSHOT |
                      ?RELEASE_SNAPSHOT.
