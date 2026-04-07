@@ -117,7 +117,8 @@ class FusionTests(testlib.BaseTestSet):
 
         resp = testlib.post_succ(self.cluster,
                                  "/controller/fusion/prepareRebalance",
-                                 data={'keepNodes': keep_nodes_string})
+                                 data={'keepNodes': keep_nodes_string,
+                                       'snapshotLifetimeSec': 300})
         acc_plan = resp.json()
         assert isinstance(acc_plan, dict)
         assert "planUUID" in acc_plan

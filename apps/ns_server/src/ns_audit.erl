@@ -94,7 +94,7 @@
          prepare_log_body/2,
          fusion_settings/2,
          request_fusion_state/3,
-         prepare_fusion_rebalance/2,
+         prepare_fusion_rebalance/3,
          abort_prepared_fusion_rebalance/2,
          upload_mounted_volumes/3,
          credential_event/3,
@@ -1186,8 +1186,10 @@ request_fusion_state(Req, State, Buckets) ->
         [{state, State},
          {buckets, {list, [list_to_binary(B) || B <- Buckets]}}]).
 
-prepare_fusion_rebalance(Req, KnownNodes) ->
-    put(prepare_fusion_rebalance, Req, [{known_nodes, {list, KnownNodes}}]).
+prepare_fusion_rebalance(Req, KnownNodes, SnapshotLifetime) ->
+    put(prepare_fusion_rebalance, Req,
+        [{known_nodes, {list, KnownNodes}},
+         {snapshot_lifetime, SnapshotLifetime}]).
 
 abort_prepared_fusion_rebalance(Req, PlanUUID) ->
     put(abort_prepared_fusion_rebalance, Req,

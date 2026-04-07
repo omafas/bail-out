@@ -1919,7 +1919,8 @@
                   "ip": "",
                   "port": 1
               },
-              "known_nodes" : []
+              "known_nodes" : [],
+              "snapshot_lifetime" : 10
           },
           "optional_fields": {
               "authenticated_userid": {

@@ -37,7 +37,7 @@
          rebalance_topology_aware_services/3,
          needs_rebalance_with_reason/3,
          get_desired_services_nodes/1,
-         prepare_fusion_rebalance/2,
+         prepare_fusion_rebalance/3,
          map_to_vbuckets_dict/1,
          maybe_check_expected_topology/2,
          run_janitor/1]).
@@ -52,9 +52,6 @@
 -define(REBALANCER_READINESS_WAIT_TIMEOUT, ?get_timeout(readiness, 60000)).
 -define(REBALANCER_QUERY_STATES_TIMEOUT,   ?get_timeout(query_states, 10000)).
 -define(REBALANCER_APPLY_CONFIG_TIMEOUT,   ?get_timeout(apply_config, 300000)).
-
--define(FUSION_SNAPSHOT_LIFETIME,
-        ?get_param(fusion_snapshot_lifetime, 60 * 60 * 1000)).
 
 %%
 %% API
@@ -2082,11 +2079,11 @@ deactivate_bucket_data_on_unknown_nodes(BucketName, Nodes) ->
             exit({error, deactivate_bucket_data_failed, Error})
     end.
 
--spec prepare_fusion_rebalance(binary(), [node()]) ->
+-spec prepare_fusion_rebalance(binary(), [node()], integer()) ->
           {ok, {list(), {list()}}} | {error, term()}.
-prepare_fusion_rebalance(PlanUUID, KeepNodes) ->
+prepare_fusion_rebalance(PlanUUID, KeepNodes, SnapshotLifetime) ->
     KeepKVNodes = ns_cluster_membership:service_nodes(KeepNodes, kv),
-    Validity = os:system_time(second) + ?FUSION_SNAPSHOT_LIFETIME div 1000,
+    Validity = os:system_time(second) + SnapshotLifetime,
     prepare_fusion_rebalance(PlanUUID, KeepKVNodes, direct,
                              fun generate_fast_forward_map/4,
                              fun run_janitor_and_fetch_snapshot/1,

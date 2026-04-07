@@ -219,9 +219,13 @@ handle_prepare_rebalance(Req) ->
     validator:handle(
       fun (Params) ->
               KeepNodes = proplists:get_value(keepNodes, Params),
-              case ns_orchestrator:prepare_fusion_rebalance(KeepNodes) of
+              SnapshotLifetime =
+                  proplists:get_value(snapshotLifetimeSec, Params),
+              case ns_orchestrator:prepare_fusion_rebalance(
+                     KeepNodes, SnapshotLifetime) of
                   {ok, AccelerationPlan} ->
-                      ns_audit:prepare_fusion_rebalance(Req, KeepNodes),
+                      ns_audit:prepare_fusion_rebalance(Req, KeepNodes,
+                                                        SnapshotLifetime),
                       menelaus_util:reply_json(Req, AccelerationPlan, 200);
                   {unknown_nodes, Nodes} ->
                       validator:report_errors_for_one(
@@ -243,6 +247,8 @@ handle_prepare_rebalance(Req) ->
       end, Req, form,
       [validator:required(keepNodes, _),
        validator:token_list(keepNodes, ",", NodeValidator, _),
+       validator:integer(snapshotLifetimeSec, 10, 60 * 60 * 1000, _),
+       validator:default(snapshotLifetimeSec, 60 * 60, _),
        validator:unsupported(_)]).
 
 handle_abort_prepared_rebalance(Req) ->

@@ -107,7 +107,7 @@
          enable_fusion/1,
          disable_fusion/0,
          stop_fusion/0,
-         prepare_fusion_rebalance/1,
+         prepare_fusion_rebalance/2,
          abort_prepared_fusion_rebalance/1,
          build_rebalance_params/2,
          rebalance_safety_checks/2,
@@ -383,13 +383,13 @@ disable_fusion() ->
 stop_fusion() ->
     call({fusion, stop}, infinity).
 
--spec prepare_fusion_rebalance([node()]) ->
+-spec prepare_fusion_rebalance([node()], integer()) ->
           {ok, term()} | busy() |
           {unknown_nodes, [node()]} |
           {failed_to_get_snapshot, node()} |
           not_enabled.
-prepare_fusion_rebalance(KeepNodes) ->
-    call({prepare_fusion_rebalance, KeepNodes}, infinity).
+prepare_fusion_rebalance(KeepNodes, SnapshotLifetime) ->
+    call({prepare_fusion_rebalance, KeepNodes, SnapshotLifetime}, infinity).
 
 -type rebalance_plan_uuid() :: string().
 
@@ -1295,14 +1295,15 @@ idle({fusion, Command}, From, _State) ->
          end,
     {keep_state_and_data, [{reply, From, RV}]};
 
-idle({prepare_fusion_rebalance, KeepNodes}, From, _State) ->
-    ?log_info("Request to prepare fusion rebalance. KeepNodes = ~p",
-              [KeepNodes]),
+idle({prepare_fusion_rebalance, KeepNodes, SnapshotLifetime}, From, _State) ->
+    ?log_info("Request to prepare fusion rebalance. KeepNodes = ~p "
+              "SnapshotLifetime = ~p", [KeepNodes, SnapshotLifetime]),
     case fusion_uploaders:get_state() of
         enabled ->
             case KeepNodes -- ns_cluster_membership:nodes_wanted() of
                 [] ->
-                    start_preparing_fusion_rebalance(KeepNodes, From);
+                    start_preparing_fusion_rebalance(
+                      KeepNodes, SnapshotLifetime, From);
                 UnknownNodes ->
                     {keep_state_and_data,
                      [{reply, From, {unknown_nodes, UnknownNodes}}]}
@@ -1402,7 +1403,7 @@ idle({{bucket_hibernation_op, {start, Op}},
 idle({{bucket_hibernation_op, {stop, Op}}, [_Bucket]}, From, _State) ->
     {keep_state_and_data, {reply, From, not_running(Op)}}.
 
-start_preparing_fusion_rebalance(KeepNodes, ReplyTo) ->
+start_preparing_fusion_rebalance(KeepNodes, SnapshotLifetime, ReplyTo) ->
     PlanUUID = couch_uuids:random(),
     Type = prepare_fusion_rebalance,
     NodesInfo = [{active_nodes, ns_cluster_membership:active_nodes()},
@@ -1414,7 +1415,7 @@ start_preparing_fusion_rebalance(KeepNodes, ReplyTo) ->
     Pid = spawn_link(
             fun () ->
                     case ns_rebalancer:prepare_fusion_rebalance(
-                           PlanUUID, KeepNodes) of
+                           PlanUUID, KeepNodes, SnapshotLifetime) of
                         {ok, {RebalancePlan, AccelerationPlan}} ->
                             ets:insert(
                               ?ETS, {?FUSION_REBALANCE_PLAN, RebalancePlan}),
@@ -1425,7 +1426,8 @@ start_preparing_fusion_rebalance(KeepNodes, ReplyTo) ->
             end),
 
     ?log_debug("Start preparing fusion rebalance for PlanUUID = ~p. "
-               "KeepNodes =  ~p. ", [PlanUUID, KeepNodes]),
+               "KeepNodes =  ~p. SnapshotLifetime = ~p", [PlanUUID, KeepNodes,
+                                                          SnapshotLifetime]),
     ns_cluster:counter_inc(Type, start),
     set_rebalance_status(Type, running, Pid),
 
