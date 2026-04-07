@@ -792,12 +792,12 @@ default_roles_totoro() ->
        {[pools], [read]}]}
     ].
 
-static_roles() ->
-    chronicle_compat:get(static_role_definitions, #{required => true}).
+role_definitions() ->
+    chronicle_compat:get(role_definitions, #{required => true}).
 
 -spec roles() -> [rbac_role_def(), ...].
 roles() ->
-    Roles = static_roles(),
+    Roles = role_definitions(),
     %% Allow roles to be added / replaced with those from the config profile.
     ConfigRoles = config_profile:get_value(extra_roles, []),
     ConfigNames = lists:map(fun extract_role_name/1, ConfigRoles),
@@ -1510,13 +1510,13 @@ extract_role_name(Role) ->
 
 chronicle_upgrade_to_totoro(ChronicleTxn) ->
     RoleDefinitions = default_roles_totoro(),
-    chronicle_upgrade:set_key(static_role_definitions, RoleDefinitions,
+    chronicle_upgrade:set_key(role_definitions, RoleDefinitions,
                               ChronicleTxn).
 
 -ifdef(TEST).
 set_role_definitions() ->
     fake_chronicle_kv:update_snapshot(
-      #{static_role_definitions => default_roles_totoro()}).
+      #{role_definitions => default_roles_totoro()}).
 
 setup_meck() ->
     meck:new(cluster_compat_mode, [passthrough]),
