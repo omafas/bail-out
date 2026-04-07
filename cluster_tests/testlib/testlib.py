@@ -818,7 +818,7 @@ def no_output(name, verbose=None, error_callback=None):
 
     f = io.StringIO()
     try:
-        with contextlib.redirect_stdout(f):
+        with contextlib.redirect_stdout(f), contextlib.redirect_stderr(f):
             yield
     except Exception as e:
         error_callback(e)
