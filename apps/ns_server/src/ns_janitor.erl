@@ -133,6 +133,8 @@ cleanup_fusion_uploaders(Bucket, BucketConfig, Servers) ->
                     ok;
                 Uploaders ->
                     {_, Map} = lists:keyfind(map, 1, BucketConfig),
+                    ns_bucket:get_fusion_state(BucketConfig) =/= enabled orelse
+                        fusion_uploaders:init_namespace(Bucket),
                     cleanup_fusion_uploaders(Uploaders, Bucket, BucketConfig,
                                              Servers, Map)
             end

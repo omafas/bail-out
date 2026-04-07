@@ -86,6 +86,7 @@
          sync_fusion_log_store/4,
          delete_fusion_namespace/5,
          get_fusion_namespaces/3,
+         create_fusion_namespace/1,
          download_snapshot/3,
          release_snapshot/2
         ]).
@@ -127,6 +128,7 @@
                      ?CMD_SYNC_FUSION_LOGSTORE |
                      ?CMD_DELETE_FUSION_NAMESPACE |
                      ?CMD_GET_FUSION_NAMESPACES |
+                     ?CMD_CREATE_FUSION_NAMESPACE |
                      ?DOWNLOAD_SNAPSHOT |
                      ?RELEASE_SNAPSHOT.
 
@@ -1280,6 +1282,17 @@ sync_fusion_log_store(Sock, VBucket, PropsJson, Timeout) ->
              Timeout) of
         {ok, #mc_header{status=?SUCCESS}, _, _} -> ok;
         Response -> process_error_response(Response)
+    end.
+
+-spec create_fusion_namespace(port()) -> ok | mc_error().
+create_fusion_namespace(Sock) ->
+    report_counter(?FUNCTION_NAME),
+    case cmd(?CMD_CREATE_FUSION_NAMESPACE, Sock, undefined, undefined,
+             {#mc_header{}, #mc_entry{}}) of
+        {ok, #mc_header{status = ?SUCCESS}, _ME, _NCB} ->
+            ok;
+        Response ->
+            process_error_response(Response)
     end.
 
 -spec delete_fusion_namespace(port(), string(), string(), binary(),

@@ -174,6 +174,7 @@
          get_fusion_uploaders_state/1,
          get_fusion_namespaces/1,
          delete_fusion_namespace/3,
+         create_fusion_namespace/1,
          download_snapshot/3,
          get_download_snapshot_status/2,
          get_snapshot_ready_status/2,
@@ -2916,3 +2917,11 @@ delete_fusion_namespace(LogStoreUri, MetaDataStoreUri, Namespace) ->
               {reply, mc_client_binary:delete_fusion_namespace(
                         Sock, LogStoreUri, MetaDataStoreUri, JWT, Namespace)}
       end, undefined, [json]).
+
+-spec create_fusion_namespace(ns_bucket:name()) ->
+          ok | mc_error().
+create_fusion_namespace(BucketName) ->
+    perform_very_long_call(
+      fun (Sock) ->
+              {reply, mc_client_binary:create_fusion_namespace(Sock)}
+      end, BucketName).

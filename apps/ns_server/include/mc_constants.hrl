@@ -140,6 +140,7 @@
 -define(CMD_STOP_FUSION_UPLOADER,            16#76).
 -define(CMD_DELETE_FUSION_NAMESPACE,         16#77).
 -define(CMD_GET_FUSION_NAMESPACES,           16#78).
+-define(CMD_CREATE_FUSION_NAMESPACE,         16#79).
 -define(CMD_SET_CHRONICLE_AUTH_TOKEN,        16#84).
 
 -define(RGET,        16#30).

@@ -44,7 +44,8 @@
          store_snapshots_uuid/3,
          get_snapshots/5,
          cleanup_snapshots/0,
-         cleanup_mounted_volumes/2]).
+         cleanup_mounted_volumes/2,
+         init_namespace/1]).
 
 %% used via rpc:call
 -export([do_get_snapshots/4, do_delete_snapshots/3]).
@@ -600,6 +601,26 @@ enable_buckets(Snapshot, BucketUploaders) ->
           end, BucketUploaders),
     {[Set || {Set, _} <- SetsAndBuckets],
      [Bucket || {_, Bucket} <- SetsAndBuckets, Bucket =/= undefined]}.
+
+-spec init_namespace(ns_bucket:name()) -> ok.
+init_namespace(BucketName) ->
+    %% attempt to create internal fusion structure in chronicle
+    %% that speeds up creating the uploaders by eliminating chronicle
+    %% conflicts. If this fails for any reason, the structure will
+    %% still be eventually created.
+    case ns_memcached:create_fusion_namespace(BucketName) of
+        ok ->
+            ?log_info("Created fusion namespace for bucket ~p", [BucketName]),
+            ok;
+        {memcached_error, key_eexists, _} ->
+            %% already created. since this is periodically called from janitor,
+            %% we shouldn't make much of a fuss about it
+            ok;
+        Error ->
+            ?log_warning("Error ~p creating fusion namespace for bucket ~p",
+                         [Error, BucketName]),
+            ok
+    end.
 
 post_enable(Buckets) ->
     Servers = lists:usort(lists:flatten(
