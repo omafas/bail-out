@@ -520,6 +520,21 @@
             }
         ]
     },
+    "cm_node_unreachable_total": {
+        "type": "counter",
+        "help": "Total number of times the node identified by the node label was reported as unreachable. Depending on the reason, the notification may be immediate (for example, connection closed) or delayed (for example, tick timeout). This can help identify intermittent network connectivity issues that may not trigger auto-failover.",
+        "added": "7.6.11",
+        "labels": [
+            {
+                "name": "node",
+                "help": "The node that is unreachable"
+            },
+            {
+                "name": "reason",
+                "help": "The erlang provided reason for the node being unreachable"
+            }
+        ]
+    },
     "cm_ns_config_merger_queue_len_1m_max": {
         "type": "gauge",
         "help": "Length of the ns_config merger queue",
