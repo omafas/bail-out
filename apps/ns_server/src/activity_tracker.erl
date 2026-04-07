@@ -179,9 +179,9 @@ is_user_covered(_Identity, _) ->
     %% Non-local users aren't tracked
     false.
 
-strip_role_parameterisation({Role, _}) when is_atom(Role) ->
+strip_role_parameterisation({Role, _}) when is_binary(Role) ->
     Role;
-strip_role_parameterisation(Role) when is_atom(Role); is_binary(Role) ->
+strip_role_parameterisation(Role) when is_binary(Role) ->
     Role.
 
 do_lists_intersect(List1, List2) ->
@@ -196,9 +196,9 @@ do_lists_intersect(List1, List2) ->
 
 -define(GROUP_A, a).
 -define(GROUP_B, b).
--define(ROLE_X, x).
--define(ROLE_Y, y).
--define(ROLE_Z, z).
+-define(ROLE_X, <<"x">>).
+-define(ROLE_Y, <<"y">>).
+-define(ROLE_Z, <<"z">>).
 
 -define(LOCAL_USER_IN_A, {"user_in_a", local}).
 -define(LOCAL_USER_IN_B, {"user_in_b", local}).

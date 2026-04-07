@@ -1241,7 +1241,7 @@ promql_filters_for_roles_test() ->
 
         ?assertBinStringsEqual(
           <<"{}">>,
-          Filters(menelaus_roles:get_roles({"Admin", admin}))),
+           Filters(menelaus_roles:get_roles({"Admin", admin}))),
 
         ?assertBinStringsEqual(
           <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
@@ -1249,57 +1249,57 @@ promql_filters_for_roles_test() ->
 
         ?assertBinStringsEqual(
           <<"{}">>,
-          Filters([{bucket_admin, [any]}])),
+           Filters([{<<"bucket_admin">>, [any]}])),
 
         ?assertBinStringsEqual(
           <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
-          Filters([{bucket_admin, [{Bucket1, UUID1}]}])),
+           Filters([{<<"bucket_admin">>, [{Bucket1, UUID1}]}])),
 
         ?assertBinStringsEqual(
           <<"{bucket=~`test1|test2`} or {bucket!~`.+`}">>,
-          Filters([{bucket_admin, [{Bucket1, UUID1}]},
-                   {bucket_admin, [{Bucket2, UUID2}]}])),
+           Filters([{<<"bucket_admin">>, [{Bucket1, UUID1}]},
+                    {<<"bucket_admin">>, [{Bucket2, UUID2}]}])),
 
         ?assertBinStringsEqual(
           <<"{}">>,
-          Filters([{eventing_manage_functions, [any, any]}])),
+           Filters([{<<"eventing_manage_functions">>, [any, any]}])),
 
         ?assertBinStringsEqual(
           <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
-          Filters([{eventing_manage_functions, [{Bucket1, UUID1}, any]}])),
+           Filters([{<<"eventing_manage_functions">>, [{Bucket1, UUID1}, any]}])),
 
         ?assertBinStringsEqual(
           <<"{bucket=`test1`,scope=~`_default`} or {bucket!~`.+`}">>,
-          Filters([{eventing_manage_functions, [{Bucket1, UUID1},
-                                                {"_default", 0}]}])),
+           Filters([{<<"eventing_manage_functions">>, [{Bucket1, UUID1},
+                                                       {"_default", 0}]}])),
 
         ?assertBinStringsEqual(
           <<"{bucket=`test1`,scope=~`_default`} or {bucket=~`test2`} or "
             "{bucket!~`.+`}">>,
-          Filters([{eventing_manage_functions, [{Bucket1, UUID1},
-                                                {"_default", 0}]},
-                   {eventing_manage_functions, [{Bucket2, UUID2}, any]}])),
+           Filters([{<<"eventing_manage_functions">>, [{Bucket1, UUID1},
+                                                       {"_default", 0}]},
+                    {<<"eventing_manage_functions">>, [{Bucket2, UUID2}, any]}])),
 
         ?assertBinStringsEqual(
           <<"{bucket=`test1`,scope=`_default`,collection=~`_default`} or "
             "{bucket=`test2`,scope=~`_default`} or {bucket!~`.+`}">>,
-          Filters([{data_monitoring, [{Bucket1, UUID1}, {"_default", 0},
-                                      {"_default", 0}]},
-                   {data_monitoring, [{Bucket2, UUID2}, {"_default", 0},
-                                      any]}])),
+           Filters([{<<"data_monitoring">>, [{Bucket1, UUID1}, {"_default", 0},
+                                             {"_default", 0}]},
+                    {<<"data_monitoring">>, [{Bucket2, UUID2}, {"_default", 0},
+                                             any]}])),
 
         ?assertBinStringsEqual(
           <<"{bucket=`test2`,scope=~`_default`} or {bucket=~`test1`} or "
             "{bucket!~`.+`}">>,
-          Filters([{data_monitoring, [{Bucket1, UUID1}, {"_default", 0},
-                                      {"_default", 0}]},
-                   {data_monitoring, [{Bucket2, UUID2}, {"_default", 0}, any]},
-                   {data_monitoring, [{Bucket1, UUID1}, any, any]}])),
+           Filters([{<<"data_monitoring">>, [{Bucket1, UUID1}, {"_default", 0},
+                                             {"_default", 0}]},
+                    {<<"data_monitoring">>, [{Bucket2, UUID2}, {"_default", 0}, any]},
+                    {<<"data_monitoring">>, [{Bucket1, UUID1}, any, any]}])),
 
         ?assertBinStringsEqual(
           <<"{bucket=~`test1`} or {bucket!~`.+`}">>,
-          Filters([{data_reader, [any, any, any]},
-                   {eventing_manage_functions, [{Bucket1, UUID1}, any]}])),
+           Filters([{<<"data_reader">>, [any, any, any]},
+                    {<<"eventing_manage_functions">>, [{Bucket1, UUID1}, any]}])),
 
         ok
     after

@@ -26,7 +26,7 @@
                               local_token | stats_reader.
 -type rbac_identity() :: {rbac_user_id(), rbac_identity_type()}.
 -type rbac_role_param() :: string() | {string(), binary()} | any.
--type rbac_role_name() :: atom() | binary().
+-type rbac_role_name() :: binary().
 -type rbac_role() :: rbac_role_name() |
                      {rbac_role_name(), nonempty_list(rbac_role_param())}.
 -type rbac_user_name() :: string() | undefined.

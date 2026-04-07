@@ -1014,7 +1014,7 @@ handle_cast(start_completed, #state{start_time=Start,
 
 issue_jwt(Silent) ->
     {ok, JWT} =
-        jwt_issuer:issue("@fusion", [metakv2_access],
+        jwt_issuer:issue("@fusion", [<<"metakv2_access">>],
                          ?JWT_LIFETIME_MS div 1000),
     {_, Payload = #{<<"exp">> := Expires}} = jose_jwt:peek_payload(JWT),
     Silent orelse ?log_debug("Issue JWT ~p", [Payload]),

@@ -59,8 +59,7 @@ issue(User, Roles, LifetimeSec) ->
                     <<"sub">> => list_to_binary(User),
                     <<"aud">> => <<"ns_server_internal">>,
                     <<"roles">> =>
-                        [list_to_binary(menelaus_web_rbac:role_to_string(R)) ||
-                            R <- Roles]
+                        [menelaus_web_rbac:role_to_binary(R) || R <- Roles]
                    },
             JWK = jose_jwk:from_map(JWKMap),
             JWS = jose_jwt:sign(
@@ -106,7 +105,7 @@ basic_test() ->
     CachePid ! internal_key_update,
     gen_server:call(jwt_cache, sync, 1000),
 
-    RV = issue("@test", [admin, metakv2_access], 1000),
+    RV = issue("@test", [<<"admin">>, <<"metakv2_access">>], 1000),
     ?assertMatch({ok, _}, RV),
     {ok, TokenBin} = RV,
     RV1 = jwt_auth:authenticate(binary_to_list(TokenBin)),
@@ -115,7 +114,7 @@ basic_test() ->
                                  authenticated_identity = {"@test", external},
                                  identity = {"@test", external},
                                  extra_groups = [],
-                                 extra_roles = [admin, metakv2_access],
+                                 extra_roles = [<<"admin">>, <<"metakv2_access">>],
                                  expiration_datetime_utc = _,
                                  password_expired = false}, _}, RV1),
 

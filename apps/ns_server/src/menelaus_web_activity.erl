@@ -9,6 +9,7 @@
 
 -module(menelaus_web_activity).
 
+-include("ns_common.hrl").
 -include_lib("ns_common/include/cut.hrl").
 
 -ifdef(TEST).
@@ -20,14 +21,15 @@
          handle_post/1,
          get_config/0,
          is_config_key/1,
-         is_enabled/1]).
+         is_enabled/1,
+         config_upgrade_to_totoro/1]).
 
 -define(CONFIG_KEY, user_activity).
 
 -define(DEFAULT_TRACKED_ROLES,
-        [admin, ro_admin, security_admin, user_admin_local, user_admin_external,
-         cluster_admin, eventing_admin, backup_admin, views_admin,
-         replication_admin, fts_admin, analytics_admin]).
+        [<<"admin">>, <<"ro_admin">>, <<"security_admin">>, <<"user_admin_local">>, <<"user_admin_external">>,
+         <<"cluster_admin">>, <<"eventing_admin">>, <<"backup_admin">>, <<"views_admin">>,
+         <<"replication_admin">>, <<"fts_admin">>, <<"analytics_admin">>]).
 
 -spec default() -> [{atom(), any()}].
 default() ->
@@ -84,7 +86,7 @@ params() ->
 type_spec(tracked_roles) ->
     #{validators => [{string_list, ","},
                      validator:validate(fun get_roles/1, _, _)],
-      formatter => fun (L) -> {value, [atom_to_binary(M) || M <- L]} end};
+      formatter => fun (L) -> {value, [R || R <- L]} end};
 type_spec(tracked_groups) ->
     #{validators => [{string_list, ","},
                      validator:validate(fun get_groups/1, _, _)],
@@ -98,7 +100,7 @@ get_roles(RolesRaw) ->
     %% Gather erroneous roles
     BadRoles = [BadRole || {error, BadRole} <- Roles],
     case BadRoles of
-        [] -> {value, Roles};
+        [] -> {value, menelaus_roles:map_roles_for_compat(Roles)};
         _ -> {error,
               lists:flatten(io_lib:format("The following roles are invalid: ~s",
                                           [string:join(BadRoles, ",")]))}
@@ -107,11 +109,16 @@ get_roles(RolesRaw) ->
 -ifdef(TEST).
 bad_roles_test() ->
     config_profile:load_default_profile_for_test(),
-    meck:expect(cluster_compat_mode, get_compat_version, ?cut([7, 9])),
+    fake_chronicle_kv:setup(),
+    %% Initially test old role format
+    fake_chronicle_kv:setup_cluster_compat_version(?VERSION_79),
     meck:expect(cluster_compat_mode, is_developer_preview, ?cut(false)),
     ?assertEqual({value, []}, get_roles([])),
     ?assertEqual({value, [cluster_admin]}, get_roles(["cluster_admin"])),
-    ?assertEqual({value, [cluster_admin, data_reader]},
+    %% Test new role format
+    fake_chronicle_kv:setup_cluster_compat_version(?VERSION_TOTORO),
+    menelaus_roles:set_role_definitions(),
+    ?assertEqual({value, [<<"cluster_admin">>, <<"data_reader">>]},
                  get_roles(["cluster_admin", "data_reader"])),
     ?assertEqual({error, "The following roles are invalid: nonsense_role"},
                  get_roles(["nonsense_role"])),
@@ -158,7 +165,10 @@ bad_groups_test() ->
 
 -spec get_config() -> proplists:proplist().
 get_config() ->
-    ns_config:read_key_fast(?CONFIG_KEY, []).
+    %% Roles need to be converted from compat format to the new binary format,
+    %% before they can be compared to any users roles
+    menelaus_users:convert_roles_from_atom_to_binary(
+      tracked_roles, ns_config:read_key_fast(?CONFIG_KEY, [])).
 
 -spec is_config_key(term()) -> boolean().
 is_config_key(?CONFIG_KEY) -> true;
@@ -167,3 +177,16 @@ is_config_key(_) -> false.
 -spec is_enabled(proplists:proplist()) -> boolean().
 is_enabled(Config) ->
     proplists:get_bool(enabled, Config).
+
+config_upgrade_to_totoro(Config) ->
+    Default = default(),
+    case ns_config:search(Config, ?CONFIG_KEY) of
+        false ->
+            %% This key really should exist...
+            [{set, ?CONFIG_KEY, Default}];
+        {value, Settings} ->
+            %% Update the roles list to use binary names
+            [{set, ?CONFIG_KEY,
+              menelaus_users:convert_roles_from_atom_to_binary(tracked_roles,
+                                                               Settings)}]
+    end.

@@ -71,6 +71,9 @@
          get_visible_role_definitions/0,
          strip_ids/2,
          chronicle_upgrade_to_totoro/1,
+         old_role_to_new/1,
+         map_roles_for_compat/1,
+         map_roles_for_compat/2,
          get_all_mutable_roles/0,
          is_mutable/1,
          get_role/1,
@@ -85,7 +88,7 @@
 
 -spec default_roles_totoro() -> [rbac_role_def(), ...].
 default_roles_totoro() ->
-    [{admin, [],
+    [{<<"admin">>, [],
       [{name, <<"Full Admin">>},
        {folder, admin},
        {desc, <<"Can manage all cluster features (including security). "
@@ -93,7 +96,7 @@ default_roles_totoro() ->
                 "write all data.">>},
        {ce, true}],
       [{[], all}]},
-     {ro_admin, [],
+     {<<"ro_admin">>, [],
       [{name, <<"Read-Only Admin">>},
        {folder, admin},
        {desc, <<"Can view all cluster statistics. "
@@ -113,14 +116,14 @@ default_roles_totoro() ->
        {[backup], [read]},
        {[ui], none},
        {[], [read, list]}]},
-     {ui_access, [],
+     {<<"ui_access">>, [],
       [{name, <<"Web Console Access">>},
        {folder, admin},
        {desc, <<"Can access the web console.">>},
        {ce, true}],
       [{[ui], [read]},
        {[pools], [read]}]},
-     {security_admin, [],
+     {<<"security_admin">>, [],
       [{name, <<"Security Admin">>},
        {folder, admin},
        {desc, <<"Can view all cluster statistics, manage certificates, manage "
@@ -149,7 +152,7 @@ default_roles_totoro() ->
        {[settings, metrics], none},
        {[ui], none},
        {[], [read, list]}]},
-     {ro_security_admin, [],
+     {<<"ro_security_admin">>, [],
       [{name, <<"Read-Only Security Admin">>},
        {folder, admin},
        {desc, <<"Can view all cluster statistics. Can read security related "
@@ -178,7 +181,7 @@ default_roles_totoro() ->
        {[settings, metrics], none},
        {[ui], none},
        {[], [read, list]}]},
-     {user_admin_local, [],
+     {<<"user_admin_local">>, [],
       [{name, <<"Local User Admin">>},
        {folder, admin},
        {desc, <<"Can view all cluster statistics and manage local user "
@@ -208,7 +211,7 @@ default_roles_totoro() ->
        {[settings, metrics], none},
        {[ui], none},
        {[], [read, list]}]},
-     {user_admin_external, [],
+     {<<"user_admin_external">>, [],
       [{name, <<"External User Admin">>},
        {folder, admin},
        {desc, <<"Can view all cluster statistics and manage external user "
@@ -238,13 +241,13 @@ default_roles_totoro() ->
        {[settings, metrics], none},
        {[ui], none},
        {[], [read, list]}]},
-     {credential_consumer, [credential_id],
+     {<<"credential_consumer">>, [credential_id],
       [{name, <<"Credential Consumer">>},
        {folder, admin},
        {desc, <<"Can read, consume (use) specific external credentials or "
                 "those matching a pattern.">>}],
       [{[{credentials, credential_id}], [consume]}]},
-     {cluster_admin, [],
+     {<<"cluster_admin">>, [],
       [{name, <<"Cluster Admin">>},
        {folder, admin},
        {desc, <<"Can manage all cluster features except security and users. "
@@ -268,7 +271,7 @@ default_roles_totoro() ->
        {[backup], none},
        {[ui], none},
        {[], all}]},
-     {eventing_admin, [],
+     {<<"eventing_admin">>, [],
       [{name, <<"Eventing Full Admin">>},
        {folder, admin},
        {desc, <<"Can create/manage eventing functions.">>}],
@@ -285,7 +288,7 @@ default_roles_totoro() ->
        {[settings, metrics], none},
        {[ui], none},
        {[], [read]}]},
-     {backup_admin, [],
+     {<<"backup_admin">>, [],
       [{name, <<"Backup Full Admin">>},
        {folder, admin},
        {desc, <<"Can perform backup related tasks.">>}],
@@ -293,7 +296,7 @@ default_roles_totoro() ->
        {[settings, metrics], none},
        {[ui], none},
        {[], all}]},
-     {bucket_admin, [bucket_name],
+     {<<"bucket_admin">>, [bucket_name],
       [{name, <<"Bucket Admin">>},
        {folder, bucket},
        {desc, <<"Can manage ALL bucket features for a given bucket (including "
@@ -316,13 +319,13 @@ default_roles_totoro() ->
        {[n1ql, meta], none},
        {[ui], none},
        {[], [read]}]},
-     {scope_admin, ?RBAC_SCOPE_PARAMS,
+     {<<"scope_admin">>, ?RBAC_SCOPE_PARAMS,
       [{name, <<"Manage Scopes">>},
        {folder, bucket},
        {desc, <<"Can create/delete scopes and collections within a given "
                 "bucket.">>}],
       [{[{collection, [bucket_name, scope_name, any]}, collections], all}]},
-     {bucket_full_access, [bucket_name],
+     {<<"bucket_full_access">>, [bucket_name],
       [{name, <<"Application Access">>},
        {folder, bucket},
        {desc, <<"Full access to bucket data. This user is intended only for "
@@ -339,7 +342,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, settings], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {views_admin, [bucket_name],
+     {<<"views_admin">>, [bucket_name],
       [{name, <<"Views Admin (deprecated)">>},
        {folder, admin},
        {desc, <<"Can create and manage views of a given bucket. "
@@ -361,7 +364,7 @@ default_roles_totoro() ->
        {[settings, metrics], none},
        {[ui], none},
        {[], [read]}]},
-     {views_reader, [bucket_name],
+     {<<"views_reader">>, [bucket_name],
       [{name, <<"Views Reader (deprecated)">>},
        {folder, views},
        {desc, <<"Can read data from the views of a given bucket. This user "
@@ -373,7 +376,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, data, docs], [read, sread]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {replication_admin, [],
+     {<<"replication_admin">>, [],
       [{name, <<"XDCR Admin">>},
        {folder, xdcr},
        {desc, <<"Can administer XDCR features to create cluster references and "
@@ -395,7 +398,7 @@ default_roles_totoro() ->
        {[settings, metrics], none},
        {[ui], none},
        {[], [read]}]},
-     {data_reader, ?RBAC_COLLECTION_PARAMS,
+     {<<"data_reader">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Data Reader">>},
        {folder, data},
        {desc, <<"Can read data from a given bucket, scope or collection. "
@@ -406,7 +409,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, settings], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {data_writer, ?RBAC_COLLECTION_PARAMS,
+     {<<"data_writer">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Data Writer">>},
        {folder, data},
        {desc, <<"Can write data to a given bucket, scope or collection. "
@@ -417,7 +420,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, settings], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {data_dcp_reader, ?RBAC_COLLECTION_PARAMS,
+     {<<"data_dcp_reader">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Data DCP Reader">>},
        {folder, data},
        {desc, <<"Can initiate DCP streams for a given bucket, scope or "
@@ -434,7 +437,7 @@ default_roles_totoro() ->
        {[admin, memcached, idle], [write]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {data_backup, [bucket_name],
+     {<<"data_backup">>, [bucket_name],
       [{name, <<"Data Backup & Restore">>},
        {folder, backup},
        {desc, <<"Can backup and restore a given bucket’s data. This user "
@@ -452,7 +455,7 @@ default_roles_totoro() ->
        {[analytics], [select, backup]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {data_monitoring, ?RBAC_COLLECTION_PARAMS,
+     {<<"data_monitoring">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Data Monitor">>},
        {folder, data},
        {desc, <<"Can read statistics for a given bucket, scope or collection. "
@@ -463,7 +466,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, settings], [read]},
        {[tasks], [read]},
        {[pools], [read]}]},
-     {fts_admin, [bucket_name],
+     {<<"fts_admin">>, [bucket_name],
       [{name, <<"Search Admin">>},
        {folder, search},
        {desc, <<"Can administer all Full Text Search features. "
@@ -474,7 +477,7 @@ default_roles_totoro() ->
        {[settings, fts], [read, write, manage]},
        {[pools], [read]},
        {[{bucket, bucket_name}, settings], [read]}]},
-     {fts_searcher, ?RBAC_COLLECTION_PARAMS,
+     {<<"fts_searcher">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Search Reader">>},
        {folder, search},
        {desc, <<"Can query Full Text Search indexes for a given bucket, scope "
@@ -484,7 +487,7 @@ default_roles_totoro() ->
        {[pools], [read]},
        {[{bucket, bucket_name}, settings], [read]},
        {[app_telemetry], [write]}]},
-     {query_select, ?RBAC_COLLECTION_PARAMS,
+     {<<"query_select">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Query Select">>},
        {folder, 'query'},
        {desc, <<"Can execute a SELECT statement on a given bucket, scope or "
@@ -495,7 +498,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, settings], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {query_update, ?RBAC_COLLECTION_PARAMS,
+     {<<"query_update">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Query Update">>},
        {folder, 'query'},
        {desc, <<"Can execute an UPDATE statement on a given bucket, scope or "
@@ -507,7 +510,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, settings], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {query_insert, ?RBAC_COLLECTION_PARAMS,
+     {<<"query_insert">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Query Insert">>},
        {folder, 'query'},
        {desc, <<"Can execute an INSERT statement on a given bucket, scope or "
@@ -518,7 +521,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, settings], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {query_delete, ?RBAC_COLLECTION_PARAMS,
+     {<<"query_delete">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Query Delete">>},
        {folder, 'query'},
        {desc, <<"Can execute a DELETE statement on a given bucket, scope or "
@@ -530,7 +533,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, settings], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {query_manage_index, ?RBAC_COLLECTION_PARAMS,
+     {<<"query_manage_index">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Query Manage Index">>},
        {folder, 'query'},
        {desc, <<"Can manage indexes for a given bucket, scope or collection. "
@@ -543,7 +546,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, stats], [read]},
        {[settings, indexes], [read]},
        {[pools], [read]}]},
-     {query_list_index, ?RBAC_COLLECTION_PARAMS,
+     {<<"query_list_index">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Query List Index">>},
        {folder, 'query'},
        {desc, <<"Can list indexes for a given bucket, scope or collection. "
@@ -556,7 +559,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}, stats], [read]},
        {[settings, indexes], [read]},
        {[pools], [read]}]},
-     {query_system_catalog, [],
+     {<<"query_system_catalog">>, [],
       [{name, <<"Query System Catalog">>},
        {folder, 'query'},
        {desc, <<"Can look up system catalog information via N1QL. This user "
@@ -566,7 +569,7 @@ default_roles_totoro() ->
        {[n1ql, meta], [read]},
        {[settings, indexes], [read]},
        {[pools], [read]}]},
-     {query_external_access, [],
+     {<<"query_external_access">>, [],
       [{name, <<"Query CURL Access">>},
        {folder, 'query'},
        {desc, <<"Can execute the CURL statement from within N1QL. This user "
@@ -575,47 +578,47 @@ default_roles_totoro() ->
        {[{bucket, any}, settings], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {query_manage_global_functions, [],
+     {<<"query_manage_global_functions">>, [],
       [{name, <<"Manage Global Functions">>},
        {folder, 'query'},
        {desc, <<"Can manage global n1ql functions">>}],
       [{[n1ql, udf], [manage]},
        {[pools], [read]}]},
-     {query_execute_global_functions, [],
+     {<<"query_execute_global_functions">>, [],
       [{name, <<"Execute Global Functions">>},
        {folder, 'query'},
        {desc, <<"Can execute global n1ql functions">>}],
       [{[n1ql, udf], [execute]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {query_manage_functions, ?RBAC_SCOPE_PARAMS,
+     {<<"query_manage_functions">>, ?RBAC_SCOPE_PARAMS,
       [{name, <<"Manage Scope Functions">>},
        {folder, 'query'},
        {desc, <<"Can manage n1ql functions for a given scope">>}],
       [{[{collection, [bucket_name, scope_name, any]}, n1ql, udf], [manage]},
        {[{collection, [bucket_name, scope_name, any]}, collections], [read]},
        {[pools], [read]}]},
-     {query_execute_functions, ?RBAC_SCOPE_PARAMS,
+     {<<"query_execute_functions">>, ?RBAC_SCOPE_PARAMS,
       [{name, <<"Execute Scope Functions">>},
        {folder, 'query'},
        {desc, <<"Can execute n1ql functions for a given scope">>}],
       [{[{collection, [bucket_name, scope_name, any]}, n1ql, udf], [execute]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {query_manage_global_external_functions, [],
+     {<<"query_manage_global_external_functions">>, [],
       [{name, <<"Manage Global External Functions">>},
        {folder, 'query'},
        {desc, <<"Can manage global external language functions">>}],
       [{[n1ql, udf_external], [manage]},
        {[pools], [read]}]},
-     {query_execute_global_external_functions, [],
+     {<<"query_execute_global_external_functions">>, [],
       [{name, <<"Execute Global External Functions">>},
        {folder, 'query'},
        {desc, <<"Can execute global external language functions">>}],
       [{[n1ql, udf_external], [execute]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {query_manage_external_functions, ?RBAC_SCOPE_PARAMS,
+     {<<"query_manage_external_functions">>, ?RBAC_SCOPE_PARAMS,
       [{name, <<"Manage Scope External Functions">>},
        {folder, 'query'},
        {desc, <<"Can manage external language functions for a given scope">>}],
@@ -623,7 +626,7 @@ default_roles_totoro() ->
          udf_external], [manage]},
        {[{collection, [bucket_name, scope_name, any]}, collections], [read]},
        {[pools], [read]}]},
-     {query_execute_external_functions, ?RBAC_SCOPE_PARAMS,
+     {<<"query_execute_external_functions">>, ?RBAC_SCOPE_PARAMS,
       [{name, <<"Execute Scope External Functions">>},
        {folder, 'query'},
        {desc, <<"Can execute external language functions for a given scope">>}],
@@ -631,7 +634,7 @@ default_roles_totoro() ->
          udf_external], [execute]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {query_manage_sequences, ?RBAC_SCOPE_PARAMS,
+     {<<"query_manage_sequences">>, ?RBAC_SCOPE_PARAMS,
       [{name, <<"Manage Sequences">>},
        {folder, 'query'},
        {desc, <<"Can manage sequences for a given scope">>}],
@@ -639,7 +642,7 @@ default_roles_totoro() ->
         [manage]},
        {[{collection, [bucket_name, scope_name, any]}, collections], [read]},
        {[pools], [read]}]},
-     {query_use_sequences, ?RBAC_SCOPE_PARAMS,
+     {<<"query_use_sequences">>, ?RBAC_SCOPE_PARAMS,
       [{name, <<"Use Sequences">>},
        {folder, 'query'},
        {desc, <<"Can use sequences for a given scope">>}],
@@ -648,7 +651,7 @@ default_roles_totoro() ->
        {[{collection, [bucket_name, scope_name, any]}, collections], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {query_use_sequential_scans, ?RBAC_COLLECTION_PARAMS,
+     {<<"query_use_sequential_scans">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Query Use Sequential Scans">>},
        {folder, 'query'},
        {desc, <<"Can use sequential scans for access to a given bucket, scope "
@@ -657,14 +660,14 @@ default_roles_totoro() ->
         [execute]},
        {[{collection, ?RBAC_COLLECTION_PARAMS}, data, docs], [range_scan]},
        {[app_telemetry], [write]}]},
-     {query_manage_system_catalog, [],
+     {<<"query_manage_system_catalog">>, [],
       [{name, <<"Query Manage System Catalog">>},
        {folder, query},
        {desc, <<"Can manage Query system catalogs via SQL++. "
                 "This user cannot read data.">>}],
       [{[n1ql, meta], [manage]},
        {[pools], [read]}]},
-     {replication_target, [bucket_name],
+     {<<"replication_target">>, [bucket_name],
       [{name, <<"XDCR Inbound">>},
        {folder, xdcr},
        {desc, <<"Can create XDCR streams into a given bucket.">>}],
@@ -677,7 +680,7 @@ default_roles_totoro() ->
        {[xdcr, c2c_communications], all},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {analytics_manager, [bucket_name],
+     {<<"analytics_manager">>, [bucket_name],
       [{name, <<"Analytics Manager">>},
        {folder, analytics},
        {desc, <<"Can manage Analytics local links. Can manage datasets on a "
@@ -685,7 +688,7 @@ default_roles_totoro() ->
                 "This user can read some data.">>}],
       [{[{bucket, bucket_name}, analytics], [manage, select]},
        {[pools], [read]}]},
-     {analytics_reader, [],
+     {<<"analytics_reader">>, [],
       [{name, <<"Analytics Reader">>},
        {folder, analytics},
        {desc, <<"Can query datasets. This is a global role as datasets may "
@@ -695,7 +698,7 @@ default_roles_totoro() ->
        {[{bucket, any}, analytics], [select]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {analytics_select, ?RBAC_COLLECTION_PARAMS,
+     {<<"analytics_select">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Analytics Select">>},
        {folder, analytics},
        {desc, <<"Can query datasets on a given bucket, scope or "
@@ -703,7 +706,7 @@ default_roles_totoro() ->
       [{[{collection, ?RBAC_COLLECTION_PARAMS}, analytics], [select]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {analytics_admin, [],
+     {<<"analytics_admin">>, [],
       [{name, <<"Analytics Admin">>},
        {folder, analytics},
        {desc, <<"Can manage dataverses. Can manage all Analytics links. "
@@ -711,7 +714,7 @@ default_roles_totoro() ->
       [{[analytics], [manage]},
        {[{bucket, any}, analytics], [manage]},
        {[pools], [read]}]},
-     {mobile_sync_gateway, [bucket_name],
+     {<<"mobile_sync_gateway">>, [bucket_name],
       [{name, <<"Sync Gateway">>},
        {folder, mobile},
        {desc, <<"Full access to bucket data as required by Sync Gateway. "
@@ -731,7 +734,7 @@ default_roles_totoro() ->
        {[admin, memcached, idle], [write]},
        {[settings, autocompaction], [read]},
        {[pools], [read]}]},
-     {sync_gateway_configurator, ?RBAC_COLLECTION_PARAMS,
+     {<<"sync_gateway_configurator">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Sync Gateway Architect">>},
        {folder, mobile},
        {desc, <<"Can manage Sync Gateway databases and users, "
@@ -742,7 +745,7 @@ default_roles_totoro() ->
        {[{collection, [any, any, any]}, sgw, replications], none},
        {[{collection, ?RBAC_COLLECTION_PARAMS}, sgw], all},
        {[admin, stats_export], [read]}]},
-     {sync_gateway_app, ?RBAC_COLLECTION_PARAMS,
+     {<<"sync_gateway_app">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Sync Gateway Application">>},
        {folder, mobile},
        {desc, <<"Can manage Sync Gateway users and roles, and "
@@ -753,7 +756,7 @@ default_roles_totoro() ->
        {[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, appdata], [read, write]},
        {[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, principal_appdata],
         [read]}]},
-     {sync_gateway_app_ro, ?RBAC_COLLECTION_PARAMS,
+     {<<"sync_gateway_app_ro">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Sync Gateway Application Read Only">>},
        {folder, mobile},
        {desc, <<"Can read Sync Gateway users and roles, and "
@@ -762,13 +765,13 @@ default_roles_totoro() ->
        {[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, principal], [read]},
        {[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, principal_appdata],
         [read]}]},
-     {sync_gateway_replicator, ?RBAC_COLLECTION_PARAMS,
+     {<<"sync_gateway_replicator">>, ?RBAC_COLLECTION_PARAMS,
       [{name, <<"Sync Gateway Replicator">>},
        {folder, mobile},
        {desc, <<"Can manage Inter-Sync Gateway Replications. "
                 "This user cannot read application data.">>}],
       [{[{collection, ?RBAC_COLLECTION_PARAMS}, sgw, replications], all}]},
-     {sync_gateway_dev_ops, [],
+     {<<"sync_gateway_dev_ops">>, [],
       [{name, <<"Sync Gateway Dev Ops">>},
        {folder, mobile},
        {desc, <<"Can manage Sync Gateway node-level configuration, "
@@ -776,18 +779,18 @@ default_roles_totoro() ->
                 "for Prometheus integration.">>}],
       [{[sgw, dev_ops], all},
        {[admin, stats_export], [read]}]},
-     {external_stats_reader, [],
+     {<<"external_stats_reader">>, [],
       [{name, <<"External Stats Reader">>},
        {folder, admin},
        {desc, <<"Access to /metrics endpoint for Prometheus integration. "
                 "Can read all stats for all services.">>}],
       [{[admin, stats_export], [read]}]},
-     {application_telemetry_writer, [],
+     {<<"application_telemetry_writer">>, [],
       [{name, <<"Application Telemetry Writer">>},
        {folder, admin},
        {desc, <<"Can report application telemetry through the SDK.">>}],
       [{[app_telemetry], [write]}]},
-     {eventing_manage_functions, ?RBAC_SCOPE_PARAMS,
+     {<<"eventing_manage_functions">>, ?RBAC_SCOPE_PARAMS,
       [{name, <<"Manage Scope Functions">>},
        {folder, eventing},
        {desc, <<"Can manage eventing functions for a given scope">>}],
@@ -831,15 +834,15 @@ ui_folders() ->
      {custom_roles, "Custom"}].
 
 internal_roles() ->
-    [{stats_reader, [], [], [{[admin, internal, stats], [read]}]},
-     {metakv2_access, [], [], [{[admin, internal, metakv2], all}]}].
+    [{<<"stats_reader">>, [], [], [{[admin, internal, stats], [read]}]},
+     {<<"metakv2_access">>, [], [], [{[admin, internal, metakv2], all}]}].
 
 maybe_add_developer_preview_roles() ->
     DP = cluster_compat_mode:is_developer_preview(),
     add_replication_developer_roles(DP).
 
 add_replication_developer_roles(true) ->
-    [{replication_developer, [],
+    [{<<"replication_developer">>, [],
       [{name, <<"XDCR Developer">>},
        {folder, xdcr},
        {desc, <<"Can read and write Custom Conflict Resolution merge "
@@ -1152,8 +1155,7 @@ compile_role({Name, Params}, CompileRole, Definitions, Snapshot) ->
         false ->
             false
     end;
-compile_role(Name, CompileRole, Definitions, Snapshot) when is_atom(Name);
-    is_binary(Name) ->
+compile_role(Name, CompileRole, Definitions, Snapshot) when is_binary(Name) ->
     compile_role({Name, []}, CompileRole, Definitions, Snapshot).
 
 compile_roles(CompileRole, Roles, Definitions, Snapshot) ->
@@ -1242,25 +1244,25 @@ get_roles({_, _} = Id) ->
 get_roles_for_identity({"", wrong_token}) ->
     case ns_config_auth:is_system_provisioned() of
         false ->
-            [admin];
+            [<<"admin">>];
         true ->
             []
     end;
 get_roles_for_identity(?ANONYMOUS_IDENTITY) ->
     case ns_config_auth:is_system_provisioned() of
         false ->
-            [admin];
+            [<<"admin">>];
         true ->
             []
     end;
 get_roles_for_identity({_, admin}) ->
-    [admin];
+    [<<"admin">>];
 get_roles_for_identity({_, local_token}) ->
-    [admin];
+    [<<"admin">>];
 get_roles_for_identity({_, stats_reader}) ->
-    [stats_reader];
+    [<<"stats_reader">>];
 get_roles_for_identity({BucketName, bucket}) ->
-    [{bucket_full_access, [BucketName]}];
+    [{<<"bucket_full_access">>, [BucketName]}];
 get_roles_for_identity({_User, external} = Identity) ->
     menelaus_users:get_roles(Identity);
 get_roles_for_identity({_User, local} = Identity) ->
@@ -1471,11 +1473,10 @@ get_param_defs(RoleName, Definitions) ->
     end.
 
 -spec validate_role(rbac_role(), [rbac_role_def()], map()) ->
-                           false | {ok, rbac_role()}.
-validate_role(Role, Definitions, Snapshot) when is_atom(Role);
-                                                is_binary(Role) ->
+          false | {ok, rbac_role()}.
+validate_role(Role, Definitions, Snapshot) when is_binary(Role) ->
     validate_role(Role, [], Definitions, Snapshot);
-validate_role({Role, Params}, Definitions, Snapshot) ->
+validate_role({Role, Params}, Definitions, Snapshot) when is_binary(Role) ->
     validate_role(Role, Params, Definitions, Snapshot).
 
 validate_role(Role, Params, Definitions, Snapshot) ->
@@ -1546,6 +1547,44 @@ external_auth_polling_interval() ->
 extract_role_name(Role) ->
     {Name, _, _, _} = Role,
     Name.
+
+-spec old_role_to_new(atom() | {atom(), nonempty_list(rbac_role_param())} |
+                      rbac_role()) -> rbac_role().
+old_role_to_new(RoleAtom) when is_atom(RoleAtom) ->
+    atom_to_binary(RoleAtom);
+old_role_to_new({RoleAtom, Params}) when is_atom(RoleAtom) ->
+    {atom_to_binary(RoleAtom), Params};
+old_role_to_new(RoleBinary) when is_binary(RoleBinary) ->
+    RoleBinary;
+old_role_to_new({RoleBinary, _} = Role) when is_binary(RoleBinary) ->
+    Role.
+
+-spec new_role_to_old(rbac_role()) ->
+          atom() | {atom(), nonempty_list(rbac_role_param())} | rbac_role().
+new_role_to_old(RoleAtom) when is_atom(RoleAtom) ->
+    RoleAtom;
+new_role_to_old({RoleAtom, _} = Role) when is_atom(RoleAtom) ->
+    Role;
+new_role_to_old(RoleBinary) when is_binary(RoleBinary) ->
+    binary_to_atom(RoleBinary);
+new_role_to_old({RoleBinary, Params}) when is_binary(RoleBinary) ->
+    {binary_to_atom(RoleBinary), Params}.
+
+%% Maps new roles with binary name to old style atom names
+%% Note, this includes a call to binary_to_atom/1, so this should only be called
+%% on roles that have already been validated as one of the limited builtin roles
+-spec map_roles_for_compat([rbac_role()], list()) ->
+    [atom() | {atom(), nonempty_list(rbac_role_param())} | rbac_role()].
+map_roles_for_compat(Roles) ->
+    map_roles_for_compat(Roles, cluster_compat_mode:get_compat_version()).
+
+map_roles_for_compat(Roles, Version) ->
+    case cluster_compat_mode:is_version_totoro(Version) of
+        true ->
+            Roles;
+        false ->
+            lists:map(fun new_role_to_old/1, Roles)
+    end.
 
 chronicle_upgrade_to_totoro(ChronicleTxn) ->
     RoleDefinitions = default_roles_totoro(),
@@ -1811,23 +1850,25 @@ compile_roles_test() ->
                   oper4}]
         end,
 
-    Definitions = [{simple_role, [], [],
+    Definitions = [{<<"simple_role">>, [], [],
                     [{[admin], all}]},
-                   {test_role, [bucket_name], [],
+                   {<<"test_role">>, [bucket_name], [],
                     [{[{bucket, bucket_name}], none}]},
-                   {test_role1, ?RBAC_COLLECTION_PARAMS, [],
+                   {<<"test_role1">>, ?RBAC_COLLECTION_PARAMS, [],
                     PermissionFilters(?RBAC_COLLECTION_PARAMS)},
-                   {test_role2, ?RBAC_SCOPE_PARAMS, [],
+                   {<<"test_role2">>, ?RBAC_SCOPE_PARAMS, [],
                     PermissionFilters(?RBAC_SCOPE_PARAMS ++ [any])}],
 
     ?assertEqual([[{[admin], all}]],
-                 compile_roles([simple_role, wrong_role], Definitions)),
-    ?assertEqual([[{[{bucket, "test"}], none}]],
-                 compile_roles([{test_role, ["test"]}], Definitions)),
-    ?assertEqual([[{[{bucket, "test"}], none}]],
-                 compile_roles([{test_role, [{"test", <<"test_id">>}]}],
+                 compile_roles([<<"simple_role">>, <<"wrong_role">>],
                                Definitions)),
-    ?assertEqual([], compile_roles([{test_role, [{"test", <<"wrong_id">>}]}],
+    ?assertEqual([[{[{bucket, "test"}], none}]],
+                 compile_roles([{<<"test_role">>, ["test"]}], Definitions)),
+    ?assertEqual([[{[{bucket, "test"}], none}]],
+                 compile_roles([{<<"test_role">>, [{"test", <<"test_id">>}]}],
+                               Definitions)),
+    ?assertEqual([], compile_roles([{<<"test_role">>,
+                                     [{"test", <<"wrong_id">>}]}],
                                    Definitions)),
 
     TestRole =
@@ -1838,7 +1879,7 @@ compile_roles_test() ->
                                            Definitions))
         end,
 
-    TestRole1 = ?cut(TestRole(_1, test_role1, _2, _2)),
+    TestRole1 = ?cut(TestRole(_1, <<"test_role1">>, _2, _2)),
     TestRole1(true, ["default", "s", "c"]),
     TestRole1(true, [{"default", <<"default_id">>}, {"s", 1}, {"c", 1}]),
     TestRole1(true, [{"default", <<"default_id">>}, {"s", 1}, any]),
@@ -1847,7 +1888,7 @@ compile_roles_test() ->
     TestRole1(false, [{"default", <<"wrong_id">>}, {"s", 1}, {"c", 1}]),
     TestRole1(false, [{"default", <<"default_id">>}, {"s", 1}, {"c", 2}]),
 
-    TestRole2 = ?cut(TestRole(_1, test_role2, _2, _2 ++ [any])),
+    TestRole2 = ?cut(TestRole(_1, <<"test_role2">>, _2, _2 ++ [any])),
     TestRole2(true, ["default", "s"]),
     TestRole2(true, [{"default", <<"default_id">>}, {"s", 1}]),
     TestRole2(true, [{"default", <<"default_id">>}, any]),
@@ -1856,17 +1897,17 @@ compile_roles_test() ->
     TestRole1(false, [{"default", <<"default_id">>}, {"s", 2}]).
 
 admin_test__() ->
-    Roles = compile_roles([admin], roles()),
+    Roles = compile_roles([<<"admin">>], roles()),
     ?assertEqual(true, is_allowed({[buckets], create}, Roles)),
     ?assertEqual(true, is_allowed({[something, something], anything}, Roles)).
 
 cluster_admin_test__() ->
-    Roles = compile_roles([cluster_admin], roles()),
+    Roles = compile_roles([<<"cluster_admin">>], roles()),
     ?assertEqual(true, is_allowed({[settings, metrics], any}, Roles)),
     ?assertEqual(false, is_allowed({[admin, settings, metrics], any}, Roles)).
 
 eventing_admin_test__() ->
-    Roles = compile_roles([eventing_admin], roles()),
+    Roles = compile_roles([<<"eventing_admin">>], roles()),
     ?assertEqual(false, is_allowed({[admin], any}, Roles)),
     ?assertEqual(false, is_allowed({[xdcr], any}, Roles)),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, xdcr], any}, Roles)),
@@ -1878,7 +1919,7 @@ eventing_admin_test__() ->
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
 backup_admin_test__() ->
-    Roles = compile_roles([backup_admin], roles()),
+    Roles = compile_roles([<<"backup_admin">>], roles()),
     ?assertEqual(false, is_allowed({[admin, users], read}, Roles)),
     ?assertEqual(false, is_allowed({[admin, users], write}, Roles)),
     ?assertEqual(false, is_allowed({[admin], any}, Roles)),
@@ -1887,7 +1928,7 @@ backup_admin_test__() ->
     ?assertEqual(true, is_allowed({[anything], all}, Roles)).
 
 ro_admin_test__() ->
-    Roles = compile_roles([ro_admin], roles()),
+    Roles = compile_roles([<<"ro_admin">>], roles()),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
     ?assertEqual(true,
                  is_allowed({[{bucket, "test"}, something], read}, Roles)),
@@ -1911,7 +1952,7 @@ ro_admin_test__() ->
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
 security_admin_test__() ->
-    Roles = compile_roles([security_admin], roles()),
+    Roles = compile_roles([<<"security_admin">>], roles()),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
     ?assertEqual(true,
                  is_allowed({[{bucket, "test"}, something], read}, Roles)),
@@ -1935,7 +1976,7 @@ security_admin_test__() ->
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
 ro_security_admin_test__() ->
-    Roles = compile_roles([ro_security_admin], roles()),
+    Roles = compile_roles([<<"ro_security_admin">>], roles()),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
     ?assertEqual(true,
                  is_allowed({[{bucket, "test"}, something], read}, Roles)),
@@ -1959,7 +2000,7 @@ ro_security_admin_test__() ->
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
 user_admin_local_test__() ->
-    Roles = compile_roles([user_admin_local], roles()),
+    Roles = compile_roles([<<"user_admin_local">>], roles()),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
     ?assertEqual(true,
                  is_allowed({[{bucket, "test"}, something], read}, Roles)),
@@ -1987,7 +2028,7 @@ user_admin_local_test__() ->
     ?assertEqual(false, is_allowed({[anything], write}, Roles)).
 
 user_admin_external_test__() ->
-    Roles = compile_roles([user_admin_external], roles()),
+    Roles = compile_roles([<<"user_admin_external">>], roles()),
     ?assertEqual(false, is_allowed({[{bucket, "test"}, data], read}, Roles)),
     ?assertEqual(true,
                  is_allowed({[{bucket, "test"}, something], read}, Roles)),
@@ -2037,7 +2078,7 @@ remove_exempted_names(AllNames, ExemptedNames) ->
       end, AllNames).
 
 roles_with_admin_event_metakv_permissions() ->
-    [regulator_access, admin].
+    [<<"regulator_access">>, <<"admin">>].
 
 %% Ensure none of the roles, except those who are granted permission,
 %% have access to the admin event/metakv permission.
@@ -2054,7 +2095,7 @@ admin_event_metakv_permissions_test__() ->
     ?assertEqual(false, is_allowed({[admin, metakv], write}, Roles)).
 
 roles_bucket_sys_write_permissions() ->
-    [admin, eventing_admin, backup_admin, data_backup].
+    [<<"admin">>, <<"eventing_admin">>, <<"backup_admin">>, <<"data_backup">>].
 
 system_collections_write_permissions_test__() ->
     AllRoles = roles(),
@@ -2086,7 +2127,8 @@ system_collections_write_permissions_test__() ->
 
     %% Ensure that mobile_sync_gateway can write only to _mobile and not to
     %% other system collections.
-    Roles1 = compile_roles([{mobile_sync_gateway, ["default"]}], AllRoles),
+    Roles1 = compile_roles([{<<"mobile_sync_gateway">>, ["default"]}],
+        AllRoles),
     ?assertEqual(true, is_allowed({[{collection, ["default",
                                                   ?SYSTEM_SCOPE_NAME,
                                                   "_mobile"]},
@@ -2130,7 +2172,7 @@ system_collections_read_permissions_test__() ->
       end, AllNames),
 
     %% mobile_sync_gateway can read from all system collections.
-    Roles = compile_roles([{mobile_sync_gateway,["test"]}], AllRoles),
+    Roles = compile_roles([{<<"mobile_sync_gateway">>, ["test"]}], AllRoles),
     ?assertEqual(true, is_allowed({[{collection,
                                      ["test", ?SYSTEM_SCOPE_NAME, "_mobile"]},
                                     data, docs], sread}, Roles)),
@@ -2167,13 +2209,13 @@ bucket_admin_check_default(Roles) ->
        true, is_allowed({[{bucket, "default"}, anything], anything}, Roles)).
 
 bucket_admin_test__() ->
-    Roles = compile_roles([{bucket_admin, ["default"]}], roles()),
+    Roles = compile_roles([{<<"bucket_admin">>, ["default"]}], roles()),
     bucket_admin_check_default(Roles),
     bucket_views_admin_check_another(Roles),
     bucket_views_admin_check_global(Roles).
 
 bucket_admin_wildcard_test__() ->
-    Roles = compile_roles([{bucket_admin, [any]}], roles()),
+    Roles = compile_roles([{<<"bucket_admin">>, [any]}], roles()),
     bucket_admin_check_default(Roles),
     bucket_views_admin_check_global(Roles).
 
@@ -2191,13 +2233,13 @@ views_admin_check_default(Roles) ->
     ?assertEqual(false, is_allowed({[{bucket, "default"}], read}, Roles)).
 
 views_admin_test__() ->
-    Roles = compile_roles([{views_admin, ["default"]}], roles()),
+    Roles = compile_roles([{<<"views_admin">>, ["default"]}], roles()),
     views_admin_check_default(Roles),
     bucket_views_admin_check_another(Roles),
     bucket_views_admin_check_global(Roles).
 
 views_admin_wildcard_test__() ->
-    Roles = compile_roles([{views_admin, [any]}], roles()),
+    Roles = compile_roles([{<<"views_admin">>, [any]}], roles()),
     views_admin_check_default(Roles),
     bucket_views_admin_check_global(Roles).
 
@@ -2209,14 +2251,14 @@ bucket_full_access_check(Roles, Bucket, Allowed) ->
     ?assertEqual(false, is_allowed({[{bucket, Bucket}], write}, Roles)).
 
 bucket_full_access_test__() ->
-    Roles = compile_roles([{bucket_full_access, ["default"]}], roles()),
+    Roles = compile_roles([{<<"bucket_full_access">>, ["default"]}], roles()),
     bucket_full_access_check(Roles, "default", true),
     bucket_full_access_check(Roles, "another", false),
     ?assertEqual(true, is_allowed({[pools], read}, Roles)),
     ?assertEqual(false, is_allowed({[another], read}, Roles)).
 
 replication_admin_test__() ->
-    Roles = compile_roles([replication_admin], roles()),
+    Roles = compile_roles([<<"replication_admin">>], roles()),
     ?assertEqual(true,
                  is_allowed({[{bucket, "default"}, xdcr], anything}, Roles)),
     ?assertEqual(false,
@@ -2251,11 +2293,11 @@ compile_and_assert(Role, Permissions, Params, Results) ->
         end, Permissions)).
 
 collection_roles_test_() ->
-    Roles = [{data_reader, [read, range_scan]},
-             {query_select, [read]},
-             {query_delete, [delete, range_scan]},
-             {query_update, [upsert, range_scan]},
-             {query_use_sequential_scans, [range_scan]}],
+    Roles = [{<<"data_reader">>, [read, range_scan]},
+             {<<"query_select">>, [read]},
+             {<<"query_delete">>, [delete, range_scan]},
+             {<<"query_update">>, [upsert, range_scan]},
+             {<<"query_use_sequential_scans">>, [range_scan]}],
 
     Permissions =
         fun (Role, Ops) ->
@@ -2268,7 +2310,7 @@ collection_roles_test_() ->
                           [{scope, ["default", "s2"]}, data, docs],
                           [{bucket, "default"}, data, docs]]] ++
                     [{[{bucket, "default"}, settings], read} ||
-                        Role =/= query_use_sequential_scans]
+                        Role =/= <<"query_use_sequential_scans">>]
         end,
 
     RolesWithPermissions = [{R, Permissions(R, Ops)} || {R, Ops} <- Roles],
@@ -2296,7 +2338,7 @@ collection_roles_test_() ->
 
     {setup, fun default_profile_test_setup/0,
      fun default_profile_test_teardown/1,
-     [{Title ++ ", role = " ++ atom_to_list(Role),
+     [{Title ++ ", role = " ++ binary_to_list(Role),
        fun () ->
                compile_and_assert(Role, Perm, Params,
                                   lists:sublist(Expected, length(Perm)))
@@ -2305,12 +2347,14 @@ collection_roles_test_() ->
          {Role, Perm} <- RolesWithPermissions]}.
 
 query_functions_test_() ->
-    Roles = [{query_manage_functions, [n1ql, udf], manage},
-             {query_execute_functions, [n1ql, udf], execute},
-             {query_manage_external_functions, [n1ql, udf_external], manage},
-             {query_execute_external_functions, [n1ql, udf_external], execute},
-             {query_manage_sequences, [n1ql, sequences], manage},
-             {query_use_sequences, [n1ql, sequences], execute}],
+    Roles = [{<<"query_manage_functions">>, [n1ql, udf], manage},
+             {<<"query_execute_functions">>, [n1ql, udf], execute},
+             {<<"query_manage_external_functions">>, [n1ql, udf_external],
+                 manage},
+             {<<"query_execute_external_functions">>, [n1ql, udf_external],
+                 execute},
+             {<<"query_manage_sequences">>, [n1ql, sequences], manage},
+             {<<"query_use_sequences">>, [n1ql, sequences], execute}],
 
     Sources = [{scope, ["default", "s"]},
                {scope, ["default", "s1"]},
@@ -2320,7 +2364,7 @@ query_functions_test_() ->
     Tests =
         lists:flatmap(
           fun ({Role, Object, Oper}) ->
-                  RoleStr = atom_to_list(Role),
+                  RoleStr = binary_to_list(Role),
                   Permissions = [{[S | Object], Oper} || S <- Sources],
                   Test =
                       ?cut(fun () ->
@@ -2348,7 +2392,7 @@ query_functions_test_() ->
      fun default_profile_test_teardown/1, Tests}.
 
 eventing_functions_test_() ->
-    Roles = [{eventing_manage_functions, [eventing, function], manage}],
+    Roles = [{<<"eventing_manage_functions">>, [eventing, function], manage}],
 
     Sources = [{scope, ["default", "s"]},
                {scope, ["default", "s1"]},
@@ -2357,7 +2401,7 @@ eventing_functions_test_() ->
     Tests =
         lists:flatmap(
           fun ({Role, Object, Oper}) ->
-                  RoleStr = atom_to_list(Role),
+                  RoleStr = binary_to_list(Role),
                   Permissions = [{[S | Object], Oper} || S <- Sources],
                   Test =
                     ?cut(fun () ->
@@ -2380,35 +2424,38 @@ eventing_functions_test_() ->
 
 validate_role_test__() ->
     ValidateRole = validate_role(_, roles(), toy_buckets()),
-    ?assertEqual({ok, admin}, ValidateRole(admin)),
-    ?assertEqual({ok, {bucket_admin, [{"test", <<"test_id">>}]}},
-                 ValidateRole({bucket_admin, ["test"]})),
-    ?assertEqual({ok, {views_admin, [any]}},
-                 ValidateRole({views_admin, [any]})),
-    ?assertEqual(false, ValidateRole(something)),
-    ?assertEqual(false, ValidateRole({bucket_admin, ["something"]})),
-    ?assertEqual(false, ValidateRole({something, ["test"]})),
-    ?assertEqual(false, ValidateRole({admin, ["test"]})),
-    ?assertEqual(false, ValidateRole(bucket_admin)),
-    ?assertEqual(false, ValidateRole({bucket_admin, ["test", "test"]})),
-    ?assertEqual(false, ValidateRole({data_reader, ["default"]})),
-    ?assertEqual(false, ValidateRole({data_reader, ["default", "s"]})),
+    ?assertEqual({ok, <<"admin">>}, ValidateRole(<<"admin">>)),
+    ?assertEqual({ok, {<<"bucket_admin">>, [{"test", <<"test_id">>}]}},
+                 ValidateRole({<<"bucket_admin">>, ["test"]})),
+    ?assertEqual({ok, {<<"views_admin">>, [any]}},
+                 ValidateRole({<<"views_admin">>, [any]})),
+    ?assertEqual(false, ValidateRole(<<"something">>)),
+    ?assertEqual(false, ValidateRole({<<"bucket_admin">>, ["something"]})),
+    ?assertEqual(false, ValidateRole({<<"something">>, ["test"]})),
+    ?assertEqual(false, ValidateRole({<<"admin">>, ["test"]})),
+    ?assertEqual(false, ValidateRole(<<"bucket_admin">>)),
+    ?assertEqual(false, ValidateRole({<<"bucket_admin">>, ["test", "test"]})),
+    ?assertEqual(false, ValidateRole({<<"data_reader">>, ["default"]})),
+    ?assertEqual(false, ValidateRole({<<"data_reader">>, ["default", "s"]})),
     DataReader =
-        {data_reader, [{"default", <<"default_id">>}, {"s", 1}, {"c", 1}]},
+        {<<"data_reader">>,
+            [{"default", <<"default_id">>}, {"s", 1}, {"c", 1}]},
     ?assertEqual({ok, DataReader},
-                 ValidateRole({data_reader, ["default", "s", "c"]})),
-    ?assertEqual(false, ValidateRole({data_reader, ["default", "s", "d"]})),
+                 ValidateRole({<<"data_reader">>, ["default", "s", "c"]})),
+    ?assertEqual(false, ValidateRole({<<"data_reader">>,
+        ["default", "s", "d"]})),
     ?assertEqual({ok, DataReader}, ValidateRole(DataReader)),
     ?assertEqual(false, ValidateRole(
-                          {data_reader,
+                          {<<"data_reader">>,
                            [{"default", <<"test_id">>}, {"s", 1}, {"c", 2}]})),
-    QMF = {query_manage_functions, [{"default", <<"default_id">>}, {"s", 1}]},
+    QMF = {<<"query_manage_functions">>,
+        [{"default", <<"default_id">>}, {"s", 1}]},
     ?assertEqual({ok, QMF}, ValidateRole(QMF)),
-    ?assertEqual({ok, QMF}, ValidateRole({query_manage_functions,
+    ?assertEqual({ok, QMF}, ValidateRole({<<"query_manage_functions">>,
                                           ["default", "s"]})),
-    ?assertEqual(false, ValidateRole({query_manage_functions,
+    ?assertEqual(false, ValidateRole({<<"query_manage_functions">>,
                                       [{"default", <<"test_id">>}, {"s", 1}]})),
-    ?assertEqual(false, ValidateRole({query_manage_functions,
+    ?assertEqual(false, ValidateRole({<<"query_manage_functions">>,
                                       [{"default", <<"default_id">>},
                                        {"s", 2}]})).
 
@@ -2439,106 +2486,110 @@ produce_roles_by_permission_test__() ->
     DefaultBucket = {"default", <<"default_id">>},
 
     [{"security permission",
-      Test([admin, security_admin, ro_security_admin],
+      Test([<<"admin">>, <<"security_admin">>, <<"ro_security_admin">>],
            {[admin, security], any})},
      {"admin security permission (read)",
-      Test([admin, ro_security_admin],
+      Test([<<"admin">>, <<"ro_security_admin">>],
            {[admin, security, admin], read})},
      {"admin security permission (write)",
-      Test([admin],
+      Test([<<"admin">>],
            {[admin, security, admin], write})},
      {"users permission",
-      Test([admin, user_admin_local, user_admin_external,
-            security_admin, ro_security_admin],
+      Test([<<"admin">>, <<"user_admin_local">>, <<"user_admin_external">>,
+            <<"security_admin">>, <<"ro_security_admin">>],
            {[admin, users], any})},
      {"security_info permission",
-      Test([user_admin_local, user_admin_external, admin, ro_security_admin,
-            security_admin],
+      Test([<<"user_admin_local">>, <<"user_admin_external">>, <<"admin">>,
+            <<"ro_security_admin">>, <<"security_admin">>],
            {[admin, security_info], read})},
      {"pools read",
       fun () ->
               Roles = GetRoles({[pools], read}),
               ?assertListsEqual(
                  [],
-                 [admin, analytics_reader,
-                  {data_reader, [any, any, any]}] -- Roles)
+                 [<<"admin">>, <<"analytics_reader">>,
+                  {<<"data_reader">>, [any, any, any]}] -- Roles)
       end},
      {"bucket settings read",
-      Test([admin, cluster_admin, query_external_access, query_system_catalog,
-            replication_admin, ro_admin, security_admin, user_admin_local,
-            user_admin_external, eventing_admin, backup_admin,
-            ro_security_admin] ++
-               enum_roles([bucket_full_access, bucket_admin, views_admin,
-                           data_backup, data_dcp_reader,
-                           data_monitoring, data_writer, data_reader,
-                           fts_admin, fts_searcher, query_delete,
-                           query_insert, query_manage_index,
-                           query_list_index, query_select,
-                           query_update, replication_target,
-                           mobile_sync_gateway],
+      Test([<<"admin">>, <<"cluster_admin">>, <<"query_external_access">>,
+            <<"query_system_catalog">>, <<"replication_admin">>, <<"ro_admin">>,
+            <<"security_admin">>, <<"user_admin_local">>,
+            <<"user_admin_external">>, <<"eventing_admin">>, <<"backup_admin">>,
+            <<"ro_security_admin">>] ++
+               enum_roles([<<"bucket_full_access">>, <<"bucket_admin">>,
+                           <<"views_admin">>, <<"data_backup">>,
+                           <<"data_dcp_reader">>, <<"data_monitoring">>,
+                           <<"data_writer">>, <<"data_reader">>,
+                           <<"fts_admin">>, <<"fts_searcher">>,
+                           <<"query_delete">>, <<"query_insert">>,
+                           <<"query_manage_index">>, <<"query_list_index">>,
+                           <<"query_select">>, <<"query_update">>,
+                           <<"replication_target">>, <<"mobile_sync_gateway">>],
                           [[any], [TestBucket]]),
            {[{bucket, "test"}, settings], read})},
      {"docs insert for bucket",
-      Test([admin, eventing_admin, backup_admin] ++
-               enum_roles([bucket_full_access, data_backup, data_writer,
-                           mobile_sync_gateway, query_insert],
+      Test([<<"admin">>, <<"eventing_admin">>, <<"backup_admin">>] ++
+               enum_roles([<<"bucket_full_access">>, <<"data_backup">>,
+                           <<"data_writer">>, <<"mobile_sync_gateway">>,
+                           <<"query_insert">>],
                           [[any], [TestBucket]]),
            {[{bucket, "test"}, data, docs], insert})},
      {"docs insert for wrong bucket",
-      Test([admin, eventing_admin, backup_admin] ++
-               enum_roles([bucket_full_access, data_backup, data_writer,
-                           mobile_sync_gateway, query_insert],
-                          [[any]]),
+      Test([<<"admin">>, <<"eventing_admin">>, <<"backup_admin">>] ++
+               enum_roles([<<"bucket_full_access">>, <<"data_backup">>,
+                           <<"data_writer">>, <<"mobile_sync_gateway">>,
+                           <<"query_insert">>], [[any]]),
            {[{bucket, "wrong"}, data, docs], insert})},
      {"docs insert for collection",
-      Test([admin, eventing_admin, backup_admin] ++
-               enum_roles([bucket_full_access, data_backup, data_writer,
-                           mobile_sync_gateway, query_insert],
-                          [[any], [DefaultBucket]]) ++
-               enum_roles([data_writer, query_insert],
+      Test([<<"admin">>, <<"eventing_admin">>, <<"backup_admin">>] ++
+               enum_roles([<<"bucket_full_access">>, <<"data_backup">>,
+                           <<"data_writer">>, <<"mobile_sync_gateway">>,
+                           <<"query_insert">>], [[any], [DefaultBucket]]) ++
+               enum_roles([<<"data_writer">>, <<"query_insert">>],
                           [[DefaultBucket, {"s", 1}]]) ++
-               enum_roles([data_writer, query_insert],
+               enum_roles([<<"data_writer">>, <<"query_insert">>],
                           [[DefaultBucket, {"s", 1}, {"c", 1}]]),
            {[{collection, ["default", "s", "c"]}, data, docs], insert})},
      {"docs insert for wrong collection",
-      Test([admin, eventing_admin, backup_admin] ++
-               enum_roles([bucket_full_access, data_backup, data_writer,
-                           mobile_sync_gateway, query_insert],
-                          [[any], [DefaultBucket]]) ++
-               enum_roles([data_writer, query_insert],
+      Test([<<"admin">>, <<"eventing_admin">>, <<"backup_admin">>] ++
+               enum_roles([<<"bucket_full_access">>, <<"data_backup">>,
+                           <<"data_writer">>, <<"mobile_sync_gateway">>,
+                           <<"query_insert">>], [[any], [DefaultBucket]]) ++
+               enum_roles([<<"data_writer">>, <<"query_insert">>],
                           [[DefaultBucket, {"s", 1}]]),
            {[{collection, ["default", "s", "w"]}, data, docs], insert})},
      {"docs insert for scope",
-      Test([admin, eventing_admin, backup_admin] ++
-               enum_roles([bucket_full_access, data_backup, data_writer,
-                           mobile_sync_gateway, query_insert],
+      Test([<<"admin">>, <<"eventing_admin">>, <<"backup_admin">>] ++
+               enum_roles([<<"bucket_full_access">>, <<"data_backup">>,
+                           <<"data_writer">>, <<"mobile_sync_gateway">>,
+                           <<"query_insert">>],
                           [[any], [DefaultBucket]]) ++
-               enum_roles([data_writer, query_insert],
+               enum_roles([<<"data_writer">>, <<"query_insert">>],
                           [[DefaultBucket, {"s", 1}]]),
            {[{scope, ["default", "s"]}, data, docs], insert})},
      {"docs insert for wrong scope",
-      Test([admin, eventing_admin, backup_admin] ++
-               enum_roles([bucket_full_access, data_backup, data_writer,
-                           mobile_sync_gateway, query_insert],
-                          [[any], [DefaultBucket]]),
+      Test([<<"admin">>, <<"eventing_admin">>, <<"backup_admin">>] ++
+               enum_roles([<<"bucket_full_access">>, <<"data_backup">>,
+                           <<"data_writer">>, <<"mobile_sync_gateway">>,
+                           <<"query_insert">>], [[any], [DefaultBucket]]),
            {[{scope, ["default", "w"]}, data, docs], insert})},
      {"any bucket",
-      Test([admin, eventing_admin, backup_admin] ++
-               enum_roles([bucket_full_access, data_backup, data_writer,
-                           mobile_sync_gateway, query_insert],
-                          [[any]]),
+      Test([<<"admin">>, <<"eventing_admin">>, <<"backup_admin">>] ++
+               enum_roles([<<"bucket_full_access">>, <<"data_backup">>,
+                           <<"data_writer">>, <<"mobile_sync_gateway">>,
+                           <<"query_insert">>], [[any]]),
            {[{bucket, any}, data, docs], insert})},
      {"wrong bucket",
-      Test([admin, eventing_admin, backup_admin] ++
-               enum_roles([bucket_full_access, data_backup, data_writer,
-                           mobile_sync_gateway, query_insert],
-                          [[any]]),
+      Test([<<"admin">>, <<"eventing_admin">>, <<"backup_admin">>] ++
+               enum_roles([<<"bucket_full_access">>, <<"data_backup">>,
+                           <<"data_writer">>, <<"mobile_sync_gateway">>,
+                           <<"query_insert">>], [[any]]),
            {[{bucket, "wrong"}, data, docs], insert})},
      {"read indexes",
-      Test([admin, ro_admin, backup_admin, eventing_admin] ++
-               enum_roles([bucket_full_access,
-                           mobile_sync_gateway, query_list_index,
-                           query_manage_index],
+      Test([<<"admin">>, <<"ro_admin">>, <<"backup_admin">>,
+            <<"eventing_admin">>] ++
+               enum_roles([<<"bucket_full_access">>, <<"mobile_sync_gateway">>,
+                           <<"query_list_index">>, <<"query_manage_index">>],
                           [[any]]),
            {[{bucket, any}, n1ql, index], read})}].
 
@@ -2575,7 +2626,7 @@ params_version_test__() ->
 
 validate_test_roles(Roles) ->
     lists:foreach(
-      fun ({Name, Params, Desc, Permissions}) when is_atom(Name),
+      fun ({Name, Params, Desc, Permissions}) when is_binary(Name),
                                                    is_list(Params),
                                                    is_list(Desc),
                                                    is_list(Permissions) ->
@@ -2611,14 +2662,14 @@ roles_pre_totoro_format_test__() ->
     validate_test_roles(menelaus_old_roles:roles_pre_totoro()).
 
 extended_roles_test__() ->
-    MyRoles = [{superman, [],
+    MyRoles = [{<<"superman">>, [],
                 [{name, <<"Superman">>},
                  {folder, admin},
                  {desc, <<"Able to leap tall buildings in a single bound!">>},
                  {ce, true}],
                 [{[admin, security_info], none},
                  {[], all}]},
-               {analytics_select, [],
+               {<<"analytics_select">>, [],
                 [{name, <<"Analytics Select">>},
                  {folder, analytics},
                  {desc, <<"This user can access the web console.">>}],
@@ -2629,10 +2680,10 @@ extended_roles_test__() ->
                          {extra_roles, MyRoles}]
                 end),
     validate_test_roles(roles()),
-    Roles = compile_roles([superman], roles()),
+    Roles = compile_roles([<<"superman">>], roles()),
     ?assertEqual(true, is_allowed({[anything], access}, Roles)),
     ?assertEqual(false, is_allowed({[admin, security_info], read}, Roles)),
-    Roles2 = compile_roles([analytics_select], roles()),
+    Roles2 = compile_roles([<<"analytics_select">>], roles()),
     ?assertEqual(true, is_allowed({[ui], read}, Roles2)),
     ?assertEqual(false, is_allowed({[pools], read}, Roles2)).
 
@@ -2823,7 +2874,7 @@ simple_custom_roles_test__() ->
     ok = set_role({<<"simple_role">>, [], [{mutable, true}], SimpleRole}),
     Roles = compile_roles([<<"simple_role">>,
                            <<"wrong_role">>,
-                           {scope_admin, ["default", "s1"]}],
+                           {<<"scope_admin">>, ["default", "s1"]}],
                           roles()),
     ?assertEqual([SimpleRole,
                   [{[{collection, ["default", "s1", any]}, collections], all}]],
@@ -2849,7 +2900,7 @@ simple_custom_roles_test__() ->
                                    Roles)),
 
     ?assertEqual({error, not_found}, delete_role(<<"unknown_id">>)),
-    ?assertEqual({error, immutable}, delete_role(admin)),
+    ?assertEqual({error, immutable}, delete_role(<<"admin">>)),
     ?assertEqual(ok, delete_role(<<"simple_role">>)).
 
 complex_custom_roles_test__() ->
@@ -2937,7 +2988,7 @@ analytics_admin_empty_profile_test_() ->
              fake_chronicle_kv:teardown()
      end,
      [fun () ->
-              Roles = compile_roles([analytics_admin], roles()),
+              Roles = compile_roles([<<"analytics_admin">>], roles()),
               ?assertEqual(true,
                            is_allowed(
                              {[{bucket, "foobar"}, analytics], manage}, Roles)),
@@ -2945,13 +2996,13 @@ analytics_admin_empty_profile_test_() ->
       end]}.
 
 analytics_access_test__() ->
-    Roles = compile_roles([analytics_access], roles()),
+    Roles = compile_roles([<<"analytics_access">>], roles()),
     ?assertEqual(true, is_allowed({[analytics], access}, Roles)),
     ?assertEqual(false, is_allowed(
                           {[admin, settings, metrics], any}, Roles)).
 
 analytics_admin_test__() ->
-    Roles = compile_roles([analytics_admin], roles()),
+    Roles = compile_roles([<<"analytics_admin">>], roles()),
     ?assertEqual(false,
                  is_allowed(
                    {[{bucket, "foobar"}, analytics], manage}, Roles)),

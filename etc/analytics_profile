@@ -13,7 +13,7 @@
 {{cbas, max_storage_partitions}, 1024}.
 {fixed_services, [kv, cbas]}.
 {max_buckets_supported, 0}.
-{extra_roles, [{analytics_admin, [],
+{extra_roles, [{<<"analytics_admin">>, [],
      [{name, <<"Enterprise Analytics Admin">>},
       {folder, admin},
       {desc, <<"Can access Enterprise Analytics service administrative APIs "
@@ -23,7 +23,7 @@
        {[ui], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {analytics_access, [],
+     {<<"analytics_access">>, [],
       [{name, <<"Enterprise Analytics Access">>},
        {folder, analytics},
        {desc, <<"Provides access to Enterprise Analytics metadata required "

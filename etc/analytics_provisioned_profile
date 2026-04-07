@@ -24,7 +24,7 @@
       128}]}.
 {fixed_services, [kv, cbas]}.
 {max_buckets_supported, 0}.
-{extra_roles, [{analytics_admin, [],
+{extra_roles, [{<<"analytics_admin">>, [],
      [{name, <<"Enterprise Analytics Admin">>},
       {folder, admin},
       {desc, <<"Can access Enterprise Analytics administrative APIs (i.e. "
@@ -34,7 +34,7 @@
        {[ui], [read]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
-     {analytics_access, [],
+     {<<"analytics_access">>, [],
       [{name, <<"Enterprise Analytics Access">>},
        {folder, analytics},
        {desc, <<"Provides access to Enterprise Analytics metadata required "
@@ -47,7 +47,7 @@
      %% the `analytics_reader` role to be removed in a future release, keeping
      %% here to avoid requiring control plane updates to grant Capella
      %% Analytics users the new analytics_access role in the near term.
-     {analytics_reader, [],
+     {<<"analytics_reader">>, [],
       [{name, <<"Enterprise Analytics Reader">>},
        {folder, analytics},
        {desc, <<"Provides access to Enterprise Analytics metadata required "

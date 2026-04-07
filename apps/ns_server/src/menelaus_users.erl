@@ -33,6 +33,7 @@
          get_roles/1,
          maybe_upgrade_user_roles/2,
          maybe_upgrade_roles_for_restore/2,
+         convert_roles_from_atom_to_binary/2,
          get_user_name/1,
          get_users_version/0,
          get_auth_version/0,
@@ -608,7 +609,10 @@ prepare_store_user(Snapshot, CanOverwrite, {{_, Domain} = Identity, Props}) ->
 
             UserProps2 =
                 case menelaus_roles:validate_roles(Roles, public, Snapshot) of
-                    {NewRoles, []} -> [{roles, NewRoles} | UserProps];
+                    {NewRoles, []} ->
+                        [{roles,
+                          menelaus_roles:map_roles_for_compat(NewRoles)} |
+                         UserProps];
                     {_, BadRoles} ->
                         throw({error, {roles_validation, BadRoles}})
                 end,
@@ -1012,9 +1016,10 @@ store_group(Identity, Description, Roles, LDAPGroup) ->
     Snapshot = ns_bucket:get_snapshot(all, [collections, uuid]),
     case menelaus_roles:validate_roles(Roles, public, Snapshot) of
         {NewRoles, []} ->
+            NewRoles1 = menelaus_roles:map_roles_for_compat(NewRoles),
             Props = [{description, Description} || Description =/= undefined] ++
                     [{ldap_group_ref, LDAPGroup} || LDAPGroup =/= undefined] ++
-                    [{roles, NewRoles}],
+                    [{roles, NewRoles1}],
             ok = replicated_dets:set(storage_name(), {group, Identity}, Props),
             ok;
         {_, BadRoles} ->
@@ -1101,16 +1106,19 @@ make_group_props(Props, Items, {_, _, Definitions, Snapshot}) ->
     lists:map(
       fun (roles = Name) ->
               Roles = proplists:get_value(roles, Props, []),
+              Roles1 = lists:map(fun menelaus_roles:old_role_to_new/1,
+                                 Roles),
               Roles2 = menelaus_roles:filter_out_invalid_roles(
-                         Roles, Definitions, Snapshot),
+                         Roles1, Definitions, Snapshot),
               {Name, Roles2};
           (Name) ->
               {Name, proplists:get_value(Name, Props)}
       end, Items).
 
 get_user_roles(UserProps, Definitions, Snapshot) ->
-    menelaus_roles:filter_out_invalid_roles(
-      proplists:get_value(roles, UserProps, []), Definitions, Snapshot).
+    Roles0 = proplists:get_value(roles, UserProps, []),
+    Roles1 = lists:map(fun menelaus_roles:old_role_to_new/1, Roles0),
+    menelaus_roles:filter_out_invalid_roles(Roles1, Definitions, Snapshot).
 
 clean_groups({DirtyLocalGroups, DirtyExtGroups}) ->
     {lists:filter(group_exists(_), DirtyLocalGroups),
@@ -1379,9 +1387,27 @@ upgrade_props(?VERSION_79, UserOrGroup, UserProps)
                          [maybe_substitute_7_9_user_roles(_)])};
 upgrade_props(?VERSION_TOTORO, UserOrGroup, Props)
                             when UserOrGroup == user; UserOrGroup == group ->
-    {ok, maybe_add_ui_access_role(Props)};
+    {ok, functools:chain(Props,
+                         [convert_roles_from_atom_to_binary(roles, _),
+                          maybe_add_ui_access_role(_)])};
 upgrade_props(_Vsn, _RecType, _Props) ->
     skip.
+
+convert_roles_from_atom_to_binary(Key, Props) ->
+    ReplaceAtomWithBinary =
+        fun (RoleAtom) when is_atom(RoleAtom) ->
+                atom_to_binary(RoleAtom);
+            ({RoleAtom, Params}) when is_atom(RoleAtom) ->
+                {atom_to_binary(RoleAtom), Params};
+            (RoleBinary) when is_binary(RoleBinary) ->
+                RoleBinary;
+            ({RoleBinary, _} = Role) when is_binary(RoleBinary) ->
+                Role
+        end,
+    case misc:key_update(Key, Props, lists:map(ReplaceAtomWithBinary, _)) of
+        false -> Props;
+        NewProps -> NewProps
+    end.
 
 maybe_add_ui_access_role(Props) ->
     AllUIRoles = menelaus_old_roles:pre_totoro_ui_roles(),
@@ -1390,11 +1416,11 @@ maybe_add_ui_access_role(Props) ->
                       end,
     MaybeAddUIRole = fun (Roles) ->
                          ShouldAdd = lists:any(ShouldAddUIRole, Roles) andalso
-                                     not lists:member(ui_access, Roles),
-                         case ShouldAdd of
+                                 not lists:member(<<"ui_access">>, Roles),
+                             case ShouldAdd of
                              true ->
-                                [ui_access | Roles];
-                             false ->
+                                     [<<"ui_access">> | Roles];
+                                 false ->
                                 Roles
                          end
                      end,
@@ -1434,7 +1460,7 @@ maybe_substitute_7_9_roles_helper(Roles) ->
                          [ro_admin, ro_security_admin];
                      (Role) ->
                          [Role]
-                 end, Roles),
+                 end, menelaus_roles:map_roles_for_compat(Roles, ?VERSION_79)),
     lists:usort(NewRoles).
 
 get_rid_of_plain_key(Auth) ->
@@ -1498,7 +1524,7 @@ upgrade_test_() ->
             fun () ->
                 Props = get_props_raw(Type, User),
                 Roles = proplists:get_value(roles, Props, []),
-                ?assertEqual(ShouldHaveUIRole, lists:member(ui_access, Roles))
+                    ?assertEqual(ShouldHaveUIRole, lists:member(<<"ui_access">>, Roles))
             end
         end,
 
@@ -1566,22 +1592,22 @@ upgrade_test_() ->
                       [ro_admin, ro_security_admin])]),
       Test(?VERSION_79,
            [{{user, {"unchanged-admin", local}},
-            [{roles, [eventing_admin]}]}],
+             [{roles, [eventing_admin]}]}],
            [CheckUser("unchanged-admin", roles,
                       [eventing_admin])]),
       Test(?VERSION_TOTORO,
            [{{user, {"u1", local}}, []},
             {{user, {"u2", local}}, [{roles, []}]},
-            {{user, {"u3", local}}, [{roles, [admin]}]},
-            {{user, {"u4", local}}, [{roles, [ro_admin]}]},
+            {{user, {"u3", local}}, [{roles, [<<"admin">>]}]},
+            {{user, {"u4", local}}, [{roles, [<<"ro_admin">>]}]},
             {{user, {"u5", external}}, []},
             {{user, {"u6", external}}, [{roles, []}]},
-            {{user, {"u7", external}}, [{roles, [admin]}]},
-            {{user, {"u8", external}}, [{roles, [ro_admin]}]},
+            {{user, {"u7", external}}, [{roles, [<<"admin">>]}]},
+            {{user, {"u8", external}}, [{roles, [<<"ro_admin">>]}]},
             {{group, "g1"}, []},
             {{group, "g2"}, [{roles, []}]},
-            {{group, "g3"}, [{roles, [admin]}]},
-            {{group, "g4"}, [{roles, [ro_admin]}]}],
+            {{group, "g3"}, [{roles, [<<"admin">>]}]},
+            {{group, "g4"}, [{roles, [<<"ro_admin">>]}]}],
            [CheckUIAccessRole(user, {"u1", local}, false),
             CheckUIAccessRole(user, {"u2", local}, false),
             CheckUIAccessRole(user, {"u3", local}, false),

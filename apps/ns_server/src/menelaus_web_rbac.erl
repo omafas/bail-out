@@ -191,9 +191,9 @@ strip_id(P) ->
 strip_ids(Params) ->
     lists:map(fun strip_id/1, Params).
 
-role_to_json(Name) when is_atom(Name); is_binary(Name) ->
+role_to_json(Name) when is_binary(Name) ->
     [{role, Name}];
-role_to_json({Name, Params}) ->
+role_to_json({Name, Params}) when is_binary(Name) ->
     Definitions = menelaus_roles:get_definitions(public),
     [{role, Name} |
      [{Param, jsonify_param(Value)} ||
@@ -875,9 +875,7 @@ parse_role_name(RoleStr, Definitions) ->
     RoleBinary = string_to_role(RoleStr),
     case lists:keyfind(RoleBinary, 1, Definitions) of
         false ->
-            try binary_to_existing_atom(RoleBinary)
-            catch error:badarg -> {error, RoleStr}
-            end;
+            {error, RoleStr};
         _ ->
             RoleBinary
     end.
@@ -891,9 +889,9 @@ get_num_params(Role, Definitions) ->
     end.
 
 adjust_role(Role, Params, Definitions) ->
-    RoleName = parse_role_name(Role, Definitions),
+    RoleBinary = string_to_role(Role),
     AdjustedParams =
-        case get_num_params(RoleName, Definitions) of
+        case get_num_params(RoleBinary, Definitions) of
             I when is_integer(I),
                    I >= length(Params) ->
                 misc:align_list(Params, I, any);
@@ -902,13 +900,13 @@ adjust_role(Role, Params, Definitions) ->
                 %% in validate_roles
                 Params
         end,
-    {RoleName, AdjustedParams}.
+    {RoleBinary, AdjustedParams}.
 
 parse_role(RoleRaw, Definitions) ->
     try
         case parse_until(RoleRaw, "[") of
             {Role, []} ->
-                parse_role_name(Role, Definitions);
+                string_to_role(Role);
             {Role, "[*]"} ->
                 adjust_role(Role, [any], Definitions);
             {Role, [$[ | ParamAndBracket]} ->
@@ -938,18 +936,14 @@ params_to_string([any | Rest]) ->
 params_to_string(Params) ->
     lists:flatten(lists:join(":", strip_ids(lists:reverse(Params)))).
 
-role_to_binary(Role) when is_atom(Role) ->
-    atom_to_binary(Role);
 role_to_binary(Role) when is_binary(Role) ->
     Role;
 role_to_binary({_, _} = Role) ->
     list_to_binary(role_to_string(Role)).
 
-role_to_string(Role) when is_atom(Role) ->
-    atom_to_list(Role);
 role_to_string(Role) when is_binary(Role) ->
     binary_to_list(Role);
-role_to_string({Role, Params}) ->
+role_to_string({Role, Params}) when is_binary(Role) ->
     lists:flatten(
             io_lib:format(
                     "~s[~s]",
@@ -3327,14 +3321,14 @@ custom_role_to_json({Name, [], Props, Permissions}) ->
 
 -ifdef(TEST).
 role_to_string_test() ->
-    ?assertEqual("role", role_to_string(role)),
-    ?assertEqual("role[b]", role_to_string({role, [{"b", 0}]})),
-    ?assertEqual("role[*]", role_to_string({role, [any]})),
+    ?assertEqual("role", role_to_string(<<"role">>)),
+    ?assertEqual("role[b]", role_to_string({<<"role">>, [{"b", 0}]})),
+    ?assertEqual("role[*]", role_to_string({<<"role">>, [any]})),
     ?assertEqual("role[b:s:c]",
-                 role_to_string({role, [{"b", 0}, {"s", 1}, {"c", 2}]})),
+                 role_to_string({<<"role">>, [{"b", 0}, {"s", 1}, {"c", 2}]})),
     ?assertEqual("role[b:s]",
-                 role_to_string({role, [{"b", 0}, {"s", 1}, any]})),
-    ?assertEqual("role[b]", role_to_string({role, [{"b", 0}, any, any]})).
+                 role_to_string({<<"role">>, [{"b", 0}, {"s", 1}, any]})),
+    ?assertEqual("role[b]", role_to_string({<<"role">>, [{"b", 0}, any, any]})).
 
 t_wrap(Tests) ->
     {foreach,
@@ -3358,23 +3352,23 @@ role_to_json_test_() ->
     t_wrap(
       [{"role to json",
         fun () ->
-                Test([{role, admin}], admin),
-                Test([{role, bucket_admin}, {bucket_name, <<"*">>}],
-                     {bucket_admin, [any]}),
-                Test([{role, bucket_admin}, {bucket_name, <<"test">>}],
-                     {bucket_admin, ["test"]}),
-                Test([{role, data_reader}, {bucket_name, <<"*">>},
+                Test([{role, <<"admin">>}], <<"admin">>),
+                Test([{role, <<"bucket_admin">>}, {bucket_name, <<"*">>}],
+                     {<<"bucket_admin">>, [any]}),
+                Test([{role, <<"bucket_admin">>}, {bucket_name, <<"test">>}],
+                     {<<"bucket_admin">>, ["test"]}),
+                Test([{role, <<"data_reader">>}, {bucket_name, <<"*">>},
                       {scope_name, <<"*">>}, {collection_name, <<"*">>}],
-                     {data_reader, [any, any, any]}),
-                Test([{role, data_reader}, {bucket_name, <<"test">>},
+                     {<<"data_reader">>, [any, any, any]}),
+                Test([{role, <<"data_reader">>}, {bucket_name, <<"test">>},
                       {scope_name, <<"*">>}, {collection_name, <<"*">>}],
-                     {data_reader, ["test", any, any]}),
-                Test([{role, data_reader}, {bucket_name, <<"test">>},
+                     {<<"data_reader">>, ["test", any, any]}),
+                Test([{role, <<"data_reader">>}, {bucket_name, <<"test">>},
                       {scope_name, <<"s">>}, {collection_name, <<"*">>}],
-                     {data_reader, ["test", "s", any]}),
-                Test([{role, data_reader}, {bucket_name, <<"test">>},
+                     {<<"data_reader">>, ["test", "s", any]}),
+                Test([{role, <<"data_reader">>}, {bucket_name, <<"test">>},
                       {scope_name, <<"s">>}, {collection_name, <<"c">>}],
-                     {data_reader, ["test", "s", "c"]})
+                     {<<"data_reader">>, ["test", "s", "c"]})
         end}]).
 
 parse_roles_test_() ->
@@ -3382,11 +3376,12 @@ parse_roles_test_() ->
       [{"without collections",
         fun () ->
                 ?assertEqual(
-                   [admin,
-                    {bucket_admin, ["test.test"]},
-                    {bucket_admin, [any]},
+                   [<<"admin">>,
+                    {<<"bucket_admin">>, ["test.test"]},
+                    {<<"bucket_admin">>, [any]},
                     {error, "bucket_admin[]"},
-                    {error, "no_such_atom"},
+                    %% With custom roles, we don't need an existing atom
+                    <<"no_such_atom">>,
                     {error, "bucket_admin[default"}],
                    parse_roles("admin, bucket_admin[test.test], "
                                "bucket_admin[*], bucket_admin[],"
@@ -3395,13 +3390,13 @@ parse_roles_test_() ->
        {"with collections",
         fun () ->
                 ?assertEqual(
-                   [{data_reader, [any, any, any]},
-                    {data_reader, ["test", any, any]},
-                    {data_reader, ["test", "s", any]},
-                    {data_reader, ["test", "s", "c"]},
-                    {data_reader, ["test", "s", "c", "c", "c"]},
-                    {bucket_admin, ["test", "s"]},
-                    {data_reader, ["", "", ""]}],
+                   [{<<"data_reader">>, [any, any, any]},
+                    {<<"data_reader">>, ["test", any, any]},
+                    {<<"data_reader">>, ["test", "s", any]},
+                    {<<"data_reader">>, ["test", "s", "c"]},
+                    {<<"data_reader">>, ["test", "s", "c", "c", "c"]},
+                    {<<"bucket_admin">>, ["test", "s"]},
+                    {<<"data_reader">>, ["", "", ""]}],
                    parse_roles("data_reader[*], data_reader[test], "
                                "data_reader[test:s], data_reader[test:s:c], "
                                "data_reader[test:s:c:c:c], "
