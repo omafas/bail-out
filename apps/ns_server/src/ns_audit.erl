@@ -591,8 +591,6 @@ format_iso8601({{YYYY, MM, DD}, {Hour, Min, Sec}}, Microsecs, Offset) ->
 
 convert_domain(admin) ->
     builtin;
-convert_domain(ro_admin) ->
-    builtin;
 convert_domain(local_token) ->
     builtin;
 convert_domain(bucket) ->
