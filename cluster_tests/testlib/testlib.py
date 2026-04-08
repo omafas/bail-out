@@ -1065,6 +1065,17 @@ def get_escript_path():
     return p
 
 
+def get_erl_path():
+    p = get_utility_path('erl')
+    if not os.path.exists(p):
+        # no erl in project's ./bin
+        # try using erl from $PATH
+        p = shutil.which('erl')
+        if p is None:
+            raise RuntimeError("erl not found")
+    return p
+
+
 def get_ns_server_dir():
     return NS_SERVER_DIR
 
@@ -1083,6 +1094,11 @@ def get_scripts_dir():
 
 def get_etc_dir():
     return os.path.join(NS_SERVER_DIR, 'etc')
+
+
+def get_app_ebin_dir(app_name):
+    return os.path.join(get_ns_server_dir(), "_build", "default", "lib",
+                        app_name, "ebin")
 
 
 def print_wrapped(str_to_print, indent=0, suffix="", max_width=None,

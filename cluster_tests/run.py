@@ -234,6 +234,57 @@ def scan_modules_for_coverage():
     return sorted_modules
 
 
+def verify_native_coverage_support():
+    """Verify that the server was compiled with native coverage support."""
+    testlib.maybe_print("Checking for native coverage support...")
+    beam_file = os.path.join(testlib.get_app_ebin_dir("ns_server"),
+                             "ns_server.beam")
+
+    if not os.path.exists(beam_file):
+        error_exit(f"Could not find {beam_file}. "
+                   "Make sure the project is compiled.")
+
+    erl_path = testlib.get_erl_path()
+    # Erlang snippet to check for coverage support and 'line_coverage'
+    check_script = f"""
+    case code:coverage_support() of
+        true ->
+            case beam_lib:chunks("{beam_file}", [compile_info]) of
+                {{ok, {{ns_server, [{{compile_info, Info}}]}}}} ->
+                    Options = proplists:get_value(options, Info, []),
+                    case lists:member(line_coverage, Options) of
+                        true ->
+                            halt(0);
+                        false ->
+                            io:format("The server was not compiled with "
+                                      "native coverage support. Please "
+                                      "re-compile with "
+                                      "CB_CODE_COVERAGE_ENABLED=true "
+                                      "environment variable."),
+                            halt(1)
+                    end;
+                Error ->
+                    io:format("Error reading beam file: ~p", [Error]),
+                    halt(2)
+            end;
+        false ->
+            io:format("The Erlang VM does not support native coverage "
+                      "(JIT is disabled)."),
+            halt(3)
+    end,
+    halt().
+    """
+
+    try:
+        # Use erl -noshell -eval as it is more reliable for inline snippets
+        result = subprocess.run([erl_path, "-noshell", "-eval", check_script],
+                                capture_output=True, text=True)
+        if result.returncode != 0:
+            error_exit(result.stdout.strip())
+    except Exception as e:
+        error_exit(f"Failed to execute coverage support check: {e}")
+
+
 def generate_coverage_report():
     """Generate coverage report by running the Erlang escript."""
 
@@ -495,6 +546,7 @@ def main():
             else:
                 testlib.config['code_coverage_modules'] = \
                     [m.strip() for m in a.split(',')]
+            verify_native_coverage_support()
             testlib.maybe_print(f"Code coverage enabled for modules: "
                                 f"{testlib.config['code_coverage_modules']}")
         elif o == '--testset-iterations':
