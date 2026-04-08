@@ -20,7 +20,7 @@
          handle_bucket_force_encr/2, min_dek_rotation_interval_in_sec/0,
          min_dek_lifetime_in_sec/0, dek_interval_error/1,
          bypass_encr_cfg_restrictions/0, handle_import_ear_dek/1,
-         get_master_password_warning/0,
+         get_master_password_warning/0, get_n2n_warning/0,
          is_encryption_enabled/2]).
 
 encr_method(Param, SecretIdName, EncrType) ->
@@ -819,3 +819,12 @@ build_master_password_warning(UnsetNodes) ->
     iolist_to_binary(
       io_lib:format("The master password for node(s) ~s is not configured",
                     [NodesStr])).
+
+get_n2n_warning() ->
+    case misc:is_cluster_encryption_fully_enabled() of
+        true -> undefined;
+        false ->
+            {ok, <<"Master-password-encrypted keys risk being sent unencrypted "
+                   "unless node-to-node encryption is enabled on every node in "
+                   "the cluster">>}
+    end.

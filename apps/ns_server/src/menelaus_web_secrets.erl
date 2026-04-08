@@ -51,17 +51,14 @@ handle_get_secrets(Req) ->
     All = cb_cluster_secrets:get_all(Snapshot),
     FilteredSecrets = read_filter_secrets_by_permission(All, Req),
     TestResults = get_test_results_aggregated(FilteredSecrets),
-    MaybeWarning = menelaus_web_encr_at_rest:get_master_password_warning(),
+    SMWarnings = sm_encrypted_secret_warnings(),
     Res = lists:map(
             fun (#{id := Id} = Props) ->
                 UsedBy = cb_cluster_secrets:where_is_secret_used(Id, Snapshot),
                 TestRes = maps:get(Id, TestResults),
-                Warnings = maybe
-                               true ?= secret_uses_node_sm(Props),
-                               {ok, Warning} ?= MaybeWarning,
-                               [Warning]
-                           else
-                               _ -> []
+                Warnings = case secret_uses_node_sm(Props) of
+                               true -> SMWarnings;
+                               false -> []
                            end,
                 {export_secret(Props#{used_by => UsedBy,
                                       test_results => TestRes,
@@ -83,15 +80,10 @@ handle_get_secret(IdStr, Req) when is_list(IdStr) ->
                     UsedBy = cb_cluster_secrets:where_is_secret_used(
                               Id, Snapshot),
                     #{Id := TestRes} = get_test_results_aggregated([Props]),
-                    Warnings =
-                        maybe
-                            true ?= secret_uses_node_sm(Props),
-                            {ok, Warning} ?= menelaus_web_encr_at_rest:
-                                               get_master_password_warning(),
-                            [Warning]
-                        else
-                            _ -> []
-                        end,
+                    Warnings = case secret_uses_node_sm(Props) of
+                                   true -> sm_encrypted_secret_warnings();
+                                   false -> []
+                               end,
                     Res = {export_secret(Props#{used_by => UsedBy,
                                                 test_results => TestRes,
                                                 warnings => Warnings})},
@@ -764,10 +756,11 @@ validate_encrypt_with(Name, Snapshot, State) ->
                   {ok, disabled} ->
                       {error, format_error(config_encryption_disabled)};
                   {ok, _} ->
-                      case menelaus_web_encr_at_rest:
-                             get_master_password_warning() of
-                          undefined -> ok;
-                          {ok, Warning} -> {warning, nodeSecretManager, Warning}
+                      case sm_encrypted_secret_warnings() of
+                            [] -> ok;
+                            L ->
+                                B = iolist_to_binary(lists:join(<<". ">>, L)),
+                                {warning, nodeSecretManager, B}
                       end
               end
       end, Name, State).
@@ -1525,6 +1518,10 @@ merge_test_res(#{status := CurStatus, datetime := CurDT,
                               ok -> [Node | CurSN];
                               _ -> CurSN
                           end}.
+
+sm_encrypted_secret_warnings() ->
+    [W || {ok, W} <- [menelaus_web_encr_at_rest:get_master_password_warning(),
+                      menelaus_web_encr_at_rest:get_n2n_warning()]].
 
 -ifdef(TEST).
 

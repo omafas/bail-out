@@ -62,6 +62,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                                      'n2': [Service.KV]},
                                            buckets=[],
                                            balanced=True,
+                                           encryption=False,
                                            num_vbuckets=16)
 
     def setup(self):
@@ -170,6 +171,7 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         set_log_dek_limit(self.cluster, None)
         set_all_bucket_dek_limit(self.cluster, None)
         set_remove_hist_keys_interval(self.cluster, None)
+        self.cluster.toggle_n2n_encryption(enable=False)
 
     def random_node(self):
         return random.choice(self.cluster.connected_nodes)
@@ -1763,12 +1765,26 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                  '/settings/security/encryptionAtRest').json()
             return r.get(component, {}).get('warnings', [])
 
-        def assert_warning(warnings, expected_nodes):
-            w = 'master password for node(s) ' \
-                f'{", ".join(n.hostname() for n in expected_nodes)} ' \
-                'is not configured'
-            testlib.assert_eq(len(warnings), 1)
-            testlib.assert_in(w, warnings[0])
+        def assert_warnings(warnings, mp=True, n2n=True, expected_nodes=None):
+            num = 0
+            for b in [mp, n2n]:
+                num += 1 if b else 0
+            testlib.assert_eq(len(warnings), num)
+
+            if mp:
+                w = 'master password for node(s) ' \
+                    f'{", ".join(n.hostname() for n in expected_nodes)} ' \
+                    'is not configured'
+                mp_warnings = [warn for warn in warnings
+                               if 'master password for node' in warn]
+                testlib.assert_eq(len(mp_warnings), 1)
+                testlib.assert_in(w, mp_warnings[0])
+
+            if n2n:
+                w = 'Master-password-encrypted keys risk being sent ' \
+                    'unencrypted unless node-to-node encryption is enabled'
+                n2n_warnings = [warn for warn in warnings if w in warn]
+                testlib.assert_eq(len(n2n_warnings), 1)
 
         def get_secret_warnings(secret_id):
             r = testlib.get_succ(self.random_node(),
@@ -1786,27 +1802,39 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         set_other_encryption(self.cluster, 'disabled', -1)
 
         # Initially no warnings (encryption disabled)
-        testlib.assert_eq(get_ear_warnings('config'), [])
-        testlib.assert_eq(get_ear_warnings('log'), [])
-        testlib.assert_eq(get_ear_warnings('audit'), [])
-        testlib.assert_eq(get_ear_warnings('other'), [])
+        assert_warnings(get_ear_warnings('config'), mp=False, n2n=False)
+        assert_warnings(get_ear_warnings('log'), mp=False, n2n=False)
+        assert_warnings(get_ear_warnings('audit'), mp=False, n2n=False)
+        assert_warnings(get_ear_warnings('other'), mp=False, n2n=False)
 
         # Enable config encryption using nodeSecretManager, it should trigger
         # a warning under config
         set_cfg_encryption(self.cluster, 'nodeSecretManager', -1)
-        assert_warning(get_ear_warnings('config'), all_nodes)
+        # Note: n2n warning only appears for secrets
+        assert_warnings(get_ear_warnings('config'), mp=True, n2n=False,
+                        expected_nodes=all_nodes)
 
         # Create a secret using nodeSecretManager
         secret_id = create_secret(self.cluster, cb_managed_secret())
         # It should trigger a warning in the secret itself
-        assert_warning(get_secret_warnings(secret_id), all_nodes)
+        assert_warnings(get_secret_warnings(secret_id), mp=True, n2n=True,
+                        expected_nodes=all_nodes)
+
+        # Enable node-to-node encryption. It should remove n2n part of
+        # the warning but master password warning should remain until master
+        # password is set
+        self.cluster.toggle_n2n_encryption(enable=True)
+        assert_warnings(get_ear_warnings('config'), mp=True, n2n=False,
+                        expected_nodes=all_nodes)
+        assert_warnings(get_secret_warnings(secret_id), mp=True, n2n=False,
+                        expected_nodes=all_nodes)
 
         # Create a secret using another secret (not nodeSecretManager)
         # and verify it has NO warnings
         secret2_spec = cb_managed_secret(encrypt_with='encryptionKey',
                                          encrypt_secret_id=secret_id)
         secret2_id = create_secret(self.cluster, secret2_spec)
-        testlib.assert_eq(get_secret_warnings(secret2_id), [])
+        assert_warnings(get_secret_warnings(secret2_id), mp=False, n2n=False)
 
         try:
             # Setting master password should make warnings disappear for
@@ -1814,15 +1842,37 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
             for n in [node1, node2]:
                 sync_change_password(n)
 
-            assert_warning(get_ear_warnings('config'), [node3])
-            assert_warning(get_secret_warnings(secret_id), [node3])
+            assert_warnings(get_ear_warnings('config'), mp=True, n2n=False,
+                            expected_nodes=[node3])
+            assert_warnings(get_secret_warnings(secret_id), mp=True, n2n=False,
+                            expected_nodes=[node3])
+
+            # Disable n2n encryption, it should trigger n2n warning for secrets
+            self.cluster.toggle_n2n_encryption(enable=False)
+
+            # Note: n2n warning only appears for secrets
+            assert_warnings(get_ear_warnings('config'), mp=True, n2n=False,
+                            expected_nodes=[node3])
+            assert_warnings(get_secret_warnings(secret_id), mp=True, n2n=True,
+                            expected_nodes=[node3])
 
             # Setting master password on the last node should make all warnings
             # disappear
             sync_change_password(node3)
 
-            testlib.assert_eq(get_ear_warnings('config'), [])
-            testlib.assert_eq(get_secret_warnings(secret_id), [])
+            assert_warnings(get_ear_warnings('config'), mp=False, n2n=False,
+                            expected_nodes=[])
+            assert_warnings(get_secret_warnings(secret_id), mp=False, n2n=True,
+                            expected_nodes=[])
+
+            # Enable n2n encryption again, it should disable warnings for
+            # secrets
+            self.cluster.toggle_n2n_encryption(enable=True)
+
+            assert_warnings(get_ear_warnings('config'), mp=False, n2n=False,
+                            expected_nodes=[])
+            assert_warnings(get_secret_warnings(secret_id), mp=False, n2n=False,
+                            expected_nodes=[])
         finally:
             for n in all_nodes:
                 sync_change_password(n, password='')
