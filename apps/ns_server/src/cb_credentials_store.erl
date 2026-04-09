@@ -53,7 +53,7 @@
 
 -define(SCHEMA_VERSION, 1).
 
--define(PREREQ_KEYS, [credential_store_settings,
+-define(PREREQ_KEYS, [?CREDENTIAL_STORE_SETTINGS_KEY,
                       ?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY]).
 -type user_meta_map() :: #{expires_at => integer(),
                            description => binary() | string(),
@@ -187,7 +187,7 @@ ensure_n2n_encryption(Snapshot) ->
 
 -spec is_overridden(atom(), map()) -> boolean().
 is_overridden(Flag, Snapshot) ->
-    case maps:find(credential_store_settings, Snapshot) of
+    case maps:find(?CREDENTIAL_STORE_SETTINGS_KEY, Snapshot) of
         {ok, {Settings, _Rev}} -> maps:get(Flag, Settings, false);
         error                  -> false
     end.

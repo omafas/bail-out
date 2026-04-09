@@ -8,6 +8,7 @@
 %% licenses/APL2.txt.
 
 -define(CREDENTIAL_IDS_KEY, credential_ids).
+-define(CREDENTIAL_STORE_SETTINGS_KEY, credential_store_settings).
 
 -define(CREDENTIAL_TYPES,
         [aws, azure_shared, azure_ad, azure_sas, azure_managed, gcp, http,

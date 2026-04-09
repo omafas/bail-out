@@ -125,7 +125,7 @@ defaults() ->
       n2n_encryption_override => false}.
 
 get_settings() ->
-    Stored = chronicle_compat:get(direct, credential_store_settings,
+    Stored = chronicle_compat:get(direct, ?CREDENTIAL_STORE_SETTINGS_KEY,
                                   #{default => #{}}),
     maps:merge(defaults(), Stored).
 
@@ -144,7 +144,7 @@ handle_settings_put(Req) ->
       Req, json, settings_validators()).
 
 handle_settings_delete(Req) ->
-    Fun = fun (_) -> {commit, [{delete, credential_store_settings}]} end,
+    Fun = fun (_) -> {commit, [{delete, ?CREDENTIAL_STORE_SETTINGS_KEY}]} end,
     case chronicle_kv:transaction(kv, [], Fun, #{}) of
         {ok, _} ->
             ns_audit:settings(Req, modify_credential_store,
@@ -167,7 +167,9 @@ settings_validators() ->
 
 validate_and_store_settings(Props, Req) ->
     Settings = validated_to_storage_format(Props),
-    Fun = fun (_) -> {commit, [{set, credential_store_settings, Settings}]} end,
+    Fun = fun (_) ->
+                  {commit, [{set, ?CREDENTIAL_STORE_SETTINGS_KEY, Settings}]}
+          end,
     case chronicle_kv:transaction(kv, [], Fun, #{}) of
         {ok, _} ->
             RestFormat = storage_to_rest_format(Settings),
