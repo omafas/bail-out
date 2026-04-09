@@ -39,7 +39,9 @@
          list/1,
          update/5,
          delete/1,
-         consume_credential/1]).
+         consume_credential/1,
+         credentials_requiring_config_encryption/1,
+         credentials_requiring_n2n_encryption/0]).
 
 %% Internal helpers (exported for testing)
 -export([build_key/1,
@@ -190,6 +192,25 @@ is_overridden(Flag, Snapshot) ->
     case maps:find(?CREDENTIAL_STORE_SETTINGS_KEY, Snapshot) of
         {ok, {Settings, _Rev}} -> maps:get(Flag, Settings, false);
         error                  -> false
+    end.
+
+-spec credentials_requiring_config_encryption(map()) -> [credential_id()].
+credentials_requiring_config_encryption(Snapshot) ->
+    credentials_unless_overridden(config_encryption_override, Snapshot).
+
+-spec credentials_requiring_n2n_encryption() -> [credential_id()].
+credentials_requiring_n2n_encryption() ->
+    Keys = [?CREDENTIAL_IDS_KEY, ?CREDENTIAL_STORE_SETTINGS_KEY],
+    {ok, {Snapshot, _}} = chronicle_kv:get_snapshot(kv, Keys),
+    credentials_unless_overridden(n2n_encryption_override, Snapshot).
+
+-spec credentials_unless_overridden(config_encryption_override |
+                                    n2n_encryption_override, map()) ->
+          [credential_id()].
+credentials_unless_overridden(OverrideFlag, Snapshot) ->
+    case is_overridden(OverrideFlag, Snapshot) of
+        true  -> [];
+        false -> get_index(Snapshot)
     end.
 
 %% Internal functions

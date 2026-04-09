@@ -1303,6 +1303,26 @@ verify_net_config_allowed(State) ->
             State
     end.
 
+verify_n2n_credentials(State) ->
+    case validator:get_value(nodeEncryption, State) of
+        false ->
+            case cb_credentials_store:credentials_requiring_n2n_encryption() of
+                [] ->
+                    State;
+                [_ | _] = Ids ->
+                    IdsStr = lists:join(", ", Ids),
+                    M = "Cannot disable node-to-node encryption because the "
+                        "following credentials would lose n2n encryption "
+                        "protection: [" ++ IdsStr ++ "]. To override, set "
+                        "'n2nEncryptionOverride' to true in "
+                        "/settings/credentialStore.",
+                    validator:return_error(nodeEncryption, iolist_to_binary(M),
+                                           State)
+            end;
+        _ ->
+            State
+    end.
+
 net_config_validators(SafeAction) ->
     afamily_validators() ++
     node_encryption_validators() ++
@@ -1312,6 +1332,7 @@ net_config_validators(SafeAction) ->
          true -> [];
          false ->
              [verify_net_config_allowed(_),
+              verify_n2n_credentials(_),
               validator:validate(fun check_for_raw_addr/1, afamily, _)]
      end.
 

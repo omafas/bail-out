@@ -12,6 +12,7 @@
 -include("ns_common.hrl").
 -include_lib("ns_common/include/cut.hrl").
 -include("cb_cluster_secrets.hrl").
+-include("credentials.hrl").
 
 -export([handle_get/2, handle_post/2, get_settings/1, handle_drop_keys/2,
          handle_bucket_drop_keys/2, handle_deks_drop_complete/1,
@@ -314,7 +315,9 @@ handle_post(Path, Req) ->
 
           RV = chronicle_kv:transaction(
                  kv, [?CHRONICLE_SECRETS_KEY,
-                      ?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY],
+                      ?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY,
+                      ?CREDENTIAL_IDS_KEY,
+                      ?CREDENTIAL_STORE_SETTINGS_KEY],
                  fun (Snapshot) ->
                      CurrentSettings = get_settings(Snapshot),
                      MergedNewSettings = get_settings(Snapshot, NewSettings3),
@@ -560,6 +563,7 @@ validate_all_settings_txn([{Usage, Cfg} | Tail], Snapshot) ->
     maybe
         ok ?= validate_sec_settings(Usage, Cfg, Snapshot),
         ok ?= validate_no_unencrypted_secrets(Usage, Cfg, Snapshot),
+        ok ?= validate_no_stored_credentials(Usage, Cfg, Snapshot),
         validate_all_settings_txn(Tail, Snapshot)
     end.
 
@@ -612,6 +616,23 @@ validate_no_unencrypted_secrets(config_encryption,
                     "some cluster secrets unencrypted: " ++ NamesStr}
     end;
 validate_no_unencrypted_secrets(_, #{}, _Snapshot) ->
+    ok.
+
+validate_no_stored_credentials(config_encryption,
+                               #{encryption := disabled,
+                                 secret_id := ?SECRET_ID_NOT_SET}, Snapshot) ->
+    case cb_credentials_store:credentials_requiring_config_encryption(
+           Snapshot) of
+        [] -> ok;
+        [_ | _] = Ids ->
+            IdsStr = lists:join(", ", Ids),
+            {error,
+             "Encryption cannot be disabled because the following credentials "
+             "would be left unencrypted: [" ++ IdsStr ++ "]. To override this, "
+             "set 'configEncryptionOverride' to true in "
+             "/settings/credentialStore."}
+    end;
+validate_no_stored_credentials(_, #{}, _Snapshot) ->
     ok.
 
 validate_sec_settings(_, #{encryption := disabled,
