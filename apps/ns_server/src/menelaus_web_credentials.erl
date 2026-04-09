@@ -220,6 +220,10 @@ validated_to_storage_format(Props) ->
 
 -define(MAX_CRED_ID_LENGTH, 128).
 
+%% Minimum time (ms) that expiresAt must be in the future.
+%% Prevents credentials that expire before they can be meaningfully consumed.
+-define(MIN_EXPIRY_PERIOD_MS, 300000). %% 5 minutes
+
 %% Audit helpers
 
 -spec audit_credential(term(), credential_audit_event(),
@@ -699,13 +703,12 @@ cred_validators() ->
 validate_expiry_in_future(Name, State) ->
     validator:validate(
       fun (V) ->
-              Now = os:system_time(millisecond),
-              case V > Now of
+              MinExpiry = os:system_time(millisecond) + ?MIN_EXPIRY_PERIOD_MS,
+              case V >= MinExpiry of
                   true  -> ok;
                   false ->
                       {error,
-                       "expiresAt must be a timestamp in "
-                       "the future"}
+                       "expiresAt must be at least 5 minutes in the future"}
               end
       end, Name, State).
 
@@ -935,12 +938,6 @@ reply_store_error(Req, n2n_encryption_required) ->
                                  "encryption to be enabled on all nodes, or "
                                  "n2nEncryptionOverride to be set in "
                                  "/settings/credentialStore">>}),
-                  400);
-reply_store_error(Req, already_expired) ->
-    reply_json_ok(Req,
-                  encode_response(
-                    #{error => <<"expiresAt must be a timestamp "
-                                 "in the future">>}),
                   400);
 reply_store_error(Req, {txn_failed, Reason}) ->
     ?log_error("Credential store transaction failed: ~p", [Reason]),

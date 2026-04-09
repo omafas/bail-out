@@ -22,7 +22,6 @@
                                    n2n_encryption_required |
                                    not_found |
                                    already_exists |
-                                   already_expired |
                                    unsupported_schema_version |
                                    invalid_type |
                                    {txn_failed, Reason :: term()} |

@@ -46,8 +46,7 @@
          redact_credential/1,
          sensitive_fields/1,
          ensure_prerequisites/1,
-         is_expired/1,
-         validate_not_already_expired/1]).
+         is_expired/1]).
 
 %% The subset of meta fields that callers may supply.
 -define(USER_META_FIELDS, [expires_at, description, guardrails]).
@@ -259,14 +258,6 @@ create_impl(Id, Type, Fields, MetaExtra, Author) ->
     Now  = os:system_time(millisecond),
     BaseMeta = #{created_at => Now, created_by => Author},
     Meta = maps:merge(BaseMeta, maps:with(?USER_META_FIELDS, MetaExtra)),
-    case validate_not_already_expired(Meta) of
-        {error, _} = Err ->
-            Err;
-        ok ->
-            create_impl_txn(Id, Key, Type, Meta, Fields)
-    end.
-
-create_impl_txn(Id, Key, Type, Meta, Fields) ->
     Cred = #{
              id             => Id,
              schema_version => ?SCHEMA_VERSION,
@@ -323,14 +314,6 @@ list_impl(Prefix, Snapshot) ->
     {ok, Sorted}.
 
 update_impl(Id, Type, Fields, MetaExtra, Author) ->
-    case validate_not_already_expired(MetaExtra) of
-        {error, _} = Err ->
-            Err;
-        ok ->
-            update_impl_txn(Id, Type, Fields, MetaExtra, Author)
-    end.
-
-update_impl_txn(Id, Type, Fields, MetaExtra, Author) ->
     Key = build_key(Id),
     Now = os:system_time(millisecond),
     Fun = fun (Snapshot) ->
@@ -428,18 +411,6 @@ is_expired(#{expires_at := ExpiresAt}) ->
 is_expired(_Meta) ->
     false.
 
-%% @doc Reject a create or update when expires_at is already in the
-%% past. The REST validator should already reject such values.
--spec validate_not_already_expired(map()) ->
-          ok | {error, already_expired}.
-validate_not_already_expired(#{expires_at := ExpiresAt}) ->
-    case os:system_time(millisecond) > ExpiresAt of
-        true  -> {error, already_expired};
-        false -> ok
-    end;
-validate_not_already_expired(_Meta) ->
-    ok.
-
 matches_prefix(_Id, "") ->
     true;
 matches_prefix(Id, Prefix) ->
@@ -489,19 +460,5 @@ matches_prefix_test() ->
     ?assert(matches_prefix("backup/aws/prod", "backup")),
     ?assert(matches_prefix("backup/aws/prod", "backup/aws")),
     ?assertNot(matches_prefix("backup/aws/prod", "backup/other")).
-
-validate_not_already_expired_test() ->
-    %% No expires_at — always ok
-    ?assertEqual(ok, validate_not_already_expired(#{})),
-    ?assertEqual(ok, validate_not_already_expired(
-                       #{created_at => 0})),
-    %% Far-future timestamp — ok
-    Future = os:system_time(millisecond) + 3600000,
-    ?assertEqual(ok, validate_not_already_expired(
-                       #{expires_at => Future})),
-    %% Past timestamp — rejected
-    ?assertEqual({error, already_expired},
-                 validate_not_already_expired(
-                   #{expires_at => 0})).
 
 -endif.
