@@ -121,7 +121,7 @@ function mnPermissionsProvider() {
   }
 
   function set(permission) {
-    if (!_.contains(interestingPermissions, permission)) {
+    if (!_.includes(interestingPermissions, permission)) {
       interestingPermissions.push(permission);
     }
     return this;

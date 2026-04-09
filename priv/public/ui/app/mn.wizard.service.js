@@ -312,7 +312,7 @@ class MnWizardService {
     if (!rv[2]) {
       return notFound;
     } else {
-      return _.detect(rv[0], function (info) {
+      return _.find(rv[0], function (info) {
         var preproc = rv[1](info.path);
         return rv[1](rv[2]).substring(0, preproc.length) == preproc;
       }) || notFound;

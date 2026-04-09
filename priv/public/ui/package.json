@@ -49,7 +49,7 @@
     "file-saver": "2.0.2",
     "ipaddr.js": "2.0.1",
     "js-beautify": "1.14.3",
-    "lodash": "3.3.0",
+    "lodash": "^4.17.21",
     "ngx-clipboard": "12.3.1",
     "oclazyload": "1.1.0",
     "ramda": "0.28.0",
@@ -116,6 +116,10 @@
       "ipaddr.js",
       "ngx-clipboard"
     ]
+  },
+  "overrides": {
+    "minimatch": "^9.0.0",
+    "semver": "^7.0.0"
   },
   "browserslist": [
     "Chrome >= 67",
