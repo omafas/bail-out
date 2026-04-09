@@ -7,6 +7,8 @@
 %% will be governed by the Apache License, Version 2.0, included in the file
 %% licenses/APL2.txt.
 
+-define(CREDENTIAL_IDS_KEY, credential_ids).
+
 -define(CREDENTIAL_TYPES,
         [aws, azure_shared, azure_ad, azure_sas, azure_managed, gcp, http,
          couchbase]).

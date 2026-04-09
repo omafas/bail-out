@@ -90,35 +90,13 @@ get(Id) ->
 %% @doc List all credentials whose Id starts with Prefix.
 %% Pass "" to list everything.
 %%
-%% We intentionally take a full chronicle snapshot here (via
-%% `chronicle_kv:get_full_snapshot/1`) and then filter keys with the
-%% `matches_prefix/2` helper. Chronicle does NOT provide a built-in
-%% prefix/range query API — the available read primitives are:
-%%   - get(Name, Key)                : single-key lookup (fast, ETS-backed)
-%%   - get_snapshot(Name, [K1,K2...]): atomic read of an explicit key list
-%%   - get_full_snapshot(Name)       : dump the entire KV store (no fast path)
-%%
-%% Because chronicle can't answer "give me all keys whose tuple first
-%% element is `credentials`" we must either: (a) read the full snapshot and
-%% filter, or (b) change the storage layout (e.g. store all credentials under
-%% one list key, or maintain a separate index key of credential ids).
-%%
-%% We prefer the current per-credential-key layout because:
-%%  - Single-key storage keeps per-credential reads (`get`,
-%%    `consume_credential`) cheap via `get_snapshot/2` (ETS fast path) and
-%%    avoids scanning a large list on the hot path.
-%%  - Writes touch only the credential key (transactions operate per-key),
-%%    avoiding unnecessary write contention that a single-list layout would
-%%    introduce.
-%%  - The `list` operation is relatively infrequent (UI/CLI) and is the only
-%%    operation that must iterate many credentials; paying the cost of a
-%%    full snapshot there is acceptable and keeps the common paths fast.
+%% Reads the credential_ids index to discover which credentials exist, filters
+%% by prefix, then fetches only the matching credential keys via get_snapshot.
 -spec list(string()) ->
           {ok, [credential_public_view()]} | {error, credential_error_reason()}.
 list(Prefix) ->
-    %% TODO: Maintain an index instead of taking the full kv and selectively
-    %% read only keys that match the prefix.
-    {ok, {Snapshot, _}} = chronicle_kv:get_full_snapshot(kv),
+    IdxKeys = [?CREDENTIAL_IDS_KEY | ?PREREQ_KEYS],
+    {ok, {Snapshot, _}} = chronicle_kv:get_snapshot(kv, IdxKeys),
     case ensure_prerequisites(Snapshot) of
         ok ->
             list_impl(Prefix, Snapshot);
@@ -221,6 +199,14 @@ is_overridden(Flag, Snapshot) ->
 build_key(Id) ->
     {credentials, Id}.
 
+%% @doc Extract the sorted set of credential IDs from a snapshot.
+-spec get_index(map()) -> ordsets:ordset(credential_id()).
+get_index(Snapshot) ->
+    case maps:find(?CREDENTIAL_IDS_KEY, Snapshot) of
+        {ok, {Ids, _Rev}} -> Ids;
+        error -> []
+    end.
+
 %% @doc Stamp the chronicle revision into the credential's meta as
 %% `payload_version`.  This distinguishes distinct payload contents for the same
 %% credential id.
@@ -272,13 +258,18 @@ create_impl(Id, Type, Fields, MetaExtra, Author) ->
                               {ok, _} ->
                                   {abort, already_exists};
                               error ->
-                                  {commit, [{set, Key, Cred}]}
+                                  Ids = get_index(Snapshot),
+                                  NewIds = ordsets:add_element(Id, Ids),
+                                  {commit,
+                                   [{set, Key, Cred},
+                                    {set, ?CREDENTIAL_IDS_KEY, NewIds}]}
                           end;
                       {error, Reason} ->
                           {abort, {prereq_failed, Reason}}
                   end
           end,
-    case chronicle_kv:transaction(kv, [Key | ?PREREQ_KEYS], Fun, #{}) of
+    TxnKeys = [Key, ?CREDENTIAL_IDS_KEY | ?PREREQ_KEYS],
+    case chronicle_kv:transaction(kv, TxnKeys, Fun, #{}) of
         {ok, Rev} ->
             {ok, redact_credential(with_version(Cred, Rev))};
         already_exists ->
@@ -299,19 +290,31 @@ get_impl(Id, Snapshot) ->
     end.
 
 list_impl(Prefix, Snapshot) ->
-    Creds = maps:fold(
-              fun ({credentials, Id}, {Cred, Revision}, Acc) ->
-                      case matches_prefix(Id, Prefix) of
-                          true  -> [redact_credential(
-                                      with_version(Cred, Revision)) | Acc];
-                          false -> Acc
-                      end;
-                  (_, _, Acc) ->
-                      Acc
-              end, [], Snapshot),
-    Sorted = lists:sort(fun (A, B) -> maps:get(id, A) =< maps:get(id, B) end,
-                        Creds),
-    {ok, Sorted}.
+    AllIds = get_index(Snapshot),
+    Filtered = [Id || Id <- AllIds, matches_prefix(Id, Prefix)],
+    case Filtered of
+        [] ->
+            {ok, []};
+        _ ->
+            CredKeys = [build_key(Id) || Id <- Filtered],
+            {ok, {CredSnap, _}} = chronicle_kv:get_snapshot(kv, CredKeys),
+            Creds =
+                lists:filtermap(
+                  fun (K) ->
+                          case maps:find(K, CredSnap) of
+                              {ok, {Cred, Rev}} ->
+                                  {true, redact_credential(
+                                           with_version(Cred, Rev))};
+                              error ->
+                                  false
+                          end
+                  end, CredKeys),
+            Sorted = lists:sort(
+                       fun (A, B) ->
+                               maps:get(id, A) =< maps:get(id, B)
+                       end, Creds),
+            {ok, Sorted}
+    end.
 
 update_impl(Id, Type, Fields, MetaExtra, Author) ->
     Key = build_key(Id),
@@ -371,13 +374,18 @@ delete_impl(Id) ->
                               error ->
                                   {abort, not_found};
                               {ok, _} ->
-                                  {commit, [{delete, Key}]}
+                                  Ids = get_index(Snapshot),
+                                  NewIds = ordsets:del_element(Id, Ids),
+                                  {commit,
+                                   [{delete, Key},
+                                    {set, ?CREDENTIAL_IDS_KEY, NewIds}]}
                           end;
                       {error, Reason} ->
                           {abort, {prereq_failed, Reason}}
                   end
           end,
-    case chronicle_kv:transaction(kv, [Key | ?PREREQ_KEYS], Fun, #{}) of
+    TxnKeys = [Key, ?CREDENTIAL_IDS_KEY | ?PREREQ_KEYS],
+    case chronicle_kv:transaction(kv, TxnKeys, Fun, #{}) of
         {ok, _}                 -> ok;
         not_found               -> {error, not_found};
         {prereq_failed, Reason} -> {error, Reason};
