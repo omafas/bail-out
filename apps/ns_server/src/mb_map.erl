@@ -351,7 +351,8 @@ generate_map_new(Map, NumReplicas, Nodes, Options) ->
                          NumSlaves, NumReplicas, Tags, UseGreedy, Uploaders,
                          Verbose) ||
                _ <- lists:seq(1, 3)] ||
-              ShuffledNodes <- [misc:shuffle(KeepNodes) || _ <- lists:seq(1, 3)]]),
+              ShuffledNodes <-
+                  [misc:shuffle(KeepNodes) || _ <- lists:seq(1, 3)]]),
 
     GeneratedMaps = score_maps(Map, GeneratedMaps0),
     Verbose andalso ?log_debug("Scores for generated maps:~n~p",
