@@ -341,9 +341,9 @@ generate_map_new(Map, NumReplicas, Nodes, Options) ->
     Uploaders = proplists:get_value(uploaders, Options),
 
     MapsFromPast0 = find_matching_past_maps(Nodes, Map, Options, MapsHistory),
-    MapsFromPast = score_maps(Map, MapsFromPast0),
+    MapsFromPast = score_maps(Map, Uploaders, MapsFromPast0),
     Verbose andalso ?log_debug("Scores for past maps:~n~p",
-                               [[S || {_, S} <- MapsFromPast]]),
+                               [[S || {_, S, _} <- MapsFromPast]]),
 
     GeneratedMaps0 =
         lists:append(
@@ -354,19 +354,30 @@ generate_map_new(Map, NumReplicas, Nodes, Options) ->
               ShuffledNodes <-
                   [misc:shuffle(KeepNodes) || _ <- lists:seq(1, 3)]]),
 
-    GeneratedMaps = score_maps(Map, GeneratedMaps0),
+    GeneratedMaps = score_maps(Map, Uploaders, GeneratedMaps0),
     Verbose andalso ?log_debug("Scores for generated maps:~n~p",
-                               [[S || {_, S} <- GeneratedMaps]]),
+                               [[GM || {_, GM, _} <- GeneratedMaps]]),
 
     AllMaps = sets:to_list(sets:from_list(GeneratedMaps ++ MapsFromPast)),
 
     Verbose andalso ?log_debug("Considering ~p maps:~n~p",
-                               [length(AllMaps), [S || {_, S} <- AllMaps]]),
-    BestMapScore = best_map(Options, AllMaps),
-    BestMap = element(1, BestMapScore),
+                               [length(AllMaps), [M || {_, M, _} <- AllMaps]]),
+    {BestMap, BestMapScore, BestMapInfo} = best_map(Options, AllMaps),
     Verbose andalso ?log_debug("Best map score: ~p (~p)",
-                               [element(2, BestMapScore),
+                               [BestMapScore,
                                 lists:keymember(BestMap, 1, GeneratedMaps)]),
+    case Uploaders of
+        undefined ->
+            ok;
+        _ ->
+            case BestMapInfo of
+                [] ->
+                    ok;
+                _ ->
+                    ?log_warning("Uploaders for vbuckets ~w will be started "
+                                 "from scratch", [BestMapInfo])
+            end
+    end,
     BestMap.
 
 generate_map_old(Map, NumReplicas, Nodes, Options) ->
@@ -381,21 +392,26 @@ generate_map_old(Map, NumReplicas, Nodes, Options) ->
     RndMap1 = balance(Map, NumReplicas, misc:shuffle(Nodes), Options),
     RndMap2 = balance(Map, NumReplicas, misc:shuffle(Nodes), Options),
 
-    AllRndMapScores = [RndMap1Score, RndMap2Score] = score_maps(Map, [RndMap1, RndMap2]),
+    AllRndMapScores = [RndMap1Score, RndMap2Score] =
+        score_maps(Map, [RndMap1, RndMap2]),
 
-    ?log_debug("Rnd maps scores: ~p, ~p", [S || {_, S} <- AllRndMapScores]),
+    ?log_debug("Rnd maps scores: ~p, ~p", [S || {_, S, _} <- AllRndMapScores]),
 
     MapsFromPast0 = find_matching_past_maps(Nodes, Map, Options, MapsHistory),
     MapsFromPast = score_maps(Map, MapsFromPast0),
 
-    AllMaps = sets:to_list(sets:from_list([NaturalMapScore, RndMap1Score, RndMap2Score | MapsFromPast])),
+    AllMaps = sets:to_list(sets:from_list([NaturalMapScore, RndMap1Score,
+                                           RndMap2Score | MapsFromPast])),
 
-    ?log_debug("Considering ~p maps:~n~p", [length(AllMaps), [S || {_, S} <- AllMaps]]),
+    ?log_debug("Considering ~p maps:~n~p",
+               [length(AllMaps), [S || {_, S, _} <- AllMaps]]),
 
     BestMapScore = best_map(Options, AllMaps),
 
     BestMap = element(1, BestMapScore),
-    ?log_debug("Best map score: ~p (~p,~p,~p)", [element(2, BestMapScore), (BestMap =:= NaturalMap), (BestMap =:= RndMap1), (BestMap =:= RndMap2)]),
+    ?log_debug("Best map score: ~p (~p,~p,~p)",
+               [element(2, BestMapScore), (BestMap =:= NaturalMap),
+                (BestMap =:= RndMap1), (BestMap =:= RndMap2)]),
     BestMap.
 
 %% @doc Generate a balanced map.
@@ -504,33 +520,62 @@ do_find_matching_past_maps(NodesSet, Map, Options, History, Trivial) ->
                           end
                   end, History).
 
+
+get_from_scratch_uploaders(Map, Uploaders, CurrentMap) ->
+    Zipped =
+        misc:zipwithN(fun (L) -> L end, [lists:seq(0, length(Map) - 1),
+                                         Map, Uploaders, CurrentMap]),
+    lists:filtermap(
+      fun ([Vb, Chain, {Uploader, _}, CurrentChain]) ->
+              Active = hd(Chain),
+              case Uploader of
+                  Active ->
+                      false;
+                  _ ->
+                      case lists:member(Active, CurrentChain) of
+                          true ->
+                              {true, Vb};
+                          false ->
+                              false
+                      end
+              end
+      end, Zipped).
+
 score_maps(CurrentMap, Maps) ->
-    [{M, vbucket_movements(CurrentMap, M)} || M <- Maps].
+    [{M, vbucket_movements(CurrentMap, M), undefined} || M <- Maps].
+
+score_maps(CurrentMap, undefined, Maps) ->
+    score_maps(CurrentMap, Maps);
+score_maps(CurrentMap, Uploaders, Maps) ->
+    lists:map(
+      fun (M) ->
+              FromScratch = get_from_scratch_uploaders(M, Uploaders,
+                                                       CurrentMap),
+              {M, {length(FromScratch), vbucket_movements(CurrentMap, M)},
+               FromScratch}
+      end, Maps).
 
 best_map(Options, Maps) ->
     History = proplists:get_value(maps_history, Options, []),
 
-    Less0 = fun ({_, X}, {_, Y}) ->
+    Less0 = fun ({_, X, _}, {_, Y, _}) ->
                     X < Y
             end,
 
-    Less = fun (X, Y) ->
-                  case {Less0(X, Y), Less0(Y, X)} of
-                      {true, false} -> true;
-                      {false, true} -> false;
-                      {false, false} ->
-                          {MapX, _} = X,
-                          {MapY, _} = Y,
-
-                          case {lists:keymember(MapX, 1, History),
-                                lists:keymember(MapY, 1, History)} of
-                              {true, false} ->
-                                  true;
-                              _ ->
-                                  false
-                          end
-                  end
-          end,
+    Less = fun ({MapX, _, _} = X, {MapY, _, _} = Y) ->
+                   case {Less0(X, Y), Less0(Y, X)} of
+                       {true, false} -> true;
+                       {false, true} -> false;
+                       {false, false} ->
+                           case {lists:keymember(MapX, 1, History),
+                                 lists:keymember(MapY, 1, History)} of
+                               {true, false} ->
+                                   true;
+                               _ ->
+                                   false
+                           end
+                   end
+           end,
 
     misc:min_by(Less, Maps).
 
@@ -1423,5 +1468,22 @@ make_vbmap_with_node_ids_test() ->
 
     Map4 = [[undefined, b, d], [b, undefined, e]],
     [[-1, 1, -1], [1, -1, -1]] = make_vbmap_with_node_ids(NodeIdMap, Map4).
+
+swap_rebalance_with_uploaders_test() ->
+    InitialNodes = [a, b, c],
+    KeepNodes = [a, c, d],
+    NVBuckets = 1024,
+    NReplicas = 2,
+    Options = [{use_vbmap_greedy_optimization, true}],
+    InitialMap = generate_map(no_nodes_map(NVBuckets, NReplicas),
+                              NReplicas, InitialNodes, Options),
+    Uploaders = [{hd(Chain), 1} || Chain <- InitialMap],
+    FastForwardMap =
+        generate_map(InitialMap, NReplicas, KeepNodes,
+                     Options ++ [{maps_history, [{InitialMap, Options}]},
+                                 {uploaders, Uploaders}]),
+    FromScratch = get_from_scratch_uploaders(FastForwardMap, Uploaders,
+                                             InitialMap),
+    ?assertEqual(FromScratch, []).
 
 -endif.
