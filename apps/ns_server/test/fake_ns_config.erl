@@ -72,6 +72,7 @@ setup() ->
 teardown() ->
     ets:delete(?TABLE_NAME),
     teardown_ns_config_events(),
+    ?meckUnload(ns_config_rep),
     ?meckUnload(ns_config).
 
 %% Both fake_chronicle_kv and fake_ns_config rely on this, so we need to
@@ -131,11 +132,16 @@ meck_setup() ->
     %% No passthrough, causes headaches as local functions can't be
     %% intercepted by meck, so we must control all entry to ns_config.
     meck:new(ns_config),
+    meck:new(ns_config_rep, [passthrough]),
 
     meck:expect(ns_config, latest, fun() -> ?NS_CONFIG_LATEST_MARKER end),
 
     meck_setup_getters(),
     meck_setup_setters(),
+
+    meck:expect(ns_config, sync_announcements, fun() -> ok end),
+    meck:expect(ns_config_rep, synchronize_local, fun() -> ok end),
+    meck:expect(ns_config_rep, ensure_config_pushed, fun() -> ok end),
 
     %% These functions are slightly interesting - they require the snapshot to
     %% be in a specific format.

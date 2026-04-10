@@ -142,12 +142,22 @@ enable(Timeout, Max, Extras) ->
     %% Request will be sent to the master for processing.
     %% In a mixed version cluster, node running highest version is
     %% usually selected as the master.
-    call({enable_auto_failover, Timeout, Max, Extras}).
+    Res = call({enable_auto_failover, Timeout, Max, Extras}),
+    %% Make sure the changes made by auto_failover module are reflected in
+    %% local config
+    ns_config_rep:synchronize_local(),
+    ns_config:sync_announcements(),
+    Res.
 
 %% @doc Disable auto-failover
 -spec disable(Extras::list()) -> ok.
 disable(Extras) ->
-    call({disable_auto_failover, Extras}).
+    Res = call({disable_auto_failover, Extras}),
+    %% Make sure the changes made by auto_failover module are reflected in
+    %% local config
+    ns_config_rep:synchronize_local(),
+    ns_config:sync_announcements(),
+    Res.
 
 %% @doc Reset the number of nodes that were auto-failovered to zero
 -spec reset_count() -> ok.
@@ -897,7 +907,12 @@ make_state_persistent(State, Extras) ->
                       {timeout, State#state.timeout},
                       {count, State#state.count},
                       {max_count, State#state.max_count}] ++ Extras)
-           end).
+           end),
+    %% When other nodes call auto_failover:enable/disable it looks for them
+    %% like a local call, while the change is actually happening on the leader.
+    %% This call ensures that the change is pushed to other nodes.
+    ns_config_rep:ensure_config_pushed(),
+    ok.
 
 note_reported(Flag, State) ->
     true = should_report(Flag, State),
