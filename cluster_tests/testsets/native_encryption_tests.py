@@ -2646,6 +2646,117 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
             assert_test_results_are_not_ok,
             sleep_time=1, attempts=50, retry_on_assert=True, verbose=True)
 
+    @tag(Tag.LowUrgency)
+    def encryption_at_rest_diag_test(self):
+        kv_only_nodes = [n for n in self.cluster.connected_nodes
+                         if Service.KV in n.get_services()]
+        query_only_nodes = [n for n in self.cluster.connected_nodes
+                            if Service.QUERY in n.get_services()]
+        def get_section(name, text):
+            lines = text.splitlines()
+            header_idx = -1
+            for i, line in enumerate(lines):
+                if line == name:
+                    header_idx = i
+                    break
+            if header_idx == -1:
+                return None
+
+            header_indent = len(lines[header_idx]) - len(lines[header_idx].lstrip())
+
+            section_lines = []
+            for i in range(header_idx + 1, len(lines)):
+                line = lines[i]
+                if not line.strip():
+                    continue
+
+                line_indent = len(line) - len(line.lstrip())
+                if line_indent <= header_indent:
+                    break
+                section_lines.append(line)
+
+            return "\n".join(section_lines)
+
+        def check_diag(node, expected_checks):
+            r = testlib.get_succ(node, '/diag/encryptionAtRest')
+            text = r.text
+            # Basic checks for the returned value
+            testlib.assert_in('Timers:', text)
+            testlib.assert_in('Cached keys list:', text)
+            deks_info_section = get_section("DEKs Info:", text)
+            assert deks_info_section is not None
+            for check in expected_checks:
+                check(deks_info_section)
+
+        def check_encr(dek_kind, expected_status):
+            def check(info):
+                section = get_section(f'  {dek_kind}:', info)
+                if expected_status == 'missing':
+                    assert section is None, f'{dek_kind} section is present'
+                    return
+                assert section is not None, f'{dek_kind} section not found'
+                if expected_status == 'enabled':
+                    testlib.assert_in('Enabled: true', section)
+                    testlib.assert_not_in('Active DEK id: undefined', section)
+                else:
+                    testlib.assert_in('Enabled: false', section)
+                    testlib.assert_in('Active DEK id: undefined', section)
+            return check
+
+        # 1. Default config (config encryption enabled by setup)
+        for node in self.cluster.connected_nodes:
+            check_diag(node, [check_encr('configDek', 'enabled'),
+                              check_encr('logDek', 'disabled')])
+
+        # 2. Unencrypted bucket
+        self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100},
+                                   sync=True)
+        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
+        BucketDEK = f'{{bucketDek,<<"{bucket_uuid}">>}}'
+        ServiceDEK = f'{{serviceBucketDek,<<"{bucket_uuid}">>}}'
+        # Wait for all nodes to see the bucket in diag
+        for node in kv_only_nodes:
+            testlib.poll_for_condition(
+                lambda: check_diag(node, [check_encr(BucketDEK, 'disabled'),
+                                          check_encr(ServiceDEK, 'missing'),
+                                          check_encr('configDek', 'enabled'),
+                                          check_encr('logDek', 'disabled')]),
+                sleep_time=1, attempts=10, retry_on_assert=True)
+        for node in query_only_nodes:
+            testlib.poll_for_condition(
+                lambda: check_diag(node, [check_encr(ServiceDEK, 'disabled'),
+                                          check_encr(BucketDEK, 'missing'),
+                                          check_encr('configDek', 'enabled'),
+                                          check_encr('logDek', 'disabled')]),
+                sleep_time=1, attempts=10, retry_on_assert=True)
+
+        # 3. Encrypted bucket
+        secret_id = create_secret(self.random_node(), cb_managed_secret())
+        self.cluster.update_bucket({'name': self.bucket_name,
+                                    'encryptionAtRestKeyId': secret_id})
+        for node in kv_only_nodes:
+            testlib.poll_for_condition(
+                lambda: check_diag(node, [check_encr(BucketDEK, 'enabled'),
+                                          check_encr(ServiceDEK, 'missing'),
+                                          check_encr('configDek', 'enabled'),
+                                          check_encr('logDek', 'disabled')]),
+                sleep_time=1, attempts=10, retry_on_assert=True)
+
+        for node in query_only_nodes:
+            testlib.poll_for_condition(
+                lambda: check_diag(node, [check_encr(ServiceDEK, 'enabled'),
+                                          check_encr(BucketDEK, 'missing'),
+                                          check_encr('configDek', 'enabled'),
+                                          check_encr('logDek', 'disabled')]),
+                sleep_time=1, attempts=10, retry_on_assert=True)
+
+        # 4. Log encryption
+        set_log_encryption(self.cluster, 'nodeSecretManager', -1)
+        for node in self.cluster.connected_nodes:
+            testlib.poll_for_condition(
+                lambda: check_diag(node, [check_encr('logDek', 'enabled')]),
+                sleep_time=1, attempts=10, retry_on_assert=True)
+
 
 # Set master password and restart the cluster
 # Testing that we can decrypt deks when master password is set
