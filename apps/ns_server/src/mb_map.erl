@@ -815,37 +815,24 @@ do_invoke_vbmap_body(VbmapPath, DiagPath, PrevMapFile, UploadersFile,
     case PortResult of
         {ok, Output} ->
             IdNodeMap = dict:from_list(misc:enumerate(Nodes, 0)),
-
             try
-                Chains0 = ejson:decode(Output),
-                Chains = lists:map(
-                           fun (Chain) ->
-                                   [dict:fetch(N, IdNodeMap) || N <- Chain]
-                           end, Chains0),
+                DecodedChains = ejson:decode(Output),
+                Map = [[dict:fetch(N, IdNodeMap) || N <- Chain] ||
+                          Chain <- DecodedChains],
 
-                EffectiveNumCopies = length(hd(Chains)),
-                S1 = vbucket_movements(CurrentMap, Chains),
-                ?log_debug("Score before simple minimization: ~p", [S1]),
-
-                Map0 = simple_minimize_moves(CurrentMap, Chains,
-                                             EffectiveNumCopies, Nodes),
-
-                S2 = vbucket_movements(CurrentMap, Map0),
-                ?log_debug("Score after simple minimization: ~p", [S2]),
-
+                EffectiveNumCopies = length(hd(Map)),
                 MapToUse =
-                    case S1 < S2 of
-                        true ->
-                            ?log_debug("Map from vbmap better before simple
-                                       minimization; using it"),
-                            Chains;
+                    case Uploaders of
+                        undefined ->
+                            maybe_simple_minimize_moves(
+                              CurrentMap, Map, EffectiveNumCopies, Nodes);
                         _ ->
-                            ?log_debug("Map better after simple minimization;
-                                       using it"),
-                            Map0
+                            %% skip the optimization since it reshuffles the
+                            %% actives
+                            Map
                     end,
 
-                Map =
+                MapPadded =
                     case EffectiveNumCopies < NumReplicas + 1 of
                         true ->
                             N = NumReplicas + 1 - EffectiveNumCopies,
@@ -854,12 +841,12 @@ do_invoke_vbmap_body(VbmapPath, DiagPath, PrevMapFile, UploadersFile,
                         false ->
                             MapToUse
                     end,
-
-                {ok, Map}
+                {ok, MapPadded}
             catch
                 E:T:S ->
-                    ?log_error("seems that vbmap produced invalid json (error ~p):~n~s",
-                               [{E, T}, Output]),
+                    ?log_error(
+                       "seems that vbmap produced invalid json (error ~p):~n~s",
+                       [{E, T}, Output]),
                     erlang:raise(E, T, S)
             end;
         {no_solution, _} ->
@@ -867,6 +854,27 @@ do_invoke_vbmap_body(VbmapPath, DiagPath, PrevMapFile, UploadersFile,
         {error, Output} ->
             ?log_error("Could not generate vbucket map: ~s", [Output]),
             exit({vbmap_error, iolist_to_binary(Output)})
+    end.
+
+maybe_simple_minimize_moves(CurrentMap, Chains, EffectiveNumCopies, Nodes) ->
+    S1 = vbucket_movements(CurrentMap, Chains),
+    ?log_debug("Score before simple minimization: ~p", [S1]),
+
+    Map0 = simple_minimize_moves(CurrentMap, Chains,
+                                 EffectiveNumCopies, Nodes),
+
+    S2 = vbucket_movements(CurrentMap, Map0),
+    ?log_debug("Score after simple minimization: ~p", [S2]),
+
+    case S1 < S2 of
+        true ->
+            ?log_debug("Map from vbmap better before simple
+                           minimization; using it"),
+            Chains;
+        _ ->
+            ?log_debug("Map better after simple minimization;
+                           using it"),
+            Map0
     end.
 
 node_to_id(Node, NodeIdMap) ->
