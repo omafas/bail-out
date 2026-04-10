@@ -47,6 +47,7 @@
 
 -include("ns_common.hrl").
 -include("credentials.hrl").
+-include("cb_cluster_secrets.hrl").
 -include_lib("ns_common/include/cut.hrl").
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -124,15 +125,26 @@ defaults() ->
     #{config_encryption_override => false,
       n2n_encryption_override => false}.
 
-get_settings() ->
-    Stored = chronicle_compat:get(direct, ?CREDENTIAL_STORE_SETTINGS_KEY,
-                                  #{default => #{}}),
+get_settings(Snapshot) ->
+    Stored =
+        case maps:find(?CREDENTIAL_STORE_SETTINGS_KEY, Snapshot) of
+            {ok, {Val, _Rev}} -> Val;
+            error -> #{}
+        end,
     maps:merge(defaults(), Stored).
 
 handle_settings_get(Req) ->
-    Settings = get_settings(),
+    Keys = [?CREDENTIAL_STORE_SETTINGS_KEY, ?CREDENTIAL_IDS_KEY,
+            ?CHRONICLE_ENCR_AT_REST_SETTINGS_KEY],
+    {ok, {Snapshot, _}} = chronicle_kv:get_snapshot(kv, Keys),
+    Settings = get_settings(Snapshot),
     RestFormat = storage_to_rest_format(Settings),
-    JsonBin = encode_response(RestFormat),
+    Warnings = cb_credentials_store:get_credential_warnings(Snapshot),
+    Result = case Warnings of
+                 [] -> RestFormat;
+                 _  -> RestFormat#{warnings => Warnings}
+             end,
+    JsonBin = encode_response(Result),
     menelaus_util:reply(Req, JsonBin, 200,
                         [{"Content-Type", "application/json"}]).
 
@@ -367,11 +379,16 @@ handle_list(Req) ->
               Req, {[{error, iolist_to_binary(Reason)}]}, 400);
         ok ->
             case cb_credentials_store:list(Prefix) of
-                {ok, Creds} ->
+                {ok, Creds, Warnings} ->
                     audit_credential(Req, list_credentials,
                                      {Prefix, length(Creds)}, ok),
-                    JsonBin = encode_response(
-                                [export_credential(C) || C <- Creds]),
+                    Credentials =
+                        #{credentials => [export_credential(C) || C <- Creds]},
+                    Result = case Warnings of
+                                 [] -> Credentials;
+                                 _ -> Credentials#{warnings => Warnings}
+                             end,
+                    JsonBin = encode_response(Result),
                     reply_json_ok(Req, JsonBin, 200);
                 {error, Reason2} ->
                     audit_credential(Req, list_credentials,

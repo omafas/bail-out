@@ -40,6 +40,7 @@
          update/5,
          delete/1,
          consume_credential/1,
+         get_credential_warnings/1,
          credentials_requiring_config_encryption/1,
          credentials_requiring_n2n_encryption/0]).
 
@@ -95,13 +96,16 @@ get(Id) ->
 %% Reads the credential_ids index to discover which credentials exist, filters
 %% by prefix, then fetches only the matching credential keys via get_snapshot.
 -spec list(string()) ->
-          {ok, [credential_public_view()]} | {error, credential_error_reason()}.
+          {ok, [credential_public_view()], [binary()]} |
+          {error, credential_error_reason()}.
 list(Prefix) ->
     IdxKeys = [?CREDENTIAL_IDS_KEY | ?PREREQ_KEYS],
     {ok, {Snapshot, _}} = chronicle_kv:get_snapshot(kv, IdxKeys),
     case ensure_prerequisites(Snapshot) of
         ok ->
-            list_impl(Prefix, Snapshot);
+            {ok, Creds} = list_impl(Prefix, Snapshot),
+            Warnings = get_credential_warnings(Snapshot),
+            {ok, Creds, Warnings};
         {error, _} = Err ->
             Err
     end.
@@ -444,6 +448,43 @@ matches_prefix(_Id, "") ->
     true;
 matches_prefix(Id, Prefix) ->
     lists:prefix(Prefix, Id).
+
+%% @doc Compute credential warnings from a snapshot.
+%% Returns warnings when credentials exist and config encryption
+%% or n2n encryption is not enabled.
+%% This chronicle snapshot contains credential_store_settings, credential_ids,
+%% chronicle_encryption_at_rest_settings keys.
+-spec get_credential_warnings(map()) -> [binary()].
+get_credential_warnings(Snapshot) ->
+    case get_index(Snapshot) of
+        [] -> [];
+        [_ | _] ->
+            [W || {ok, W} <-
+                      [config_encryption_warning(Snapshot),
+                       n2n_encryption_warning()]]
+    end.
+
+config_encryption_warning(Snapshot) ->
+    case menelaus_web_encr_at_rest:is_encryption_enabled(config_encryption,
+                                                         Snapshot) of
+        true ->
+            undefined;
+        false ->
+            {ok,
+             <<"Stored credentials are not protected by config encryption at "
+               "rest">>}
+    end.
+
+n2n_encryption_warning() ->
+    case misc:is_cluster_encryption_fully_enabled() of
+        true ->
+            undefined;
+        false ->
+            {ok,
+             <<"Stored credentials risk being sent unencrypted unless "
+               "node-to-node encryption is enabled on every node in the "
+               "cluster">>}
+    end.
 
 -ifdef(TEST).
 
