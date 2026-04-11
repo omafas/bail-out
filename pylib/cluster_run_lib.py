@@ -999,5 +999,5 @@ def wait_for_rebalance(url, timeout_s=60, interval_s=0.5, wait_balanced=False,
     err = rebalance_error(url)
     if (err is None and wait_balanced and
             not wait_for_balanced(url, balanced_timeout, balanced_interval)):
-        return "timeout"
+        return f"Unbalanced after {balanced_timeout}s"
     return err
