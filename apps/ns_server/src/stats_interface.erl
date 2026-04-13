@@ -22,6 +22,7 @@
          current_items_total/2,
          failover_safeness_level/1,
          for_backup_failures/0,
+         for_cont_backup_failures/0,
          latest/2]).
 
 -define(DEFAULT_TIMEOUT, ?get_timeout(default, 5000)).
@@ -254,6 +255,22 @@ for_backup_failures() ->
                            Repository = proplists:get_value(<<"repository">>,
                                                             Props),
                            {true, {backup_failure, Task, Repository}};
+                       _ ->
+                           false
+                   end
+           end).
+
+for_cont_backup_failures() ->
+    Query = <<"{name=~`contbk_events_processed`}">>,
+    latest(Query,
+           fun ([]) ->
+                   false;
+               (Props) ->
+                   case proplists:get_value(<<"status">>, Props) of
+                       <<"failed">> ->
+                           Event = proplists:get_value(<<"event_type">>, Props),
+                           Bucket = proplists:get_value(<<"bucket">>, Props),
+                           {true, {cont_backup_event_failed, Bucket, Event}};
                        _ ->
                            false
                    end

@@ -939,13 +939,14 @@ config_upgrade_to_totoro_test() ->
             {alerts, [ip, time_out_of_sync]}]}]],
     Expected1 = [{set, email_alerts,
                   [{pop_up_alerts,
-                    [backup_failure, cm_bucket_autoreprovision_total,disk,
-                     encr_at_rest_errors_total,encr_at_rest_key_test_failed,ip,
+                    [backup_failure, cm_bucket_autoreprovision_total,
+                     cont_backup_event_failed, disk,encr_at_rest_errors_total,
+                     encr_at_rest_key_test_failed, ip,
                      xdcr_replication_deleted]},
                    {alerts,
                     [backup_failure, cm_bucket_autoreprovision_total,
-                     encr_at_rest_errors_total,
-                     encr_at_rest_key_test_failed,ip,time_out_of_sync,
+                     cont_backup_event_failed, encr_at_rest_errors_total,
+                     encr_at_rest_key_test_failed, ip, time_out_of_sync,
                      xdcr_replication_deleted]}]}],
     ?assertEqual(Expected1, config_upgrade_to_totoro(Config1)).
 -endif.

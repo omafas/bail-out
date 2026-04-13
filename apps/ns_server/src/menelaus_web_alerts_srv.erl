@@ -177,6 +177,8 @@ short_description(cm_bucket_autoreprovision_total) ->
     "bucket auto-reprovisioning has occurred";
 short_description(backup_failure) ->
     "A backup service task failed";
+short_description(cont_backup_event_failed) ->
+    "Failure processing a continuous backup event";
 short_description(Other) ->
     %% this case is needed for tests to work
     couch_util:to_list(Other).
@@ -286,7 +288,9 @@ errors(cm_bucket_autoreprovision_total) ->
     "necessary to rebuild replicas.";
 errors(backup_failure) ->
     "A '~s' task failed for the repository '~s'. Please see the UI for more "
-    "information.".
+    "information.";
+errors(cont_backup_event_failed) ->
+    "Continuous backup on bucket '~s' failed to process an event '~s'.".
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -561,6 +565,7 @@ alert_keys_added_in_totoro() ->
     [xdcr_replication_deleted,
      encr_at_rest_errors_total,
      backup_failure,
+     cont_backup_event_failed,
      cm_bucket_autoreprovision_total].
 
 -spec alert_keys_disabled_by_default() -> [atom()].
@@ -610,7 +615,7 @@ global_checks() ->
      stuck_rebalance, memcached_connections, disk_guardrail,
      indexer_diverging_replicas, xdcr_replication_deleted, encr_at_rest,
      cm_bucket_autoreprovision_total, indexer_lost_replicas,
-     backup_failure].
+     backup_failure, cont_backup_event_failed].
 
 %% @doc fires off various checks
 check_alerts(Opaque, Hist, Stats) ->
@@ -1190,6 +1195,42 @@ check(backup_failure, Opaque, _History, _Stats) ->
                               Msg = fmt_to_bin(errors(backup_failure),
                                                [Task, Repository]),
                               global_alert(backup_failure, Msg),
+                              dict:store(Key, NumFailures, Acc)
+                      end
+              end, Opaque, Failures)
+    end;
+check(cont_backup_event_failed, Opaque, _History, _Stats) ->
+    case stats_interface:for_cont_backup_failures() of
+        [] ->
+            %% Stat not yet emitted
+            Opaque;
+        Failures ->
+            lists:foldl(
+              fun ({{cont_backup_event_failed, Bucket, Event}, NumFailures},
+                   Acc) ->
+                      Key = {cont_backup_event_failed, Bucket, Event},
+                      PriorNum = case dict:find(Key, Acc) of
+                                     {ok, Prior} -> Prior;
+                                     error -> 0
+                                 end,
+                      case NumFailures of
+                          PriorNum ->
+                              Acc;
+                          0 ->
+                              %% Reset?
+                              dict:store(Key, 0, Acc);
+                          NumFailures when NumFailures < PriorNum ->
+                              ?log_debug("Number of continuous backup event "
+                                         "failures for '~p' has unexpectedly "
+                                         "gone down from ~p to ~p",
+                                         [Key, PriorNum, NumFailures]),
+                              %% Use the new, lower number
+                              dict:store(Key, NumFailures, Acc);
+                          _ ->
+                              Msg = fmt_to_bin(
+                                      errors(cont_backup_event_failed),
+                                      [Bucket, Event]),
+                              global_alert(cont_backup_event_failed, Msg),
                               dict:store(Key, NumFailures, Acc)
                       end
               end, Opaque, Failures)

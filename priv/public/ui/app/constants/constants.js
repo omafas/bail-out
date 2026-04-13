@@ -49,7 +49,8 @@ let knownAlerts = [
   'encr_at_rest_errors_total',
   'cm_bucket_autoreprovision_total',
   'indexer_lost_replicas',
-  'backup_failure'
+  'backup_failure',
+  'cont_backup_event_failed'
 ];
 
 let timeUnitToSeconds = {

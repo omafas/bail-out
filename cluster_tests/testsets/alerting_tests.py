@@ -418,6 +418,66 @@ class AlertTests(testlib.BaseTestSet):
             # Remove the temporary directory used for the repository
             shutil.rmtree(repo_path)
 
+    # Test for a continuous backup event failure. This is done by creating
+    # a bucket and then creating a directory in the continuous backup
+    # directory which cannot be written to. Then continuous backup is
+    # enabled for the bucket and the failure should occur and a stat
+    # emitted.
+    # XXX: Tag this change after the test gets some prime time soaking
+    # @tag(Tag.LowUrgency)
+    def contbk_event_processing_failure_test(self):
+        def check_backup_up():
+            r = testlib.get(self.cluster, "/_p/backup/api/v1/cluster/self")
+            return r.status_code == 200
+
+        bucket_name = 'contbkBucket'
+
+        # Wait for the backup service to complete starting up
+        testlib.poll_for_condition(check_backup_up, sleep_time=1, timeout=30)
+
+        try:
+            # Create a bucket
+            self.cluster.create_bucket({'name': bucket_name,
+                                        'storageBackend': 'magma',
+                                        'ramQuotaMB': '100'}, sync=True)
+            UUID = self.cluster.get_bucket_uuid(bucket_name)
+
+            # Create a directory which cannot be accessed. The inability
+            # to access it will lead to continuous backup emitting a
+            # contbk_events_processed stat with "failed" status.
+            node = self.cluster.get_available_cluster_node()
+            data_path = node.data_path()
+            inaccessible_dir = f"{data_path}/data/@continuous_backup/{UUID}/0"
+            print(f"Inaccessible directory is '{inaccessible_dir}'")
+            os.makedirs(inaccessible_dir, mode=0o100)
+
+            # Enable continuous backup
+            data = {'name': bucket_name,
+                    'continuousBackupEnabled': 'true',
+                    'continuousBackupLocation': data_path,
+                    'historyRetentionSeconds': '2342424'}
+            self.cluster.update_bucket(data=data)
+
+            # poll for alert
+            alert_re = (f"Continuous backup on bucket '{bucket_name}' failed "
+                        "to process an event 'contbk_settings_start'")
+            testlib.poll_for_condition(
+                    lambda: assert_alerts(
+                        self.cluster, [alert_re], verify_email=True,
+                        mock_smtp_server=self.mock_smtp_server),
+                    sleep_time=1, timeout=120, verbose=True,
+                    retry_on_assert=True,
+                    msg="wait for continuous backup event failure alert")
+        finally:
+            # Clean up the bucket we created
+            testlib.ensure_deleted(self.cluster,
+                                   f"/pools/default/buckets/{bucket_name}")
+            # Make the directory accessible...
+            os.chmod(f"{inaccessible_dir}", 0o777)
+            # ... and delete it
+            shutil.rmtree(f"{inaccessible_dir}")
+
+
     def to_node(self):
         return self.cluster._nodes[1]
 
