@@ -894,6 +894,13 @@ class Cluster:
             testlib.get_succ(self, f"/pools/default/buckets/{name}"),
             "non-json response for " + f"/pools/default/buckets/{name}")
 
+    def get_vbucket_map(self, name):
+        resp = testlib.diag_eval(
+            self,
+            f'{{ok, BucketConfig}} = ns_bucket:get_bucket("{name}"),'
+            '{json, proplists:get_value(map, BucketConfig)}.')
+        return testlib.json_response(resp, "non-json response for bucket map")
+
     def get_counters(self):
         r = testlib.get_succ(self, f'/pools/default/')
         return r.json()['counters']

@@ -215,7 +215,7 @@ class FusionTests(testlib.BaseTestSet):
 
         self.cluster.rebalance(plan_uuid = plan_uuid)
 
-        self.check_uploaders('test', otp_nodes.values())
+        self.check_uploaders('test')
 
         testlib.post_succ(self.cluster, "/controller/fusion/syncLogStore")
 
@@ -252,7 +252,7 @@ class FusionTests(testlib.BaseTestSet):
 
         self.cluster.rebalance(plan_uuid = plan_uuid)
 
-        self.check_uploaders('test', otp_nodes.values())
+        self.check_uploaders('test')
 
         resp = testlib.get_succ(self.cluster, "/fusion/activeGuestVolumes")
         volumes = resp.json()
@@ -520,11 +520,14 @@ class FusionTests(testlib.BaseTestSet):
             '{json, [{[{node, N}, {term, T}]} || {N, T} <- Res]}.')
         return json.loads(resp.text)
 
-    def check_uploaders(self, bucket, nodes):
+    def check_uploaders(self, bucket):
+        vbucket_map = self.cluster.get_vbucket_map(bucket)
         uploaders = self.get_uploaders(bucket)
-        uploader_nodes = set(uploader['node'] for uploader in uploaders)
-        assert all(uploader['node'] in nodes for uploader in uploaders)
-        assert all(node in uploader_nodes for node in nodes)
+        testlib.assert_eq(len(uploaders), len(vbucket_map))
+
+        for vbucket, chain in enumerate(vbucket_map):
+            testlib.assert_not_eq(None, chain[0])
+            testlib.assert_eq(uploaders[vbucket]['node'], chain[0])
 
     def snapshot_management_test(self):
         self.init_fusion()
@@ -580,7 +583,7 @@ class FusionTests(testlib.BaseTestSet):
         self.cluster.rebalance(ejected_nodes=[second_node],
                                plan_uuid = plan_uuid,
                                wait = True)
-        self.check_uploaders('test', keep_nodes)
+        self.check_uploaders('test')
 
     def prepare_2_nodes_one_bucket(self):
         self.init_fusion()
@@ -619,14 +622,14 @@ class FusionTests(testlib.BaseTestSet):
                                plan_uuid = plan_uuid,
                                wait = True)
 
-        self.check_uploaders('test', [first_node_otp])
+        self.check_uploaders('test')
 
     def rebalance_with_trivial_moves_test(self):
-        first_node, second_node = self.prepare_2_nodes_one_bucket()
+        _, second_node = self.prepare_2_nodes_one_bucket()
         self.cluster.failover_node(second_node, graceful=True)
         self.cluster.eject_node(second_node, second_node)
         self.cluster.rebalance(wait = True)
-        self.check_uploaders('test', [first_node.otp_node()])
+        self.check_uploaders('test')
 
 def assert_buckets_error(json, expected):
     error_message = get_json_error(json, 'buckets')
