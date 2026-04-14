@@ -1679,7 +1679,14 @@ find_nodes_and_validate_bucket_config_with_continuous_backup(
         [] ->
             erlang:exit("No live nodes found for continuous backup");
         Nodes ->
-            validate_bucket_config_with_service(Nodes, cont_backup,
+            %% We might have a mixed CE/EE cluster, we only run cont_backup on
+            %% EE nodes though, so we need to filter out the CE nodes.
+            EEContBackupNodes =
+                lists:filter(
+                  fun(Node) ->
+                          cluster_compat_mode:is_continuous_backup_enabled(Node)
+                  end, Nodes),
+            validate_bucket_config_with_service(EEContBackupNodes, cont_backup,
                                                 BucketConfigString, Options)
     end.
 

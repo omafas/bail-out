@@ -56,7 +56,8 @@
          prod_spec_from_legacy_version/1,
          compare_prod_compat_version/2,
          is_data_service_file_based_rebalance_enabled/0,
-         is_continuous_backup_enabled/0]).
+         is_continuous_backup_enabled/0,
+         is_continuous_backup_enabled/1]).
 
 %% NOTE: this is rpc:call-ed by mb_master
 -export([mb_master_advertised_version/0]).
@@ -166,8 +167,8 @@ is_index_pausing_on() ->
     is_index_aware_rebalance_on() andalso
         (not ns_config:read_key_fast(index_pausing_disabled, false)).
 
-is_enterprise(Config) ->
-    case ns_config:search(Config, {node, node(), is_enterprise}) of
+is_enterprise(Node, Config) ->
+    case ns_config:search(Config, {node, Node, is_enterprise}) of
         {value, Value} ->
             Value;
         false ->
@@ -176,8 +177,15 @@ is_enterprise(Config) ->
             ns_config_default:init_is_enterprise()
     end.
 
+is_enterprise(Config) ->
+    is_enterprise(node(), Config).
+
 is_enterprise() ->
     is_enterprise(ns_config:latest()).
+
+-spec is_node_enterprise(node()) -> boolean().
+is_node_enterprise(Node) when is_atom(Node) ->
+    is_enterprise(Node, ns_config:latest()).
 
 is_saslauthd_enabled() ->
     is_enterprise() andalso
@@ -195,7 +203,10 @@ is_data_service_file_based_rebalance_enabled(Config) ->
                          ?DATA_SERVICE_FILE_BASED_BACKFILL_DEFAULT).
 
 is_continuous_backup_enabled() ->
-    is_enterprise() andalso
+    is_continuous_backup_enabled(node()).
+
+is_continuous_backup_enabled(Node) ->
+    is_node_enterprise(Node) andalso
         not config_profile:search({kv, cont_backup_disabled}, false).
 
 is_cbas_enabled() ->
