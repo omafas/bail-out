@@ -1559,7 +1559,7 @@ validate_bucket_config_against_services(BucketConfigString, Options) ->
     case Res of
         {ok, AllResults} ->
             merge_service_bucket_config_validation_results(AllResults);
-        {errors, Error} ->
+        {error, Error} ->
             erlang:exit(
               lists:flatten(
                 io_lib:format(
