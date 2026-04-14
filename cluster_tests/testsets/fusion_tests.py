@@ -264,7 +264,7 @@ class FusionTests(testlib.BaseTestSet):
         testlib.post_succ(self.cluster, '/fusion/enable')
         self.wait_for_state('enabling', 'enabled')
 
-        resp = testlib.post_succ(
+        testlib.post_succ(
             self.cluster,
             f"/pools/default/buckets/test/controller/doFlush")
 
@@ -380,7 +380,6 @@ class FusionTests(testlib.BaseTestSet):
         self.cluster.add_node(second_node, services=[Service.KV])
 
         otp_nodes = testlib.get_otp_nodes(self.cluster)
-        second_otp_node = otp_nodes[second_node.hostname()]
 
         testlib.post_fail(
             self.cluster,
@@ -544,7 +543,6 @@ class FusionTests(testlib.BaseTestSet):
 
         acc_plan = self.prepare_rebalance(otp_nodes.values())
         plan_uuid = acc_plan["planUUID"]
-        plan_nodes = acc_plan["nodes"]
 
         uuids = self.get_snapshot_uuids()
 
@@ -575,7 +573,7 @@ class FusionTests(testlib.BaseTestSet):
         acc_plan = self.prepare_rebalance(keep_nodes)
         plan_uuid = acc_plan["planUUID"]
 
-        resp = testlib.post_succ(
+        testlib.post_succ(
             self.cluster,
             f"/controller/fusion/uploadMountedVolumes?planUUID={plan_uuid}",
             json=generate_nodes_volumes([third_node.otp_node()]))
@@ -613,7 +611,7 @@ class FusionTests(testlib.BaseTestSet):
 
         plan_uuid = acc_plan["planUUID"]
 
-        resp = testlib.post_succ(
+        testlib.post_succ(
             self.cluster,
             f"/controller/fusion/uploadMountedVolumes?planUUID={plan_uuid}",
             json={'nodes': []})
