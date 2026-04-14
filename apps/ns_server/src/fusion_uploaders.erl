@@ -113,9 +113,15 @@ build_fast_forward_info(Bucket, BucketConfig, Map, FastForwardMap, NServers) ->
     case ns_bucket:get_fusion_state(BucketConfig) of
         enabled ->
             Current = ns_bucket:get_fusion_uploaders(Bucket),
-            Moves = calculate_moves(
-                      Bucket, Map, FastForwardMap, Current,
-                      allowance(Map, NServers)),
+            Moves =
+                case place_uploaders_on_actives() of
+                    true ->
+                        build_on_actives(FastForwardMap, Current, moves);
+                    false ->
+                        calculate_moves(
+                          Bucket, Map, FastForwardMap, Current,
+                          allowance(Map, NServers))
+                end,
             ?rebalance_info("Calculated fusion uploader moves. Moves:~n~p",
                             [Moves]),
             {Moves, Current};
@@ -129,6 +135,19 @@ allowance(Map, NServers) ->
 -spec build_initial(vbucket_map()) -> uploaders().
 build_initial(VBucketMap) ->
     [{N, 1} || [N | _] <- VBucketMap].
+
+build_on_actives(VBucketMap, CurrentUploaders, OutputFormat) ->
+    lists:map(
+      fun ({[Active | _], {Active, UploaderTerm}}) ->
+              case OutputFormat of
+                  moves ->
+                      same;
+                  uploaders ->
+                      {Active, UploaderTerm}
+              end;
+          ({[Active | _], {_, UploaderTerm}}) ->
+              {Active, UploaderTerm + 1}
+      end, lists:zip(VBucketMap, CurrentUploaders)).
 
 -spec get_moves(fast_forward_info()) -> moves().
 get_moves({Moves, _}) ->
@@ -456,29 +475,37 @@ calculate_bucket_uploaders(Bucket, BucketConfig) ->
                     %% this bucket was never enabled for fusion
                     {ok, build_initial(Map)};
                 Uploaders ->
-                    case ns_bucket:is_fusion(BucketConfig) of
-                        false ->
-                            %% fusion was disabled on this bucket which means
-                            %% that data is erased. therefore  start from
-                            %% scratch, but do not go lower or equal to
-                            %% existing terms
-                            Zipped = lists:zip(build_initial(Map), Uploaders),
-                            {ok, lists:map(
-                                   fun ({{Node, _}, {Node, Term}}) ->
-                                           {Node, Term};
-                                       ({{Node, _}, {_, Term}}) ->
-                                           {Node, Term + 1}
-                                   end, Zipped)};
+                    case place_uploaders_on_actives() of
                         true ->
-                            %% fusion was stopped for this bucket
-                            %% rebuild uploaders according to existing data
-                            %% trying to minimize the initial upload
-                            re_enable_uploaders(
-                              Bucket,
-                              length(ns_bucket:get_servers(BucketConfig)),
-                              Map, Uploaders)
+                            {ok, build_on_actives(Map, Uploaders, uploaders)};
+                        false ->
+                            place_uploaders_on_actives_or_replicas(
+                              Bucket, BucketConfig, Map, Uploaders)
                     end
             end
+    end.
+
+place_uploaders_on_actives_or_replicas(Bucket, BucketConfig, Map, Uploaders) ->
+    case ns_bucket:is_fusion(BucketConfig) of
+        false ->
+            %% fusion was disabled on this bucket which means
+            %% that data is erased. therefore start from
+            %% scratch, but do not go lower or equal to
+            %% existing terms
+            Zipped = lists:zip(build_initial(Map), Uploaders),
+            {ok, lists:map(
+                   fun ({{Node, _}, {Node, Term}}) ->
+                           {Node, Term};
+                       ({{Node, _}, {_, Term}}) ->
+                           {Node, Term + 1}
+                   end, Zipped)};
+        true ->
+            %% fusion was stopped for this bucket
+            %% rebuild uploaders according to existing data
+            %% trying to minimize the initial upload
+            re_enable_uploaders(
+              Bucket, length(ns_bucket:get_servers(BucketConfig)),
+              Map, Uploaders)
     end.
 
 calculate_uploaders([], Acc) ->
