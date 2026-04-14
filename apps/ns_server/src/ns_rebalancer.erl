@@ -103,7 +103,7 @@ generate_vbucket_map_options(KeepNodes, BucketConfig) ->
                                  {tags, Tags},
                                  {use_vbmap_greedy_optimization, UseGreedy}]).
 
-generate_vbucket_map(CurrentMap, KeepNodes, Bucket, BucketConfig) ->
+generate_vbucket_map(CurrentMap, KeepNodes, Bucket, BucketConfig, Uploaders) ->
     Opts = generate_vbucket_map_options(KeepNodes, BucketConfig),
 
     Map0 =
@@ -125,8 +125,9 @@ generate_vbucket_map(CurrentMap, KeepNodes, Bucket, BucketConfig) ->
     Map = case Map0 of
               undefined ->
                   EffectiveOpts =
-                      [{maps_history, ns_bucket:past_vbucket_maps(Bucket)}
-                       | Opts],
+                      [{maps_history,
+                        ns_bucket:past_vbucket_maps(Bucket)} | Opts] ++
+                      [{uploaders, Uploaders} || Uploaders =/= undefined],
                   NumReplicas = ns_bucket:num_replicas(BucketConfig),
                   mb_map:generate_map(CurrentMap, NumReplicas, KeepNodes,
                                       EffectiveOpts);
@@ -141,7 +142,7 @@ generate_initial_map(Bucket, BucketConfig) ->
                    proplists:get_value(num_vbuckets, BucketConfig),
                    proplists:get_value(num_replicas, BucketConfig)),
     Servers = ns_bucket:get_servers(BucketConfig),
-    generate_vbucket_map(NoNodesMap, Servers, Bucket, BucketConfig).
+    generate_vbucket_map(NoNodesMap, Servers, Bucket, BucketConfig, undefined).
 
 local_buckets_shutdown_loop(Ref, CanWait) ->
     ExcessiveBuckets = ns_memcached:active_buckets() -- ns_bucket:node_bucket_names(node()),
@@ -839,10 +840,17 @@ run_janitor_pre_rebalance(BucketName) ->
             exit({pre_rebalance_janitor_run_failed, BucketName, Error})
     end.
 
+generate_fast_forward_map_with_uploaders(Map, Servers, Bucket, Config) ->
+    Uploaders = ns_bucket:get_fusion_uploaders(Bucket),
+    generate_fast_forward_map(Map, Servers, Bucket, Config, Uploaders).
+
 generate_fast_forward_map(Map, Servers, Bucket, Config) ->
+    generate_fast_forward_map(Map, Servers, Bucket, Config, undefined).
+
+generate_fast_forward_map(Map, Servers, Bucket, Config, Uploaders) ->
     NumReplicas = ns_bucket:num_replicas(Config),
     AdjustedMap = mb_map:align_replicas(Map, NumReplicas),
-    generate_vbucket_map(AdjustedMap, Servers, Bucket, Config).
+    generate_vbucket_map(AdjustedMap, Servers, Bucket, Config, Uploaders).
 
 %% @doc Rebalance the cluster. Operates on a single bucket. Will
 %% either return ok or exit with reason 'stopped' or whatever reason
@@ -2119,8 +2127,14 @@ deactivate_bucket_data_on_unknown_nodes(BucketName, Nodes) ->
 prepare_fusion_rebalance(PlanUUID, KeepNodes, SnapshotLifetime) ->
     KeepKVNodes = ns_cluster_membership:service_nodes(KeepNodes, kv),
     Validity = os:system_time(second) + SnapshotLifetime,
+    GenerateFun = case fusion_uploaders:place_uploaders_on_actives() of
+                      true ->
+                          fun generate_fast_forward_map_with_uploaders/4;
+                      false ->
+                          fun generate_fast_forward_map/4
+                  end,
     prepare_fusion_rebalance(PlanUUID, KeepKVNodes, direct,
-                             fun generate_fast_forward_map/4,
+                             GenerateFun,
                              fun run_janitor_and_fetch_snapshot/1,
                              Validity).
 

@@ -23,7 +23,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--export([build_fast_forward_info/5,
+-export([place_uploaders_on_actives/0,
+         build_fast_forward_info/5,
          build_initial/1,
          get_moves/1,
          get_current/1,
@@ -72,6 +73,9 @@
             ale:info(?USER_LOGGER, "Fusion state changed to ~p", [State])
         end).
 
+-define(PLACE_UPLOADERS_ON_ACTIVES,
+        ?get_param(place_uploaders_on_actives, true)).
+
 %% incremented starting from 1 with each uploader change
 %% The purpose of Term is to help
 %% s3 to recognize rogue uploaders and ignore them.
@@ -97,6 +101,10 @@
 
 -export_type([fast_forward_info/0, uploaders/0, enable_error/0,
               disable_or_stop_error/0, bucket_state/0, state/0]).
+
+-spec place_uploaders_on_actives() -> boolean().
+place_uploaders_on_actives() ->
+    ?PLACE_UPLOADERS_ON_ACTIVES.
 
 -spec build_fast_forward_info(ns_bucket:name(), ns_bucket:config(),
                               vbucket_map(), vbucket_map(), integer()) ->
