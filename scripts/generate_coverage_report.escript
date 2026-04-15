@@ -59,7 +59,8 @@ run(#{report_dir := ReportDir, format := Format, import_dirs := CoverageDirs}) -
         end
     end, lists:sort(CoverdataFiles)),
 
-    ImportedModules = cover:imported_modules(),
+    ImportedModules = lists:filter(fun(M) -> not is_meck_module(M) end,
+                                   cover:imported_modules()),
 
     HtmlDir = filename:join(ReportDir, "html"),
     TxtDir = filename:join(ReportDir, "txt"),
@@ -252,4 +253,10 @@ disable_cover_output() ->
         Pid ->
             group_leader(erlang:whereis(standard_error), Pid),
             ok
+    end.
+
+is_meck_module(Mod) ->
+    case re:run(atom_to_list(Mod), "^.*_meck_original$") of
+        {match, _} -> true;
+        nomatch -> false
     end.
