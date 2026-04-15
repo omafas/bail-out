@@ -331,18 +331,16 @@ handle_settings(Method, Req) ->
     end.
 
 handle_settings_get(Req) ->
-    case chronicle_kv:get(kv, jwt_settings) of
-        {ok, {Settings, _Rev}} ->
-            RestFormat = storage_to_rest_format(Settings),
-            JsonBin = encode_response(RestFormat),
-            menelaus_util:reply(Req, JsonBin, 200,
-                                [{"Content-Type", "application/json"}]);
-        {error, Error} ->
-            ?log_error("Failed to get JWT settings: ~p", [Error]),
-            menelaus_util:reply_json(Req,
-                                     {[{error, <<"Failed to get settings">>}]},
-                                     404)
-    end.
+    RestFormat =
+        case chronicle_kv:get(kv, jwt_settings) of
+            {ok, {Settings, _Rev}} ->
+                storage_to_rest_format(Settings);
+            {error, not_found} ->
+                #{enabled => false, issuers => []}
+        end,
+    JsonBin = encode_response(RestFormat),
+    menelaus_util:reply(Req, JsonBin, 200,
+                        [{"Content-Type", "application/json"}]).
 
 handle_settings_put(Req) ->
     validator:handle(

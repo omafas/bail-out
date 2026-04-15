@@ -120,8 +120,9 @@ class JWTTests(testlib.BaseTestSet):
         audit_payload = {"auditdEnabled": "true"}
         testlib.post_succ(self.cluster, "/settings/audit", data=audit_payload)
 
-        # Disabled by default
-        testlib.get_fail(self.cluster, self.endpoint, expected_code=404)
+        # Not configured by default - returns 200 with empty issuers list
+        r = testlib.get_succ(self.cluster, self.endpoint)
+        assert r.json() == {"enabled": False, "issuers": []}
 
     def teardown(self):
         testlib.delete_config_key(self.cluster,
@@ -129,7 +130,9 @@ class JWTTests(testlib.BaseTestSet):
         testlib.delete_config_key(self.cluster,
                                   "{jwt_cache, jwks_cooldown_interval_ms}")
         testlib.delete_succ(self.cluster, self.endpoint)
-        testlib.get_fail(self.cluster, self.endpoint, expected_code=404)
+        # After DELETE, returns 200 with empty issuers list (not configured)
+        r = testlib.get_succ(self.cluster, self.endpoint)
+        assert r.json() == {"enabled": False, "issuers": []}
 
         audit_payload = {"auditdEnabled": "false"}
         testlib.post_succ(self.cluster, "/settings/audit", data=audit_payload)
