@@ -274,6 +274,10 @@ cbauth_call(Func, Params, Kind, [CbauthLabel | Tail], Opts, Acc) ->
         {ok, Res} ->
             ?log_debug("~s at ~s returned ok", [Func, CbauthLabel]),
             cbauth_call(Func, Params, Kind, Tail, Opts, [Res | Acc]);
+        {error, <<"keys-not-set">>} ->
+            ?log_debug("~s at ~s returned keys-not-set for ~p, will retry",
+                       [Func, CbauthLabel, Kind]),
+            {error, retry};
         {error, Reason} ->
             ?log_error("Failed to call ~s at ~s for ~p: ~p",
                        [Func, CbauthLabel, Kind, Reason]),
