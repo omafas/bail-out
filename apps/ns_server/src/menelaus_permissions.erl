@@ -67,6 +67,14 @@ priv_set(Privilege, [Object | Rest], PrivTree, ParentPrivileges) ->
                                                            ParentPrivileges)}
                   end}.
 
+priv_set_all(Privileges, PrivTree) ->
+    sets:fold(
+        fun (Key, Acc) ->
+                maps:fold(fun (Object, _, Acc1) ->
+                                  priv_set(Key, [Object], Acc1)
+                          end, Acc, Acc)
+        end, PrivTree, Privileges).
+
 priv_unset(Privilege, Object, PrivTree) ->
     priv_unset(Privilege, Object, PrivTree, sets:new()).
 
@@ -271,25 +279,82 @@ check_permissions_for_role(Snapshot, CompiledRole, BucketPermissionsFun,
                             bucket_permissions(Name, [CompiledRole],
                                                BucketPermissionsFun(Name), Acc)
                     end, #{}, ns_bucket:get_bucket_names(Snapshot)),
-    CollectionPrivileges =
-        privileges_merge(BucketPrivileges,
-                         lists:foldl(
-                           collection_permissions(
-                             _, _, CollectionPermissionsFun, PrivObjFun),
-                           #{}, Collections)),
+    CollectionPrivileges = lists:foldl(
+                             collection_permissions(
+                               _, _, CollectionPermissionsFun, PrivObjFun),
+                             #{}, Collections),
+    AllPrivileges =
+        maps:merge_with(
+          fun (_, #priv_object{privileges = Privileges1},
+               #priv_object{privileges = Privileges2,
+                            children = Children}) ->
+                  %% We merge bucket privileges in without modifying the
+                  %% scope/collection privileges since the BucketPrivileges
+                  %% are those that only apply at the bucket level
+                  #priv_object{privileges = sets:union(Privileges1,
+                                                       Privileges2),
+                               children = Children}
+          end, BucketPrivileges, CollectionPrivileges),
     maps:filter(
       fun (_, #priv_object{privileges = Privileges, children = Children}) ->
               sets:size(Privileges) > 0 orelse map_size(Children) > 0
-      end, CollectionPrivileges).
+      end, AllPrivileges).
+
+remove_redundant_privileges(Map, ParentPrivs) ->
+    maps:filtermap(
+      fun (_, #priv_object{privileges = Privileges, children = Children}) ->
+              case remove_redundant_privileges(Children, Privileges) of
+                  NewChildren when map_size(NewChildren) =:= 0 ->
+                      case sets:is_equal(Privileges, ParentPrivs) of
+                          true -> false;
+                          false -> {true, #priv_object{privileges = Privileges,
+                                                       children = NewChildren}}
+                      end;
+                  NewChildren ->
+                      {true, #priv_object{privileges = Privileges,
+                                          children = NewChildren}}
+              end
+      end, Map).
 
 privileges_merge(Priv1, Priv2) ->
-    maps:merge_with(
-      fun (_,
-           #priv_object{privileges = Privileges1, children = Children1},
-           #priv_object{privileges = Privileges2, children = Children2}) ->
-              #priv_object{privileges = sets:union(Privileges1, Privileges2),
-                           children = privileges_merge(Children1, Children2)}
-      end, Priv1, Priv2).
+    privileges_merge(Priv1, Priv2, sets:new()).
+
+privileges_merge(Priv1, Priv2, ParentPrivs) ->
+    Merged =
+        maps:merge_with(
+          fun (_, #priv_object{privileges = Privileges1, children = Children1},
+               #priv_object{privileges = Privileges2, children = Children2}) ->
+                  Privs = sets:union(Privileges1, Privileges2),
+                  case {map_size(Children1) =:= 0, map_size(Children2) =:= 0} of
+                      {true, false} ->
+                          Children3 = priv_set_all(Privileges1, Children2),
+                          Children4 = remove_redundant_privileges(Children3,
+                                                                  Privs),
+                          #priv_object{privileges = Privs,
+                                       children = Children4};
+                      {false, true} ->
+                          Children3 = priv_set_all(Privileges2, Children1),
+                          Children4 = remove_redundant_privileges(Children3,
+                                                                  Privs),
+                          #priv_object{privileges = Privs,
+                                       children = Children4};
+                      _ ->
+                          Children = privileges_merge(Children1, Children2,
+                                                      Privs),
+                          #priv_object{privileges = Privs,
+                                       children = Children}
+                  end
+          end, Priv1, Priv2),
+    maps:filter(
+      fun (_, #priv_object{privileges = Privileges, children = Children})
+            when map_size(Children) =:= 0 ->
+              case sets:is_equal(Privileges, ParentPrivs) of
+                  true -> false;
+                  false -> true
+              end;
+          (_, _) ->
+              true
+      end, Merged).
 
 
 -ifdef(TEST).
@@ -470,4 +535,55 @@ fixup_collection_params_test() ->
                    {[{collection, [any, any, "_mobile"]}], op},
                    Snapshot),
                  Result4).
+
+privileges_merge_test() ->
+    Set = fun (L) -> sets:from_list(L) end,
+    Priv0 = #{},
+    Priv1 = #{b => #priv_object{privileges = Set([x]),
+                                children = #{}}},
+    ?assertEqual(Priv1,
+                 privileges_merge(Priv0, Priv1)),
+    ?assertEqual(Priv1,
+                 privileges_merge(Priv1, Priv0)),
+    Priv2 =
+        #{b => #priv_object{
+                  privileges = Set([]),
+                  children =
+                      #{s => #priv_object{
+                                privileges = Set([]),
+                                children =
+                                    #{c => #priv_object{
+                                              privileges = Set([x]),
+                                              children = #{}}}}}}},
+    ?assertEqual(Priv1,
+                 privileges_merge(Priv1, Priv2)),
+    ?assertEqual(Priv1,
+                 privileges_merge(Priv2, Priv1)),
+    Priv3 = #{b => #priv_object{
+                      privileges = Set([]),
+                      children = #{
+                                   s => #priv_object{
+                                           privileges = Set([y]),
+                                           children = #{}}}}},
+    Priv4 =
+        #{b => #priv_object{
+                  privileges = Set([]),
+                  children =
+                      #{s => #priv_object{
+                                privileges = Set([y]),
+                                children =
+                                    #{c => #priv_object{
+                                              privileges = Set([x, y]),
+                                              children = #{}}}}}}},
+    ?assertEqual(Priv4,
+                 privileges_merge(Priv3, Priv2)),
+    ?assertEqual(Priv4,
+                 privileges_merge(Priv2, Priv3)),
+    Priv5 = #{b => #priv_object{
+                      privileges = Set([x]),
+                      children = #{s => #priv_object{
+                                           privileges = Set([x, y]),
+                                           children = #{}}}}},
+    ?assertEqual(Priv5,
+                 privileges_merge(Priv1, Priv3)).
 -endif.
