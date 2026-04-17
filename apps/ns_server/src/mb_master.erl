@@ -7,6 +7,40 @@
 %% will be governed by the Apache License, Version 2.0, included in the file
 %% licenses/APL2.txt.
 %%
+%% @doc Module responsible for keeping track of the master and determining
+%%      master node placement in the cluster.
+%%
+%% A node may attempt to take over mastership if any of the following conditions
+%% are met:
+%%  1. The master is strongly lower priority at module startup
+%%  2. It is the only node in the cluster when it starts up
+%%  3. It becomes the only node in the cluster
+%%  4. An existing master node is ejected and there are no higher priority nodes
+%%     in the cluster
+%%  5. It hasn't heard from a master or a higher priority node for ?TIMEOUT
+%%     amount of time
+%%
+%% Node priority is defined in the following two ways:
+%%  1. Priority - used to determine if a node is higher priority for becoming
+%%     master.
+%%     Priority criteria:
+%%      a. Node version - newer version node is higher priority
+%%      b. Services weights - node with lower service weight [*] is higher
+%%         priority
+%%      c. Server group - node in a different server group than the current
+%%         master is higher priority
+%%      d. Node name - node with lexicographically lower name is higher priority
+%% 2. Strict priority - used to determine if a node should forcefully take over
+%%    mastership.
+%%    Strict priority criteria:
+%%     a. Node version - newer version node is higher priority
+%%     b. Services weights - node with lower service weight is higher priority
+%%
+%% [*] The service weight list assigns larger weights (lower mastership
+%%     priorities) to nodes running services that have a larger impact on data
+%%     availability during failovers. See ?DEFAULT_SERVICE_WEIGHTS in
+%%     'ns_common.hrl'.
+%%
 -module(mb_master).
 
 -behaviour(gen_statem).
@@ -267,9 +301,11 @@ terminate(_Reason, _StateName, StateData) ->
 
 candidate(info, config_changed, StateData) ->
     Peers = ns_node_disco:nodes_wanted(),
-    S0 = update_service_weights(StateData),
-    S1 = refresh_high_priority_nodes(update_peers(S0, Peers)),
-    S2 = rebuild_server_groups_cache(S1),
+    State = functools:chain(StateData,
+                            [update_service_weights(_),
+                             update_peers(_, Peers),
+                             refresh_high_priority_nodes(_),
+                             rebuild_server_groups_cache(_)]),
     case Peers of
         [N] when N == node() ->
             ale:info(?USER_LOGGER,
@@ -279,9 +315,9 @@ candidate(info, config_changed, StateData) ->
             %% @from candidate
             %% @to master
             %% @reason Only node remaining
-            {next_state, master, start_master(S2)};
+            {next_state, master, start_master(State)};
         _ ->
-            case can_be_master(S2) of
+            case can_be_master(State) of
                 true ->
                     ale:info(?USER_LOGGER,
                              "Master has been removed from cluster. "
@@ -290,9 +326,9 @@ candidate(info, config_changed, StateData) ->
                     %% @from candidate
                     %% @to master
                     %% @reason Master removed from the cluster
-                    {next_state, master, start_master(S2)};
+                    {next_state, master, start_master(State)};
                 false ->
-                    {keep_state, refresh_master_server_group(S2)}
+                    {keep_state, refresh_master_server_group(State)}
             end
     end;
 candidate(info, {send_heartbeat, LastHBInterval},
@@ -422,15 +458,18 @@ candidate(Type, Msg, State) ->
 
 master(info, config_changed, StateData) ->
     Peers = ns_node_disco:nodes_wanted(),
-    S0 = update_service_weights(StateData),
-    S1 = refresh_high_priority_nodes(update_peers(S0, Peers)),
-    S2 = refresh_master_server_group(rebuild_server_groups_cache(S1)),
+    State = functools:chain(StateData,
+                            [update_service_weights(_),
+                             update_peers(_, Peers),
+                             refresh_high_priority_nodes(_),
+                             rebuild_server_groups_cache(_),
+                             refresh_master_server_group(_)]),
     case lists:member(node(), Peers) of
         true ->
-            {keep_state, S2};
+            {keep_state, State};
         false ->
             ?log_info("Master has been demoted. Peers = ~p", [Peers]),
-            NewState = shutdown_master_sup(S2),
+            NewState = shutdown_master_sup(State),
             %% @state_change
             %% @from master
             %% @to candidate
@@ -451,7 +490,7 @@ master(info,
         true ->
             Now = erlang:monotonic_time(),
 
-            case higher_priority_node(NodeInfo, ServiceWeights) of
+            case higher_priority_than_master(NodeInfo, ServiceWeights) of
                 true ->
                     case get_orchestrator_state() of
                         idle ->
@@ -686,9 +725,9 @@ get_services_total_priority(Services, ServiceWeights) ->
         end,
         0, Services).
 
-%% Determine whether some node is of higher priority than ourselves.
--spec higher_priority_node(node_info(), service_weights()) -> boolean().
-higher_priority_node(NodeInfo, ServiceWeights) ->
+%% Determine whether some node is of higher priority than us (the master).
+-spec higher_priority_than_master(node_info(), service_weights()) -> boolean().
+higher_priority_than_master(NodeInfo, ServiceWeights) ->
     Self = node_info(),
     higher_priority_node(Self, NodeInfo, ServiceWeights).
 
