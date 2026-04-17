@@ -1309,23 +1309,34 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
                                       verify_encryption_kek=kek_id)
 
     def dek_limit_test(self):
-        set_cfg_dek_limit(self.cluster, 2)
-        set_log_dek_limit(self.cluster, 2)
-
         secret = cb_managed_secret(usage=['config-encryption'])
         secret_id = create_secret(self.random_node(), secret)
 
         set_cfg_encryption(self.random_node(), 'encryptionKey', secret_id,
-                           dek_rotation=1)
-        set_log_encryption(self.cluster, 'nodeSecretManager', -1,
-                           dek_rotation=1)
+                           dek_rotation=1,
+                           dek_lifetime=10)
+        set_log_encryption(self.random_node(), 'nodeSecretManager', -1,
+                           dek_rotation=1,
+                           dek_lifetime=10)
+
+        # Wait until we have 4 log DEKs. We don't do it for config because
+        # config encryption removes old DEKs immediately, so its number will
+        # not grow actually.
+        poll_verify_cluster_dek_info(self.cluster, 'logs', min_dek_number=3)
+
+        set_cfg_dek_limit(self.cluster, 2)
+        set_log_dek_limit(self.cluster, 2)
+
+        # Wait until old DEKs got removed and the number of DEKs is within the
+        # limit
+        poll_verify_cluster_dek_info(self.cluster, 'logs', max_dek_number=2)
 
         time.sleep(3)
 
-        verify_dek_files(self.cluster, Path() / 'config' / 'deks',
-                         verify_key_count=lambda n: n <= 2)
-        verify_dek_files(self.cluster, Path() / 'config' / 'logs_deks',
-                         verify_key_count=lambda n: n <= 2)
+        # Once it reaches the limit, it should not go over it anymore
+        for node in self.cluster.connected_nodes:
+            verify_node_dek_info(node, 'configuration', max_dek_number=2)
+            verify_node_dek_info(node, 'logs', max_dek_number=2)
 
     @tag(Tag.LowUrgency)
     def all_bucket_dek_limit_test(self):
@@ -1341,34 +1352,59 @@ class NativeEncryptionTests(testlib.BaseTestSet, SampleBucketTasksBase):
         secret = cb_managed_secret(usage=['bucket-encryption'])
         secret_id = create_secret(self.random_node(), secret)
 
-        set_all_bucket_dek_limit(self.cluster, all_bucket_dek_limit)
-
         self.cluster.create_bucket({'name': self.bucket_name, 'ramQuota': 100,
                                     'encryptionAtRestKeyId': secret_id,
-                                    'encryptionAtRestDekRotationInterval': 0},
+                                    'storageBackend': 'magma',
+                                    'encryptionAtRestDekRotationInterval': 1,
+                                    'encryptionAtRestDekLifetime': 10},
                                    sync=True)
+
+        def verify_dek_number(node, min_dek_number=None, max_dek_number=None):
+            # Write some documents to the bucket to make sure that we have
+            # something to re-encrypt with every active DEK, otherwise
+            # new DEKs are not really used and can be removed once new dek is
+            # generated (it depends on implementation in memcached).
+            write_random_doc(self.cluster, self.bucket_name)
+            verify_bucket_dek_info(node, self.bucket_name,
+                                   min_dek_number=min_dek_number,
+                                   max_dek_number=max_dek_number)
+
+        # Wait until each node has at least 3 DEKs
+        for n in kv_nodes(self.cluster):
+            testlib.poll_for_condition(
+                lambda: verify_dek_number(n, min_dek_number=3),
+                sleep_time=1, timeout=60, retry_on_assert=True, verbose=True)
+
+        set_all_bucket_dek_limit(self.cluster, all_bucket_dek_limit)
         # Set the limit after bucket is created, otherwise we don't have
         # bucket UUID yet
         set_bucket_dek_limit(self.cluster, self.bucket_name,
                              specific_bucket_dek_limit)
 
-        self.cluster.update_bucket({'name': self.bucket_name,
-                                    'encryptionAtRestDekRotationInterval': 1})
+        if specific_bucket_dek_limit is None:
+            actual_limit = all_bucket_dek_limit
+        elif all_bucket_dek_limit is None:
+            actual_limit = specific_bucket_dek_limit
+        else:
+            actual_limit = min(all_bucket_dek_limit, specific_bucket_dek_limit)
 
-        # Write some documents to the bucket to make sure that we have
-        # something to re-encrypt with every active DEK, otherwise
-        # new DEKs are not really used and can be removed once new dek is
-        # generated (it depends on implementation in memcached).
-        # Note that we wait for 3 seconds here so at least 3 DEK can be
-        # generated if the limit is not respected.
+        # Wait until old DEKs got removed and the number of DEKs is within
+        # the min of two limits
+        for n in kv_nodes(self.cluster):
+            testlib.poll_for_condition(
+                lambda: verify_dek_number(n, max_dek_number=actual_limit),
+                sleep_time=1, timeout=60, retry_on_assert=True, verbose=True)
+
+        # Keep writing documents while the DEKs are trying to rotate but
+        # the limit should prevent it
         for i in range(15):
             write_random_doc(self.cluster, self.bucket_name)
             time.sleep(0.2)
 
-        bucket_uuid = self.cluster.get_bucket_uuid(self.bucket_name)
-        verify_bucket_deks_files(self.cluster, bucket_uuid,
-                                 verify_key_count=lambda n: n <= 2)
-
+        # Once it reaches the limit, it should not go over it anymore
+        for n in kv_nodes(self.cluster):
+            verify_bucket_dek_info(n, self.bucket_name,
+                                   max_dek_number=actual_limit),
 
     def prepare_cluster_for_node_readd_testing(self):
         # Create cb-managed secret for bucket encryption
@@ -3562,6 +3598,7 @@ def verify_node_dek_info(node, data_type, **kwargs):
 
 
 def verify_dek_info(info, data_statuses=None, dek_number=None,
+                    min_dek_number=None, max_dek_number=None,
                     oldest_dek_time=None):
     if data_statuses is not None:
         assert 'dataStatus' in info, 'data status is not present in ' \
@@ -3572,6 +3609,16 @@ def verify_dek_info(info, data_statuses=None, dek_number=None,
         assert 'dekNumber' in info, 'dek number is not present in ' \
                                     'encryptionAtRestInfo'
         assert info['dekNumber'] == dek_number, \
+               f'dek number is unexpected: {info["dekNumber"]}'
+    if min_dek_number is not None:
+        assert 'dekNumber' in info, 'dek number is not present in ' \
+                                    'encryptionAtRestInfo'
+        assert info['dekNumber'] >= min_dek_number, \
+               f'dek number is unexpected: {info["dekNumber"]}'
+    if max_dek_number is not None:
+        assert 'dekNumber' in info, 'dek number is not present in ' \
+                                    'encryptionAtRestInfo'
+        assert info['dekNumber'] <= max_dek_number, \
                f'dek number is unexpected: {info["dekNumber"]}'
     if oldest_dek_time is not None:
         assert 'oldestDekCreationDatetime' in info, \
