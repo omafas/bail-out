@@ -79,6 +79,7 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             buckets=[],
             min_num_nodes=1,
             min_num_connected=1,
+            balanced=True,
             include_services=[testlib.Service.QUERY])
 
     def setup(self):
@@ -407,14 +408,93 @@ class ExternalCollectionTests(testlib.BaseTestSet):
         testlib.patch_succ(
             self.cluster,
             f"{collection_path(bucket_name, scope_name, collection_name)}"
-            "?external=1")
-
-        print(get_manifest(self.cluster, bucket_name, external=True))
+            "?external=1",
+            data={"param1": "value1"})
 
         col = get_collection_from_manifest(
             self.cluster, bucket_name,
             scope_name, collection_name, external=True)
-        testlib.assert_not_eq(None, col)
+        testlib.assert_eq("value1", col["param1"])
+
+    def patch_external_collection_multiple_params_test(self):
+        bucket_name = "patch-multi-bucket"
+        scope_name = "patch-multi-scope"
+        collection_name = "patch-multi-col"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+        testlib.post_succ(
+            self.cluster,
+            f"{collections_path(bucket_name, scope_name)}"
+            "?external=1",
+            data={"name": collection_name})
+
+        testlib.patch_succ(
+            self.cluster,
+            f"{collection_path(bucket_name, scope_name, collection_name)}"
+            "?external=1",
+            data={"param1": "value1",
+                  "param2": "value2"})
+
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name, external=True)
+        testlib.assert_eq("value1", col["param1"])
+        testlib.assert_eq("value2", col["param2"])
+
+    def patch_external_collection_preserves_props_test(self):
+        bucket_name = "patch-preserve-bucket"
+        scope_name = "patch-preserve-scope"
+        collection_name = "patch-preserve-col"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+        testlib.post_succ(
+            self.cluster,
+            f"{collections_path(bucket_name, scope_name)}"
+            "?external=1",
+            data={"name": collection_name,
+                  "param1": "value1"})
+
+        # Patch with a different param
+        testlib.patch_succ(
+            self.cluster,
+            f"{collection_path(bucket_name, scope_name, collection_name)}"
+            "?external=1",
+            data={"param2": "value2"})
+
+        # Both params should be present
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name, external=True)
+        testlib.assert_eq("value1", col["param1"])
+        testlib.assert_eq("value2", col["param2"])
+
+    def patch_external_collection_overwrites_prop_test(self):
+        bucket_name = "patch-overwrite-bucket"
+        scope_name = "patch-overwrite-scope"
+        collection_name = "patch-overwrite-col"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+        testlib.post_succ(
+            self.cluster,
+            f"{collections_path(bucket_name, scope_name)}"
+            "?external=1",
+            data={"name": collection_name,
+                  "param1": "value1"})
+
+        # Overwrite param1 with the same forced value
+        testlib.patch_succ(
+            self.cluster,
+            f"{collection_path(bucket_name, scope_name, collection_name)}"
+            "?external=1",
+            data={"param1": "value1"})
+
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name, external=True)
+        testlib.assert_eq("value1", col["param1"])
 
     def patch_nonexistent_external_collection_test(self):
         bucket_name = "patch-404-bucket"
@@ -427,7 +507,7 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             self.cluster,
             f"{collection_path(bucket_name, scope_name, 'nonexistent')}"
             "?external=1",
-            expected_code=404)
+            data={"param1": "value1"}, expected_code=404)
 
     def delete_external_collection_test(self):
         bucket_name = "delete-ext-bucket"
@@ -518,3 +598,30 @@ class ExternalCollectionTests(testlib.BaseTestSet):
                 bucket_name, scope_name,
                 "nonexistent"),
             expected_code=404)
+
+    def patch_external_collection_empty_body_test(self):
+        bucket_name = "patch-empty-bucket"
+        scope_name = "patch-empty-scope"
+        collection_name = "patch-empty-col"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+        testlib.post_succ(
+            self.cluster,
+            f"{collections_path(bucket_name, scope_name)}"
+            "?external=1",
+            data={"name": collection_name,
+                  "param1": "value1"})
+
+        # Patch with empty body should succeed and
+        # preserve existing props
+        testlib.patch_succ(
+            self.cluster,
+            f"{collection_path(bucket_name, scope_name, collection_name)}"
+            "?external=1",
+            data={})
+
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, collection_name, external=True)
+        testlib.assert_eq("value1", col["param1"])

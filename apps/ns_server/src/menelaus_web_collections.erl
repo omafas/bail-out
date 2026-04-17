@@ -189,16 +189,31 @@ handle_post_external_collection(Bucket, Scope, Req) ->
     menelaus_util:assert_is_totoro(),
     validator:handle(
       fun (Values) ->
-              Name = proplists:get_value(name, Values),
-              RV = collections:create_external_collection(
-                     Bucket, Scope, Name, proplists:delete(name, Values)),
-              maybe_audit(RV, Req,
-                          ns_audit:create_collection(_, Bucket, Scope, Name,
-                                                     _)),
-              maybe_add_event_log(RV, Bucket, []),
-              handle_rv(RV, collection_create, Req)
+              CollectionParams = collection_params(Values),
+              case validate_external_collection_with_service(
+                     Bucket, Scope, CollectionParams) of
+                  {ok, ServiceOKs} ->
+                      Name = proplists:get_value(name, Values),
+                      Props = build_collection_props(
+                                proplists:delete(name, Values), ServiceOKs),
+                      RV = collections:create_external_collection(
+                             Bucket, Scope, Name, Props),
+                      maybe_audit(RV, Req,
+                                  ns_audit:create_collection(
+                                    _, Bucket, Scope, Name, _)),
+                      maybe_add_event_log(RV, Bucket, []),
+                      handle_rv(RV, collection_create, Req);
+                  no_query_node ->
+                      reply_global_error(
+                        Req,
+                        "Must have a query node to configure an external "
+                        "collection",
+                        400);
+                  {errors, Errors} ->
+                      reply_validation_errors(Req, Errors)
+              end
       end, Req, form,
-      external_collection_validators() ++ [validator:unsupported(_)]).
+      external_collection_validators()).
 
 handle_patch_collection(Bucket, Scope, Name, Req) ->
     assert_api_available(Bucket),
@@ -237,17 +252,29 @@ handle_patch_external_collection(Bucket, Scope, Name, Req) ->
     menelaus_util:assert_is_totoro(),
     validator:handle(
       fun (Values) ->
-              RV = collections:modify_external_collection(
-                     Bucket, Scope, Name, proplists:delete(name, Values)),
-              maybe_audit(RV, Req,
-                          ns_audit:modify_collection(_, Bucket, Scope, Name,
-                                                     _)),
-              maybe_add_event_log(RV, Bucket, []),
-              handle_rv(RV, collection_patch, Req)
+              CollectionParams =
+                  collection_params(
+                    [{name, Name} | Values]),
+              case validate_external_collection_with_service(
+                     Bucket, Scope, CollectionParams) of
+                  {ok, ServiceOKs} ->
+                      Props = build_collection_props(
+                                Values,
+                                ServiceOKs),
+                      RV = collections:modify_external_collection(
+                             Bucket, Scope, Name, Props),
+                      maybe_audit(
+                        RV, Req,
+                        ns_audit:modify_collection(
+                          _, Bucket, Scope, Name, _)),
+                      maybe_add_event_log(RV, Bucket, []),
+                      handle_rv(RV, collection_patch, Req);
+                  {errors, Errors} ->
+                      reply_validation_errors(Req, Errors)
+              end
       end, Req, form,
       [validator:prohibited(name, _),
-       validator:no_duplicate_keys(_),
-       validator:unsupported(_)]).
+       validator:no_duplicate_keys(_)]).
 
 handle_delete_scope(Bucket, Name, Req) ->
     assert_api_available(Bucket),
@@ -518,6 +545,97 @@ reply_global_error(Req, Msg, Code) ->
 
 is_req_external(Req) ->
     proplists:get_value("external", mochiweb_request:parse_qs(Req)) =:= "1".
+
+%% External collection validation
+
+validate_external_collection_with_service(Bucket, Scope, Params) ->
+    CollectionConfig = {menelaus_web_external_catalogs:binary_params(Params) ++
+                            [{bucket, list_to_binary(Bucket)},
+                             {scope, list_to_binary(Scope)}]},
+    Options =
+        #{clusterCompatVersion =>
+              cluster_compat_mode:effective_cluster_compat_version()},
+    Nodes = get_query_nodes(),
+    case Nodes of
+        [] ->
+            no_query_node;
+        _ ->
+            validate_collection_against_query_nodes(
+              Nodes, CollectionConfig, Options)
+    end.
+
+get_query_nodes() ->
+    AllNodes = ns_cluster_membership:service_active_nodes(n1ql),
+    ns_node_disco:only_live_nodes(AllNodes).
+
+validate_collection_against_query_nodes([FirstNode | _], CollectionConfig,
+                                        Options) ->
+    maybe
+        %% Whilst we could validate on all nodes, there is currently no need.
+        %% The code should handle multiple already though, just in case.
+        {ok, Results} ?=
+            service_agent:validate_external_collection_config(
+              n1ql, [FirstNode], CollectionConfig, Options),
+
+        ValidationOptions = #{filter_internal => false,
+                              filter_unsupported => false},
+        {ok, {OKs, Errors}} =
+            delegated_config:process_service_api_validation_results(
+              Results, ValidationOptions),
+
+        %% Cluster_tests need a way to test as much of the code as possible,
+        %% without relying on other components (i.e. knowing the config that
+        %% query supports). We can inject our own values for the sake of
+        %% testing.
+        ForcedValidationResults =
+            ns_config:read_key_fast(
+              forced_external_collection_validation_results, #{}),
+
+        case maps:size(ForcedValidationResults) of
+            0 ->
+                case maps:size(Errors) of
+                    0 -> {ok, OKs};
+                    _ -> {errors, maps:to_list(Errors)}
+                end;
+            _ ->
+                {ok, ForcedValidationResults}
+        end
+    else
+        {error, Error} ->
+            ?log_error(
+               "Error validating external collection "
+               "config with query service: ~p",
+               [Error]),
+            {errors, [{<<"_">>,
+                       <<"Service validation failed">>}]}
+    end.
+
+collection_params(Values) ->
+    lists:filter(
+      fun ({name, _}) -> false;
+          ({external_collection, _}) -> false;
+          (_) -> true
+      end, Values).
+
+build_collection_props(Values, ServiceOKs) ->
+
+    %% Filter down the OKsFromServices to only Params we wanted
+    %% to set, since the returned list is all parameters, not just
+    %% the ones we wanted to set.
+    lists:filtermap(
+      fun ({Key, Value}) ->
+              BKey = list_to_binary(Key),
+              case maps:is_key(BKey, ServiceOKs) of
+                  false -> false;
+                  true -> {true, {BKey, list_to_binary(Value)}}
+              end
+      end, Values).
+
+reply_validation_errors(Req, Errors) ->
+    ErrorJson =
+        {[{Key, Msg} || {Key, Msg} <- Errors]},
+    menelaus_util:reply_json(
+      Req, {[{errors, ErrorJson}]}, 400).
 
 -ifdef(TEST).
 bucket_config_not_found_when_posting_collections_test() ->

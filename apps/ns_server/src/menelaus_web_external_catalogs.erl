@@ -23,7 +23,8 @@
          handle_put_catalog/2,
          handle_patch_catalog/2,
          handle_delete_catalog/2,
-         get_uid/0]).
+         get_uid/0,
+         binary_params/1]).
 
 -define(CHRONICLE_KEY, external_catalogs).
 -define(MAX_NAME_LENGTH, 256).
