@@ -321,7 +321,10 @@ MACRO (NS_SERVER_TEST)
   IF (NOT NS_SERVER_TEST_EXPLICIT)
     # Test invocation
     ADD_TEST(NAME ${_name} COMMAND ${_cmd} WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
-    SET_TESTS_PROPERTIES(${_name} PROPERTIES FIXTURES_REQUIRED NS_TEST_SETUP)
+    # Set a long timeout for these tests as they may take a while to run
+    # in jenkins agents with limited resources, especially when code coverage
+    # is enabled.
+    SET_TESTS_PROPERTIES(${_name} PROPERTIES FIXTURES_REQUIRED NS_TEST_SETUP TIMEOUT 3600)
   ENDIF ()
 
   # Also create a custom target
