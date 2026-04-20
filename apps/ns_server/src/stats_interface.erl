@@ -261,18 +261,27 @@ for_backup_failures() ->
            end).
 
 for_cont_backup_failures() ->
-    Query = <<"{name=~`contbk_events_processed`}">>,
+    Query = <<"{name=~`contbk_events_processed|contbk_gaps`}">>,
     latest(Query,
            fun ([]) ->
                    false;
                (Props) ->
-                   case proplists:get_value(<<"status">>, Props) of
-                       <<"failed">> ->
-                           Event = proplists:get_value(<<"event_type">>, Props),
+                   case proplists:get_value(<<"name">>, Props) of
+                       <<"contbk_events_processed">> ->
+                           case proplists:get_value(<<"status">>, Props) of
+                               <<"failed">> ->
+                                   Event = proplists:get_value(<<"event_type">>,
+                                                               Props),
+                                   Bucket = proplists:get_value(<<"bucket">>,
+                                                                Props),
+                                   {true,
+                                    {cont_backup_event_failed, Bucket, Event}};
+                               _ ->
+                                   false
+                           end;
+                       <<"contbk_gaps">> ->
                            Bucket = proplists:get_value(<<"bucket">>, Props),
-                           {true, {cont_backup_event_failed, Bucket, Event}};
-                       _ ->
-                           false
+                           {true, {contbk_gaps, Bucket}}
                    end
            end).
 

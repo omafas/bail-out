@@ -179,6 +179,8 @@ short_description(backup_failure) ->
     "A backup service task failed";
 short_description(cont_backup_event_failed) ->
     "Failure processing a continuous backup event";
+short_description(cont_backup_gaps) ->
+    "Continuous backup missed some data";
 short_description(Other) ->
     %% this case is needed for tests to work
     couch_util:to_list(Other).
@@ -290,7 +292,12 @@ errors(backup_failure) ->
     "A '~s' task failed for the repository '~s'. Please see the UI for more "
     "information.";
 errors(cont_backup_event_failed) ->
-    "Continuous backup on bucket '~s' failed to process an event '~s'.".
+    "Continuous backup on bucket '~s' failed to process an event '~s'.";
+errors(cont_backup_gaps) ->
+    "Continuous backup on bucket '~s' failed to backup some data. Some "
+    "timestamps will not be restorable. To restore to timestamps after "
+    "the missed data, manual intervention is required: please take a "
+    "cbbackupmgr backup.".
 
 %% ------------------------------------------------------------------
 %% API Function Definitions
@@ -566,6 +573,7 @@ alert_keys_added_in_totoro() ->
      encr_at_rest_errors_total,
      backup_failure,
      cont_backup_event_failed,
+     cont_backup_gaps,
      cm_bucket_autoreprovision_total].
 
 -spec alert_keys_disabled_by_default() -> [atom()].
@@ -1232,6 +1240,30 @@ check(cont_backup_event_failed, Opaque, _History, _Stats) ->
                                       [Bucket, Event]),
                               global_alert(cont_backup_event_failed, Msg),
                               dict:store(Key, NumFailures, Acc)
+                      end;
+                  ({{contbk_gaps, Bucket}, NumGaps}, Acc) ->
+                      Key = {contbk_gaps, Bucket},
+                      PriorNumGaps = case dict:find(Key, Acc) of
+                                         {ok, Prior} -> Prior;
+                                         error -> 0
+                                     end,
+                      case NumGaps of
+                          PriorNumGaps ->
+                              Acc;
+                          0 ->
+                              dict:store(Key, 0, Acc);
+                          NumGaps when NumGaps < PriorNumGaps ->
+                              ?log_debug("Number of continuous backup gaps "
+                                         "for '~p' has unexpectedly gone down  "
+                                         "from ~p to ~p",
+                                         [Key, PriorNumGaps, NumGaps]),
+                              %% Use the new, lower number
+                              dict:store(Key, NumGaps, Acc);
+                          _ ->
+                              Msg = fmt_to_bin(errors(cont_backup_gaps),
+                                               [Bucket]),
+                              global_alert(cont_backup_gaps, Msg),
+                              dict:store(Key, NumGaps, Acc)
                       end
               end, Opaque, Failures)
     end;

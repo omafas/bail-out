@@ -50,7 +50,8 @@ let knownAlerts = [
   'cm_bucket_autoreprovision_total',
   'indexer_lost_replicas',
   'backup_failure',
-  'cont_backup_event_failed'
+  'cont_backup_event_failed',
+  'cont_backup_gaps'
 ];
 
 let timeUnitToSeconds = {

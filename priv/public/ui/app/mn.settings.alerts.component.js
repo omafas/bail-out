@@ -211,7 +211,8 @@ class MnSettingsAlertsComponent extends MnLifeCycleHooksToStream {
       case knownAlerts[28]: return 'Bucket reprovisioned'
       case knownAlerts[29]: return 'Index has lost replicas';
       case knownAlerts[30]: return 'Backup Failure';
-      case knownAlerts[31]: return 'Continuous backup event failed'
+      case knownAlerts[31]: return 'Continuous backup event failed';
+      case knownAlerts[32]: return 'Continuous backup gaps in data'
     }
   }
 }
