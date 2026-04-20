@@ -677,9 +677,12 @@ reply_cbauth_error(Req, Code, Reason, HttpStatus) ->
 %% Credential request validation
 
 cred_validators() ->
+    WireToAtom = maps:from_list(
+                   [{atom_to_binary(misc:snake_to_camel_atom(T)), T}
+                    || T <- ?CREDENTIAL_TYPES]),
     [validator:required(type, _),
-     validator:one_of(type, ?CREDENTIAL_TYPES, _),
-     validator:convert(type, fun binary_to_existing_atom/1, _),
+     validator:one_of(type, maps:keys(WireToAtom), _),
+     validator:convert(type, fun (B) -> maps:get(B, WireToAtom) end, _),
      validator:required(fields, _),
      %% Field validators are determined by type; we use a 2-arity validate
      %% callback so we can read the already-validated `type` from the state
@@ -839,7 +842,7 @@ validated_fields_to_store(Type, FieldsProplist) ->
 export_credential(#{id := Id, schema_version := SV, type := Type,
                     meta := Meta, fields := Fields}) ->
     #{<<"id">>            => ensure_binary(Id),
-      <<"type">>          => atom_to_binary(Type),
+      <<"type">>          => atom_to_binary(misc:snake_to_camel_atom(Type)),
       <<"schemaVersion">> => SV,
       <<"meta">>          => export_meta(Meta),
       <<"fields">>        => export_fields(Type, Fields)}.
