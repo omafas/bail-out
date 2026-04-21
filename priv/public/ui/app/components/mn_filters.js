@@ -405,7 +405,7 @@ function mnPrepareQuantity() {
       throw new Error("Unknown number system");
     }
 
-    var t = _.detect([[T,'T'],[G,'G'],[M,'M'],[K,'K']], function (t) {
+    var t = _.find([[T,'T'],[G,'G'],[M,'M'],[K,'K']], function (t) {
       return value >= t[0];
     }) || [1, ''];
 
@@ -441,7 +441,7 @@ function mnRescaleForSum() {
   // is same as in Brasenham line/circle drawing algorithm.
   return function (newSum, values, oldSum) {
     if (oldSum == null) {
-      oldSum = _.inject(values, function (a,v) {return a+v;}, 0);
+      oldSum = _.reduce(values, function (a,v) {return a+v;}, 0);
     }
     // every value needs to be multiplied by newSum / oldSum
     var error = 0;
@@ -515,7 +515,7 @@ function mnTruncateTo3Digits() {
     if (!value) {
       return 0;
     }
-    var scale = _.detect([100, 10, 1, 0.1, 0.01, 0.001], function (v) {return value >= v;}) || 0.0001;
+    var scale = _.find([100, 10, 1, 0.1, 0.01, 0.001], function (v) {return value >= v;}) || 0.0001;
     if (leastScale != undefined && leastScale > scale) {
       scale = leastScale;
     }

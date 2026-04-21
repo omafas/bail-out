@@ -62,7 +62,7 @@ function mnHelperFactory($window, $state, $location, $timeout, $q, $http, mnPend
       return _.clone($state.params[hashKey]) || [];
     }
     $scope.isDetailsOpened = function (hashValue) {
-      return _.contains(getHashValue(), String(hashValue));
+      return _.includes(getHashValue(), String(hashValue));
     };
     $scope.toggleDetails = function (hashValue) {
       var currentlyOpened = getHashValue();

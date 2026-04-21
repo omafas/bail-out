@@ -161,8 +161,8 @@ function mnServersFactory($http, $q, $uibModal, mnPoolDefault) {
       method: 'POST',
       url: '/controller/rebalance',
       data: {
-        knownNodes: _.pluck(allNodes, 'otpNode').join(','),
-        ejectedNodes: _.pluck(mnServersService.getPendingEject(), 'otpNode').join(',')
+        knownNodes: _.map(allNodes, 'otpNode').join(','),
+        ejectedNodes: _.map(mnServersService.getPendingEject(), 'otpNode').join(',')
       }
     }).then(null, function (resp) {
       if (resp.data) {
@@ -257,7 +257,7 @@ function mnServersFactory($http, $q, $uibModal, mnPoolDefault) {
       var stillActualEject = [];
 
       _.each(mnServersService.getPendingEject(), function (node) {
-        var original = _.detect(nodes, function (n) {
+        var original = _.find(nodes, function (n) {
           return n.otpNode == node.otpNode;
         });
         if (!original || original.clusterMembership === 'inactiveAdded') {
@@ -292,7 +292,7 @@ function mnServersFactory($http, $q, $uibModal, mnPoolDefault) {
       rv.reallyActiveData = _.filter(rv.reallyActive, function (node) {
         return _.indexOf(node.services, "kv") > -1;
       });
-      rv.unhealthyActive = _.detect(rv.reallyActive, function (node) {
+      rv.unhealthyActive = _.find(rv.reallyActive, function (node) {
         return node.status === 'unhealthy';
       });
       let ram = poolDefault.storageTotals.ram;
