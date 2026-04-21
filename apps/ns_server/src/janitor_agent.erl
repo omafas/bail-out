@@ -81,6 +81,7 @@
          get_fusion_sync_info/2,
          sync_fusion_log_store/2,
          get_fusion_uploaders_state/2,
+         init_fusion_namespace/2,
          download_snapshot/5,
          wait_download_snapshot/4,
          wait_snapshot_ready/4,
@@ -415,6 +416,14 @@ process_multicall_rv([], []) ->
 process_multicall_rv(BadReplies, BadNodes) ->
     {errors, [{N, bad_node} || N <- BadNodes] ++ BadReplies}.
 
+pick_best_node_to_call([FN | _] = Nodes) ->
+    case lists:member(node(), Nodes) of
+        true ->
+            node();
+        _ ->
+            FN
+    end.
+
 -spec maybe_start_fusion_uploaders(
         ns_bucket:name(), [{node(), [{vbucket_id(), integer()}]}]) ->
           ok | {error, {failed_nodes, [node()]}}.
@@ -491,6 +500,11 @@ get_fusion_uploaders_state(Bucket, BucketConfig) ->
     NodesCalls = [{Node, get_fusion_uploaders_state} || Node <- Servers],
     call_on_nodes_with_returns(Bucket, NodesCalls, fun servant_call/3).
 
+-spec init_fusion_namespace(ns_bucket:name(), [node()]) ->
+          ok | {error, {failed_nodes, [node()]}}.
+init_fusion_namespace(Bucket, Servers) ->
+    NodesCalls = [{pick_best_node_to_call(Servers), init_fusion_namespace}],
+    call_on_nodes(Bucket, NodesCalls, fun servant_call/3).
 
 -spec delete_vbucket_copies(ns_bucket:name(), pid(), [node()], vbucket_id()) ->
                                    ok | {errors, [{node(), term()}]}.
@@ -851,6 +865,12 @@ handle_call({maybe_stop_fusion_uploaders, VBuckets}, From, State) ->
       From, State, undefined,
       fun (undefined, #state{bucket_name = Bucket}) ->
               ns_memcached:maybe_stop_fusion_uploaders(Bucket, VBuckets)
+      end);
+handle_call(init_fusion_namespace, From, State) ->
+    handle_call_via_servant(
+      From, State, undefined,
+      fun (undefined, #state{bucket_name = Bucket}) ->
+              fusion_uploaders:init_namespace(Bucket)
       end);
 handle_call(Call, From, State) ->
     do_handle_call(Call, From, cleanup_rebalance_artifacts(Call, State)).
