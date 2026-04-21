@@ -240,7 +240,7 @@ jsonify_privs([SectionKey | Rest], Map) ->
             Privileges = menelaus_permissions:privileges(PrivObject),
             Children = menelaus_permissions:children(PrivObject),
             [{jsonify_key(Key),
-              {[{privileges, maps:keys(Privileges)}] ++
+              {[{privileges, sets:to_list(Privileges)}] ++
                    [jsonify_privs(Rest, Children) ||
                        map_size(Children) =/= 0]}} | Acc]
         end, [], Map)}}.

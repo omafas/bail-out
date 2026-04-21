@@ -34,7 +34,7 @@ privileges(#priv_object{privileges = Privileges}) -> Privileges.
 children(#priv_object{children = Children}) -> Children.
 
 priv_set(Privilege, Object, PrivTree) ->
-    priv_set(Privilege, Object, PrivTree, #{}).
+    priv_set(Privilege, Object, PrivTree, sets:new()).
 
 %% Note that privileges can be set at the bucket, scope or collection level.
 %% If the same privilege is applied to a parent level, priv_set retains the
@@ -47,9 +47,10 @@ priv_set(Privilege, [Object], PrivTree, ParentPrivileges) ->
     maps:update_with(
       Object,
       fun (#priv_object{privileges = Privileges} = PrivObj) ->
-              PrivObj#priv_object{privileges = Privileges#{Privilege => true}}
+              PrivObj#priv_object{privileges = sets:add_element(Privilege,
+                                                                Privileges)}
       end,
-      #priv_object{privileges = ParentPrivileges#{Privilege => true},
+      #priv_object{privileges = sets:add_element(Privilege, ParentPrivileges),
                    children = #{}},
       PrivTree);
 priv_set(Privilege, [Object | Rest], PrivTree, ParentPrivileges) ->
@@ -67,16 +68,16 @@ priv_set(Privilege, [Object | Rest], PrivTree, ParentPrivileges) ->
                   end}.
 
 priv_unset(Privilege, Object, PrivTree) ->
-    priv_unset(Privilege, Object, PrivTree, #{}).
+    priv_unset(Privilege, Object, PrivTree, sets:new()).
 
 priv_unset(Privilege, [Object], PrivTree, ParentPrivileges) ->
     maps:update_with(
       Object,
       fun (#priv_object{privileges = Privileges} = PrivObj) ->
-              PrivObj#priv_object{privileges = maps:remove(Privilege,
-                                                           Privileges)}
+              PrivObj#priv_object{privileges = sets:del_element(Privilege,
+                                                                Privileges)}
       end,
-      #priv_object{privileges = maps:remove(Privilege, ParentPrivileges),
+      #priv_object{privileges = sets:del_element(Privilege, ParentPrivileges),
                    children = #{}},
       PrivTree);
 priv_unset(Privilege, [Object | Rest], PrivTree, ParentPrivileges) ->
@@ -278,7 +279,7 @@ check_permissions_for_role(Snapshot, CompiledRole, BucketPermissionsFun,
                            #{}, Collections)),
     maps:filter(
       fun (_, #priv_object{privileges = Privileges, children = Children}) ->
-              map_size(Privileges) > 0 orelse map_size(Children) > 0
+              sets:size(Privileges) > 0 orelse map_size(Children) > 0
       end, CollectionPrivileges).
 
 privileges_merge(Priv1, Priv2) ->
@@ -286,7 +287,7 @@ privileges_merge(Priv1, Priv2) ->
       fun (_,
            #priv_object{privileges = Privileges1, children = Children1},
            #priv_object{privileges = Privileges2, children = Children2}) ->
-              #priv_object{privileges = maps:merge(Privileges1, Privileges2),
+              #priv_object{privileges = sets:union(Privileges1, Privileges2),
                            children = privileges_merge(Children1, Children2)}
       end, Priv1, Priv2).
 
@@ -297,19 +298,22 @@ flatten_priv_object(Map) ->
 
 flatten_priv_object(Prefix, Acc, Map) ->
     maps:fold(
-      fun (Key, #priv_object{
-                   privileges = Privileges,
-                   children = Children}, Acc1) when map_size(Privileges) =:= 0,
-                                                    map_size(Children) =:= 0 ->
-              [{lists:reverse([Key | Prefix]), empty} | Acc1];
-          (Key, #priv_object{privileges = Privileges,
+      fun (Key, #priv_object{privileges = Privileges,
                              children = Children}, Acc1) ->
-              NewPrefix = [Key | Prefix],
-              NewPrefixReversed = lists:reverse(NewPrefix),
-              flatten_priv_object(
-                NewPrefix,
-                Acc1 ++ [{NewPrefixReversed, K} || K <- maps:keys(Privileges)],
-                Children)
+              case sets:size(Privileges) =:= 0 andalso
+                  map_size(Children) =:= 0 of
+                  true ->
+                      [{lists:reverse([Key | Prefix]), empty} | Acc1];
+                  false ->
+                      NewPrefix = [Key | Prefix],
+                      NewPrefixReversed = lists:reverse(NewPrefix),
+                      flatten_priv_object(
+                        NewPrefix,
+                        Acc1 ++
+                            [{NewPrefixReversed, K} ||
+                                K <- sets:to_list(Privileges)],
+                        Children)
+              end
       end, Acc, Map).
 
 
@@ -324,7 +328,7 @@ priv_is_granted(Privilege, Key, PrivTree) ->
 priv_is_granted(Privilege, [Object | Rest], PrivTree, GrantedByParent) ->
     case maps:find(Object, PrivTree) of
         {ok, #priv_object{privileges = Privileges, children = Children}} ->
-            GrantedAtThisLevel = maps:is_key(Privilege, Privileges),
+            GrantedAtThisLevel = sets:is_element(Privilege, Privileges),
             case Rest of
                 [] ->
                     %% If privileges are specified at this level, and the
