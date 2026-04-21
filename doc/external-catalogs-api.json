@@ -24,23 +24,19 @@
         ],
         "responses": {
           "200": {
-            "description": "A JSON array of external catalogs.\n",
+            "description": "A JSON object of external catalogs keyed by name.\n",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
+                  "type": "object",
+                  "additionalProperties": {
                     "$ref": "#/components/schemas/Catalog"
                   }
                 },
-                "example": [
-                  {
-                    "name": "my-catalog"
-                  },
-                  {
-                    "name": "other-catalog"
-                  }
-                ]
+                "example": {
+                  "my-catalog": {},
+                  "other-catalog": {}
+                }
               }
             }
           },
@@ -84,9 +80,7 @@
                 "schema": {
                   "$ref": "#/components/schemas/Catalog"
                 },
-                "example": {
-                  "name": "my-catalog"
-                }
+                "example": {}
               }
             }
           },
@@ -145,9 +139,7 @@
                 "schema": {
                   "$ref": "#/components/schemas/Catalog"
                 },
-                "example": {
-                  "name": "my-catalog"
-                }
+                "example": {}
               }
             }
           },
@@ -178,10 +170,10 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CatalogInput"
+                "$ref": "#/components/schemas/CatalogUpdateInput"
               },
               "example": {
-                "name": "new-name"
+                "param1": "value1"
               }
             }
           }
@@ -194,14 +186,12 @@
                 "schema": {
                   "$ref": "#/components/schemas/Catalog"
                 },
-                "example": {
-                  "name": "new-name"
-                }
+                "example": {}
               }
             }
           },
           "400": {
-            "description": "Invalid input. The name is missing, empty, too long, or contains invalid characters.\n",
+            "description": "Invalid input.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -218,17 +208,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "A catalog with the new name already exists.\n",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string"
-                },
-                "example": "External catalog 'new-name' already exists"
-              }
-            }
           }
         }
       },
@@ -294,18 +273,16 @@
     "schemas": {
       "Catalog": {
         "type": "object",
-        "required": [
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "The unique name of the external catalog.\n",
-            "minLength": 1,
-            "maxLength": 256,
-            "pattern": "^[a-zA-Z0-9_\\-\\.]+$",
-            "example": "my-catalog"
-          }
+        "additionalProperties": {
+          "type": "string"
+        },
+        "description": "A catalog object containing service-validated parameters. The name is not included in the response body; it is either the key in the list response or part of the URL path.\n"
+      },
+      "CatalogUpdateInput": {
+        "type": "object",
+        "description": "Input for updating a catalog. The name must not be included; it is taken from the URL path.\n",
+        "additionalProperties": {
+          "type": "string"
         }
       },
       "CatalogInput": {

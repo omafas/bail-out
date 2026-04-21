@@ -235,11 +235,8 @@ format_catalog(Catalog) ->
     ExtraParams = proplists:get_value(extra_params, Catalog, []),
     {ExtraParams}.
 
-format_catalog(Name, Catalog) ->
-    {[{Name, format_catalog(Catalog)}]}.
-
 format_catalogs(Catalogs) when is_map(Catalogs) ->
-    {maps:to_list(maps:map(fun format_catalog/2, Catalogs))}.
+    {maps:to_list(maps:map(fun (_K, V) -> format_catalog(V) end, Catalogs))}.
 
 build_catalog(ServiceOKs, Params) ->
     %% Filter down the OKsFromServices to only Params we wanted
