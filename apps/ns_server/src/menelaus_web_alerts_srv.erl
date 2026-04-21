@@ -1175,96 +1175,40 @@ check(xdcr_replication_deleted, Opaque, _History, _Stats) ->
 check(backup_failure, Opaque, _History, _Stats) ->
     case stats_interface:for_backup_failures() of
         [] ->
-            %% Stat not yet emitted
             Opaque;
         Failures ->
             lists:foldl(
               fun ({{backup_failure, Task, Repository}, NumFailures}, Acc) ->
                       Key = {backup_failure, Task, Repository},
-                      PriorNum = case dict:find(Key, Acc) of
-                                     {ok, Prior} -> Prior;
-                                     error -> 0
-                                 end,
-                      case NumFailures of
-                          PriorNum ->
-                              Acc;
-                          0 ->
-                              %% Reset?
-                              dict:store(Key, 0, Acc);
-                          NumFailures when NumFailures < PriorNum ->
-                              %% Not sure this can happen.
-                              ?log_debug("Number of backup failures for '~p' "
-                                         "has unexpectedly gone down from ~p "
-                                         "to ~p.",
-                                         [Key, PriorNum, NumFailures]),
-                              %% Use the new, lower number
-                              dict:store(Key, NumFailures, Acc);
-                          _ ->
-                              Msg = fmt_to_bin(errors(backup_failure),
-                                               [Task, Repository]),
-                              global_alert(backup_failure, Msg),
-                              dict:store(Key, NumFailures, Acc)
-                      end
+                      check_failure(Key, NumFailures, Acc,
+                                    fun () ->
+                                            fmt_to_bin(errors(backup_failure),
+                                                       [Task, Repository])
+                                    end)
               end, Opaque, Failures)
     end;
 check(cont_backup_event_failed, Opaque, _History, _Stats) ->
     case stats_interface:for_cont_backup_failures() of
         [] ->
-            %% Stat not yet emitted
             Opaque;
         Failures ->
             lists:foldl(
               fun ({{cont_backup_event_failed, Bucket, Event}, NumFailures},
                    Acc) ->
                       Key = {cont_backup_event_failed, Bucket, Event},
-                      PriorNum = case dict:find(Key, Acc) of
-                                     {ok, Prior} -> Prior;
-                                     error -> 0
-                                 end,
-                      case NumFailures of
-                          PriorNum ->
-                              Acc;
-                          0 ->
-                              %% Reset?
-                              dict:store(Key, 0, Acc);
-                          NumFailures when NumFailures < PriorNum ->
-                              ?log_debug("Number of continuous backup event "
-                                         "failures for '~p' has unexpectedly "
-                                         "gone down from ~p to ~p",
-                                         [Key, PriorNum, NumFailures]),
-                              %% Use the new, lower number
-                              dict:store(Key, NumFailures, Acc);
-                          _ ->
-                              Msg = fmt_to_bin(
-                                      errors(cont_backup_event_failed),
-                                      [Bucket, Event]),
-                              global_alert(cont_backup_event_failed, Msg),
-                              dict:store(Key, NumFailures, Acc)
-                      end;
+                      check_failure(Key, NumFailures, Acc,
+                                    fun () ->
+                                            fmt_to_bin(
+                                              errors(cont_backup_event_failed),
+                                              [Bucket, Event])
+                                    end);
                   ({{contbk_gaps, Bucket}, NumGaps}, Acc) ->
                       Key = {contbk_gaps, Bucket},
-                      PriorNumGaps = case dict:find(Key, Acc) of
-                                         {ok, Prior} -> Prior;
-                                         error -> 0
-                                     end,
-                      case NumGaps of
-                          PriorNumGaps ->
-                              Acc;
-                          0 ->
-                              dict:store(Key, 0, Acc);
-                          NumGaps when NumGaps < PriorNumGaps ->
-                              ?log_debug("Number of continuous backup gaps "
-                                         "for '~p' has unexpectedly gone down  "
-                                         "from ~p to ~p",
-                                         [Key, PriorNumGaps, NumGaps]),
-                              %% Use the new, lower number
-                              dict:store(Key, NumGaps, Acc);
-                          _ ->
-                              Msg = fmt_to_bin(errors(cont_backup_gaps),
-                                               [Bucket]),
-                              global_alert(cont_backup_gaps, Msg),
-                              dict:store(Key, NumGaps, Acc)
-                      end
+                      check_failure(Key, NumGaps, Acc,
+                                    fun () ->
+                                            fmt_to_bin(errors(cont_backup_gaps),
+                                                       [Bucket])
+                                    end)
               end, Opaque, Failures)
     end;
 check(encr_at_rest, Opaque, _History, Stats) ->
@@ -1694,6 +1638,28 @@ check_global_stat_increased(Stats, StatName, Opaque) ->
                     global_alert(StatName, fmt_to_bin(errors(StatName), [Host]))
             end,
             dict:store(StatName, New, Opaque)
+    end.
+
+%% @doc Check for failure stat changes and alert if increased.
+%% Key is the opaque dict key, Num is the current count, and MsgFun
+%% returns the alert message.
+check_failure(Key, Num, Opaque, MsgFun) ->
+    PriorNum = case dict:find(Key, Opaque) of
+                   {ok, Prior} -> Prior;
+                   error -> 0
+               end,
+    case Num of
+        PriorNum ->
+            Opaque;
+        0 ->
+            dict:store(Key, 0, Opaque);
+        Num when Num < PriorNum ->
+            ?log_debug("Failure count for '~p' has unexpectedly gone down "
+                       "from ~p to ~p", [Key, PriorNum, Num]),
+            dict:store(Key, Num, Opaque);
+        _ ->
+            global_alert(element(1, Key), MsgFun()),
+            dict:store(Key, Num, Opaque)
     end.
 
 %% @doc check that I can listen on the current host
