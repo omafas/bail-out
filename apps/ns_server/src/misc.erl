@@ -4082,7 +4082,11 @@ snake_to_camel_test_() ->
 %%   canonical    - the canonical @-prefixed identity for role storage
 %%                  (defaults to @<identity> if not specified)
 service_definitions() ->
-    #{n1ql     => #{identity => "cbq-engine"},
+    %% "n1ql"/"query" aliases let credential-store allowedServices resolve
+    %% dev/test scripts in the query and indexing repos that use those revrpc
+    %% paths instead of the prod "cbq-engine".
+    #{n1ql     => #{identity => "cbq-engine",
+                    auth_aliases => ["n1ql", "query"]},
       backup   => #{identity => "backup", auth_aliases => ["cbcontbk"]},
       index    => #{identity => "index", auth_aliases => ["projector"]},
       xdcr     => #{identity => "goxdcr"},
@@ -4145,11 +4149,15 @@ service_identity_mapping_test_() ->
      ?_assertEqual(error, service_name_to_identity("cbcontbk")),
      ?_assertEqual(error, service_name_to_identity("bogus")),
      ?_assertEqual(n1ql, identity_name_to_service("cbq-engine")),
+     ?_assertEqual(n1ql, identity_name_to_service("n1ql")),
+     ?_assertEqual(n1ql, identity_name_to_service("query")),
      ?_assertEqual(backup, identity_name_to_service("cbcontbk")),
      ?_assertEqual(backup, identity_name_to_service("backup")),
      ?_assertEqual(index, identity_name_to_service("projector")),
      ?_assertEqual(unknown, identity_name_to_service("bogus")),
      ?_assertEqual("@backup", canonical_admin_identity("@cbcontbk")),
      ?_assertEqual("@backup", canonical_admin_identity("@backup")),
+     ?_assertEqual("@cbq-engine", canonical_admin_identity("@n1ql")),
+     ?_assertEqual("@cbq-engine", canonical_admin_identity("@query")),
      ?_assertEqual("@cbq-engine", canonical_admin_identity("@cbq-engine"))].
 -endif.

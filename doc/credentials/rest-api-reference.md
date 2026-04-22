@@ -167,7 +167,7 @@ These map to service identities via `misc:identity_name_to_service/1`:
 
 | Service | Identity(ies) |
 |---|---|
-| n1ql | @cbq-engine |
+| n1ql | @cbq-engine, @n1ql, @query |
 | backup | @backup, @cbcontbk |
 | index | @index, @projector |
 | xdcr | @goxdcr |
