@@ -1889,199 +1889,211 @@ generate_prometheus_test_config(ExtraConfig, Services) ->
     [{F, yaml:preprocess(Yaml)} || {F, Yaml} <- Configs].
 
 default_config_test() ->
-    config_profile:load_default_profile_for_test(),
-    [{_, DefaultMainCfg}, {RulesFile, DefaultRulesCfg}] =
-        generate_prometheus_test_config([], [kv]),
-    RulesFileBin = list_to_binary(RulesFile),
+    try
+        config_profile:load_default_profile_for_test(),
+        [{_, DefaultMainCfg}, {RulesFile, DefaultRulesCfg}] =
+            generate_prometheus_test_config([], [kv]),
+        RulesFileBin = list_to_binary(RulesFile),
 
-    ?assert(is_binary(yaml:encode(DefaultMainCfg))),
-    ?assert(is_binary(yaml:encode(DefaultRulesCfg))),
+        ?assert(is_binary(yaml:encode(DefaultMainCfg))),
+        ?assert(is_binary(yaml:encode(DefaultRulesCfg))),
 
-    ?assertMatch(
-      #{global := #{scrape_interval := <<"10s">>,
-                    scrape_timeout := <<"10s">>},
-        rule_files := [RulesFileBin],
-        scrape_configs := [#{job_name := <<"general">>,
-                             static_configs :=
-                               [#{targets := [<<"127.0.0.1:8091">>,%% ns_server
-                                              <<"127.0.0.1:9998">>,%% xdcr
-                                              <<"127.0.0.1:9125">>,%% cont bk
-                                              <<"127.0.0.1:11280">>]}]}, %% kv
-                           #{job_name := <<"ns_server_high_cardinality">>,
-                             scrape_interval := <<"60s">>,
-                             scrape_timeout  := <<"10s">>,
-                             static_configs :=
-                               [#{targets := [<<"127.0.0.1:8091">>]}]},
-                           #{job_name := <<"kv_high_cardinality">>,
-                             scrape_interval := <<"10s">>,
-                             scrape_timeout := <<"10s">>,
-                             static_configs :=
-                               [#{targets := [<<"127.0.0.1:11280">>]}]}]},
-      DefaultMainCfg),
+        ?assertMatch(
+          #{global := #{scrape_interval := <<"10s">>,
+                        scrape_timeout := <<"10s">>},
+            rule_files := [RulesFileBin],
+            scrape_configs := [#{job_name := <<"general">>,
+                                 static_configs :=
+                                   [#{targets := [<<"127.0.0.1:8091">>,%% ns_server
+                                                  <<"127.0.0.1:9998">>,%% xdcr
+                                                  <<"127.0.0.1:9125">>,%% cont bk
+                                                  <<"127.0.0.1:11280">>]}]}, %% kv
+                               #{job_name := <<"ns_server_high_cardinality">>,
+                                 scrape_interval := <<"60s">>,
+                                 scrape_timeout  := <<"10s">>,
+                                 static_configs :=
+                                   [#{targets := [<<"127.0.0.1:8091">>]}]},
+                               #{job_name := <<"kv_high_cardinality">>,
+                                 scrape_interval := <<"10s">>,
+                                 scrape_timeout := <<"10s">>,
+                                 static_configs :=
+                                   [#{targets := [<<"127.0.0.1:11280">>]}]}]},
+          DefaultMainCfg),
 
-    ?assertMatch(
-      #{groups := [#{interval := <<"10s">>,
-                     rules := [_|_]}]},
-      DefaultRulesCfg),
-    config_profile:unload_profile_for_test().
+        ?assertMatch(
+          #{groups := [#{interval := <<"10s">>,
+                         rules := [_|_]}]},
+          DefaultRulesCfg)
+    after
+        config_profile:unload_profile_for_test()
+    end.
 
 prometheus_config_test() ->
-    config_profile:load_default_profile_for_test(),
-    MainConfig =
-        fun (StatsSettings, NodeServices) ->
-                ExtraConfig = [{stats_settings, StatsSettings}],
-                [{_, Cfg} | _] = generate_prometheus_test_config(ExtraConfig,
-                                                                 NodeServices),
-                ?assert(is_binary(yaml:encode(Cfg))),
-                Cfg
-        end,
+    try
+        config_profile:load_default_profile_for_test(),
+        MainConfig =
+            fun (StatsSettings, NodeServices) ->
+                    ExtraConfig = [{stats_settings, StatsSettings}],
+                    [{_, Cfg} | _] = generate_prometheus_test_config(ExtraConfig,
+                                                                     NodeServices),
+                    ?assert(is_binary(yaml:encode(Cfg))),
+                    Cfg
+            end,
 
-    ?assertMatch(
-      #{global := #{scrape_interval := <<"20s">>},
-        scrape_configs := [#{job_name := <<"general">>},
-                           #{job_name := <<"ns_server_high_cardinality">>,
-                             scrape_interval := <<"60s">>},
-                           #{job_name := <<"kv_high_cardinality">>,
-                             scrape_interval := <<"20s">>}]},
-      MainConfig([{scrape_interval, 20}], [kv])),
+        ?assertMatch(
+          #{global := #{scrape_interval := <<"20s">>},
+            scrape_configs := [#{job_name := <<"general">>},
+                               #{job_name := <<"ns_server_high_cardinality">>,
+                                 scrape_interval := <<"60s">>},
+                               #{job_name := <<"kv_high_cardinality">>,
+                                 scrape_interval := <<"20s">>}]},
+          MainConfig([{scrape_interval, 20}], [kv])),
 
-    ?assertMatch(
-      #{scrape_configs := [#{job_name := <<"general">>}]},
-      MainConfig([{services, [{kv, [{high_cardinality_enabled, false}]},
-                              {ns_server,
-                               [{high_cardinality_enabled, false}]}]}],
-                 [kv])),
+        ?assertMatch(
+          #{scrape_configs := [#{job_name := <<"general">>}]},
+          MainConfig([{services, [{kv, [{high_cardinality_enabled, false}]},
+                                  {ns_server,
+                                   [{high_cardinality_enabled, false}]}]}],
+                     [kv])),
 
-    ?assertMatch(
-      #{global := #{scrape_interval := <<"10s">>},
-        scrape_configs := [#{job_name := <<"general">>},
-                           #{job_name := <<"kv_high_cardinality">>,
-                             scrape_interval := <<"20s">>}]},
-      MainConfig([{services,
-                   [{kv, [{high_cardinality_enabled, true},
-                          {high_cardinality_scrape_interval, 20}]},
-                    {ns_server, [{high_cardinality_enabled, false}]}]}],
-                 [kv])),
+        ?assertMatch(
+          #{global := #{scrape_interval := <<"10s">>},
+            scrape_configs := [#{job_name := <<"general">>},
+                               #{job_name := <<"kv_high_cardinality">>,
+                                 scrape_interval := <<"20s">>}]},
+          MainConfig([{services,
+                       [{kv, [{high_cardinality_enabled, true},
+                              {high_cardinality_scrape_interval, 20}]},
+                        {ns_server, [{high_cardinality_enabled, false}]}]}],
+                     [kv])),
 
-    ?assertMatch(
-      #{global := #{scrape_interval := <<"10s">>},
-        scrape_configs := [#{job_name := <<"general">>}]},
-      MainConfig([{services,
-                   [{kv, [{high_cardinality_enabled, true},
-                          {high_cardinality_scrape_interval, 20}]},
-                    {ns_server, [{high_cardinality_enabled, false}]}]}],
-                 [])),
+        ?assertMatch(
+          #{global := #{scrape_interval := <<"10s">>},
+            scrape_configs := [#{job_name := <<"general">>}]},
+          MainConfig([{services,
+                       [{kv, [{high_cardinality_enabled, true},
+                              {high_cardinality_scrape_interval, 20}]},
+                        {ns_server, [{high_cardinality_enabled, false}]}]}],
+                     [])),
 
-    ?assertMatch(
-      #{scrape_configs := [#{job_name := <<"general">>},
-                           #{job_name := <<"ns_server_high_cardinality">>},
-                           #{job_name := <<"kv_high_cardinality">>},
-                           #{job_name := <<"prometheus">>,
-                             scrape_interval := <<"42s">>}]},
-      MainConfig([{prometheus_metrics_enabled, true},
-                  {prometheus_metrics_scrape_interval, 42}], [kv])),
+        ?assertMatch(
+          #{scrape_configs := [#{job_name := <<"general">>},
+                               #{job_name := <<"ns_server_high_cardinality">>},
+                               #{job_name := <<"kv_high_cardinality">>},
+                               #{job_name := <<"prometheus">>,
+                                 scrape_interval := <<"42s">>}]},
+          MainConfig([{prometheus_metrics_enabled, true},
+                      {prometheus_metrics_scrape_interval, 42}], [kv])),
 
-    config_profile:unload_profile_for_test(),
-    ok.
+        ok
+    after
+        config_profile:unload_profile_for_test()
+    end.
 
 prometheus_derived_metrics_config_test() ->
-    config_profile:load_default_profile_for_test(),
-    RulesConfig =
-        fun (StatsSettings, NodeServices) ->
-                ExtraConfig = [{stats_settings, StatsSettings}],
-                [{_, Cfg} | Rest] =
-                    generate_prometheus_test_config(ExtraConfig, NodeServices),
-                ?assert(is_binary(yaml:encode(Cfg))),
-                case Rest of
-                    [{_, RulesCfg}] ->
-                        ?assert(is_binary(yaml:encode(RulesCfg))),
-                        RulesCfg;
-                    [] ->
-                        undefined
-                end
+    try
+        config_profile:load_default_profile_for_test(),
+        RulesConfig =
+            fun (StatsSettings, NodeServices) ->
+                    ExtraConfig = [{stats_settings, StatsSettings}],
+                    [{_, Cfg} | Rest] =
+                        generate_prometheus_test_config(ExtraConfig, NodeServices),
+                    ?assert(is_binary(yaml:encode(Cfg))),
+                    case Rest of
+                        [{_, RulesCfg}] ->
+                            ?assert(is_binary(yaml:encode(RulesCfg))),
+                            RulesCfg;
+                        [] ->
+                            undefined
+                    end
+            end,
+
+        ?assertMatch(
+          undefined,
+          RulesConfig([{derived_metrics_filter, []}], [kv])),
+
+        ?assertMatch(
+          #{groups := [#{rules := [#{record := _}|_]}]},
+          RulesConfig([{derived_metrics_filter, all}], [kv])),
+
+        ExpectedMetrics = [<<"cm_failover_safeness_level">>,
+                           <<"couch_docs_actual_disk_size">>,
+                           <<"sysproc_cpu_utilization">>,
+                           <<"sys_cpu_host_utilization_rate">>,
+                           <<"sys_cpu_host_user_rate">>,
+                           <<"sys_cpu_host_sys_rate">>,
+                           <<"sys_cpu_host_other_rate">>,
+                           <<"sys_cpu_host_idle_rate">>,
+                           <<"sys_cpu_utilization_rate">>,
+                           <<"sys_cpu_user_rate">>,
+                           <<"sys_cpu_sys_rate">>,
+                           <<"sys_cpu_throttled_rate">>,
+                           <<"sys_cpu_burst_rate">>] ++
+        case misc:is_linux() of
+            true ->
+                [<<"sys_cpu_irq_rate">>,
+                 <<"sys_cpu_stolen_rate">>];
+            false ->
+                []
         end,
+        RulesCfg = RulesConfig([{derived_metrics_filter, all}], []),
+        #{groups := [#{rules := Rules}]} = RulesCfg,
+        IsRulePresent =
+            fun (Name) ->
+                    case lists:search(
+                           fun (#{record := N}) -> N == Name end,
+                           Rules) of
+                        {value, _} -> true;
+                        false -> false
+                    end
+            end,
+        ?assertEqual(length(ExpectedMetrics), length(Rules)),
+        [?assert(IsRulePresent(N)) || N <- ExpectedMetrics],
 
-    ?assertMatch(
-      undefined,
-      RulesConfig([{derived_metrics_filter, []}], [kv])),
+        FailoverSafenessName = <<"cm_failover_safeness_level">>,
+        ?assertMatch(
+          #{groups :=
+              [#{rules := [#{record := FailoverSafenessName,
+                             expr := <<"1 - (kv_dcp_items_remaining{", _/binary>>,
+                             labels := #{name := FailoverSafenessName}}]}]},
+          RulesConfig([{derived_metrics_interval, 7},
+                       {derived_metrics_filter,
+                        [binary_to_list(FailoverSafenessName), "unknown"]}],
+                      [kv, n1ql])),
 
-    ?assertMatch(
-      #{groups := [#{rules := [#{record := _}|_]}]},
-      RulesConfig([{derived_metrics_filter, all}], [kv])),
+        ?assertMatch(
+          #{groups := [#{interval := <<"42s">>}]},
+          RulesConfig([{derived_metrics_interval, 42}], [kv])),
 
-    ExpectedMetrics = [<<"cm_failover_safeness_level">>,
-                       <<"couch_docs_actual_disk_size">>,
-                       <<"sysproc_cpu_utilization">>,
-                       <<"sys_cpu_host_utilization_rate">>,
-                       <<"sys_cpu_host_user_rate">>,
-                       <<"sys_cpu_host_sys_rate">>,
-                       <<"sys_cpu_host_other_rate">>,
-                       <<"sys_cpu_host_idle_rate">>,
-                       <<"sys_cpu_utilization_rate">>,
-                       <<"sys_cpu_user_rate">>,
-                       <<"sys_cpu_sys_rate">>,
-                       <<"sys_cpu_throttled_rate">>,
-                       <<"sys_cpu_burst_rate">>] ++
-    case misc:is_linux() of
-        true ->
-            [<<"sys_cpu_irq_rate">>,
-             <<"sys_cpu_stolen_rate">>];
-        false ->
-            []
-    end,
-    RulesCfg = RulesConfig([{derived_metrics_filter, all}], []),
-    #{groups := [#{rules := Rules}]} = RulesCfg,
-    IsRulePresent =
-        fun (Name) ->
-                case lists:search(
-                       fun (#{record := N}) -> N == Name end,
-                       Rules) of
-                    {value, _} -> true;
-                    false -> false
-                end
-        end,
-    ?assertEqual(length(ExpectedMetrics), length(Rules)),
-    [?assert(IsRulePresent(N)) || N <- ExpectedMetrics],
-
-    FailoverSafenessName = <<"cm_failover_safeness_level">>,
-    ?assertMatch(
-      #{groups :=
-          [#{rules := [#{record := FailoverSafenessName,
-                         expr := <<"1 - (kv_dcp_items_remaining{", _/binary>>,
-                         labels := #{name := FailoverSafenessName}}]}]},
-      RulesConfig([{derived_metrics_interval, 7},
-                   {derived_metrics_filter,
-                    [binary_to_list(FailoverSafenessName), "unknown"]}],
-                  [kv, n1ql])),
-
-    ?assertMatch(
-      #{groups := [#{interval := <<"42s">>}]},
-      RulesConfig([{derived_metrics_interval, 42}], [kv])),
-
-    config_profile:unload_profile_for_test(),
-    ok.
+        ok
+    after
+        config_profile:unload_profile_for_test()
+    end.
 
 prometheus_config_afamily_test() ->
-    config_profile:load_default_profile_for_test(),
-    ExtraConfig = [{{node, ?NODE, address_family}, inet6}],
-    [{_, Cfg}, _] = generate_prometheus_test_config(ExtraConfig, [kv]),
-    ?assert(is_binary(yaml:encode(Cfg))),
+    try
+        config_profile:load_default_profile_for_test(),
+        ExtraConfig = [{{node, ?NODE, address_family}, inet6}],
+        [{_, Cfg}, _] = generate_prometheus_test_config(ExtraConfig, [kv]),
+        ?assert(is_binary(yaml:encode(Cfg))),
 
-    ?assertMatch(
-      #{scrape_configs := [#{job_name := <<"general">>,
-                             static_configs :=
-                               [#{targets := [<<"[::1]:8091">>,%% ns_server
-                                              <<"[::1]:9998">>,%% xdcr
-                                              <<"[::1]:9125">>,%% cont bk
-                                              <<"[::1]:11280">>]}]}, %% kv
-                           #{job_name := <<"ns_server_high_cardinality">>,
-                             static_configs :=
-                               [#{targets := [<<"[::1]:8091">>]}]},
-                           #{job_name := <<"kv_high_cardinality">>,
-                             static_configs :=
-                               [#{targets := [<<"[::1]:11280">>]}]}]},
-      Cfg),
-    config_profile:unload_profile_for_test().
+        ?assertMatch(
+          #{scrape_configs := [#{job_name := <<"general">>,
+                                 static_configs :=
+                                   [#{targets := [<<"[::1]:8091">>,%% ns_server
+                                                  <<"[::1]:9998">>,%% xdcr
+                                                  <<"[::1]:9125">>,%% cont bk
+                                                  <<"[::1]:11280">>]}]}, %% kv
+                               #{job_name := <<"ns_server_high_cardinality">>,
+                                 static_configs :=
+                                   [#{targets := [<<"[::1]:8091">>]}]},
+                               #{job_name := <<"kv_high_cardinality">>,
+                                 static_configs :=
+                                   [#{targets := [<<"[::1]:11280">>]}]}]},
+          Cfg)
+    after
+        config_profile:unload_profile_for_test()
+    end.
 
 %% This test is disabled due to intermittent failures and also because
 %% decimation is under consideration for being removed.

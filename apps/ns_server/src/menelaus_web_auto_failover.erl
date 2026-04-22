@@ -496,72 +496,74 @@ disable_disk_failover(Config) ->
 
 -ifdef(TEST).
 config_upgrade_to_79_test() ->
-    meck:new(cluster_compat_mode),
-    meck:expect(cluster_compat_mode, is_cluster_79, fun() -> true end),
+    try
+        meck:new(cluster_compat_mode),
+        meck:expect(cluster_compat_mode, is_cluster_79, fun() -> true end),
 
-    meck:new(ns_config, [passthrough]),
-    meck:expect(ns_config, search_node_with_default,
-        fun(_, Default) ->
-            Default
-        end),
-    meck:expect(ns_config, read_key_fast,
-        fun(_, Default) ->
-            Default
-        end),
+        meck:new(ns_config, [passthrough]),
+        meck:expect(ns_config, search_node_with_default,
+            fun(_, Default) ->
+                Default
+            end),
+        meck:expect(ns_config, read_key_fast,
+            fun(_, Default) ->
+                Default
+            end),
 
-    %% Test using the "default" profile.
-    config_profile:load_default_profile_for_test(),
+        %% Test using the "default" profile.
+        config_profile:load_default_profile_for_test(),
 
-    BaseConfig = default_config(true),
-    [{set, auto_failover_cfg, DefaultUpgradedCfg}] =
-        config_upgrade_to_79([BaseConfig]),
-    ?assertEqual([{enabled, false}, {timePeriod, 120}],
-                 proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
-                                     DefaultUpgradedCfg)),
+        BaseConfig = default_config(true),
+        [{set, auto_failover_cfg, DefaultUpgradedCfg}] =
+            config_upgrade_to_79([BaseConfig]),
+        ?assertEqual([{enabled, false}, {timePeriod, 120}],
+                     proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
+                                         DefaultUpgradedCfg)),
 
-    ExistingCfg =
-        misc:update_proplist(DefaultUpgradedCfg,
-                             [{?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
-                               [{enabled, true}, {timePeriod, 5}]}]),
-    [{set, auto_failover_cfg, IgnoreExistingDiskNonRespCfg}] =
-        config_upgrade_to_79([[{?ROOT_CONFIG_KEY, ExistingCfg}]]),
-    ?assertEqual([{enabled, true}, {timePeriod, 5}],
-                 proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
-                                     IgnoreExistingDiskNonRespCfg)),
+        ExistingCfg =
+            misc:update_proplist(DefaultUpgradedCfg,
+                                 [{?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
+                                   [{enabled, true}, {timePeriod, 5}]}]),
+        [{set, auto_failover_cfg, IgnoreExistingDiskNonRespCfg}] =
+            config_upgrade_to_79([[{?ROOT_CONFIG_KEY, ExistingCfg}]]),
+        ?assertEqual([{enabled, true}, {timePeriod, 5}],
+                     proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
+                                         IgnoreExistingDiskNonRespCfg)),
 
-    config_profile:unload_profile_for_test(),
+        config_profile:unload_profile_for_test(),
 
-    %% Test using the provisioned profile which has changes to the default
-    %% auto-failover settings.
-    config_profile:load_profile_for_test(?PROVISIONED_PROFILE_STR),
+        %% Test using the provisioned profile which has changes to the default
+        %% auto-failover settings.
+        config_profile:load_profile_for_test(?PROVISIONED_PROFILE_STR),
 
-    [{set, auto_failover_cfg, UpgradedWithProfile}] =
-        config_upgrade_to_79([BaseConfig]),
+        [{set, auto_failover_cfg, UpgradedWithProfile}] =
+            config_upgrade_to_79([BaseConfig]),
 
-    %% Profile values differ from base but must not change base values
-    %% as a result of upgrade
-    ?assertEqual(120, proplists:get_value(timeout, UpgradedWithProfile)),
-    ?assertEqual(1, proplists:get_value(max_count, UpgradedWithProfile)),
-    ?assertEqual([{enabled,false},{timePeriod,120}],
-                 proplists:get_value(?DATA_DISK_ISSUES_CONFIG_KEY,
-                                     UpgradedWithProfile)),
+        %% Profile values differ from base but must not change base values
+        %% as a result of upgrade
+        ?assertEqual(120, proplists:get_value(timeout, UpgradedWithProfile)),
+        ?assertEqual(1, proplists:get_value(max_count, UpgradedWithProfile)),
+        ?assertEqual([{enabled,false},{timePeriod,120}],
+                     proplists:get_value(?DATA_DISK_ISSUES_CONFIG_KEY,
+                                         UpgradedWithProfile)),
 
-    %% Values not in base config but introduced in profile as new key/values
-    ?assertEqual(undefined,
-                 proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
-                 BaseConfig)),
-    ?assertEqual([{enabled, true}, {timePeriod, 120}],
-                 proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
-                 UpgradedWithProfile)),
-    ?assertEqual(undefined,
-                 proplists:get_value(
-                   ?ALLOW_FAILOVER_EPHEMERAL_NO_REPLICAS_CONFIG_KEY,
-                   BaseConfig)),
-    ?assertEqual(false,
-                 proplists:get_value(
-                   ?ALLOW_FAILOVER_EPHEMERAL_NO_REPLICAS_CONFIG_KEY,
-                   UpgradedWithProfile)),
-
-    config_profile:unload_profile_for_test(),
-    meck:unload().
+        %% Values not in base config but introduced in profile as new key/values
+        ?assertEqual(undefined,
+                     proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
+                     BaseConfig)),
+        ?assertEqual([{enabled, true}, {timePeriod, 120}],
+                     proplists:get_value(?DATA_DISK_NON_RESPONSIVENESS_CONFIG_KEY,
+                     UpgradedWithProfile)),
+        ?assertEqual(undefined,
+                     proplists:get_value(
+                       ?ALLOW_FAILOVER_EPHEMERAL_NO_REPLICAS_CONFIG_KEY,
+                       BaseConfig)),
+        ?assertEqual(false,
+                     proplists:get_value(
+                       ?ALLOW_FAILOVER_EPHEMERAL_NO_REPLICAS_CONFIG_KEY,
+                       UpgradedWithProfile))
+    after
+        config_profile:unload_profile_for_test(),
+        meck:unload()
+    end.
 -endif.

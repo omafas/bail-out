@@ -118,24 +118,27 @@ get_roles(RolesRaw) ->
 
 -ifdef(TEST).
 bad_roles_test() ->
-    config_profile:load_default_profile_for_test(),
-    meck:expect(cluster_compat_mode, get_compat_version, ?cut([7, 9])),
-    meck:expect(cluster_compat_mode, is_developer_preview, ?cut(false)),
-    ?assertEqual({value, []}, get_roles([])),
-    ?assertEqual({value, [cluster_admin]}, get_roles(["cluster_admin"])),
-    ?assertEqual({value, [cluster_admin, data_reader]},
-                 get_roles(["cluster_admin", "data_reader"])),
-    ?assertEqual({error, "The following roles are invalid: nonsense_role"},
-                 get_roles(["nonsense_role"])),
-    %% We only expect role names, without any parameterisation
-    ?assertEqual({error, "The following roles are invalid: cluster_admin[*]"},
-                 get_roles(["cluster_admin[*]"])),
-    ?assertEqual({error,
-                  "The following roles are invalid: "
-                  "nonsense_role,another_nonsense_role"},
-                 get_roles(["nonsense_role", "another_nonsense_role"])),
-    meck:unload(),
-    config_profile:unload_profile_for_test().
+    try
+        config_profile:load_default_profile_for_test(),
+        meck:expect(cluster_compat_mode, get_compat_version, ?cut([7, 9])),
+        meck:expect(cluster_compat_mode, is_developer_preview, ?cut(false)),
+        ?assertEqual({value, []}, get_roles([])),
+        ?assertEqual({value, [cluster_admin]}, get_roles(["cluster_admin"])),
+        ?assertEqual({value, [cluster_admin, data_reader]},
+                     get_roles(["cluster_admin", "data_reader"])),
+        ?assertEqual({error, "The following roles are invalid: nonsense_role"},
+                     get_roles(["nonsense_role"])),
+        %% We only expect role names, without any parameterisation
+        ?assertEqual({error, "The following roles are invalid: cluster_admin[*]"},
+                     get_roles(["cluster_admin[*]"])),
+        ?assertEqual({error,
+                      "The following roles are invalid: "
+                      "nonsense_role,another_nonsense_role"},
+                     get_roles(["nonsense_role", "another_nonsense_role"]))
+    after
+        meck:unload(),
+        config_profile:unload_profile_for_test()
+    end.
 -endif.
 
 get_groups(Groups) ->
