@@ -5517,7 +5517,8 @@ build_dynamic_bucket_info_test_setup(Version, IsEnterprise) ->
         end).
 
 build_dynamic_bucket_info_test_teardown() ->
-    meck:unload().
+    meck:unload(),
+    config_profile:unload_profile_for_test().
 
 %% Test the output of build_dynamic_bucket_info. Aspirationally this would test
 %% the entire output of the function, but for now it just tests a subset of it.
@@ -6038,7 +6039,8 @@ num_replicas_guardrail_validation_test_() ->
                          fun (_, Default) -> Default end)
      end,
      fun (_) ->
-             meck:unload()
+             meck:unload(),
+             config_profile:unload_profile_for_test()
      end,
      [{"num_replicas can't be increased after disk usage guardrail hit",
        ?_assertEqual(ExpectedError1,
