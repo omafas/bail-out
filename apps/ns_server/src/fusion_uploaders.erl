@@ -45,7 +45,8 @@
          get_snapshots/5,
          cleanup_snapshots/0,
          cleanup_mounted_volumes/2,
-         init_namespace/1]).
+         init_namespace/1,
+         enable_bucket/1]).
 
 %% used via rpc:call
 -export([do_get_snapshots/4, do_delete_snapshots/3]).
@@ -84,7 +85,7 @@
 -type state() ::
         disabled | disabling | enabled | enabling | stopped | stopping.
 -type bucket_state() ::
-        disabled | disabling | enabled | stopped | stopping.
+        disabled | disabling | enabled | enabling | stopped | stopping.
 -type wrong_state_error() :: {wrong_state, state(), [state()]}.
 -type bucket_validation_error() ::
         unknown | non_magma | continuous_backup_enabled.
@@ -552,23 +553,22 @@ command({enable, BucketNames}) ->
         {ok, _, {EnablingBuckets, DisablingBuckets}} ?=
             enable(BucketUploaders, MagmaBucketNames),
 
-        [?LOG_BUCKET_STATE(Bucket, enabled) || Bucket <- EnablingBuckets],
+        [?LOG_BUCKET_STATE(Bucket, enabling) || Bucket <- EnablingBuckets],
         [?LOG_BUCKET_STATE(Bucket, disabling) || Bucket <- DisablingBuckets],
         ?LOG_FUSION_STATE(enabling),
         post_enable(BucketsToEnable)
     end;
 command(Command) when Command =:= disable orelse Command =:= stop ->
     ?log_debug("Attempt to ~p fusion", [Command]),
-    {StateToSet, AllowedStates, BucketStates} =
+    {StateToSet, AllowedStates} =
         case Command of
             disable ->
-                {disabling, [enabled, enabling, stopped, stopping],
-                 [enabled, stopped, stopping]};
+                {disabling, [enabled, enabling, stopped, stopping]};
             stop ->
-                {stopping, [enabled, enabling], [enabled]}
+                {stopping, [enabled, enabling]}
         end,
     case chronicle_compat:txn(disable_or_stop_txn(
-                                _, StateToSet, AllowedStates, BucketStates)) of
+                                _, StateToSet, AllowedStates)) of
         {ok, _Rev, AffectedBuckets} ->
             [?LOG_BUCKET_STATE(B, StateToSet) || B <- AffectedBuckets],
             ?LOG_FUSION_STATE(StateToSet),
@@ -577,7 +577,7 @@ command(Command) when Command =:= disable orelse Command =:= stop ->
             Other
     end.
 
-enable_buckets(Snapshot, BucketUploaders) ->
+start_enabling_buckets(Snapshot, BucketUploaders) ->
     SetsAndBuckets =
         lists:flatmap(
           fun ({BucketName, Uploaders}) ->
@@ -593,14 +593,23 @@ enable_buckets(Snapshot, BucketUploaders) ->
                       case ns_bucket:get_fusion_state(BucketConfig) of
                           enabled ->
                               [];
+                          enabling ->
+                              [];
                           _ ->
                               [{{set, ns_bucket:sub_key(BucketName, props),
                                  ns_bucket:set_fusion_state(
-                                   enabled, BucketConfig)}, BucketName}]
+                                   enabling, BucketConfig)}, BucketName}]
                       end
           end, BucketUploaders),
     {[Set || {Set, _} <- SetsAndBuckets],
      [Bucket || {_, Bucket} <- SetsAndBuckets, Bucket =/= undefined]}.
+
+
+-spec enable_bucket(ns_bucket:name()) -> ok.
+enable_bucket(BucketName) ->
+    ns_bucket:enable_fusion(BucketName),
+    ?LOG_BUCKET_STATE(BucketName, enabled),
+    ok.
 
 -spec init_namespace(ns_bucket:name()) -> ok.
 init_namespace(BucketName) ->
@@ -662,7 +671,7 @@ enable(BucketUploaders, MagmaBucketNames) ->
                         [stopped], disabling),
 
                   {EnablingBucketSets, EnablingBuckets} =
-                      enable_buckets(Snapshot, BucketUploaders),
+                      start_enabling_buckets(Snapshot, BucketUploaders),
 
                   {commit, [{set, config_key(),
                              misc:update_proplist(
@@ -676,7 +685,7 @@ enable(BucketUploaders, MagmaBucketNames) ->
               end
       end).
 
-disable_or_stop_txn(Txn, StateToSet, AllowedStates, BucketStates) ->
+disable_or_stop_txn(Txn, StateToSet, AllowedStates) ->
     Snapshot = ns_bucket:fetch_snapshot(all, Txn, [props]),
     {ok, {Config, _}} = chronicle_compat:txn_get(config_key(), Txn),
     State = proplists:get_value(state, Config),
@@ -686,7 +695,7 @@ disable_or_stop_txn(Txn, StateToSet, AllowedStates, BucketStates) ->
         true ->
             FusionBuckets = ns_bucket:get_fusion_buckets(Snapshot),
             {BucketSets, AffectedBuckets} =
-                update_bucket_state_sets(FusionBuckets, BucketStates,
+                update_bucket_state_sets(FusionBuckets, AllowedStates,
                                          StateToSet),
             {commit,
              [update_state_set(Config, StateToSet) | BucketSets],

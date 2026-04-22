@@ -248,7 +248,8 @@
          get_fusion_buckets/0,
          get_fusion_buckets/1,
          fusion_uploaders_key/1,
-         get_fusion_uploaders/1]).
+         get_fusion_uploaders/1,
+         enable_fusion/1]).
 
 -import(json_builder,
         [to_binary/1,
@@ -3522,6 +3523,10 @@ set_fusion_state(disabled, BucketConfig) ->
 set_fusion_state(State, BucketConfig) ->
     lists:keystore(magma_fusion_state, 1, BucketConfig,
                    {magma_fusion_state, State}).
+
+-spec enable_fusion(name()) -> ok.
+enable_fusion(BucketName) ->
+    set_property(BucketName, magma_fusion_state, enabled).
 
 -spec filter_buckets_by(buckets(), fun ((config()) -> buckets())) -> buckets().
 filter_buckets_by(Buckets, Filter) ->

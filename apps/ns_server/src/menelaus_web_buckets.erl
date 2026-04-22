@@ -4106,7 +4106,7 @@ parse_validate_fusion_enabled(
                 [] ->
                     case CanBeEnabledFun() of
                         true ->
-                            {ok, magma_fusion_state, enabled};
+                            {ok, magma_fusion_state, enabling};
                         false ->
                             ignore
                     end;
@@ -4115,7 +4115,7 @@ parse_validate_fusion_enabled(
                         false ->
                             {error, ?FUSION_ENABLED, ?CANNOT_ENABLE_FUSION};
                         true ->
-                            {ok, magma_fusion_state, enabled}
+                            {ok, magma_fusion_state, enabling}
                     end;
                 [{ok, _, false}] ->
                     ignore;
@@ -5486,7 +5486,7 @@ parse_validate_fusion_enabled_test_() ->
                                     (Value == undefined andalso CanBeEnabled) of
                                     true ->
                                         ?assertEqual(
-                                           {ok, magma_fusion_state, enabled},
+                                           {ok, magma_fusion_state, enabling},
                                            Resp);
                                     false ->
                                         ?assertEqual(ignore, Resp)
