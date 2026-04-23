@@ -89,7 +89,7 @@ function mnPoolDefaultFactory(mnPools, mnHelper, $http, $q, $window, $location, 
       //TODO replace serverGroupsUri in isGroupsAvailable using mixed cluster version
       poolDefault.isGroupsAvailable = !!(pools.isEnterprise && poolDefault.serverGroupsUri);
       poolDefault.isEnterprise = pools.isEnterprise;
-      poolDefault.thisNode = _.detect(poolDefault.nodes, function (n) {
+      poolDefault.thisNode = _.find(poolDefault.nodes, function (n) {
         return n.thisNode;
       });
 

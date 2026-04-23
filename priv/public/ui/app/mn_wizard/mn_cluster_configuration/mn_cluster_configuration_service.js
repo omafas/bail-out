@@ -246,7 +246,7 @@ function mnClusterConfigurationServiceFactory($http, mnHelper, IEC, mnPools) {
       var ram = nodeConfig.storageTotals.ram;
       var totalRAMMegs = ram ? Math.floor(ram.total / IEC.Mi) : 0;
       preprocessPath = (nodeConfig.os === 'windows' || nodeConfig.os === 'win64' || nodeConfig.os === 'win32') ? preprocessPathForWindows : preprocessPathStandard;
-      nodeConfig.preprocessedAvailableStorage = _.map(_.clone(nodeConfig.availableStorage.hdd, true), function (storage) {
+      nodeConfig.preprocessedAvailableStorage = _.map(_.cloneDeep(nodeConfig.availableStorage.hdd), function (storage) {
         storage.path = preprocessPath(storage.path);
         return storage;
       }).sort(function (a, b) {
@@ -265,7 +265,7 @@ function mnClusterConfigurationServiceFactory($http, mnHelper, IEC, mnPools) {
     });
   }
   function lookup(path, availableStorage) {
-    return updateTotal(path && _.detect(availableStorage, function (info) {
+    return updateTotal(path && _.find(availableStorage, function (info) {
       return preprocessPath(path).substring(0, info.path.length) == info.path;
     }) || {path: "/", sizeKBytes: 0, usagePercent: 0});
   }
