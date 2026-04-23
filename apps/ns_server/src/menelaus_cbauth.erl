@@ -670,6 +670,7 @@ service_to_label(Service) ->
 -define(LONG_TIMEOUT, 60_000).
 
 setup_t() ->
+    meck:new(config_profile, [passthrough]),
     meck:expect(config_profile, get,
                 fun () ->
                         ?DEFAULT_EMPTY_PROFILE_FOR_TESTS

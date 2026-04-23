@@ -130,10 +130,13 @@ config_upgrade_to_76(Config) ->
 
 -ifdef(TEST).
 defaults_test() ->
-    config_profile:load_default_profile_for_test(),
-    Versions = [?MIN_SUPPORTED_VERSION, ?VERSION_76],
-    lists:foreach(fun(V) -> default_versioned(V) end, Versions),
-    config_profile:unload_profile_for_test().
+    try
+        config_profile:load_default_profile_for_test(),
+        Versions = [?MIN_SUPPORTED_VERSION, ?VERSION_76],
+        lists:foreach(fun(V) -> default_versioned(V) end, Versions)
+    after
+        config_profile:unload_profile_for_test()
+    end.
 
 default_versioned(Version) ->
     Keys = fun (L) -> lists:sort([K || {K, _} <- L]) end,
@@ -146,15 +149,18 @@ default_versioned(Version) ->
                  Keys(general_settings_defaults(Version))).
 
 config_upgrade_test() ->
-    config_profile:load_default_profile_for_test(),
-    CmdList = config_upgrade_to_76([]),
-    [{set, {metakv, Meta}, Data}] = CmdList,
-    ?assertEqual(<<"/analytics/settings/config">>, Meta),
-    ?assertEqual(<<"{\"analytics.settings.blob_storage_bucket\":\"\","
-                   "\"analytics.settings.blob_storage_prefix\":\"\","
-                   "\"analytics.settings.blob_storage_region\":\"\","
-                   "\"analytics.settings.blob_storage_scheme\":\"\"}">>,
-                 Data),
-    config_profile:unload_profile_for_test().
+    try
+        config_profile:load_default_profile_for_test(),
+        CmdList = config_upgrade_to_76([]),
+        [{set, {metakv, Meta}, Data}] = CmdList,
+        ?assertEqual(<<"/analytics/settings/config">>, Meta),
+        ?assertEqual(<<"{\"analytics.settings.blob_storage_bucket\":\"\","
+                       "\"analytics.settings.blob_storage_prefix\":\"\","
+                       "\"analytics.settings.blob_storage_region\":\"\","
+                       "\"analytics.settings.blob_storage_scheme\":\"\"}">>,
+                     Data)
+    after
+        config_profile:unload_profile_for_test()
+    end.
     %% TODO: add upgrade test w/ analytics profile
 -endif.

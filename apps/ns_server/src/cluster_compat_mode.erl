@@ -13,6 +13,7 @@
 -include("ns_common.hrl").
 
 -ifdef(TEST).
+-include("ns_test.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -503,26 +504,30 @@ mb_master_advertised_version_test() ->
 -define(WOMBAT_PROD_NAME, "Wombat").
 
 is_compatible_product_test() ->
-    meck:expect(config_profile, get,
-                fun () ->
-                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
-                end),
-    true = is_compatible_product(undefined),
-    true = is_compatible_product(?DEFAULT_PROD),
-    true = is_compatible_product(<<?DEFAULT_PROD>>),
-    false = is_compatible_product(?WOMBAT_PROD),
-    meck:expect(config_profile, get,
-                fun () ->
-                        [
-                         {name, "wombat"},
-                         {prod, ?WOMBAT_PROD},
-                         {prod_name, ?WOMBAT_PROD_NAME}
-                        ]
-                end),
-    false = is_compatible_product(undefined),
-    false = is_compatible_product(?DEFAULT_PROD),
-    true = is_compatible_product(?WOMBAT_PROD),
-    meck:unload().
+    try
+        meck:new(config_profile, [passthrough]),
+        meck:expect(config_profile, get,
+                    fun () ->
+                            ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                    end),
+        true = is_compatible_product(undefined),
+        true = is_compatible_product(?DEFAULT_PROD),
+        true = is_compatible_product(<<?DEFAULT_PROD>>),
+        false = is_compatible_product(?WOMBAT_PROD),
+        meck:expect(config_profile, get,
+                    fun () ->
+                            [
+                             {name, "wombat"},
+                             {prod, ?WOMBAT_PROD},
+                             {prod_name, ?WOMBAT_PROD_NAME}
+                            ]
+                    end),
+        false = is_compatible_product(undefined),
+        false = is_compatible_product(?DEFAULT_PROD),
+        true = is_compatible_product(?WOMBAT_PROD)
+    after
+        meck:unload()
+    end.
 -endif.
 
 preserve_durable_mutations() ->

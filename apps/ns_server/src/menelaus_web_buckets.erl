@@ -6015,7 +6015,8 @@ build_dynamic_bucket_info_test_setup(Version, IsEnterprise) ->
         end).
 
 build_dynamic_bucket_info_test_teardown() ->
-    meck:unload().
+    meck:unload(),
+    config_profile:unload_profile_for_test().
 
 %% Test the output of build_dynamic_bucket_info. Aspirationally this would test
 %% the entire output of the function, but for now it just tests a subset of it.
@@ -6419,58 +6420,59 @@ parse_validate_storage_mode_test_() ->
 rank_params_screening_test() ->
     %% These tests ensure that all the different cases are handled when we are
     %% fully upgraded to 7.6.
-    meck:new(cluster_compat_mode, [passthrough]),
-    meck:expect(cluster_compat_mode, is_cluster_76,
-                fun () -> true end),
-    meck:expect(config_profile, get,
-                fun () ->
-                        ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
-                end),
-    Params = [{"bucketType", "couchbase"}, {"rank", "0"}],
-    IsNew = true,
-    ?assertEqual(parse_validate_bucket_rank(Params, IsNew), {ok, rank, 0}),
+    try
+        meck:new([cluster_compat_mode, config_profile], [passthrough]),
+        meck:expect(cluster_compat_mode, is_cluster_76,
+                    fun () -> true end),
+        meck:expect(config_profile, get,
+                    fun () ->
+                            ?DEFAULT_EMPTY_PROFILE_FOR_TESTS
+                    end),
+        Params = [{"bucketType", "couchbase"}, {"rank", "0"}],
+        IsNew = true,
+        ?assertEqual(parse_validate_bucket_rank(Params, IsNew), {ok, rank, 0}),
 
-    Params2 = [{"bucketType", "couchbase"}],
-    IsNew2 = false,
-    ?assertEqual(parse_validate_bucket_rank(Params2, IsNew2), ignore),
+        Params2 = [{"bucketType", "couchbase"}],
+        IsNew2 = false,
+        ?assertEqual(parse_validate_bucket_rank(Params2, IsNew2), ignore),
 
-    Params3 = [{"bucketType", "couchbase"}, {"rank", "10"}],
-    IsNew3 = true,
-    ?assertEqual(parse_validate_bucket_rank(Params3, IsNew3), {ok, rank, 10}),
+        Params3 = [{"bucketType", "couchbase"}, {"rank", "10"}],
+        IsNew3 = true,
+        ?assertEqual(parse_validate_bucket_rank(Params3, IsNew3), {ok, rank, 10}),
 
-    Params4 = [{"bucketType", "couchbase"}, {"rank", "100"}],
-    IsNew4 = false,
-    ?assertEqual(parse_validate_bucket_rank(Params4, IsNew4), {ok, rank, 100}),
+        Params4 = [{"bucketType", "couchbase"}, {"rank", "100"}],
+        IsNew4 = false,
+        ?assertEqual(parse_validate_bucket_rank(Params4, IsNew4), {ok, rank, 100}),
 
-    %% This case tests rank=undefined,IsNew=false,Is76=true. This allows
-    %% older nodes to join newer ones without issue.
-    NoRankParams = [{"bucketType", "couchbase"}],
-    NotNew = false,
-    ?assertEqual(parse_validate_bucket_rank(NoRankParams, NotNew), ignore),
+        %% This case tests rank=undefined,IsNew=false,Is76=true. This allows
+        %% older nodes to join newer ones without issue.
+        NoRankParams = [{"bucketType", "couchbase"}],
+        NotNew = false,
+        ?assertEqual(parse_validate_bucket_rank(NoRankParams, NotNew), ignore),
 
-    %% these tests ensure we return correct value when we are NOT in 7.6
-    meck:expect(cluster_compat_mode, is_cluster_76,
-                fun () -> false end),
-    %% Is76=false, rank=0, IsNew=true
-    Params5 = [{"bucketType", "couchbase"}, {"rank", "0"}],
-    IsNew5 = true,
-    ?assertEqual(parse_validate_bucket_rank(Params5, IsNew5),
-                 {error, rank,
-                  <<"Bucket rank cannot be set until the cluster is fully "
-                    "upgraded to 7.6.">>}),
+        %% these tests ensure we return correct value when we are NOT in 7.6
+        meck:expect(cluster_compat_mode, is_cluster_76,
+                    fun () -> false end),
+        %% Is76=false, rank=0, IsNew=true
+        Params5 = [{"bucketType", "couchbase"}, {"rank", "0"}],
+        IsNew5 = true,
+        ?assertEqual(parse_validate_bucket_rank(Params5, IsNew5),
+                     {error, rank,
+                      <<"Bucket rank cannot be set until the cluster is fully "
+                        "upgraded to 7.6.">>}),
 
-    %% Is76=false, rank=10, IsNew=false
-    Params6 = [{"bucketType", "couchbase"}, {"rank", "10"}],
-    IsNew6 = false,
-    ?assertEqual(parse_validate_bucket_rank(Params6, IsNew6),
-                 {error, rank,
-                  <<"Bucket rank cannot be set until the cluster is fully "
-                    "upgraded to 7.6.">>}),
-
-    %% Is76=false, rank=undefined, IsNew=false
-    ?assertEqual(parse_validate_bucket_rank(NoRankParams, NotNew), ignore),
-    config_profile:unload_profile_for_test(),
-    meck:unload(cluster_compat_mode).
+        %% Is76=false, rank=10, IsNew=false
+        Params6 = [{"bucketType", "couchbase"}, {"rank", "10"}],
+        IsNew6 = false,
+        ?assertEqual(parse_validate_bucket_rank(Params6, IsNew6),
+                     {error, rank,
+                      <<"Bucket rank cannot be set until the cluster is fully "
+                        "upgraded to 7.6.">>}),
+        %% Is76=false, rank=undefined, IsNew=false
+        ?assertEqual(parse_validate_bucket_rank(NoRankParams, NotNew), ignore)
+    after
+        meck:unload()
+    end.
 
 test_num_replicas_guardrail_validation(#{disk_usage := DiskUsage,
                                          old_num_replicas := OldNumReplicas,
@@ -6535,7 +6537,8 @@ num_replicas_guardrail_validation_test_() ->
                          fun (_, Default) -> Default end)
      end,
      fun (_) ->
-             meck:unload()
+             meck:unload(),
+             config_profile:unload_profile_for_test()
      end,
      [{"num_replicas can't be increased after disk usage guardrail hit",
        ?_assertEqual(ExpectedError1,
