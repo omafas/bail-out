@@ -1383,38 +1383,48 @@ build_stats_perm_map(UserRoles, PermCheckFun, RolesDefinitions) ->
        lists:foldl(CheckParamPerm, _,
                    proplists:get_value(collections, Params, []))]).
 
+allowed_objects(PermMap) ->
+    maps:keys(maps:filter(fun (_, V) -> V =:= true end, PermMap)).
+
 convert_perm_map_to_promql_ast(PermMap) ->
-    AllowedBuckets = maps:keys(maps:filter(fun (_, V) -> V =:= true end,
-                                           PermMap)),
+    AllowedBuckets = allowed_objects(PermMap),
     Filters =
-        [{[{eq_any, "bucket", AllowedBuckets}]} || AllowedBuckets =/= []] ++
-        maps:fold(
-          fun (_Bucket, true, Acc) -> Acc;
-              (Bucket, ScopePermMap, Acc) ->
-                  AllowedScopes = maps:keys(
-                                    maps:filter(fun (_, V) -> V =:= true end,
-                                                ScopePermMap)),
-                  [{[{eq, "bucket", Bucket},
-                     {re, "scope", lists:join("|", AllowedScopes)}]}
-                        || AllowedScopes =/= []] ++
-                  maps:fold(
-                    fun (_Scope, true, Acc2) -> Acc2;
-                        (Scope, CollectionsPermMap, Acc2) ->
-                            AllowedCols = maps:keys(
-                                            maps:filter(
-                                              fun (_, V) -> V =:= true end,
-                                              CollectionsPermMap)),
-                            [{[{eq, "bucket", Bucket},
-                               {eq, "scope", Scope},
-                               {re, "collection", lists:join("|", AllowedCols)}]}
-                                    || AllowedCols =/= []] ++ Acc2
-                    end, Acc, ScopePermMap)
-          end, [], PermMap),
+        [buckets_filter(AllowedBuckets) || AllowedBuckets =/= []] ++
+        maps:fold(fun convert_scope_map_to_promql_ast/3, [], PermMap),
     case Filters of
         [] -> [];
-        _ -> [{[{not_re, "bucket", ".+"}]} | Filters]
+        _ ->
+            %% Add non-bucket stats which would otherwise be filtered out
+            [{[{not_re, "bucket", ".+"}]} | Filters]
     end.
 
+buckets_filter(Buckets) ->
+    {[{eq_any, "bucket", Buckets}]}.
+
+convert_scope_map_to_promql_ast(_Bucket, true, Acc) ->
+    Acc;
+convert_scope_map_to_promql_ast(Bucket, ScopeMap, Acc) ->
+    AllowedScopes = allowed_objects(ScopeMap),
+    [scopes_filter(Bucket, AllowedScopes)
+     || AllowedScopes =/= []] ++
+    maps:fold(convert_collection_map_to_promql_ast(Bucket, _, _, _),
+              Acc, ScopeMap).
+
+scopes_filter(Bucket, Scopes) ->
+    {[{eq, "bucket", Bucket},
+      {re, "scope", lists:join("|", Scopes)}]}.
+
+convert_collection_map_to_promql_ast(_Bucket, _Scope, true, Acc) ->
+    Acc;
+convert_collection_map_to_promql_ast(Bucket, Scope, CollectionMap, Acc) ->
+    AllowedCols = allowed_objects(CollectionMap),
+    [collections_filter(Bucket, Scope, AllowedCols)
+     || AllowedCols =/= []] ++ Acc.
+
+collections_filter(Bucket, Scope, Collections) ->
+    {[{eq, "bucket", Bucket},
+      {eq, "scope", Scope},
+      {re, "collection", lists:join("|", Collections)}]}.
 
 verify_derived_metrics(Metrics) ->
     AllDerivedMetrics = all_derived_metrics(),
