@@ -592,6 +592,7 @@ reply_unknown_service_error(Req) ->
 reject_service_caller(Req) ->
     case menelaus_auth:get_identity(Req) of
         {[$@ | _], admin} ->
+            maybe_audit_access_forbidden(Req, []),
             menelaus_util:web_json_exception(
               403,
               {[{message,
