@@ -60,15 +60,15 @@ function mnTasksDetailsFactory($http, $cacheFactory, mnTasksService) {
       rv.tasks = tasks;
       rv.tasksXDCR = _.filter(tasks, detectXDCRTask);
       rv.tasksCollectInfo = _.filter(tasks, detectCollectInfoTask);
-      rv.tasksRecovery = _.detect(tasks, detectRecoveryTasks);
-      rv.tasksRebalance = _.detect(tasks, detectRebalanceTasks);
+      rv.tasksRecovery = _.find(tasks, detectRecoveryTasks);
+      rv.tasksRebalance = _.find(tasks, detectRebalanceTasks);
       rv.tasksWarmingUp = _.filter(tasks, detectWarmupTask);
       rv.tasksBucketCompaction = _.filter(tasks, detectBucketCompactionTask);
       rv.tasksViewCompaction = _.filter(tasks, detectViewCompactionTask);
       rv.inRebalance = !!(rv.tasksRebalance && rv.tasksRebalance.status === "running");
       rv.inRecoveryMode = !!rv.tasksRecovery;
       rv.loadingSamples = _.filter(tasks, detectLoadingSamples);
-      rv.isLoadingSamples = !!_.detect(tasks, detectLoadingSamples);
+      rv.isLoadingSamples = !!_.find(tasks, detectLoadingSamples);
       rv.stopRecoveryURI = rv.tasksRecovery && rv.tasksRecovery.stopURI;
       rv.isSubtypeFailover =
         !!(rv.tasksRebalance &&
@@ -76,7 +76,7 @@ function mnTasksDetailsFactory($http, $cacheFactory, mnTasksService) {
       rv.running = _.filter(tasks, function (task) {
         return task.status === "running";
       });
-      rv.isOrphanBucketTask = !!_.detect(tasks, detectOrphanBucketTask);
+      rv.isOrphanBucketTask = !!_.find(tasks, detectOrphanBucketTask);
 
       mnTasksService.stream.tasksXDCRPlug.next(rv.tasksXDCR);
       mnTasksService.stream.tasksWarmingUpPlug.next(rv.tasksWarmingUp);

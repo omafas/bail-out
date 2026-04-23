@@ -58,7 +58,7 @@ function mnBarUsageDirective(mnRescaleForSumFilter) {
         newOptions.items[i].itemStyle.width = values[i] + "%";
         sum += v;
       });
-      newOptions.tdItems = _.select(newOptions.items, function (item) {
+      newOptions.tdItems = _.filter(newOptions.items, function (item) {
         return item.name !== null;
       });
 
