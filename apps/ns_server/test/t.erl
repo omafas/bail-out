@@ -36,6 +36,7 @@
 
 -include("ns_common.hrl").
 -include_lib("ale/include/ale.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -export([start/0, start/1, start_eunit/0, start_triq/0, config/1]).
 
@@ -230,7 +231,12 @@ run_eunit_tests(Modules0) ->
     %% will filter _tests modules out to avoid running tests twice.
     Modules  = filter_out_unneeded_tests_modules(Modules0),
     Listener = spawn_listener(),
-    TestResult = eunit:test([{spawn, M} || M <- Modules],
+    TestResult = eunit:test({foreachx, spawn,
+                             %% setup for each module:
+                             fun (_Module) -> ok end,
+                             %% teardown for each module
+                             fun (Module, _) -> test_teardown(Module) end,
+                             [{M, fun (_, _) -> M end} || M <- Modules]},
                             [verbose, {report, Listener},
                              {print_depth, ?DEPTH}]),
 
@@ -250,6 +256,18 @@ run_eunit_tests(Modules0) ->
                           "have been caught by this harness.",
                     [Msg | FailedTests]
             end
+    end.
+
+test_teardown(X) ->
+    ?assertEqual({X, no_mocks}, {X, mock_leftovers()}).
+
+mock_leftovers() ->
+    case meck:mocked() of
+        [] ->
+            no_mocks;
+        L ->
+            meck:unload(),
+            {unmocked, L}
     end.
 
 filter_out_unneeded_tests_modules(Modules) ->
