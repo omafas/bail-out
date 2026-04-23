@@ -289,7 +289,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
                                           "services": "backup"}, 400)
 
 def parse_nodes_list(text):
-    sansbrackets = text.strip("[").strip("]")
+    sansbrackets = text.strip(" \n[]")
     if sansbrackets == '':
         return []
-    return [v.strip("'") for v in sansbrackets.split(",")]
+    return [v.strip(" \n'") for v in sansbrackets.split(",")]
