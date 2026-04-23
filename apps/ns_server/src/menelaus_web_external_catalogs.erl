@@ -73,6 +73,8 @@ handle_post_catalog(Req) ->
                           already_exists ->
                               reply_conflict(Req, Name)
                       end;
+                  no_query_node ->
+                      reply_no_query_node(Req);
                   {errors, Errors} ->
                       reply_validation_errors(
                         Req, Errors)
@@ -105,6 +107,8 @@ handle_put_catalog(Name, Req) ->
                           rev_mismatch ->
                               reply_rev_mismatch(Req)
                       end;
+                  no_query_node ->
+                      reply_no_query_node(Req);
                   {errors, Errors} ->
                       reply_validation_errors(
                         Req, Errors)
@@ -155,6 +159,8 @@ maybe_patch_catalog(Name, Params, UserRev, Req, Retries) ->
     else
         not_found ->
             menelaus_util:reply_not_found(Req);
+        no_query_node ->
+            reply_no_query_node(Req);
         {errors, Errors} ->
             reply_validation_errors(Req, Errors);
         rev_mismatch ->
@@ -185,7 +191,7 @@ validate_with_service(ExtraParams) ->
     Nodes = get_query_nodes(),
     case Nodes of
         [] ->
-            {ok, #{}};
+            no_query_node;
         _ ->
             validate_against_query_nodes(
               Nodes, {WithCompat}, #{})
@@ -384,6 +390,12 @@ reply_rev_mismatch(Req) ->
       <<"Revision mismatch. The catalog has been"
         " modified since it was last read.">>,
       409).
+
+reply_no_query_node(Req) ->
+    menelaus_util:reply_json(
+        Req,
+        <<"Must have a query node to configure an external catalog">>,
+        400).
 
 reply_validation_errors(Req, Errors) ->
     ErrorJson =
