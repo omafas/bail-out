@@ -6622,31 +6622,35 @@ parse_validate_ephemeral_eviction_policy_test() ->
                    NewBucket, IsMagma)).
 
 validate_bucket_config_with_memcached_test() ->
-    meck:new(ns_memcached, []),
-    meck:expect(ns_memcached, validate_bucket_config,
-                fun (_BucketConfigString) ->
-                        {ok, #{
-                               %% Public parameter - set to a value.
-                               "foo" => #{
-                                          <<"value">> => "value",
-                                          <<"visibility">> => <<"public">>
-                                         },
-                               %% Public parameter - default value.
-                               "bar" => #{
-                                          <<"value">> => "value",
-                                          <<"visibility">> => <<"public">>
-                                         },
-                               %% Parameter validation error.
-                               "baz" => #{
-                                          <<"error">> => <<"error">>,
-                                          <<"message">> => <<"message">>
-                                         }
-                              }}
-                end),
-    {ok, {OKs, ErrorMessages}} = validate_bucket_config_with_memcached(
-                                   "foo=value;baz=value",
-                                   #{allow_internal_params => false}),
-    ?assertEqual(#{"foo" => "value", "bar" => "value"}, OKs),
-    ?assertEqual(#{"baz" => <<"message">>}, ErrorMessages).
+    try
+        meck:new(ns_memcached, []),
+        meck:expect(ns_memcached, validate_bucket_config,
+                    fun (_BucketConfigString) ->
+                            {ok, #{
+                                %% Public parameter - set to a value.
+                                "foo" => #{
+                                            <<"value">> => "value",
+                                            <<"visibility">> => <<"public">>
+                                            },
+                                %% Public parameter - default value.
+                                "bar" => #{
+                                            <<"value">> => "value",
+                                            <<"visibility">> => <<"public">>
+                                            },
+                                %% Parameter validation error.
+                                "baz" => #{
+                                            <<"error">> => <<"error">>,
+                                            <<"message">> => <<"message">>
+                                            }
+                                }}
+                    end),
+        {ok, {OKs, ErrorMessages}} = validate_bucket_config_with_memcached(
+                                    "foo=value;baz=value",
+                                    #{allow_internal_params => false}),
+        ?assertEqual(#{"foo" => "value", "bar" => "value"}, OKs),
+        ?assertEqual(#{"baz" => <<"message">>}, ErrorMessages)
+    after
+        meck:unload()
+    end.
 
 -endif.

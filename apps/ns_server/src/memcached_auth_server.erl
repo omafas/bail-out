@@ -635,14 +635,14 @@ test_process_data(InputMessage, Validator) ->
     test_process_data([InputMessage], Validator).
 
 with_mocked_users(Users, Fun) ->
-    meck:new(mc_binary, [passthrough]),
-    meck:new(menelaus_roles, [passthrough]),
-    meck:new(menelaus_auth, [passthrough]),
-    meck:new(menelaus_users, [passthrough]),
-    meck:new(ns_config, [passthrough]),
-    meck:new(cluster_compat_mode, [passthrough]),
-
     try
+        meck:new(mc_binary, [passthrough]),
+        meck:new(menelaus_roles, [passthrough]),
+        meck:new(menelaus_auth, [passthrough]),
+        meck:new(menelaus_users, [passthrough]),
+        meck:new(ns_config, [passthrough]),
+        meck:new(cluster_compat_mode, [passthrough]),
+
         meck:expect(ns_config, read_key_fast,
                     fun(oauthbearer_enabled, Default) ->
                             Default;
@@ -730,11 +730,7 @@ with_mocked_users(Users, Fun) ->
         true = meck:validate(mc_binary),
         true = meck:validate(ns_config)
     after
-        meck:unload(menelaus_users),
-        meck:unload(menelaus_auth),
-        meck:unload(menelaus_roles),
-        meck:unload(mc_binary),
-        meck:unload(ns_config)
+        meck:unload()
     end,
     ok.
 -endif.

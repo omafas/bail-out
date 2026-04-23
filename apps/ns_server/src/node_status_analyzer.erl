@@ -282,6 +282,7 @@ health_monitor_t() ->
                   {"otherNode", [ns_server, kv]}], get_monitors_from_state()).
 
 common_test_teardown() ->
+    ?meckUnload(fake_ns_pubsub),
     ok.
 
 health_monitor_test_teardown() ->

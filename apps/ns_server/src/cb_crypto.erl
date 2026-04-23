@@ -1065,7 +1065,7 @@ get_force_encryption_timestamp_test() ->
     NewDate = {{2025,8,21},{23,28,56}},
     OldDate = {{2025,8,21},{23,27,29}},
     SuperOldDate = {{2025,8,21},{23,26,29}},
-    meck:new(cluster_compat_mode, [passthrough]),
+    meck:new([cluster_compat_mode, menelaus_web_encr_at_rest], [passthrough]),
     try
         meck:expect(cluster_compat_mode, is_cluster_79,
                     fun () -> true end),
@@ -1123,7 +1123,7 @@ get_force_encryption_timestamp_test() ->
         Assert(undefined, undefined, undefined, undefined)
 
     after
-        meck:unload(cluster_compat_mode)
+        meck:unload()
     end.
 -endif.
 
