@@ -9,7 +9,6 @@ For credential type schemas see [credential-types.md](credential-types.md).
 Every Go service connected to ns_server via cbauth receives a `specialUser` (e.g. `@cbq-engine`, `@backup`) and one or more `specialPasswords` through the revrpc Cache.
 This is the service's own internal identity.
 When cbauth calls ns_server endpoints (`/_cbauth/*`), it authenticates using `specialUser`/password via HTTP Basic Auth.
-That identity satisfies the route-level `{[admin, internal], all}` guard.
 
 `specialUser` is **not** a human admin.
 It is the process-level identity ns_server assigns to each service at startup.

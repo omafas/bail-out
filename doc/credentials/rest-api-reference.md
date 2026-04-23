@@ -8,13 +8,13 @@ For credential type schemas see [credential-types.md](credential-types.md).
 
 These are the endpoints an administrator uses to create, read, update, and delete credentials.
 
-| Method | Endpoint | RBAC Permission Required | Roles That Satisfy | Description |
-|---|---|---|---|---|
-| GET | `/settings/credentials` | `{[admin, security], read}` | Security Admin, RO Security Admin, Full Admin | List all credentials (+ warnings, optional `?prefix=`) |
-| GET | `/settings/credentials/:id` | `{[admin, security], read}` | Security Admin, RO Security Admin, Full Admin | Get one credential (secrets redacted) |
-| POST | `/settings/credentials/:id` | `{[admin, security], write}` | Security Admin, Full Admin | Create a credential |
-| PUT | `/settings/credentials/:id` | `{[admin, security], write}` | Security Admin, Full Admin | Full-replace update (`type` field is immutable) |
-| DELETE | `/settings/credentials/:id` | `{[admin, security], write}` | Security Admin, Full Admin | Delete a credential |
+| Method | Endpoint | Roles That Satisfy | Description |
+|---|---|---|---|
+| GET | `/settings/credentials` | Security Admin, RO Security Admin, Full Admin | List all credentials (+ warnings, optional `?prefix=`) |
+| GET | `/settings/credentials/:id` | Security Admin, RO Security Admin, Full Admin | Get one credential (secrets redacted) |
+| POST | `/settings/credentials/:id` | Security Admin, Full Admin | Create a credential |
+| PUT | `/settings/credentials/:id` | Security Admin, Full Admin | Full-replace update (`type` field is immutable) |
+| DELETE | `/settings/credentials/:id` | Security Admin, Full Admin | Delete a credential |
 
 **Credential ID constraints:**
 
@@ -24,11 +24,11 @@ These are the endpoints an administrator uses to create, read, update, and delet
 
 ## Credential Store Settings — `/settings/credentialStore`
 
-| Method | Endpoint | RBAC Permission Required | Roles That Satisfy | Description |
-|---|---|---|---|---|
-| GET | `/settings/credentialStore` | `{[admin, security], read}` | Security Admin, RO Security Admin, Full Admin | Read store settings (+ warnings) |
-| PUT | `/settings/credentialStore` | `{[admin, security], write}` | Security Admin, Full Admin | Update store settings |
-| DELETE | `/settings/credentialStore` | `{[admin, security], write}` | Security Admin, Full Admin | Reset store settings to defaults |
+| Method | Endpoint | Roles That Satisfy | Description |
+|---|---|---|---|
+| GET | `/settings/credentialStore` | Security Admin, RO Security Admin, Full Admin | Read store settings (+ warnings) |
+| PUT | `/settings/credentialStore` | Security Admin, Full Admin | Update store settings |
+| DELETE | `/settings/credentialStore` | Security Admin, Full Admin | Reset store settings to defaults |
 
 **Settings fields (PUT body, JSON):**
 
@@ -56,19 +56,16 @@ See [architecture.md — Storage](architecture.md#storage) for full details on t
 
 ## Service Role Management — `/settings/rbac/services/:name/roles`
 
-| Method | Endpoint | Route Guard | Roles That Satisfy | Description |
-|---|---|---|---|---|
-| GET | `/settings/rbac/services/:name/roles` | `{[admin, security, admin], read}` | **Full Admin only** | Read current service roles |
-| PUT | `/settings/rbac/services/:name/roles` | `{[admin, security, admin], write}` | **Full Admin only** | Assign roles to a service |
-| DELETE | `/settings/rbac/services/:name/roles` | `{[admin, security, admin], write}` | **Full Admin only** | Delete all service roles |
+| Method | Endpoint | Roles That Satisfy | Description |
+|---|---|---|---|
+| GET | `/settings/rbac/services/:name/roles` | **Full Admin only** | Read current service roles |
+| PUT | `/settings/rbac/services/:name/roles` | **Full Admin only** | Assign roles to a service |
+| DELETE | `/settings/rbac/services/:name/roles` | **Full Admin only** | Delete all service roles |
 
-> Security Admin has `{[admin, security, admin], none}` and therefore **cannot** read, write, or delete service roles.
-> This is by design to prevent privilege escalation.
+> Security Admin **cannot** read, write, or delete service roles — this is by design to prevent privilege escalation.
 >
 > **Service identity restriction.** Additionally, the PUT and DELETE handlers reject requests from internal users (`@`-prefixed callers in the admin domain) with a 403.
-> This prevents a service from granting `credential_consumer` to itself or another service, or from deleting existing service role grants.
 > Services may still read their own roles via GET.
-> See `reject_service_caller/1` in `menelaus_web_rbac.erl`.
 
 ## Granting Consume Permissions
 
@@ -78,7 +75,7 @@ Use the standard user-management endpoint to assign the `credential_consumer` ro
 
 **Endpoint:** `PUT /settings/rbac/users/:domain/:userId`
 
-**RBAC required by the caller:** `{[admin, users], write}` — i.e. **User Admin** (local or external) or **Full Admin**.
+**Callers:** **User Admin** (local or external) or **Full Admin**.
 Since `credential_consumer` is not a security role, Security Admin is NOT required.
 
 **Example — grant `alice` consume on credential `n1ql/prod/s3`:**
@@ -115,10 +112,8 @@ Only the `credential_consumer` role is permitted for services.
 
 **Endpoint:** `PUT /settings/rbac/services/:serviceName/roles`
 
-**RBAC required by the caller:** `{[admin, security, admin], write}` — i.e. **Full Admin only**.
-Security Admin cannot use this endpoint because it has `{[admin, security, admin], none}`.
-User Admin also lacks this permission.
-This ensures only the highest-privilege administrator can grant credentials to service identities.
+**Callers:** **Full Admin only**.
+Security Admin and User Admin cannot use this endpoint — this ensures only the highest-privilege administrator can grant credentials to service identities.
 
 **`:serviceName`** is one of: `n1ql`, `backup`, `index`, `xdcr`, `fts`, `eventing`, `cbas`
 
@@ -150,34 +145,6 @@ curl -u Administrator:password \
 ```bash
 curl -X DELETE -u Administrator:password \
   http://localhost:8091/settings/rbac/services/backup/roles
-```
-
-### Permission granting — summary diagram
-
-```mermaid
-sequenceDiagram
-    participant FA as Full Admin
-    participant UA as User Admin
-    participant SA as Security Admin
-
-    Note over SA: CRUD credentials<br/>{[admin, security], write}
-    Note over UA: Assign roles to end users<br/>{[admin, users], write}
-    Note over FA: Can do everything
-
-    rect rgb(230, 245, 230)
-        Note over UA,FA: Grant credential_consumer to end user
-        UA->>UA: PUT /settings/rbac/users/local/alice<br/>roles=credential_consumer[pattern]
-    end
-
-    rect rgb(230, 230, 245)
-        Note over FA: Grant credential_consumer to service (Full Admin only)
-        FA->>FA: PUT /settings/rbac/services/backup/roles<br/>roles=credential_consumer[pattern]
-    end
-
-    rect rgb(245, 230, 230)
-        Note over SA: ✗ Cannot assign roles to users or services
-        Note over UA: ✗ Cannot create/view/modify credentials
-    end
 ```
 
 ## Guardrails

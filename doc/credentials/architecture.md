@@ -1,6 +1,6 @@
 # Credential Store — Architecture & Design
 
-This document covers the internal design of the credential store: chronicle storage, encryption model, RBAC internals, authorization flow, and known issues.
+This document covers the internal design of the credential store: chronicle storage, encryption model, RBAC internals, and authorization flow.
 For the REST API see [rest-api-reference.md](rest-api-reference.md).
 For service integration see [service-integration-guide.md](service-integration-guide.md).
 
@@ -66,62 +66,33 @@ Likewise for n2n encryption and `n2nEncryptionOverride`.
 
 ### Role summary
 
-| Role | Parameterised By | Permissions Granted | Assignable To |
+| Role | Parameterised By | Capability | Assignable To |
 |---|---|---|---|
-| `credential_consumer` | `credential_id` | `{[{credentials, <id>}], consume}` | End users **and** services |
-| `service_admin` | *(internal)* | All permissions **except** any credential access. See [below](#service_admin--design-and-known-limitations) | Service identities only (implicit, Totoro+) |
-| `admin` (Full Admin) | — | Everything including CRUD on `/settings/credentials` and service role grants | Human administrators |
-| `security_admin` | — | `{[admin, security], all}` — CRUD on credentials and credential store settings. **Cannot** manage users/service roles (`{[admin, security, admin], none}`, `{[admin, users], [read]}`) | Human administrators |
-| `user_admin_local` | — | `{[admin, users], all}` (except admin domain) — assign roles to local users including `credential_consumer`. **Cannot** CRUD credentials | Human administrators |
-| `user_admin_external` | — | `{[admin, users], all}` (except admin/local domain) — assign roles to external users including `credential_consumer`. **Cannot** CRUD credentials | Human administrators |
+| `credential_consumer` | `credential_id` | Consume a matching credential | End users **and** services |
+| `service_admin` | *(internal)* | Administrative operations for service identities, excluding credential access | Service identities only (implicit, Totoro+) |
+| `admin` (Full Admin) | — | All operations including credential CRUD and service role grants | Human administrators |
+| `security_admin` | — | Credential CRUD and credential store settings; cannot manage users or service roles | Human administrators |
+| `user_admin_local` | — | Assign non-security roles (including `credential_consumer`) to local users; cannot CRUD credentials | Human administrators |
+| `user_admin_external` | — | Assign non-security roles (including `credential_consumer`) to external users; cannot CRUD credentials | Human administrators |
 
-### Role separation and privilege escalation analysis
+### Role separation
 
-> **Key insight — no circular privilege escalation:**
->
-> - **Security Admin** can CRUD credentials and store settings, but has `{[admin, security, admin], none}` which blocks writing to the admin domain.
->   It cannot assign roles to users (`{[admin, users], [read]}` — read only) or service identities.
->   It cannot grant itself `credential_consumer`.
->
-> - **User Admin** can assign `credential_consumer` (and other non-security roles) to end users.
->   It has `{[admin, security], none}` — it cannot create, read, or modify credentials.
->   It cannot access the service roles endpoint.
->
-> - **Full Admin** (`{[], all}`) is the only role that can both CRUD credentials AND manage service roles.
->
-> - The `service_admin` role (implicitly assigned to all `@`-prefixed service users) explicitly **excludes** credential permissions (`{[{credentials, any}], none}`).
->   Services must be explicitly granted `credential_consumer[<pattern>]` via `PUT /settings/rbac/services/:service/roles` by a Full Admin.
+Administrative duties are split across three distinct roles so that no single non-Full-Admin role can both produce and consume a credential:
 
-### Role separation background
+| Responsibility | Role |
+|---|---|
+| Create / edit / delete credentials; manage credential store settings | **Security Admin** or Full Admin |
+| Assign roles to end users (including `credential_consumer`) | **User Admin** (local / external) or Full Admin |
+| Assign roles to service identities | **Full Admin only** |
 
 The separation of User Admin and Security Admin dates back to Morpheus (8.0).
-The `when_79` guards in `menelaus_web.erl` refer to analytics releases; for Couchbase Server, this separation was available from 8.0 onwards (Morpheus).
-
-What **is** new in Totoro (8.1) is:
+New in Totoro (8.1):
 - The **credential store** itself (CRUD, consume, guardrails).
-- The **`service_admin`** internal role, which strips credential permissions from service identities so they must be granted `credential_consumer` explicitly.
+- The **`service_admin`** internal role, which removes credential access from service identities so they must be granted `credential_consumer` explicitly.
 - The **`credential_consumer`** role and the service roles endpoint (`/settings/rbac/services/:name/roles`).
 
-The existing User Admin / Security Admin separation applies to credential management as follows:
-
-| Responsibility | Role | Key Permission |
-|---|---|---|
-| Create / edit / delete credentials; manage credential store settings | **Security Admin** or Full Admin | `{[admin, security], write}` |
-| Assign roles to end users (including `credential_consumer`) | **User Admin** (local / external) or Full Admin | `{[admin, users], write}` |
-| Assign roles to service identities | **Full Admin only** | `{[admin, security, admin], write}` |
-
-**Why can't Security Admin manage service roles?**
-The service roles endpoint (`PUT /settings/rbac/services/:name/roles`) requires `{[admin, security, admin], write}`.
-Security Admin explicitly has `{[admin, security, admin], none}` — this is by design to prevent privilege escalation (a Security Admin cannot grant itself Full Admin).
-
-**Why can User Admin grant `credential_consumer`?**
-`credential_consumer` only grants `{[{credentials, <id>}], consume}`.
-It has no `{[admin, security], …}` permissions, so it is **not** classified as a security role.
-The additional `verify_security_roles_access` check in the user-management handler only blocks granting security-level roles (like `security_admin`, `admin`); `credential_consumer` passes through freely.
-
-**No circular privilege escalation:** A User Admin can grant `credential_consumer` to users (letting them *use* credentials) but cannot create, view, or modify the credentials themselves — that requires Security Admin.
-A Security Admin can CRUD credentials but cannot assign roles to users or services, so it cannot grant itself `credential_consumer`.
-Only Full Admin can do both.
+`credential_consumer` is classified as a non-security role, so User Admin is sufficient to grant it to end users; CRUD of the credential itself remains a Security Admin capability.
+Service-role assignment is deliberately restricted to Full Admin.
 
 ## ns_server Authorization Checks — Decision Flowchart
 
@@ -160,44 +131,14 @@ flowchart TD
     H -->|"No (or guardrail empty)"| DENY7["403 —<br/>SERVICE_GUARDRAIL_BLOCKED"]
 ```
 
-## `service_admin` — Design and Known Limitations
+## `service_admin`
 
 Prior to Totoro, all `@`-prefixed service identities (e.g. `@backup`, `@cbq-engine`) received the implicit `admin` role — effectively Full Admin.
-In Totoro, they receive `service_admin` instead:
+In Totoro, they receive `service_admin` instead, which removes credential access so that a service cannot read, list, write, or consume credentials unless a Full Admin explicitly grants `credential_consumer[<pattern>]` to that service via `PUT /settings/rbac/services/:service/roles`.
 
-```erlang
-%% menelaus_roles.erl — internal_roles()
-{service_admin, [], [],
- [{[{credentials, any}], none},
-  {[], all}]}
-```
+The service-roles endpoint additionally rejects service identities as callers (`reject_service_caller` in `menelaus_web_rbac.erl`) so that a service cannot use the endpoint to grant itself or another service a role.
 
-This is `{[], all}` (everything) **minus** `{[{credentials, any}], none}` (no credential access at all — no read, write, list, or consume).
-
-The intent is that a service cannot access credentials unless a Full Admin explicitly grants `credential_consumer[<pattern>]` to that service via `PUT /settings/rbac/services/:service/roles`.
-
-**Direct self-escalation via service roles endpoint — blocked.**
-The `/settings/rbac/services/:name/roles` endpoint requires `{[admin, security, admin], write}`.
-`service_admin`'s `{[], all}` catch-all grants this permission, which would in principle let a service call the endpoint to assign `credential_consumer` to itself or another service.
-To close this path, the endpoint explicitly rejects requests from service identity callers (`reject_service_caller` in `menelaus_web_rbac.erl`).
-Broader removal of unneeded `service_admin` vertices (including `{[admin, security, admin], write}`) is tracked in [MB-71508](https://jira.issues.couchbase.com/browse/MB-71508); once that lands, this explicit check becomes defence-in-depth rather than the primary guard.
-See [rest-api-reference.md — Service Role Management](rest-api-reference.md#service-role-management--settingsrbacservicesnameroles) for details.
-
-**Known limitation — indirect credential access via user management ("puppet user" pattern).**
-Because `service_admin` retains `{[admin, users], all}`, a service could in theory:
-
-1. Create a local user (e.g. `PUT /settings/rbac/users/local/puppet`).
-2. Grant that user `credential_consumer[*]`.
-3. Consume credentials on-behalf-of that user (`?user=puppet&domain=local`).
-
-This cannot be trivially fixed because N1QL (`@cbq-engine`) relies on `{[admin, users], all}` to support SQL user-management statements (`CREATE USER`, `GRANT ROLE`, etc.).
-N1QL authenticates these calls as `@cbq-engine` — it does not pass the end user's identity via `cb-on-behalf-of`.
-Stripping user management from `service_admin` would break N1QL's SQL user management.
-Blocking only `credential_consumer` grants from service callers would also break `GRANT credential_consumer` issued through N1QL by an authorised administrator.
-
-**This is accepted as a known architectural limitation.**
-The `service_admin` carve-out ensures services cannot *accidentally* consume credentials and makes credential access grants auditable.
-See [MB-71442](https://jira.issues.couchbase.com/browse/MB-71442) for the full investigation and future remediation plan.
+Ongoing work to narrow `service_admin` to an explicit allow-list of operations is tracked in [MB-71508](https://jira.issues.couchbase.com/browse/MB-71508).
 
 ## Source File Reference
 
@@ -212,12 +153,3 @@ See [MB-71442](https://jira.issues.couchbase.com/browse/MB-71442) for the full i
 | `ns_server/apps/ns_server/src/menelaus_roles.erl` | `credential_consumer` role definition, `service_admin` internal role |
 | `ns_server/apps/ns_server/src/menelaus_web_rbac.erl` | `handle_put_service_roles` — endpoint to assign roles to services |
 | `ns_server/apps/ns_server/src/misc.erl` | `service_definitions/0`, `identity_name_to_service/1`, `canonical_admin_identity/1` |
-
-## Known Issues & Future Work
-
-| Ticket | Summary |
-|---|---|
-| [MB-71442](https://jira.issues.couchbase.com/browse/MB-71442) | Harden service_admin Role to Prevent Indirect Credential Access (puppet-user pattern) |
-| [MB-71508](https://jira.issues.couchbase.com/browse/MB-71508) | Tighten service_admin from deny-list to explicit allow-list |
-| [MB-71440](https://jira.issues.couchbase.com/browse/MB-71440) | Encrypt sensitive portion of the credential in memory (per-credential DEK via envelope encryption) |
-| [MB-71345](https://jira.issues.couchbase.com/browse/MB-71345) | Consolidate n2n encryption state into chronicle to eliminate races between ns_config reads and chronicle commits |

@@ -495,16 +495,13 @@ handle_delete(IdStr, Req) ->
 %% @doc Internal cbauth endpoint: GET /_cbauth/getCredential/<id>
 %%
 %% Called by Go services via cbauth's Creds.GetCredential(id). The service
-%% authenticates using its own identity (e.g. @cbq-engine, @fts, @backup) for
-%% the route-level {[admin, internal], all} guard, and passes the end-user
-%% identity in query parameters:
+%% authenticates using its own identity (e.g. @cbq-engine, @fts, @backup) and
+%% passes the end-user identity in query parameters:
 %%   ?user=<user>&domain=<domain>&extras=<base64-encoded extras>
 %%
 %% Enforces:
 %%   1. Service-identity binding — when the on-behalf-of user is a service
-%%      identity (@-prefixed), it must match the authenticated caller. The
-%%      Go/cbauth side already enforces this via verifySpecialCreds, so this
-%%      check only fires for raw HTTP calls that bypass cbauth.
+%%      identity (@-prefixed), it must match the authenticated caller.
 %%   2. RBAC — the on-behalf-of user must have `consume` permission on
 %%      `{credentials, Id}`.
 %%   3. Expiry — credentials past their `expires_at` are rejected (enforced by
@@ -547,8 +544,7 @@ handle_get_credential_for_cbauth(IdStr, Req) ->
 %% Two checks, both of which must pass:
 %%   1. The caller must map to a known service (not `unknown`).
 %%   2. When the on-behalf-of identity is a service identity (@-prefixed), it
-%%      must match the authenticated caller. This prevents a raw HTTP request
-%%      that authenticates as cbq-engine from passing ?user=@backup.
+%%      must match the authenticated caller.
 -spec check_caller_identity(term(), atom(), {string(), atom()}) ->
           ok | {error, binary()}.
 check_caller_identity(_Req, unknown, _OnBehalf) ->
@@ -639,10 +635,8 @@ service_from_identity(Req) ->
 %% @doc Check if identity is a service identity (@ user in admin domain).
 %% Service identities like @backup, @cbq-engine bypass guardrails.
 %% Human admins like "Administrator" in admin domain do NOT bypass guardrails.
-%%
-%% Note: This replicates the logic in menelaus_auth:is_internal_identity/1
-%% because we need to check the on-behalf-of identity (from query params),
-%% not the caller's identity from the request.
+%% We check the on-behalf-of identity (from query params), not the caller's
+%% identity from the request.
 -spec is_service_identity({string(), atom()}) -> boolean().
 is_service_identity({[$@ | _], admin}) -> true;
 is_service_identity(_) -> false.

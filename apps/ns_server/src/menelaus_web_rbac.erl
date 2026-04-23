@@ -586,12 +586,9 @@ reply_unknown_service_error(Req) ->
     menelaus_util:reply_json(
       Req, <<"Unknown service.">>, 404).
 
-%% Prevent service identities from modifying service roles. This prevents a
-%% service from granting credential_consumer to itself or another service.
-%% service_admin's {[], all} catch-all grants {[admin, security, admin], write}
-%% (the permission this endpoint requires), so without this check a service
-%% could call the endpoint directly. Can be revisited once service_admin is
-%% narrowed to an explicit allow-list (MB-71508).
+%% Prevent service identities from modifying service roles so that a service
+%% cannot grant itself or another service any role. May be revisited once
+%% service_admin is narrowed to an explicit allow-list (MB-71508).
 reject_service_caller(Req) ->
     case menelaus_auth:get_identity(Req) of
         {[$@ | _], admin} ->

@@ -1287,12 +1287,9 @@ get_roles_for_identity(?ANONYMOUS_IDENTITY) ->
 get_roles_for_identity({[$@ | _] = User, admin}) ->
     case cluster_compat_mode:is_cluster_totoro() of
         true ->
-            %% service_admin omits credential permissions, but this is a soft
-            %% boundary. service_admin retains {admin, users} write (puppet-user
-            %% creation, tracked in MB-71442) and {admin, security, admin} write
-            %% (role grants to services via the service-roles endpoint, guarded
-            %% by reject_service_caller). Broader tightening to an explicit
-            %% allow-list tracked in MB-71508.
+            %% service_admin omits credential permissions. Ongoing work to
+            %% narrow service_admin to an explicit allow-list is tracked in
+            %% MB-71508.
             CanonicalUser = misc:canonical_admin_identity(User),
             StoredRoles =
                 try menelaus_users:get_roles({CanonicalUser, admin})

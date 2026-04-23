@@ -18,7 +18,7 @@ Two consumption patterns exist:
 |---|---|---|
 | [REST API Reference](rest-api-reference.md) | UI / frontend developers | Endpoints, request/response formats, error codes, wire format, guardrails |
 | [Service Integration Guide](service-integration-guide.md) | Go service developers | cbauth consumption patterns, sequence diagrams, integration checklist, testing |
-| [Architecture & Design](architecture.md) | ns_server developers | Chronicle storage, encryption design, RBAC internals, authorization flowchart, known issues |
+| [Architecture & Design](architecture.md) | ns_server developers | Chronicle storage, encryption design, RBAC internals, authorization flowchart |
 | [Credential Types](credential-types.md) | All | V1 schema envelope, meta fields, per-type field tables |
 
 ## Viewing Diagrams
