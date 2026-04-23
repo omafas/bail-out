@@ -1049,6 +1049,8 @@ update_via_orchestrator(Req, BucketId, StorageMode, BucketType, UpdatedProps,
             reply_text(Req, "Encryption key can't encrypt this bucket", 400);
         {error, encryption_is_incompatible_with_fusion} ->
             reply_text(Req, "Encryption is incompatible with fusion", 400);
+        {error, {throttle_error, Msg}} ->
+            reply_text(Req, Msg, 400);
         {exit, {not_found, _}, _} ->
             %% if this happens then our validation raced, so repeat everything
             retry;
@@ -1131,6 +1133,8 @@ do_bucket_create(Req, Name, ParsedProps) ->
         {error, cannot_enable_fusion} ->
             {errors, 400, [{list_to_atom(?FUSION_ENABLED),
                             ?CANNOT_ENABLE_FUSION}]};
+        {error, {throttle_error, Msg}} ->
+            {errors, 400, [{'_', Msg}]};
         Other ->
             case menelaus_web_cluster:busy_reply("create bucket", Other) of
                 {Code, Msg} ->
@@ -1868,56 +1872,20 @@ validate_watermarks(Params, Ctx) ->
                              memoryHighWatermark,
                              less_than).
 
-
-validate_throttle_params(Params, Ctx) ->
-    validate_throttle_reserved_vs_hard_limit(Params, Ctx) ++
-        validate_throttle_reserved_vs_node_capacity(Params, Ctx).
-
-validate_throttle_reserved_vs_hard_limit(Params, Ctx) ->
+validate_throttle_params(Params, #bv_ctx{bucket_name = BucketName} = Ctx) ->
     Reserved = get_value_from_params_or_bucket(
                  throttle_reserved, Params, Ctx),
     HardLimit = get_value_from_params_or_bucket(
                   throttle_hard_limit, Params, Ctx),
-
-    case {Reserved, HardLimit} of
-        {undefined, _} -> [];
-        {_, undefined} -> [];
-        _ when Reserved > HardLimit ->
-            [{throttleReserved,
-                <<"throttleReserved cannot exceed throttleHardLimit">>}];
-        _ -> []
-    end.
-
-validate_throttle_reserved_vs_node_capacity(
-  Params,
-  #bv_ctx{all_buckets = AllBuckets,
-          bucket_name = BucketName} = Ctx) ->
-    Reserved = get_value_from_params_or_bucket(throttle_reserved, Params, Ctx),
-    Nodes = ns_cluster_membership:nodes_wanted(),
-    KvNodes = ns_cluster_membership:service_nodes(Nodes, kv),
-    case {Reserved, KvNodes} of
-        {undefined, _} -> [];
-        {0, _} -> [];
-        {_, []} -> [];
-        {_, KvNodes} ->
-            OtherReserved =
-                lists:sum(
-                  [ns_bucket:get_throttle_reserved(Config) ||
-                      {Name, Config} <- AllBuckets, Name =/= BucketName]),
-            TotalReserved = OtherReserved + Reserved,
-            MinCapacity =
-                lists:min(
-                    [menelaus_web_mcd_settings:get_effective_node_capacity(
-                        Node, direct) || Node <- KvNodes]),
-            case TotalReserved > MinCapacity of
-                true ->
-                    Msg = io_lib:format(
-                            "Sum of throttleReserved across all buckets (~p) "
-                            "exceeds node_capacity (~p)", [TotalReserved,
-                                                           MinCapacity]),
-                    [{throttleReserved, iolist_to_binary(Msg)}];
-                false -> []
-            end
+    Config =
+        [{throttle_reserved, Reserved} || Reserved =/= undefined] ++
+            [{throttle_hard_limit, HardLimit} || HardLimit =/= undefined],
+    case ns_bucket:validate_bucket_throttle_params(BucketName, Config,
+                                                   direct) of
+        ok ->
+            [];
+        {error, {throttle_error, Msg}} ->
+            [{throttleReserved, Msg}]
     end.
 
 validate_lifetime_with_rotation_intrvl(undefined, _CurrRotIntrvl, _MaxDeks) ->

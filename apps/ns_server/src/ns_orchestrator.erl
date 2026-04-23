@@ -206,7 +206,8 @@ get_state(Timeout) ->
           {error, secret_not_found} |
           {error, secret_not_allowed} |
           {error, encryption_is_incompatible_with_fusion} |
-          {error, cannot_enable_fusion} | busy().
+          {error, cannot_enable_fusion} |
+          {error, {throttle_error, binary()}} | busy().
 create_bucket(BucketType, BucketName, NewConfig) ->
     call({create_bucket, BucketType, BucketName, NewConfig}, infinity).
 
@@ -224,7 +225,8 @@ create_bucket(BucketType, BucketName, NewConfig) ->
                    history_retention_enabled_on_collections}} |
           {error, secret_not_found} |
           {error, secret_not_allowed} |
-          {error, encryption_is_incompatible_with_fusion} | busy() |
+          {error, encryption_is_incompatible_with_fusion} |
+          {error, {throttle_error, binary()}} | busy() |
           {error, {storage_mode_migration,
                    eviction_policy_no_restart_required}}.
 update_bucket(BucketType, StorageMode, BucketName, UpdatedProps, Options) ->

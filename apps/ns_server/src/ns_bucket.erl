@@ -241,7 +241,8 @@
          is_data_service_file_based_rebalance_enabled/1,
          get_data_service_rebalance_type/1,
          get_throttle_reserved/1,
-         get_throttle_hard_limit/1]).
+         get_throttle_hard_limit/1,
+         validate_bucket_throttle_params/3]).
 
 %% fusion
 -export([is_fusion/1,
@@ -1469,10 +1470,19 @@ restore_bucket(BucketName, NewConfig, BucketUUID, Manifest) ->
 
 do_create_bucket(BucketName, Config, BucketUUID, Manifest) ->
     Result =
-        chronicle_kv:transaction(
-          kv, [root(), nodes_wanted, buckets_marked_for_shutdown_key(),
-               ?CHRONICLE_SECRETS_KEY, fusion_uploaders:config_key()],
-          fun (Snapshot) ->
+        chronicle_compat:txn(
+          fun (Txn) ->
+                  SnapshotFromKeys =
+                      chronicle_compat:txn_get_many(
+                          [root(), nodes_wanted,
+                           buckets_marked_for_shutdown_key(),
+                           ?CHRONICLE_SECRETS_KEY,
+                           fusion_uploaders:config_key()], Txn),
+
+                  ThrottleDepsSnapshot =
+                      get_throttle_dependencies_snapshot(Txn),
+                  Snapshot = maps:merge(SnapshotFromKeys, ThrottleDepsSnapshot),
+
                   BucketNames = get_bucket_names(Snapshot),
                   %% We make similar checks via validate_create_bucket/2 in
                   %% ns_orchestrator and since the leader leases guarantees that
@@ -1518,6 +1528,9 @@ do_create_bucket(BucketName, Config, BucketUUID, Manifest) ->
                               false ->
                                   ok
                           end,
+
+                      ok ?= validate_bucket_throttle_params(
+                               BucketName, Config, Snapshot),
 
                       {commit, create_bucket_sets(BucketName, BucketNames,
                                                   BucketUUID, Config) ++
@@ -1985,6 +1998,13 @@ update_bucket_props_inner(Type, OldStorageMode, BucketName, Props, Options) ->
                 fun (_) -> ok end
         end,
 
+    ThrottlePredicate =
+        fun (Snapshot) ->
+            {ok, CurrConfig} = get_bucket(BucketName, Snapshot),
+            NewConfig = misc:update_proplist(CurrConfig, Props),
+            validate_bucket_throttle_params(BucketName, NewConfig, Snapshot)
+        end,
+
     {Props2, DeleteKeys1} =
         maybe_update_eviction_policy_overrides(Props1, BucketConfig,
                                                MaybeDeleteCasKey, Options),
@@ -1997,7 +2017,9 @@ update_bucket_props_inner(Type, OldStorageMode, BucketName, Props, Options) ->
             false ->
                 update_bucket_props_with_predicate(
                     BucketName, Props2, DeleteKeys1,
-                    SecretIdCheckPredicate, [], #{});
+                    chain_predicates(
+                      [SecretIdCheckPredicate,
+                       ThrottlePredicate]), [], #{});
             true ->
                 %% Reject storage migration if servers haven't been
                 %% populated yet (This is extremely unlikely to happen,
@@ -2040,7 +2062,9 @@ update_bucket_props_inner(Type, OldStorageMode, BucketName, Props, Options) ->
 
                 update_bucket_props_with_predicate(
                   BucketName, NewProps, DeleteKeys2,
-                  Predicate, [collections], #{read_consistency => quorum})
+                  chain_predicates(
+                    [Predicate, ThrottlePredicate]),
+                  [collections], #{read_consistency => quorum})
         end,
 
     case RV of
@@ -2263,6 +2287,14 @@ storage_mode_migration_in_progress(BucketConfig) ->
                   (_KV) ->
                       false
               end, BucketConfig).
+
+chain_predicates(Predicates) ->
+    fun (Snapshot) ->
+            lists:foldl(
+              fun (_, {error, _} = Err) -> Err;
+                  (Pred, ok) -> Pred(Snapshot)
+              end, ok, Predicates)
+    end.
 
 update_bucket_props(BucketName, Props) ->
     update_bucket_props(BucketName, Props, []).
@@ -2533,15 +2565,19 @@ update_buckets_config(BucketsUpdates) ->
             Other
     end.
 
-update_buckets_config(BucketsUpdates, Predicate, SubKeys, Opts) ->
+update_buckets_config(BucketsUpdates, Predicate,
+                      SubKeys, Opts) ->
+    Keys = [?CHRONICLE_SECRETS_KEY] ++
+           [sub_key(BucketName, SubKey) ||
+            {BucketName, _} <- BucketsUpdates,
+            SubKey <- [uuid, props | SubKeys]],
     RV =
-        chronicle_kv:transaction(
-          kv,
-          [?CHRONICLE_SECRETS_KEY] ++
-          [sub_key(BucketName, SubKey) ||
-           {BucketName, _} <- BucketsUpdates,
-           SubKey <- [uuid, props | SubKeys]],
-          fun (Snapshot) ->
+        chronicle_compat:txn(
+          fun (Txn) ->
+                  SnapshotFromKeys = chronicle_compat:txn_get_many(Keys, Txn),
+                  ThrottleDepsSnapshot =
+                      get_throttle_dependencies_snapshot(Txn),
+                  Snapshot = maps:merge(SnapshotFromKeys, ThrottleDepsSnapshot),
                   case Predicate(Snapshot) of
                       ok ->
                           Commits =
@@ -2553,9 +2589,8 @@ update_buckets_config(BucketsUpdates, Predicate, SubKeys, Opts) ->
                                   OldBuckets =
                                       lists:map(
                                         fun ({BN, _}) ->
-                                                {ok, BC} = get_bucket(
-                                                             BN, Snapshot),
-                                                {BN, BC}
+                                            {ok, BC} = get_bucket(BN, Snapshot),
+                                            {BN, BC}
                                         end, BucketsUpdates),
                                   {commit, Commits, OldBuckets};
                               Res ->
@@ -2879,6 +2914,68 @@ get_throttle_reserved(BucketConfig) ->
 get_throttle_hard_limit(BucketConfig) ->
     proplists:get_value(throttle_hard_limit, BucketConfig,
                         attribute_default(throttle_hard_limit)).
+
+mcd_settings_keys(KvNodes) ->
+    [memcached_config_settings |
+     [{node, N, memcached_config_settings} || N <- KvNodes]].
+
+get_throttle_dependencies_snapshot(Txn) ->
+    BucketsSnapshot = fetch_snapshot(all, Txn, [props]),
+    ClusterSnapshot = ns_cluster_membership:fetch_snapshot(Txn),
+    NodesWanted = ns_cluster_membership:nodes_wanted(ClusterSnapshot),
+    KvNodes = ns_cluster_membership:service_nodes(ClusterSnapshot, NodesWanted,
+                                                  kv),
+    McdSnapshot = chronicle_compat:txn_get_many(mcd_settings_keys(KvNodes),
+                                                Txn),
+    lists:foldl(fun maps:merge/2, #{}, [BucketsSnapshot, ClusterSnapshot,
+                                        McdSnapshot]).
+
+validate_bucket_throttle_params(BucketName, NewBucketConfig, Snapshot) ->
+    Reserved = get_throttle_reserved(NewBucketConfig),
+    HardLimit = get_throttle_hard_limit(NewBucketConfig),
+    maybe
+        ok ?= validate_throttle_reserved_vs_hard_limit(Reserved, HardLimit),
+        ok ?= validate_throttle_reserved_vs_capacity(BucketName, Reserved,
+                                                     Snapshot)
+    end.
+
+validate_throttle_reserved_vs_hard_limit(
+  Reserved, HardLimit) when Reserved > HardLimit ->
+    {error, {throttle_error,
+             <<"throttleReserved cannot exceed throttleHardLimit">>}};
+validate_throttle_reserved_vs_hard_limit(_, _) ->
+    ok.
+
+validate_throttle_reserved_vs_capacity(_BucketName, 0, _Snapshot) ->
+    ok;
+validate_throttle_reserved_vs_capacity(BucketName, Reserved, Snapshot) ->
+    NodesWanted = ns_cluster_membership:nodes_wanted(Snapshot),
+    KvNodes = ns_cluster_membership:service_nodes(Snapshot, NodesWanted, kv),
+    case KvNodes of
+        [] ->
+            ok;
+        _ ->
+            AllBuckets = get_buckets(Snapshot),
+            OtherReserved =
+                lists:sum(
+                  [get_throttle_reserved(Config) ||
+                      {Name, Config} <- AllBuckets, Name =/= BucketName]),
+            TotalReserved = OtherReserved + Reserved,
+            MinCapacity =
+                lists:min(
+                  [menelaus_web_mcd_settings:get_effective_node_capacity(
+                      N, Snapshot) || N <- KvNodes]),
+            case TotalReserved > MinCapacity of
+                true ->
+                    Msg = io_lib:format(
+                            "Sum of throttleReserved across all buckets (~p) "
+                            "exceeds node_capacity (~p)", [TotalReserved,
+                                                           MinCapacity]),
+                    {error, {throttle_error, iolist_to_binary(Msg)}};
+                false ->
+                    ok
+            end
+    end.
 
 get_view_nodes(BucketConfig) ->
     case can_have_views(BucketConfig) of
