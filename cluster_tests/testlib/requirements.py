@@ -11,7 +11,7 @@ from copy import deepcopy
 from typing import Dict, List, Union
 
 import testlib
-from testlib.cluster import Cluster, build_cluster
+from testlib.cluster import Cluster, build_cluster, StartClusterError
 from testlib import get_succ
 from testlib.util import Service, services_to_strings
 import random
@@ -175,8 +175,10 @@ class ClusterRequirements:
         unmet_requirements = cluster.maybe_repair_cluster_requirements()
         if len(unmet_requirements) > 0:
             unmet_str = ', '.join(str(r) for r in unmet_requirements)
-            raise RuntimeError("Newly created cluster still has the following "
-                               f"requirements unmet: {unmet_str}")
+            raise StartClusterError(
+                    RuntimeError("Newly created cluster still has the "
+                                 f"following requirements unmet: {unmet_str}"),
+                                 cluster_index)
 
         return cluster
 

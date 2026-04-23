@@ -745,10 +745,11 @@ def main():
     # (coverage==0%) will still be counted in the code coverage report.
     # We don't do it on every cluster because it slows down the coverage
     # calculation.
-    cluster.ensure_coverage_modules_loaded()
+    if cluster is not None:
+        cluster.ensure_coverage_modules_loaded()
 
-    if not cluster.is_existing_cluster():
-        cluster.destroy()
+        if not cluster.is_existing_cluster():
+            cluster.destroy()
 
     testlib.print_wrapped("\n=== Finishing ",
                           max_width=testlib.config['screen_width'])
