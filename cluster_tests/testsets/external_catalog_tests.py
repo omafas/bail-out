@@ -51,6 +51,12 @@ class ExternalCatalogTests(testlib.BaseTestSet):
             testlib.ensure_deleted(
                 self.cluster, catalog_path(catalog))
 
+        # Some tests care about the catalog limit which is the same as the
+        # collections limit as catalogs data is consumed via collections.
+        testlib.diag_eval(
+            self.cluster,
+            'ns_config:delete(max_collections_count)')
+
     def get_empty_list_test(self):
         r = testlib.get_succ(self.cluster, BASE_PATH)
         body = r.json()
@@ -444,6 +450,35 @@ class ExternalCatalogTests(testlib.BaseTestSet):
         body = r.json()
         testlib.assert_eq("value1", body["param1"])
         testlib.assert_eq("value2", body["param2"])
+
+    def catalog_limit_test(self):
+        # Set the max collections count to a low value
+        # to test the catalog limit.
+        testlib.diag_eval(
+            self.cluster,
+            'ns_config:set(max_collections_count, 2)')
+
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "limit-a"})
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "limit-b"})
+
+        # Third catalog should fail
+        testlib.post_fail(
+            self.cluster, BASE_PATH,
+            expected_code=400,
+            data={"name": "limit-c"})
+
+        # Deleting one should allow creation again
+        testlib.delete_succ(
+            self.cluster,
+            catalog_path("limit-a"))
+        testlib.post_succ(
+            self.cluster, BASE_PATH,
+            data={"name": "limit-c"})
+
 
     def pools_default_includes_catalogs_test(self):
         r = testlib.get_succ(

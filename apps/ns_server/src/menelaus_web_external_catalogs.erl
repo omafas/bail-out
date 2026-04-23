@@ -71,7 +71,9 @@ handle_post_catalog(Req) ->
                                 format_catalog(CommittedCatalog),
                                 200);
                           already_exists ->
-                              reply_conflict(Req, Name)
+                              reply_conflict(Req, Name);
+                          too_many_catalogs ->
+                              reply_too_many_catalogs(Req)
                       end;
                   no_query_node ->
                       reply_no_query_node(Req);
@@ -271,6 +273,9 @@ set_state(ManifestUid, Catalogs) ->
       #{uid => ManifestUid,
         catalogs => Catalogs}}].
 
+max_catalogs() ->
+    collections:get_max_supported(num_collections).
+
 add_catalog(Name, Catalog) ->
     chronicle_kv:transaction(
       kv, [?CHRONICLE_KEY],
@@ -281,10 +286,20 @@ add_catalog(Name, Catalog) ->
                   {ok, _} ->
                       {abort, already_exists};
                   not_found ->
-                      NewUid = get_uid(State) + 1,
-                      CatalogWithRev = [{rev, NewUid} | Catalog],
-                      NewCatalogs = Catalogs#{Name => CatalogWithRev},
-                      {commit, set_state(NewUid, NewCatalogs), CatalogWithRev}
+                      case maps:size(Catalogs) >=
+                          max_catalogs() of
+                          true ->
+                              {abort, too_many_catalogs};
+                          false ->
+                              NewUid = get_uid(State) + 1,
+                              CatalogWithRev =
+                                  [{rev, NewUid} | Catalog],
+                              NewCatalogs =
+                                  Catalogs#{Name => CatalogWithRev},
+                              {commit,
+                               set_state(NewUid, NewCatalogs),
+                               CatalogWithRev}
+                      end
               end
       end).
 
@@ -396,6 +411,16 @@ reply_no_query_node(Req) ->
         Req,
         <<"Must have a query node to configure an external catalog">>,
         400).
+
+reply_too_many_catalogs(Req) ->
+    Max = max_catalogs(),
+    menelaus_util:reply_json(
+      Req,
+      iolist_to_binary(
+        io_lib:format(
+          "Maximum number of external catalogs"
+          " (~b) has been reached", [Max])),
+      400).
 
 reply_validation_errors(Req, Errors) ->
     ErrorJson =
