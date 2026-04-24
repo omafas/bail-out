@@ -2273,6 +2273,65 @@
               "authenticated_userid" : {"domain" : "", "user" : ""},
               "sessionid" : ""
           }
+      },
+      {
+          "id": 8300,
+          "name" : "create external catalog",
+          "description" : "External catalog was created",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "local" : {"ip" : "", "port" : 1},
+              "catalog_name" : "",
+              "rev" : 0
+          },
+          "optional_fields" : {
+              "authenticated_userid" : {"domain" : "", "user" : ""},
+              "sessionid" : ""
+          }
+      },
+      {
+          "id": 8301,
+          "name" : "modify external catalog",
+          "description" : "External catalog was modified",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "local" : {"ip" : "", "port" : 1},
+              "catalog_name" : "",
+              "rev" : 0
+          },
+          "optional_fields" : {
+              "authenticated_userid" : {"domain" : "", "user" : ""},
+              "sessionid" : ""
+          }
+      },
+      {
+          "id": 8302,
+          "name" : "delete external catalog",
+          "description" : "External catalog was deleted",
+          "sync" : false,
+          "enabled" : true,
+          "filtering_permitted" : false,
+          "mandatory_fields" : {
+              "timestamp" : "",
+              "real_userid" : {"domain" : "", "user" : ""},
+              "remote" : {"ip" : "", "port" : 1},
+              "local" : {"ip" : "", "port" : 1},
+              "catalog_name" : ""
+          },
+          "optional_fields" : {
+              "authenticated_userid" : {"domain" : "", "user" : ""},
+              "sessionid" : ""
+          }
       }
     ]
 }

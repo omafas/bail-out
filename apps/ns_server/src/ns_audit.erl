@@ -100,7 +100,10 @@
          credential_event/3,
          get_identity/1,
          set_custom_role/3,
-         delete_custom_role/2
+         delete_custom_role/2,
+         create_external_catalog/3,
+         modify_external_catalog/3,
+         delete_external_catalog/2
         ]).
 
 -export([start_link/0, stats/0]).
@@ -546,7 +549,13 @@ code(delete_credential) ->
 code(set_custom_role) ->
     8298;
 code(delete_custom_role) ->
-    8299.
+    8299;
+code(create_external_catalog) ->
+    8300;
+code(modify_external_catalog) ->
+    8301;
+code(delete_external_catalog) ->
+    8302.
 
 send_to_memcached(ParentPID, {Code, EncodedBody, IsSync}) ->
     case (catch ns_memcached_sockets_pool:executing_on_socket(
@@ -1129,6 +1138,18 @@ set_manifest(Req, BucketName, InputManifest, ValidOnUid, Uid) ->
     put(set_manifest, Req,
         [{bucket_name, BucketName}, {input_manifest, InputManifest},
          {valid_on_uid, ValidOnUid}, {new_manifest_uid, Uid}]).
+
+create_external_catalog(Req, Name, Rev) ->
+    put(create_external_catalog, Req,
+        [{catalog_name, Name}, {rev, Rev}]).
+
+modify_external_catalog(Req, Name, Rev) ->
+    put(modify_external_catalog, Req,
+        [{catalog_name, Name}, {rev, Rev}]).
+
+delete_external_catalog(Req, Name) ->
+    put(delete_external_catalog, Req,
+        [{catalog_name, Name}]).
 
 auth_failure(Req0) ->
     Req =

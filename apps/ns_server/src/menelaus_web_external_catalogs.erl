@@ -66,6 +66,10 @@ handle_post_catalog(Req) ->
                                   BinaryParams),
                       case add_catalog(Name, Catalog) of
                           {ok, _, CommittedCatalog} ->
+                              ns_audit:create_external_catalog(
+                                Req, Name,
+                                proplists:get_value(
+                                  rev, CommittedCatalog)),
                               menelaus_util:reply_json(
                                 Req,
                                 format_catalog(CommittedCatalog),
@@ -99,6 +103,10 @@ handle_put_catalog(Name, Req) ->
                       case replace_catalog(
                              BinName, Updated, UserRev) of
                           {ok, _, CommittedCatalog} ->
+                              ns_audit:modify_external_catalog(
+                                Req, BinName,
+                                proplists:get_value(
+                                  rev, CommittedCatalog)),
                               menelaus_util:reply_json(
                                 Req,
                                 format_catalog(CommittedCatalog),
@@ -157,7 +165,11 @@ maybe_patch_catalog(Name, Params, UserRev, Req, Retries) ->
         {ok, _, CommittedCatalog} ?=
             replace_catalog(Name, Updated, RevToCheck),
 
-        menelaus_util:reply_json(Req, format_catalog(CommittedCatalog), 200)
+        ns_audit:modify_external_catalog(
+          Req, Name,
+          proplists:get_value(rev, CommittedCatalog)),
+        menelaus_util:reply_json(
+          Req, format_catalog(CommittedCatalog), 200)
     else
         not_found ->
             menelaus_util:reply_not_found(Req);
@@ -176,8 +188,11 @@ maybe_patch_catalog(Name, Params, UserRev, Req, Retries) ->
 
 handle_delete_catalog(Name, Req) ->
     menelaus_util:assert_is_totoro(),
-    case delete_catalog(list_to_binary(Name)) of
+    BinName = list_to_binary(Name),
+    case delete_catalog(BinName) of
         {ok, _} ->
+            ns_audit:delete_external_catalog(
+              Req, BinName),
             menelaus_util:reply_json(Req, [], 200);
         not_found ->
             menelaus_util:reply_not_found(Req)
