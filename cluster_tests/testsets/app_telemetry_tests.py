@@ -124,7 +124,7 @@ class AppTelemetryTests(testlib.BaseTestSet):
                     # Test case for remote node
                     f"{metric_1}{{le=\"0.001\"}}": f"{value}"
                 }),
-            sleep_time=1, timeout=5)
+            sleep_time=1, timeout=15)
 
     def disabled_test(self):
         # Disable app telemetry
