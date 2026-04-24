@@ -103,7 +103,10 @@
          delete_custom_role/2,
          create_external_catalog/3,
          modify_external_catalog/3,
-         delete_external_catalog/2
+         delete_external_catalog/2,
+         create_external_collection/5,
+         modify_external_collection/5,
+         drop_external_collection/5
         ]).
 
 -export([start_link/0, stats/0]).
@@ -557,7 +560,13 @@ code(create_external_catalog) ->
 code(modify_external_catalog) ->
     8301;
 code(delete_external_catalog) ->
-    8302.
+    8302;
+code(create_external_collection) ->
+    8303;
+code(modify_external_collection) ->
+    8304;
+code(drop_external_collection) ->
+    8305.
 
 send_to_memcached(ParentPID, {Code, EncodedBody, IsSync}) ->
     case (catch ns_memcached_sockets_pool:executing_on_socket(
@@ -1152,6 +1161,30 @@ modify_external_catalog(Req, Name, Rev) ->
 delete_external_catalog(Req, Name) ->
     put(delete_external_catalog, Req,
         [{catalog_name, Name}]).
+
+create_external_collection(Req, BucketName, ScopeName,
+                           CollectionName, Uid) ->
+    put(create_external_collection, Req,
+        [{bucket_name, BucketName},
+         {scope_name, ScopeName},
+         {collection_name, CollectionName},
+         {new_manifest_uid, Uid}]).
+
+modify_external_collection(Req, BucketName, ScopeName,
+                           CollectionName, Uid) ->
+    put(modify_external_collection, Req,
+        [{bucket_name, BucketName},
+         {scope_name, ScopeName},
+         {collection_name, CollectionName},
+         {new_manifest_uid, Uid}]).
+
+drop_external_collection(Req, BucketName, ScopeName,
+                         CollectionName, Uid) ->
+    put(drop_external_collection, Req,
+        [{bucket_name, BucketName},
+         {scope_name, ScopeName},
+         {collection_name, CollectionName},
+         {new_manifest_uid, Uid}]).
 
 auth_failure(Req0) ->
     Req =

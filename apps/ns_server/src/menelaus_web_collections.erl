@@ -201,9 +201,10 @@ handle_post_external_collection(Bucket, Scope, Req) ->
                                 proplists:delete(name, Values), ServiceOKs),
                       RV = collections:create_external_collection(
                              Bucket, Scope, Name, Props),
-                      maybe_audit(RV, Req,
-                                  ns_audit:create_collection(
-                                    _, Bucket, Scope, Name, _)),
+                      maybe_audit(
+                        RV, Req,
+                        ns_audit:create_external_collection(
+                          _, Bucket, Scope, Name, _)),
                       maybe_add_event_log(RV, Bucket, []),
                       handle_rv(RV, collection_create, Req);
                   no_query_node ->
@@ -254,7 +255,7 @@ handle_patch_couchbase_collection(Bucket, Scope, Name, Req, BucketConf) ->
 process_patch_return_value(RV, Bucket, Scope, Name, Req) ->
     maybe_audit(
       RV, Req,
-      ns_audit:modify_collection(
+      ns_audit:modify_external_collection(
         _, Bucket, Scope, Name, _)),
     maybe_add_event_log(RV, Bucket, []),
     handle_rv(RV, collection_patch, Req).
@@ -311,14 +312,27 @@ handle_delete_collection(Bucket, Scope, Name, Req) ->
     ExternalCollection = is_req_external(Req),
     RV =
         case ExternalCollection of
-            false -> collections:drop_collection(Bucket, Scope, Name);
+            false ->
+                handle_delete_couchbase_collection(Bucket, Scope, Name, Req);
             true ->
                 menelaus_util:assert_is_totoro(),
-                collections:drop_external_collection(Bucket, Scope, Name)
+                handle_delete_external_collection(Bucket, Scope, Name, Req)
         end,
-    maybe_audit(RV, Req, ns_audit:drop_collection(_, Bucket, Scope, Name, _)),
     maybe_add_event_log(RV, Bucket, []),
     handle_rv(RV, collection_delete, Req).
+
+handle_delete_couchbase_collection(Bucket, Scope, Name, Req) ->
+    RV = collections:drop_collection(Bucket, Scope, Name),
+    maybe_audit(RV, Req, ns_audit:drop_collection(_, Bucket, Scope,
+                                                  Name, _)),
+    RV.
+
+handle_delete_external_collection(Bucket, Scope, Name, Req) ->
+    RV = collections:drop_external_collection(Bucket, Scope, Name),
+    maybe_audit(RV, Req,
+        ns_audit:drop_external_collection(_, Bucket, Scope,
+            Name, _)),
+    RV.
 
 handle_set_manifest(Bucket, Req) ->
     assert_api_available(Bucket),
