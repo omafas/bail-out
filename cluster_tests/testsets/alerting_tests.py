@@ -368,6 +368,7 @@ class AlertTests(testlib.BaseTestSet):
     # Test for a backup failure notification. This test starts a backup and
     # then kills the cbbackupmgr. The backup service will then emit a task
     # failure stat which ns_server will detect and create the alert.
+    @tag(Tag.LowUrgency)
     def backup_failure_alert_test(self):
         def check_backup_up():
             r = testlib.get(self.cluster, "/_p/backup/api/v1/cluster/self")
@@ -423,8 +424,7 @@ class AlertTests(testlib.BaseTestSet):
     # directory which cannot be written to. Then continuous backup is
     # enabled for the bucket and the failure should occur and a stat
     # emitted.
-    # XXX: Tag this change after the test gets some prime time soaking
-    # @tag(Tag.LowUrgency)
+    @tag(Tag.LowUrgency)
     def contbk_event_processing_failure_test(self):
         def check_backup_up():
             r = testlib.get(self.cluster, "/_p/backup/api/v1/cluster/self")
