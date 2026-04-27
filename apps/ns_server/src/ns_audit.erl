@@ -546,6 +546,8 @@ code(update_credential) ->
     8295;
 code(delete_credential) ->
     8296;
+code(consume_credential) ->
+    8297;
 code(set_custom_role) ->
     8298;
 code(delete_custom_role) ->
