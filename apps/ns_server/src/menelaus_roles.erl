@@ -115,10 +115,10 @@ default_roles_totoro() ->
        {[admin, security_info], none},
        {[admin, stats_export], [read]},
        {[admin, users], none},
+       {[admin, catalogs], [read]},
        {[admin], none},
        {[eventing], none},
        {[analytics], none},
-       {[external_catalog], [read]},
        {[backup], [read]},
        {[{credentials, any}], none},
        {[ui], none},
@@ -144,6 +144,7 @@ default_roles_totoro() ->
        {[admin, event], none},
        {[admin, metakv], none},
        {[admin, settings, metrics], none},
+       {[admin, catalogs], none},
        {[{bucket, any}, data], none},
        {[{bucket, any}, views], none},
        {[{bucket, any}, n1ql], none},
@@ -152,7 +153,6 @@ default_roles_totoro() ->
        {[{bucket, any}], [read]},
        {[{credentials, any}], [read, write]},
        {[analytics], none},
-       {[external_catalog], none},
        {[backup], none},
        {[eventing], none},
        {[xdcr], none},
@@ -174,6 +174,7 @@ default_roles_totoro() ->
        {[admin, event], none},
        {[admin, metakv], none},
        {[admin, settings, metrics], none},
+       {[admin, catalogs], none},
        {[{bucket, any}, data], none},
        {[{bucket, any}, views], none},
        {[{bucket, any}, n1ql], none},
@@ -182,7 +183,6 @@ default_roles_totoro() ->
        {[{bucket, any}], [read]},
        {[{credentials, any}], [read]},
        {[analytics], none},
-       {[external_catalog], none},
        {[backup], none},
        {[eventing], none},
        {[xdcr], none},
@@ -206,6 +206,7 @@ default_roles_totoro() ->
        {[admin, event], none},
        {[admin, metakv], none},
        {[admin, settings, metrics], none},
+       {[admin, catalogs], none},
        {[{bucket, any}, data], none},
        {[{bucket, any}, views], none},
        {[{bucket, any}, n1ql], none},
@@ -213,7 +214,6 @@ default_roles_totoro() ->
        {[{bucket, any}, analytics], none},
        {[{bucket, any}], [read]},
        {[analytics], none},
-       {[external_catalog], [read]},
        {[backup], none},
        {[eventing], none},
        {[xdcr], none},
@@ -238,6 +238,7 @@ default_roles_totoro() ->
        {[admin, event], none},
        {[admin, metakv], none},
        {[admin, settings], none},
+       {[admin, catalogs], none},
        {[{bucket, any}, data], none},
        {[{bucket, any}, views], none},
        {[{bucket, any}, n1ql], none},
@@ -245,7 +246,6 @@ default_roles_totoro() ->
        {[{bucket, any}, analytics], none},
        {[{bucket, any}], [read]},
        {[analytics], none},
-       {[external_catalog], [read]},
        {[backup], none},
        {[eventing], none},
        {[xdcr], none},
@@ -330,7 +330,6 @@ default_roles_totoro() ->
        {[admin], none},
        {[eventing], none},
        {[analytics], none},
-       {[external_catalog], none},
        {[backup], none},
        {[settings, metrics], none},
        {[n1ql, meta], none},
@@ -378,7 +377,6 @@ default_roles_totoro() ->
        {[admin], none},
        {[eventing], none},
        {[analytics], none},
-       {[external_catalog], none},
        {[backup], none},
        {[settings, metrics], none},
        {[{credentials, any}], none},
@@ -414,7 +412,6 @@ default_roles_totoro() ->
        {[admin], none},
        {[eventing], none},
        {[analytics], none},
-       {[external_catalog], none},
        {[backup], none},
        {[settings, metrics], none},
        {[{credentials, any}], none},
@@ -513,14 +510,14 @@ default_roles_totoro() ->
       [{name, <<"External Catalog Read-Only Admin">>},
        {folder, 'external_catalog'},
        {desc, <<"Can read the configured external catalogs.">>}],
-      [{[external_catalog], [read]},
+      [{[admin, catalogs], [read]},
        %% + pools access to let us stream pools for catalog manifest uid updates
        {[pools], [read]}]},
      {<<"external_catalog_admin">>, [],
       [{name, <<"External Catalog Admin">>},
        {folder, 'external_catalog'},
        {desc, <<"Can read/update/delete the configured external catalogs.">>}],
-      [{[external_catalog], [read, write]},
+      [{[admin, catalogs], [read, write]},
        %% + pools access to let us stream pools for catalog manifest uid updates
        {[pools], [read]}]},
      {<<"query_select">>, ?RBAC_COLLECTION_PARAMS,
@@ -2101,6 +2098,36 @@ credentials_access_matrix_test__() ->
               Check(consume, EC)
       end, Defs).
 
+catalog_admin_access_matrix_test__() ->
+    Defs = roles() ++ internal_roles(),
+    %% {Read, Write}; missing roles default to all-false.
+    Exceptions =
+        #{<<"admin">>                     => {true, true},
+          <<"ro_admin">>                  => {true, false},
+          <<"cluster_admin">>             => {true, true},
+          <<"service_admin">>             => {true, true},
+          <<"external_catalog_reader">>   => {true, false},
+          <<"external_catalog_admin">>    => {true, true}},
+    lists:foreach(
+      fun ({Name, ParamDefs, _Props, _Perms}) ->
+              RoleSpec = case ParamDefs of
+                             [] -> Name;
+                             _  -> {Name, [any || _ <- ParamDefs]}
+                         end,
+              Compiled = compile_roles([RoleSpec], Defs),
+              {ER, EW} =
+                  maps:get(Name, Exceptions, {false, false}),
+              Check =
+                  fun (Op, Expected) ->
+                          Actual = is_allowed(
+                                     {[admin, catalogs], Op}, Compiled),
+                          ?assertEqual({Name, Op, Expected},
+                                       {Name, Op, Actual})
+                  end,
+              Check(read, ER),
+              Check(write, EW)
+      end, Defs).
+
 cluster_admin_test__() ->
     Roles = compile_roles([<<"cluster_admin">>], roles()),
     ?assertEqual(true, is_allowed({[settings, metrics], any}, Roles)),
@@ -3170,6 +3197,7 @@ default_profile_test_() ->
       fun service_admin_test__/0,
       fun service_admin_with_credential_consumer_test__/0,
       fun credentials_access_matrix_test__/0,
+      fun catalog_admin_access_matrix_test__/0,
       fun cluster_admin_test__/0,
       fun eventing_admin_test__/0,
       fun backup_admin_test__/0,

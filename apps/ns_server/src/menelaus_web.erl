@@ -653,10 +653,10 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                 ["pools", "default", "tasks"] ->
                     {{[tasks], read}, fun menelaus_web_misc:handle_tasks/2, ["default"]};
                 ["pools", "default", "externalCatalogs"] ->
-                    {{[external_catalog], read},
+                    {{[admin, catalogs], read},
                      fun menelaus_web_external_catalogs:handle_get_catalogs/1};
                 ["pools", "default", "externalCatalogs", Name] ->
-                    {{[external_catalog], read},
+                    {{[admin, catalogs], read},
                      fun menelaus_web_external_catalogs:handle_get_catalog/2,
                      [Name]};
                 ["index.html"] ->
@@ -957,7 +957,7 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {{[admin, settings], write},
                      fun menelaus_web_guardrails:handle_post/2, [PathRest]};
                 ["pools", "default", "externalCatalogs"] ->
-                    {{[external_catalog], write},
+                    {{[admin, catalogs], write},
                      fun menelaus_web_external_catalogs:handle_post_catalog/1};
                 ["settings", "encryptionKeys"] ->
                     {no_check_disallow_anonymous,
@@ -1384,7 +1384,7 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                      fun menelaus_web_secrets:handle_delete_historical_key/3,
                      [SecretId, Id]};
                 ["pools", "default", "externalCatalogs", Name] ->
-                    {{[external_catalog], write},
+                    {{[admin, catalogs], write},
                      fun menelaus_web_external_catalogs:handle_delete_catalog/2,
                      [Name]};
                 ["settings", "jwt"] ->
@@ -1454,9 +1454,9 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {{[server_groups], write},
                      fun menelaus_web_groups:handle_server_group_update/2, [GroupUUID]};
                 ["pools", "default", "externalCatalogs", Name] ->
-                    {{[external_catalog], write},
-                        fun menelaus_web_external_catalogs:handle_put_catalog/2,
-                        [Name]};
+                    {{[admin, catalogs], write},
+                     fun menelaus_web_external_catalogs:handle_put_catalog/2,
+                     [Name]};
                 ["settings", "rbac", "users", UserId] ->
                     {when_79({[admin, users], write},
                              {[admin, security], write}),
@@ -1566,7 +1566,7 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                      fun menelaus_web_collections:handle_patch_collection/4,
                      [Id, Scope, CollectionId]};
                 ["pools", "default", "externalCatalogs", Name] ->
-                    {{[external_catalog], write},
+                    {{[admin, catalogs], write},
                      fun menelaus_web_external_catalogs:handle_patch_catalog/2,
                      [Name]};
                 _ ->
