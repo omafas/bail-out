@@ -24,7 +24,8 @@
          handle_patch_catalog/2,
          handle_delete_catalog/2,
          get_uid/0,
-         binary_params/1]).
+         binary_params/1,
+         catalog_fetcher/1]).
 
 -define(CHRONICLE_KEY, external_catalogs).
 -define(MAX_NAME_LENGTH, 256).
@@ -277,6 +278,15 @@ get_state(Snapshot) ->
 
 get_catalogs(#{catalogs := Catalogs}) ->
     Catalogs.
+
+catalog_fetcher(Txn) ->
+    Result = chronicle_compat:txn_get(?CHRONICLE_KEY, Txn),
+    case Result of
+        {error, not_found} ->
+            #{};
+        {ok, {State, _Rev}} ->
+            #{catalogs => get_catalogs(State)}
+    end.
 
 get_uid(#{uid := Uid}) ->
     Uid.

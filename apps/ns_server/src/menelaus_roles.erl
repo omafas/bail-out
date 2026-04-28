@@ -111,6 +111,7 @@ default_roles_totoro() ->
       [{[{bucket, any}, data], none},
        {[{bucket, any}, fts], none},
        {[{bucket, any}, analytics], none},
+       {[{catalog, any}], none},
        {[admin, security], none},
        {[admin, security_info], none},
        {[admin, stats_export], [read]},
@@ -151,6 +152,7 @@ default_roles_totoro() ->
        {[{bucket, any}, fts], none},
        {[{bucket, any}, analytics], none},
        {[{bucket, any}], [read]},
+       {[{catalog, any}], none},
        {[{credentials, any}], [read, write]},
        {[analytics], none},
        {[backup], none},
@@ -181,6 +183,7 @@ default_roles_totoro() ->
        {[{bucket, any}, fts], none},
        {[{bucket, any}, analytics], none},
        {[{bucket, any}], [read]},
+       {[{catalog, any}], none},
        {[{credentials, any}], [read]},
        {[analytics], none},
        {[backup], none},
@@ -213,6 +216,7 @@ default_roles_totoro() ->
        {[{bucket, any}, fts], none},
        {[{bucket, any}, analytics], none},
        {[{bucket, any}], [read]},
+       {[{catalog, any}], none},
        {[analytics], none},
        {[backup], none},
        {[eventing], none},
@@ -245,6 +249,7 @@ default_roles_totoro() ->
        {[{bucket, any}, fts], none},
        {[{bucket, any}, analytics], none},
        {[{bucket, any}], [read]},
+       {[{catalog, any}], none},
        {[analytics], none},
        {[backup], none},
        {[eventing], none},
@@ -278,6 +283,7 @@ default_roles_totoro() ->
        {[{bucket, any}, n1ql], none},
        {[{bucket, any}, fts], none},
        {[{bucket, any}, analytics], none},
+       {[{catalog, any}], none},
        {[n1ql, curl], none},
        {[eventing], none},
        {[analytics], none},
@@ -295,6 +301,7 @@ default_roles_totoro() ->
        %% This role is intentionally given this powerful permission
        %% (see MB-42835).
        {[{bucket, any}], all},
+       {[{catalog, any}], none},
        {[n1ql], all},
        {[eventing], all},
        {[analytics], all},
@@ -307,7 +314,8 @@ default_roles_totoro() ->
       [{name, <<"Backup Full Admin">>},
        {folder, admin},
        {desc, <<"Can perform backup related tasks.">>}],
-      [{[admin], none},
+      [{[{catalog, any}], none},
+       {[admin], none},
        {[settings, metrics], none},
        {[{credentials, any}], none},
        {[ui], none},
@@ -326,6 +334,7 @@ default_roles_totoro() ->
        {[{bucket, bucket_name}], all},
        {[{bucket, any}, settings], [read]},
        {[{bucket, any}], none},
+       {[{catalog, any}], none},
        {[xdcr], none},
        {[admin], none},
        {[eventing], none},
@@ -373,6 +382,7 @@ default_roles_totoro() ->
        {[{bucket, any}, settings], [read]},
        {[{bucket, any}], none},
        {[{bucket, bucket_name}, n1ql], [execute]},
+       {[{catalog, any}], none},
        {[xdcr], none},
        {[admin], none},
        {[eventing], none},
@@ -407,6 +417,7 @@ default_roles_totoro() ->
        {[{bucket, any}, stats], [read]},
        {[{bucket, any}, collections], [read]},
        {[{bucket, any}], none},
+       {[{catalog, any}], none},
        {[xdcr, developer], [read]},
        {[xdcr], all},
        {[admin], none},
@@ -564,6 +575,40 @@ default_roles_totoro() ->
        {[{collection, ?RBAC_COLLECTION_PARAMS}, data, docs],
         [delete, range_scan]},
        {[{bucket, bucket_name}, settings], [read]},
+       {[pools], [read]},
+       {[app_telemetry], [write]}]},
+     {<<"query_select_external_catalog">>, [catalog_name],
+      [{name, <<"Query External Catalog Select">>},
+       {folder, 'query'},
+       {desc, <<"Can execute a SELECT statement on a given external catalog. "
+                "This user can read external data, but not write it.">>}],
+      [{[{catalog, catalog_name}, n1ql, select], [execute]},
+       {[pools], [read]},
+       {[app_telemetry], [write]}]},
+     {<<"query_update_external_catalog">>, [catalog_name],
+      [{name, <<"Query External Catalog Update">>},
+       {folder, 'query'},
+       {desc, <<"Can execute an UPDATE statement on a given external catalog."
+                "This user can write external data, but cannot read it.">>}],
+      [{[{catalog, catalog_name}, n1ql, update], [execute]},
+       {[pools], [read]},
+       {[app_telemetry], [write]}]},
+     {<<"query_insert_external_catalog">>, [catalog_name],
+      [{name, <<"Query External Catalog Insert">>},
+       {folder, 'query'},
+       {desc, <<"Can execute an INSERT statement on a given external catalog "
+                "to add data. This user can insert external data, but cannot "
+                "read it.">>}],
+      [{[{catalog, catalog_name}, n1ql, insert], [execute]},
+       {[pools], [read]},
+       {[app_telemetry], [write]}]},
+     {<<"query_delete_external_catalog">>, [catalog_name],
+      [{name, <<"Query External Catalog Delete">>},
+       {folder, 'query'},
+       {desc, <<"Can execute a DELETE statement on a given external catalog to "
+                "delete data. This user cannot read data. "
+                "This user can delete data.">>}],
+      [{[{catalog, catalog_name}, n1ql, delete], [execute]},
        {[pools], [read]},
        {[app_telemetry], [write]}]},
      {<<"query_manage_index">>, ?RBAC_COLLECTION_PARAMS,
@@ -937,6 +982,7 @@ is_data_vertex(_) ->
 -spec vertex_arity(atom()) -> pos_integer().
 vertex_arity(bucket)      -> 1;
 vertex_arity(credentials) -> 1;
+vertex_arity(catalog)     -> 1;
 vertex_arity(scope)       -> 2;
 vertex_arity(collection)  -> 3.
 
@@ -945,6 +991,7 @@ is_parameterized_vertex(bucket)      -> true;
 is_parameterized_vertex(credentials) -> true;
 is_parameterized_vertex(scope)       -> true;
 is_parameterized_vertex(collection)  -> true;
+is_parameterized_vertex(catalog)     -> true;
 is_parameterized_vertex(_)           -> false.
 
 is_credential_prefix(CredId) ->
@@ -956,6 +1003,8 @@ is_credential_prefix(CredId) ->
 get_vertex_param_list({bucket, B}) ->
     [B];
 get_vertex_param_list({credentials, C}) ->
+    [C];
+get_vertex_param_list({catalog, C}) ->
     [C];
 get_vertex_param_list({_, Params}) ->
     Params;
@@ -1159,6 +1208,23 @@ compile_param(credential_id, Name, Snapshot) ->
                                 cb_credentials_store:get_index(Snapshot)) of
         true -> {Name, Snapshot};
         false -> undefined
+    end;
+compile_param(catalog_name, Name, Ctx) ->
+    case Ctx of
+        #{catalogs := Catalogs} ->
+            find_object(
+              Name,
+              fun(CatalogName) ->
+                      case maps:find(list_to_binary(CatalogName),
+                                     Catalogs) of
+                          {ok, _Value} ->
+                              {CatalogName, Ctx};
+                          error ->
+                              undefined
+                      end
+              end);
+        _ ->
+            undefined
     end.
 
 %% A credential_id role param is valid when:
@@ -1493,7 +1559,7 @@ calculate_possible_param_values(Snapshot, Combination, Permission) ->
 
 all_params_combinations() ->
     [[], [bucket_name], ?RBAC_SCOPE_PARAMS, ?RBAC_COLLECTION_PARAMS,
-     [credential_id]].
+     [credential_id], [catalog_name]].
 
 -spec calculate_possible_param_values(map(), undefined | rbac_permission()) ->
                                              rbac_all_param_values().
@@ -1619,9 +1685,15 @@ validate_roles(Roles, Scope) ->
 %% `credential_consumer' params refer to an existing credential.
 -spec get_roles_snapshot() -> map().
 get_roles_snapshot() ->
-    chronicle_compat:get_snapshot(
-      [ns_bucket:fetch_snapshot(all, _, [collections, uuid]),
-       cb_credentials_store:fetch_index_snapshot(_)]).
+    Fetchers =
+        [ns_bucket:fetch_snapshot(all, _, [collections, uuid]),
+         cb_credentials_store:fetch_index_snapshot(_)] ++
+        case cluster_compat_mode:is_cluster_totoro() of
+            true -> [menelaus_web_external_catalogs:catalog_fetcher(_)];
+            false -> []
+        end,
+
+    chronicle_compat:get_snapshot(Fetchers).
 
 -spec validate_roles([rbac_role()], public | all, map()) ->
           {GoodRoles :: [rbac_role()], BadRoles :: [rbac_role()]}.
@@ -1976,8 +2048,12 @@ toy_manifest() ->
 toy_props() ->
     [{storage_mode, magma}, {type, membase}].
 
+toy_catalogs() ->
+    #{catalogs => #{<<"toy_catalog">> => {}}}.
+
 compile_roles(Roles, Definitions) ->
-    compile_roles(Roles, Definitions, toy_buckets()).
+    compile_roles(Roles, Definitions,
+                  maps:merge(toy_buckets(), toy_catalogs())).
 
 compile_roles_test() ->
     StripId = fun ({N, _Id}) -> N; (N) -> N end,
@@ -2127,6 +2203,42 @@ catalog_admin_access_matrix_test__() ->
               Check(read, ER),
               Check(write, EW)
       end, Defs).
+
+catalog_access_matrix_test__() ->
+    Defs = roles() ++ internal_roles(),
+    %% {Read, Write, Consume}; missing roles default to all-false.
+    Exceptions =
+        #{<<"admin">> => [select, update, insert, delete],
+          <<"service_admin">> => [select, update, insert, delete],
+          <<"query_select_external_catalog">> => [select],
+          <<"query_update_external_catalog">> => [update],
+          <<"query_insert_external_catalog">> => [insert],
+          <<"query_delete_external_catalog">> => [delete]},
+    lists:foreach(
+      fun(Param) ->
+              lists:foreach(
+                fun ({Name, ParamDefs, _Props, _Perms}) ->
+                        RoleSpec =
+                            case ParamDefs of
+                                [] -> Name;
+                                _  -> {Name, [any || _ <- ParamDefs]}
+                            end,
+                        Compiled = compile_roles([RoleSpec], Defs),
+                        AllowedParams = maps:get(Name, Exceptions, []),
+                        ER = proplists:is_defined(Param, AllowedParams),
+                        Check =
+                            fun (Op, Expected) ->
+                                    Actual = is_allowed(
+                                               {[{catalog, "test_catalog"},
+                                                 n1ql, Param],
+                                                Op},
+                                               Compiled),
+                                    ?assertEqual({Name, Op, Expected},
+                                                 {Name, Op, Actual})
+                            end,
+                        Check(execute, ER)
+                end, Defs)
+      end, [select, update, insert, delete]).
 
 cluster_admin_test__() ->
     Roles = compile_roles([<<"cluster_admin">>], roles()),
@@ -2295,7 +2407,9 @@ extract_all_names(Roles) ->
               [{Name, ["default", "s"]} | AccIn];
           ({Name, ?RBAC_COLLECTION_PARAMS, _Description, _Filters},
            AccIn) ->
-              [{Name, ["default", "s", "c"]} | AccIn]
+              [{Name, ["default", "s", "c"]} | AccIn];
+          ({Name, [catalog_name], _Description, _Filters}, AccIn) ->
+              [{Name, ["catalog"]} | AccIn]
       end, [], Roles).
 
 remove_exempted_names(AllNames, ExemptedNames) ->
@@ -3198,6 +3312,7 @@ default_profile_test_() ->
       fun service_admin_with_credential_consumer_test__/0,
       fun credentials_access_matrix_test__/0,
       fun catalog_admin_access_matrix_test__/0,
+      fun catalog_access_matrix_test__/0,
       fun cluster_admin_test__/0,
       fun eventing_admin_test__/0,
       fun backup_admin_test__/0,
