@@ -754,7 +754,7 @@ attribute_min(Name) ->
         dcp_backfill_idle_disk_threshold -> % percentage
             0;
         throttle_reserved -> 0;             % ops/sec
-        throttle_hard_limit -> 0            % ops/sec
+        throttle_hard_limit -> 1            % ops/sec
     end.
 
 %% The maximum value of the attribute.

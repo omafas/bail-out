@@ -120,7 +120,7 @@ chronicle_setting_names() ->
     [{throttle_enabled, bool},
      {read_unit_size, {int, 0, ?MAX_32BIT_SIGNED_INT}},
      {write_unit_size, {int, 0, ?MAX_32BIT_SIGNED_INT}},
-     {node_capacity, {int, 0, ?MAX_64BIT_UNSIGNED_INT}}].
+     {node_capacity, {int, 1, ?MAX_64BIT_UNSIGNED_INT}}].
 
 all_setting_names() ->
     chronicle_setting_names() ++ ns_config_setting_names() ++
