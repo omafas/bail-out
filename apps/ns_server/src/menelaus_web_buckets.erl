@@ -2624,6 +2624,9 @@ parse_validate_encryption_secret_id(BucketName, Params) ->
         {error, secret_not_allowed} ->
             [{error, encryptionAtRestKeyId,
               <<"Encryption key can't encrypt this bucket">>}];
+        {error, encryption_is_incompatible_with_fusion} ->
+            [{error, encryptionAtRestKeyId,
+              <<"Encryption is incompatible with fusion">>}];
         [] ->
             [];
         [_ | _] ->

@@ -313,6 +313,11 @@ class FusionTests(testlib.BaseTestSet):
                 'historyRetentionSeconds': 8,
                 'historyRetentionBytes': 2147483649}
 
+    def get_encryption_bucket_params(self):
+        return {'encryptionAtRestKeyId': 0,
+                'encryptionAtRestDekRotationInterval': 2592000,
+                'encryptionAtRestDekLifetime': 31536000}
+
     def enabling_fusion_for_buckets_errors_test(self):
         self.create_bucket('magma', 1)
         self.create_bucket('couchstore', 1, {'bucketType': 'membase',
@@ -342,20 +347,27 @@ class FusionTests(testlib.BaseTestSet):
         testlib.post_succ(self.cluster, '/fusion/enable')
         self.wait_for_state('enabling', 'enabled')
 
-        resp = self.create_bucket(
-            'test', 1, self.get_backup_bucket_params(), expected_code=400)
-        get_json_error(resp.json(), 'continuousBackupEnabled')
+        params_to_test = [('continuousBackupEnabled',
+                           self.get_backup_bucket_params()),
+                          ('encryptionAtRestKeyId',
+                           self.get_encryption_bucket_params())]
 
-        self.create_bucket(
-            'test', 1,
-            self.get_backup_bucket_params() | {'fusionEnabled': 'false'})
+        for key, params in params_to_test:
+            resp = self.create_bucket('test', 1, params, expected_code=400)
+            get_json_error(resp.json(), key)
 
-        self.create_bucket('fusion', 1)
+            ## encryption is disallowed even on non fusion buckets
+            ## if fusion is enabled
+            if key == 'continuousBackupEnabled':
+                self.create_bucket('test', 1,
+                                   params | {'fusionEnabled': 'false'})
 
-        resp = self.cluster.update_bucket({'name': 'fusion'} |
-                                          self.get_backup_bucket_params(),
-                                          expected_code=400)
-        get_json_error(resp.json(), 'continuousBackupEnabled')
+            self.create_bucket('fusion', 1)
+
+            resp = self.cluster.update_bucket({'name': 'fusion'} |
+                                              params, expected_code=400)
+            get_json_error(resp.json(), key)
+            testlib.delete_all_buckets(self.cluster)
 
     def abort_rebalance_test(self):
         self.init_fusion()
