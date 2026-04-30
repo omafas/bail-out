@@ -310,10 +310,9 @@ validate_allowed_hosts_list([E | Tail], Acc) ->
 get_azure_allowed_domains(Str) ->
     try ejson:decode(Str) of
         L when is_list(L) ->
-            Domains = [binary_to_list(D) || D <- L],
-            case validate_azure_allowed_domains(Domains) of
+            case validate_azure_allowed_domains(L) of
                 {error, Msg} -> {error, Msg};
-                ok -> {ok, Domains}
+                ok -> {ok, L}
             end;
         _ ->
             {error, "Invalid format. Expecting a list of strings"}
@@ -332,7 +331,7 @@ validate_azure_allowed_domains(AllowedDomains) ->
                 {ok, #{host := Host}} =
                     misc:parse_url(KeyUrl, [{return, string}]),
                 [_, H | T]  = string:split(Host, ".", all),
-                Domain = string:join([H | T], "."),
+                Domain = iolist_to_binary(string:join([H | T], ".")),
                 lists:member(Domain, ToRemoveDomains);
             (_) ->
                 false

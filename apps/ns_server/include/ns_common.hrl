@@ -570,10 +570,11 @@
         "/sys/fs/cgroup/system.slice/couchbase-server.service").
 
 -define(DEFAULT_AZURE_ALLOWED_DOMAINS,
-    ["vault.azure.net", "vault.azure.cn",
-     "vault.usgovcloudapi.net", "vault.microsoftazure.de",
-     "managedhsm.azure.net", "managedhsm.azure.cn",
-     "managedhsm.usgovcloudapi.net", "managedhsm.microsoftazure.de"]).
+    [<<"vault.azure.net">>, <<"vault.azure.cn">>,
+     <<"vault.usgovcloudapi.net">>, <<"vault.microsoftazure.de">>,
+     <<"managedhsm.azure.net">>, <<"managedhsm.azure.cn">>,
+     <<"managedhsm.usgovcloudapi.net">>,
+     <<"managedhsm.microsoftazure.de">>]).
 
 -type cgroup_val() :: max | non_neg_integer().
 -record(limits, {hard = max :: cgroup_val(), soft = max :: cgroup_val()}).

@@ -1079,7 +1079,7 @@ validate_azure_key(KeyUrlStr) ->
 
     ValidateDomain =
         fun (Domain) ->
-            case lists:member(Domain, AllowedDomains) of
+            case lists:member(iolist_to_binary(Domain), AllowedDomains) of
                 true ->
                     ok;
                 false ->
