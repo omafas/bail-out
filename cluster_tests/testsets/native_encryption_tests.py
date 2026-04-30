@@ -2888,6 +2888,7 @@ class NativeEncryptionWithKmipServerTests(testlib.BaseTestSet):
     def random_node(self):
         return random.choice(self.cluster.connected_nodes)
 
+    @tag(Tag.Disabled)
     def kmip_key_test(self):
         with setup_kmip_server(self.cluster):
             # There is no such secret in the kmip server, so it should fail

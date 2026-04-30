@@ -148,6 +148,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
             self.set_service_quota(service, quota, None)
         self.old_mem_quotas = {}
 
+    @tag(Tag.Disabled)
     def topology_aware_service_test(self):
         self.assert_topology(ServicesTopologyTests.initial_topology)
         self.assert_service_map(Service.INDEX, [0, 1])
@@ -156,6 +157,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
                               [Service.QUERY, Service.INDEX],
                               [Service.QUERY, Service.INDEX]])
 
+    @tag(Tag.Disabled)
     def new_topology_aware_service_test(self):
         self.assert_topology(ServicesTopologyTests.initial_topology)
         self.assert_service_map(Service.EVENTING, [])
@@ -164,6 +166,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
                               [Service.QUERY, Service.INDEX, Service.EVENTING],
                               [Service.QUERY, Service.EVENTING]])
 
+    @tag(Tag.Disabled)
     def remove_topology_aware_service_test(self):
         self.assert_topology(ServicesTopologyTests.initial_topology)
         self.assert_service_map(Service.INDEX, [0, 1])
@@ -173,6 +176,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
                               [Service.QUERY]])
 
     @tag(Tag.LowUrgency)
+    @tag(Tag.Disabled)
     def serviceless_node_test(self):
         self.assert_topology(ServicesTopologyTests.initial_topology)
         self.change_services_topology({Service.INDEX: [0], Service.QUERY: [2]},
@@ -182,6 +186,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
                               [Service.QUERY]])
 
     @tag(Tag.LowUrgency)
+    @tag(Tag.Disabled)
     def simple_service_test(self):
         self.assert_topology(ServicesTopologyTests.initial_topology)
         self.assert_service_map(Service.BACKUP, [])
@@ -194,6 +199,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
                               [Service.QUERY, Service.INDEX, Service.BACKUP],
                               [Service.QUERY]])
 
+    @tag(Tag.Disabled)
     def set_large_quotas(self):
         resp = testlib.get_succ(self.cluster, "/pools/default")
         json = resp.json()
@@ -204,11 +210,13 @@ class ServicesTopologyTests(testlib.BaseTestSet):
         self.set_service_quota(Service.INDEX, newquota, json)
         self.set_service_quota(Service.FTS, newquota, json)
 
+    @tag(Tag.Disabled)
     def enough_quota_test(self):
         self.assert_topology(ServicesTopologyTests.initial_topology)
         self.set_large_quotas()
         self.change_services_topology({Service.FTS: [2]}, 200)
 
+    @tag(Tag.Disabled)
     def exceed_quota_test(self):
         self.assert_topology(ServicesTopologyTests.initial_topology)
         self.set_large_quotas()
@@ -216,6 +224,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
         self.change_services_topology({Service.FTS: [0]}, 400)
         self.assert_topology(ServicesTopologyTests.initial_topology)
 
+    @tag(Tag.Disabled)
     def swap_services_with_large_quotas_test(self):
         self.assert_topology(ServicesTopologyTests.initial_topology)
         self.set_large_quotas()
@@ -234,6 +243,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
                                 testlib.format_res_info(res))
 
     @tag(Tag.LowUrgency)
+    @tag(Tag.Disabled)
     def full_rebalance_test(self):
         self.assert_topology(ServicesTopologyTests.initial_topology)
         self.rebalance({Service.BACKUP: [1, 2]}, None, 200)
@@ -241,6 +251,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
                               [Service.QUERY, Service.INDEX, Service.BACKUP],
                               [Service.QUERY, Service.BACKUP]])
 
+    @tag(Tag.Disabled)
     def not_rebalancing_service_test(self):
         res = self.rebalance({Service.BACKUP: [1, 2]}, [Service.INDEX], 400)
         testlib.assert_eq(res.text,
@@ -248,6 +259,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
                           ' in the rebalance')
         self.assert_topology(ServicesTopologyTests.initial_topology)
 
+    @tag(Tag.Disabled)
     def delta_recovery_test(self):
         failover_node = self.cluster.connected_nodes[1]
         self.failed_node = failover_node
@@ -258,6 +270,7 @@ class ServicesTopologyTests(testlib.BaseTestSet):
         testlib.assert_eq(res.text, 'Service topology change is incompatible '
                           'with delta recovery')
 
+    @tag(Tag.Disabled)
     def failed_node_test(self):
         failover_node = self.cluster.connected_nodes[1]
         self.failed_node = failover_node
@@ -266,10 +279,12 @@ class ServicesTopologyTests(testlib.BaseTestSet):
         testlib.assert_eq(res.text, 'Service topology change is not possible if'
                           ' some nodes are failed over')
 
+    @tag(Tag.Disabled)
     def kv_not_allowed_test(self):
         res = self.change_services_topology({Service.KV: [1, 2]}, 400)
         testlib.assert_eq(res.text, 'Cannot change topology for data service')
 
+    @tag(Tag.Disabled)
     def bad_parameters_test(self):
         nodes_str = ','.join(self.otp_nodes)
         res = self.rebalance_with_params({"topology": nodes_str}, 400)

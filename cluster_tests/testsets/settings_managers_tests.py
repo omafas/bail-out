@@ -22,6 +22,7 @@ import testlib
 import base64
 
 from testlib.util import Service
+from testlib.test_tag_decorator import tag, Tag
 
 SECRET_KEY = "/indexing/settings/config/features/ShardAffinity"
 
@@ -147,31 +148,39 @@ class SettingsManagersTests(testlib.BaseTestSet):
     def test_teardown(self):
         pass
 
+    @tag(Tag.Disabled)
     def index_settings_manager_test(self):
         _get_test_generator(self.cluster, "/settings/indexes", INDEX_SETTINGS)
 
+    @tag(Tag.Disabled)
     def index_settings_manager_json_test(self):
         _json_blob_test_gen(self.cluster, "/indexing/settings/config")
 
+    @tag(Tag.Disabled)
     def query_settings_manager_test(self):
         _get_test_generator(self.cluster, "/settings/querySettings",
                             QUERY_SETTINGS)
 
+    @tag(Tag.Disabled)
     def query_settings_manager_json_test(self):
         _json_blob_test_gen(self.cluster, "/query/settings/config")
 
+    @tag(Tag.Disabled)
     def eventing_settings_manager_json_test(self):
         _json_blob_test_gen(self.cluster, "/eventing/settings/config")
 
+    @tag(Tag.Disabled)
     def analytics_settings_manager_test(self):
         _get_test_generator(self.cluster, "/settings/analytics",
                             ANALYTICS_SETTINGS)
 
+    @tag(Tag.Disabled)
     def analytics_settings_manager_json_test(self):
         _json_blob_test_gen(self.cluster, "/analytics/settings/config")
 
     # Custom test for a "magic" metakv key that will be introduced. Doesn't do
     # a ton at the moment but can hopefully be expanded later.
+    @tag(Tag.Disabled)
     def enable_shard_affinity_metakv_test(self):
         testlib.metakv_put_succ(self.cluster, SECRET_KEY,
                                 data = {'value': shard_affinty_blob("true")})

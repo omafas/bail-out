@@ -8,6 +8,8 @@ class Tag(Enum):
     # Indicates that a test doesn't need to be run on every patchset in CV, so
     # it may get left for a post-commit job
     LowUrgency = "LowUrgency"
+    # Indicates that a test is disabled
+    Disabled = "Disabled"
 
 
 def tag_from_str(tag_str: str) -> Union[Tag, str]:
