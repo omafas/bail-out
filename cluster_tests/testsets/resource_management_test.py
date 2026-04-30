@@ -827,6 +827,9 @@ def disable_bucket_guard_rails(cluster):
                 },
                 "dataSizePerNode": {
                     "enabled": False
+                },
+                "collectionsPerQuota": {
+                    "enabled": False
                 }
             },
             "diskUsage": {
