@@ -260,11 +260,23 @@ cbauth_call(Func, Params, Kind, CbauthLabels) ->
     cbauth_call(Func, Params, Kind, CbauthLabels, #{}).
 
 cbauth_call(Func, Params, Kind, CbauthLabels, Opts) ->
-    cbauth_call(Func, Params, Kind, CbauthLabels, Opts, []).
+    Results = misc:parallel_map(
+                fun (Label) ->
+                    {Label, cbauth_call_single(Func, Params, Kind, Label, Opts)}
+                end, CbauthLabels, infinity),
+    Errors = [{L, Reason} || {L, {error, Reason}} <- Results],
+    case Errors of
+        [] ->
+            {ok, [R || {_, {ok, R}} <- Results]};
+        _ ->
+            OnlyRetries = lists:all(fun ({_, R}) -> R == retry end, Errors),
+            case OnlyRetries of
+                true -> {error, retry};
+                false -> {error, {cbauth_errors, Errors}}
+            end
+    end.
 
-cbauth_call(_Func, _Params, _Kind, [], _Opts, Res) ->
-    {ok, lists:reverse(Res)};
-cbauth_call(Func, Params, Kind, [CbauthLabel | Tail], Opts, Acc) ->
+cbauth_call_single(Func, Params, Kind, CbauthLabel, Opts) ->
     ?log_debug("Calling ~s for ~s for ~p", [Func, CbauthLabel, Kind]),
     RpcOpts = #{silent => false, timeout => ?CBAUTH_RPC_TIMEOUT},
     try json_rpc_connection:perform_call(CbauthLabel,
@@ -272,7 +284,7 @@ cbauth_call(Func, Params, Kind, [CbauthLabel | Tail], Opts, Acc) ->
                                          Params, RpcOpts) of
         {ok, Res} ->
             ?log_debug("~s at ~s returned ok", [Func, CbauthLabel]),
-            cbauth_call(Func, Params, Kind, Tail, Opts, [Res | Acc]);
+            {ok, Res};
         {error, <<"keys-not-set">>} ->
             ?log_debug("~s at ~s returned keys-not-set for ~p, will retry",
                        [Func, CbauthLabel, Kind]),
@@ -287,8 +299,7 @@ cbauth_call(Func, Params, Kind, [CbauthLabel | Tail], Opts, Acc) ->
                        [Func, CbauthLabel, Kind]),
             case maps:get(ignore_missing_connection, Opts, false) of
                 true ->
-                    Res = {ok, undefined},
-                    cbauth_call(Func, Params, Kind, Tail, Opts, [Res | Acc]);
+                    {ok, undefined};
                 false ->
                     {error, retry}
             end
