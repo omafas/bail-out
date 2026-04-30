@@ -128,6 +128,20 @@ class ClusterRequirements:
     def as_list(self):
         return list(filter(lambda x: x is not None, self.requirements.values()))
 
+    def has_service(self, service: 'Service'):
+        """Return True if these requirements include the given service."""
+        services_req = self.requirements.get('services')
+        if services_req is None:
+            return False
+        service_str = service.value
+        include = services_req.include_services
+        if isinstance(include, list):
+            return service_str in include
+        if isinstance(include, dict):
+            return any(service_str in node_services
+                       for node_services in include.values())
+        return False
+
     @testlib.no_output_decorator
     def create_cluster(self, auth, cluster_index, tmp_cluster_dir,
                        first_node_index, connect=True):

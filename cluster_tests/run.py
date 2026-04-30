@@ -42,6 +42,7 @@ import cluster_run_lib
 from testlib import UnmetRequirementsError, TestError
 from testlib.cluster import InconsistentClusterError, StartClusterError
 from testlib import test_tag_decorator
+from testlib.util import Service, strings_to_services
 
 from testsets import \
     authn_tests, \
@@ -179,6 +180,10 @@ Usage: {{program_name}}
         html - HTML reports only
         txt  - Text reports only (per-module .txt files)
         all  - Both HTML and text reports
+    [--exclude-services <service>[,<service>...]]
+        Skip all testsets whose requirements include any of the listed services.
+        Services are specified by value: index, n1ql, fts, backup,
+        eventing, cbas. Example: --exclude-services fts,cbas
     [--help]
         Show this help
 """
@@ -457,7 +462,8 @@ def main():
                                            'no-res-alignment',
                                            'no-wrap',
                                            'code-coverage-modules=',
-                                           'coverage-output-format='])
+                                           'coverage-output-format=',
+                                           'exclude-services='])
     except getopt.GetoptError as err:
         bad_args_exit(str(err))
 
@@ -471,6 +477,7 @@ def main():
     with_tags = None
     without_tags = None
     ignore_unknown_tags = False
+    exclude_services = None
     seed = testlib.random_str(16)
     reuse_clusters = True
     randomize_clusters = False
@@ -514,6 +521,16 @@ def main():
         elif o == '--without-tags':
             without_tags = list(map(test_tag_decorator.tag_from_str,
                                     a.split(",")))
+        elif o == '--exclude-services':
+            try:
+                exclude_services = strings_to_services(
+                    [s.strip() for s in a.split(",")])
+            except KeyError as e:
+                valid = [svc.value for svc in Service if svc.value is not None]
+                bad_args_exit(f"Unknown service: {e}. "
+                              f"Valid services: {', '.join(valid)}")
+            if Service.KV in exclude_services:
+                bad_args_exit("KV service cannot be excluded")
         elif o == '--ignore-unknown-tags':
             ignore_unknown_tags = True
         elif o in ('--keep-tmp-dirs', '-k'):
@@ -635,7 +652,8 @@ def main():
 
     try:
         testsets_to_run = find_tests(tests, discovered_tests, with_tags,
-                                     without_tags)
+                                     without_tags,
+                                     exclude_services=exclude_services)
     except ValueError as e:
         error_exit(str(e))
 
@@ -912,12 +930,47 @@ def group_testsets(testsets, reuse_clusters, randomize_clusters,
     return (tests_count, sorted_testsets_grouped)
 
 
-def find_tests(test_names, discovered_list, with_tags, without_tags):
+
+def get_testsets_by_excluded_services(testset_list, exclude_services):
+    """Filter out testset configurations that require excluded services.
+
+    For each testset the function removes every configuration whose
+    requirements include at least one of the excluded services.
+    Testsets whose every configuration is removed this way are dropped
+    entirely (i.e. they will not be run at all).
+
+    Args:
+        testset_list: list of (name, class, tests, configurations) tuples.
+        exclude_services: list of Service enums to exclude.
+
+    Returns:
+        A filtered list of (name, class, tests, configurations) tuples.
+    """
+    if not exclude_services:
+        return testset_list
+
+    def configuration_needs_excluded_service(configuration):
+        return any(configuration.has_service(svc) for svc in exclude_services)
+
+    filtered = []
+    for (n, cl, tests, configurations) in testset_list:
+        kept = [c for c in configurations
+                if not configuration_needs_excluded_service(c)]
+        if kept:
+            filtered.append((n, cl, tests, kept))
+    return filtered
+
+
+def find_tests(test_names, discovered_list, with_tags, without_tags,
+               exclude_services=None):
     if test_names is not None:
         discovered_list = get_testsets_by_names(test_names, discovered_list)
     if with_tags or without_tags:
         discovered_list = get_testsets_by_tags(discovered_list, with_tags,
                                                without_tags)
+    if exclude_services:
+        discovered_list = get_testsets_by_excluded_services(discovered_list,
+                                                            exclude_services)
     return discovered_list
 
 
