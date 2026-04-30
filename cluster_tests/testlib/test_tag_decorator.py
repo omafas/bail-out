@@ -12,18 +12,31 @@ class Tag(Enum):
     Disabled = "Disabled"
 
 
-def tag_from_str(tag_str: str) -> Union[Tag, str]:
+class UnknownTag:
+    """Returned by tag_from_str when the string does not match any known Tag."""
+    def __init__(self, name: str):
+        self.name = name
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return f"UnknownTag({self.name!r})"
+
+
+def tag_from_str(tag_str: str) -> Union[Tag, UnknownTag]:
     """
     Convert a tag string into the Tag enum. If the string doesn't match a tag,
-    the original string will be returned, for separate error handling
+    an UnknownTag instance is returned (carrying the original string), for
+    separate error handling.
 
     :param tag_str: A string which may or may not match an instance of Tag
-    :return: Either the Tag enum, or the original string
+    :return: Either the Tag enum, or an UnknownTag wrapping the original string
     """
-    tag_enum = Tag(tag_str)
-    if tag_enum is None:
-        raise ValueError(f"{tag_str} is not a tag")
-    return tag_enum
+    try:
+        return Tag(tag_str)
+    except ValueError:
+        return UnknownTag(tag_str)
 
 
 def tag(tag_enum: Tag):

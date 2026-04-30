@@ -595,11 +595,13 @@ def main():
         if with_tags is not None:
             for tag in with_tags:
                 if not isinstance(tag, test_tag_decorator.Tag):
-                    raise ValueError(f"{tag} is not a valid Tag")
+                    error_exit(f"'{tag}' is not a valid tag. Use "
+                               f"--ignore-unknown-tags to ignore unknown tags.")
         if without_tags is not None:
             for tag in without_tags:
                 if not isinstance(tag, test_tag_decorator.Tag):
-                    raise ValueError(f"{tag} is not a valid Tag")
+                    error_exit(f"'{tag}' is not a valid tag. Use "
+                               f"--ignore-unknown-tags to ignore unknown tags.")
 
     override_print()
 
