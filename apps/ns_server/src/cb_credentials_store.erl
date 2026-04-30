@@ -42,14 +42,16 @@
          consume_credential/1,
          get_credential_warnings/1,
          credentials_requiring_config_encryption/1,
-         credentials_requiring_n2n_encryption/0]).
+         credentials_requiring_n2n_encryption/0,
+         fetch_index_snapshot/1]).
 
 %% Internal helpers (exported for testing)
 -export([build_key/1,
          redact_credential/1,
          sensitive_fields/1,
          ensure_prerequisites/1,
-         is_expired/1]).
+         is_expired/1,
+         get_index/1]).
 
 %% The subset of meta fields that callers may supply.
 -define(USER_META_FIELDS, [expires_at, description, guardrails]).
@@ -231,6 +233,9 @@ get_index(Snapshot) ->
         {ok, {Ids, _Rev}} -> Ids;
         error -> []
     end.
+
+fetch_index_snapshot(Txn) ->
+    chronicle_compat:txn_get_many([?CREDENTIAL_IDS_KEY], Txn).
 
 %% @doc Stamp the chronicle revision into the credential's meta as
 %% `payload_version`.  This distinguishes distinct payload contents for the same

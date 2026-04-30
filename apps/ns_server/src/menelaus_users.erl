@@ -468,7 +468,7 @@ make_props_state(ItemList) ->
             lists:member(user_roles, ItemList) orelse
             lists:member(group_roles, ItemList) of
             true -> {menelaus_roles:get_definitions(public),
-                     ns_bucket:get_snapshot(all, [collections, uuid])};
+                     menelaus_roles:get_roles_snapshot()};
             false -> {undefined, undefined}
         end,
     {Passwordless, TemporaryPassword, Definitions, Snapshot}.
@@ -540,7 +540,7 @@ store_service_roles({_User, admin} = Identity, Roles) ->
     end.
 
 store_users(Users, CanOverwrite) ->
-    Snapshot = ns_bucket:get_snapshot(all, [collections, uuid]),
+    Snapshot = menelaus_roles:get_roles_snapshot(),
     case prepare_store_users_docs(Snapshot, Users, CanOverwrite) of
         {ok, {UpdatedUsers, PreparedDocs}} ->
             FinalDocs = maybe_set_high_priority_user_changes(PreparedDocs),
@@ -1028,7 +1028,7 @@ get_roles(Identity) ->
 %% Groups functions
 
 store_group(Identity, Description, Roles, LDAPGroup) ->
-    Snapshot = ns_bucket:get_snapshot(all, [collections, uuid]),
+    Snapshot = menelaus_roles:get_roles_snapshot(),
     case menelaus_roles:validate_roles(Roles, public, Snapshot) of
         {NewRoles, []} ->
             NewRoles1 = menelaus_roles:map_roles_for_compat(NewRoles),
@@ -1294,7 +1294,7 @@ filter_out_invalid_roles(Props, Definitions, Snapshot) ->
 cleanup_bucket_roles(BucketName) ->
     ?log_debug("Delete all roles for bucket ~p", [BucketName]),
     Snapshot = ns_bucket:remove_from_snapshot(
-                 BucketName, ns_bucket:get_snapshot(all, [collections, uuid])),
+                 BucketName, menelaus_roles:get_roles_snapshot()),
 
     Definitions = menelaus_roles:get_definitions(all),
     UpdateFun =

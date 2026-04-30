@@ -38,6 +38,7 @@
 -include("ns_common.hrl").
 -include("ns_config.hrl").
 -include("rbac.hrl").
+-include("credentials.hrl").
 -include("pipes.hrl").
 -include_lib("ns_common/include/cut.hrl").
 
@@ -79,7 +80,8 @@
          get_role/1,
          set_role/1,
          delete_role/1,
-         diff_roles/2]).
+         diff_roles/2,
+         get_roles_snapshot/0]).
 
 -export([start_compiled_roles_cache/0]).
 
@@ -1118,7 +1120,32 @@ compile_param(scope_name, Name, Manifest) ->
                 end);
 compile_param(collection_name, Name, Scope) ->
     find_object(Name, ?cut(maybe_add_id(collections:get_collection(_, Scope))));
-compile_param(credential_id, Name, Ctx) -> {Name, Ctx}.
+compile_param(credential_id, Name, Snapshot) ->
+    case is_valid_credential_id(Name,
+                                cb_credentials_store:get_index(Snapshot)) of
+        true -> {Name, Snapshot};
+        false -> undefined
+    end.
+
+%% A credential_id role param is valid when:
+%%   - `any' (from the `[*]' wildcard in the role string) — matches everything
+%%   - a bare `"*"' — equivalent to `any', no existence check required
+%%   - a prefix `"foo/*"' — at least one existing credential must start with
+%%     `foo/'
+%%   - a specific id — must refer to an existing credential
+is_valid_credential_id(any, _Ids) ->
+    true;
+is_valid_credential_id(Name, Ids) when is_list(Name) ->
+    case is_credential_prefix(Name) of
+        {true, ""} ->
+            true;
+        {true, Prefix} ->
+            lists:any(fun (Id) -> lists:prefix(Prefix, Id) end, Ids);
+        false ->
+            lists:member(Name, Ids)
+    end;
+is_valid_credential_id(_, _) ->
+    false.
 
 maybe_add_id(undefined) ->
     undefined;
@@ -1385,7 +1412,7 @@ build_compiled_roles(#authn_res{identity = Identity} = AuthnRes) ->
                        [ns_config_log:tag_user_data(Identity)]),
             Definitions = get_definitions(all),
             compile_roles(get_roles(AuthnRes), Definitions,
-                          ns_bucket:get_snapshot(all, [collections, uuid]));
+                          get_roles_snapshot());
         true ->
             ?log_debug("Retrieve compiled roles for user ~p from ns_server "
                        "node", [ns_config_log:tag_user_data(Identity)]),
@@ -1551,8 +1578,16 @@ validate_roles(Roles) ->
 -spec validate_roles([rbac_role()], public | all) ->
           {GoodRoles :: [rbac_role()], BadRoles :: [rbac_role()]}.
 validate_roles(Roles, Scope) ->
-    validate_roles(Roles, Scope,
-                   ns_bucket:get_snapshot(all, [collections, uuid])).
+    validate_roles(Roles, Scope, get_roles_snapshot()).
+
+%% @doc Build a snapshot suitable for role validation/compilation: the bucket
+%% collections/uuid snapshot plus the credential-id index used to check that
+%% `credential_consumer' params refer to an existing credential.
+-spec get_roles_snapshot() -> map().
+get_roles_snapshot() ->
+    chronicle_compat:get_snapshot(
+      [ns_bucket:fetch_snapshot(all, _, [collections, uuid]),
+       cb_credentials_store:fetch_index_snapshot(_)]).
 
 -spec validate_roles([rbac_role()], public | all, map()) ->
           {GoodRoles :: [rbac_role()], BadRoles :: [rbac_role()]}.
@@ -1863,13 +1898,30 @@ object_match_with_credentials_test() ->
     ?assertEqual(false, object_match([], [{credentials, "backup/prod/s3"}])),
     ?assertEqual(true, object_match([{credentials, "backup/prod/s3"}], [])).
 
+is_valid_credential_id_test() ->
+    Ids = ["backup/prod/s3", "backup/dev/test", "other/key"],
+    ?assertEqual(true,  is_valid_credential_id(any, [])),
+    ?assertEqual(true,  is_valid_credential_id(any, Ids)),
+    ?assertEqual(true,  is_valid_credential_id("*", [])),
+    ?assertEqual(true,  is_valid_credential_id("backup/prod/s3", Ids)),
+    ?assertEqual(false, is_valid_credential_id("does/not/exist", Ids)),
+    ?assertEqual(false, is_valid_credential_id("backup/prod/s3", [])),
+    ?assertEqual(true,  is_valid_credential_id("backup/*", Ids)),
+    ?assertEqual(true,  is_valid_credential_id("backup/prod/*", Ids)),
+    ?assertEqual(false, is_valid_credential_id("nomatch/*", Ids)),
+    ?assertEqual(false, is_valid_credential_id("backup/*", [])),
+    ?assertEqual(false, is_valid_credential_id(<<"foo">>, Ids)).
+
 toy_buckets_props() ->
     [{"test", [{uuid, <<"test_id">>}, {props, toy_props()}]},
      {"default", [{uuid, <<"default_id">>}, {collections, toy_manifest()},
                   {props, toy_props()}]}].
 
 toy_buckets() ->
-    ns_bucket:toy_buckets(toy_buckets_props()).
+    maps:put(?CREDENTIAL_IDS_KEY,
+             {["backup/prod/s3", "backup/dev/test", "other/key", "test"],
+              {<<"toy">>, 0}},
+             ns_bucket:toy_buckets(toy_buckets_props())).
 
 toy_manifest() ->
     [{uid, 2},
