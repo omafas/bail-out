@@ -63,6 +63,7 @@
          validate_roles/3,
          params_version/1,
          filter_out_invalid_roles/3,
+         is_data_vertex/1,
          produce_roles_by_permission/2,
          get_security_roles/1,
          get_user_admin_roles/1,

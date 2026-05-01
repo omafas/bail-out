@@ -155,10 +155,20 @@ get_params([{scope, [B, S]} | Rest]) ->
     {[B, S, any], Rest};
 get_params([{collection, [B, S, C]} | Rest]) ->
     {[B, S, C], Rest};
-get_params([O | _] = Rest) when is_atom(O) ->
-    %% We don't want to silently fail when there are invalid parameterisations,
-    %% so we need the first vertex to be an atom if it's not a known parameter
-    {[any, any, any], Rest}.
+get_params([Head | _] = Rest) ->
+    %% Non-collection-shaped vertex (atom like `external_catalog' or
+    %% parameterised non-data vertex like `{credentials, _}'): nothing to
+    %% expand for collection-permission purposes, so emit a fully-wildcard
+    %% collection tuple and leave the vertex in `Rest' for downstream
+    %% matching.
+    %%
+    %% A new parameterised data vertex MUST add an explicit clause above —
+    %% this catch-all is only correct because non-data vertices have no
+    %% bucket/scope/collection identity to expand.
+    case is_atom(Head) orelse not menelaus_roles:is_data_vertex(Head) of
+        true  -> {[any, any, any], Rest};
+        false -> erlang:error({unhandled_data_vertex, Head})
+    end.
 
 expand_collection_params({PermissionObject, Operations}, Snapshot) ->
     {CollectionParams, ObjRest} = get_params(PermissionObject),

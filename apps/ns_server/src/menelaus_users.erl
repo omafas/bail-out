@@ -74,6 +74,7 @@
          format_plain_auth/1,
          delete_storage_offline/0,
          cleanup_bucket_roles/1,
+         cleanup_credential_roles/1,
          get_salt_and_mac/1,
 
          %% Backward compatibility:
@@ -1292,10 +1293,16 @@ filter_out_invalid_roles(Props, Definitions, Snapshot) ->
     lists:keystore(roles, 1, Props, {roles, FilteredRoles}).
 
 cleanup_bucket_roles(BucketName) ->
-    ?log_debug("Delete all roles for bucket ~p", [BucketName]),
     Snapshot = ns_bucket:remove_from_snapshot(
                  BucketName, menelaus_roles:get_roles_snapshot()),
+    cleanup_invalid_roles({bucket, BucketName}, Snapshot).
 
+cleanup_credential_roles(CredId) ->
+    cleanup_invalid_roles({credential, CredId},
+                          menelaus_roles:get_roles_snapshot()).
+
+cleanup_invalid_roles(Trigger, Snapshot) ->
+    ?log_debug("Delete all roles invalidated by deletion of ~p", [Trigger]),
     Definitions = menelaus_roles:get_definitions(all),
     UpdateFun =
         fun ({Type, Key}, Props) when Type == user; Type == group ->
@@ -1306,7 +1313,7 @@ cleanup_bucket_roles(BucketName) ->
                         ?log_debug("Changing properties of ~p ~p from ~p "
                                    "to ~p due to deletion of ~p",
                                    [Type, ns_config_log:tag_user_data(Key),
-                                    Props, NewProps, BucketName]),
+                                    Props, NewProps, Trigger]),
                         {update, NewProps}
                 end
         end,

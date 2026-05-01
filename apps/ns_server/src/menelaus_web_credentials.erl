@@ -482,6 +482,7 @@ handle_put(IdStr, Req) ->
 handle_delete(IdStr, Req) ->
     case cb_credentials_store:delete(IdStr) of
         ok ->
+            menelaus_users:cleanup_credential_roles(IdStr),
             audit_credential(Req, delete_credential, IdStr, ok),
             menelaus_util:reply(Req, 200);
         {error, not_found} ->
