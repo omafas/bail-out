@@ -2059,6 +2059,38 @@ service_admin_with_credential_consumer_test__() ->
     ?assertEqual(false,
                  is_allowed({[{credentials, "other"}], consume}, Roles)).
 
+%% This guards against future drift: a new role that forgets to exclude the
+%% credentials vertex (typically `{[{credentials, any}], none}' before a
+%% `{[], _}' catch-all) will fail here with the offending role and op.
+credentials_access_matrix_test__() ->
+    Defs = roles() ++ internal_roles(),
+    %% {Read, Write, Consume}; missing roles default to all-false.
+    Exceptions =
+        #{<<"admin">>               => {true, true,  true},
+          <<"security_admin">>      => {true, true,  false},
+          <<"ro_security_admin">>   => {true, false, false},
+          <<"credential_consumer">> => {false, false, true}},
+    lists:foreach(
+      fun ({Name, ParamDefs, _Props, _Perms}) ->
+              RoleSpec = case ParamDefs of
+                             [] -> Name;
+                             _  -> {Name, [any || _ <- ParamDefs]}
+                         end,
+              Compiled = compile_roles([RoleSpec], Defs),
+              {ER, EW, EC} =
+                  maps:get(Name, Exceptions, {false, false, false}),
+              Check =
+                  fun (Op, Expected) ->
+                          Actual = is_allowed(
+                                     {[{credentials, "test"}], Op}, Compiled),
+                          ?assertEqual({Name, Op, Expected},
+                                       {Name, Op, Actual})
+                  end,
+              Check(read, ER),
+              Check(write, EW),
+              Check(consume, EC)
+      end, Defs).
+
 cluster_admin_test__() ->
     Roles = compile_roles([<<"cluster_admin">>], roles()),
     ?assertEqual(true, is_allowed({[settings, metrics], any}, Roles)),
@@ -3119,6 +3151,7 @@ default_profile_test_() ->
      [fun admin_test__/0,
       fun service_admin_test__/0,
       fun service_admin_with_credential_consumer_test__/0,
+      fun credentials_access_matrix_test__/0,
       fun cluster_admin_test__/0,
       fun eventing_admin_test__/0,
       fun backup_admin_test__/0,
