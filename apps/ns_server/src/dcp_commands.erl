@@ -162,6 +162,8 @@ command_2_atom(?DCP_CACHED_VALUE) ->
     dcp_cached_value;
 command_2_atom(?DCP_CACHED_KEY_META) ->
     dcp_cached_key_meta;
+command_2_atom(?DCP_CACHE_TRANSFER) ->
+    dcp_cache_transfer;
 command_2_atom(?CMD_GET_ERROR_MAP) ->
     cmd_get_error_map;
 command_2_atom(?CMD_HELLO) ->
