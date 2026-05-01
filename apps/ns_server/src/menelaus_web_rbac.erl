@@ -241,7 +241,7 @@ handle_get(Req) ->
     menelaus_util:reply_json(Req, {RV}).
 
 handle_get_roles(Req) ->
-    Snapshot = ns_bucket:get_snapshot(all, [collections, uuid]),
+    Snapshot = menelaus_roles:get_roles_snapshot(),
     validator:handle(
       fun (Values) ->
               Permission = proplists:get_value(permission, Values),
@@ -388,8 +388,7 @@ handle_get_users(Path, Domain, Req) ->
 get_roles_for_users_filtering(undefined) ->
     all;
 get_roles_for_users_filtering(Permission) ->
-    get_roles_by_permission(Permission,
-                            ns_bucket:get_snapshot(all, [collections, uuid])).
+    get_roles_by_permission(Permission, menelaus_roles:get_roles_snapshot()).
 
 handle_get_users_with_domain(Req, DomainAtom, Path) ->
     Query = mochiweb_request:parse_qs(Req),
@@ -1276,7 +1275,7 @@ do_get_service_roles(ServiceName, Req) ->
             Roles = menelaus_users:get_roles(Identity),
             ns_audit:rbac_info_retrieved(Req, users),
             menelaus_util:reply_json(
-              Req, {[{roles, [role_to_json(R) || R <- Roles]}]})
+              Req, {[{roles, [{role_to_json(R)} || R <- Roles]}]})
     end.
 
 handle_put_service_roles(ServiceName, Req) ->

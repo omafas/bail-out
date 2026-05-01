@@ -14,13 +14,13 @@ These are the endpoints an administrator uses to create, read, update, and delet
 | GET | `/settings/credentials/:id` | Security Admin, RO Security Admin, Full Admin | Get one credential (secrets redacted) |
 | POST | `/settings/credentials/:id` | Security Admin, Full Admin | Create a credential |
 | PUT | `/settings/credentials/:id` | Security Admin, Full Admin | Full-replace update (`type` field is immutable) |
-| DELETE | `/settings/credentials/:id` | Security Admin, Full Admin | Delete a credential |
+| DELETE | `/settings/credentials/:id` | Security Admin, Full Admin | Delete a credential (also removes all `credential_consumer[<id>]` grants referencing it from users and service roles) |
 
 **Credential ID constraints:**
 
-- A credential ID is a string path up to **128 characters** long.
+- A credential ID is a string up to **128 characters** long.
 - Must contain only **ASCII printable characters** (no spaces).
-- Supports hierarchical paths (e.g. `backup/prod/s3`).
+- The id is an opaque string. `/` is allowed (e.g. `backup/prod/s3`) but has no special meaning; `prefix/*` matching in role grants is literal string-prefix matching.
 
 ## Credential Store Settings — `/settings/credentialStore`
 
@@ -102,8 +102,13 @@ curl -X PUT -u Administrator:password \
   -d "roles=credential_consumer[*]"
 ```
 
-> **Note:** The `credential_consumer` role is parameterised by a `credential_id` pattern.
-> The pattern supports `*` as a suffix wildcard matching zero or more characters (including `/`).
+**Credential id pattern.** The bracket parameter accepts:
+
+- `*` — any credential (wildcard).
+- `prefix/*` — any credential whose id starts with `prefix/`. At least one such credential must exist.
+- A concrete id — must exist in the credential store.
+
+See [architecture.md — RBAC Model](architecture.md#rbac-model) for the full pattern semantics and grant lifecycle on credential deletion.
 
 ### Granting consume permission to a service identity
 
@@ -146,6 +151,41 @@ curl -u Administrator:password \
 curl -X DELETE -u Administrator:password \
   http://localhost:8091/settings/rbac/services/backup/roles
 ```
+
+The same `credential_id` pattern rules apply as for end users: `*` for any, `prefix/*` for a matching prefix (at least one credential must match), or a concrete existing id. See [architecture.md — RBAC Model](architecture.md#rbac-model).
+
+## Per-Credential Access Review
+
+To answer "who can consume this credential?" or "which roles confer consume on this credential?", filter the standard RBAC listing endpoints by a `cluster.credentials[<id>]!consume` permission string.
+
+**Endpoint:** `GET /settings/rbac/roles?permission=cluster.credentials/<id>!consume`
+**Endpoint:** `GET /settings/rbac/users?permission=cluster.credentials/<id>!consume`
+
+**Callers:** Full Admin, Security Admin, User Admin (read-only access to RBAC listings).
+
+**What you get back depends on the id form:**
+
+| Query | Rows returned for `credential_consumer` |
+|---|---|
+| `cluster.credentials[<id>]!consume` | One row for the concrete id and one for the `*` wildcard — both confer consume on `<id>` |
+| `cluster.credentials[*]!consume` | Only the `*` wildcard row |
+| `cluster.credentials[prefix/*]!consume` | The `*` wildcard row, plus any concrete-id rows whose ids start with `prefix/` |
+
+**Example — list all roles that grant consume on `backup/prod/s3`:**
+
+```bash
+curl -u Administrator:password \
+  'http://localhost:8091/settings/rbac/roles?permission=cluster.credentials%5Bbackup%2Fprod%2Fs3%5D%21consume'
+```
+
+**Example — list all users that can consume `backup/prod/s3`:**
+
+```bash
+curl -u Administrator:password \
+  'http://localhost:8091/settings/rbac/users?permission=cluster.credentials%5Bbackup%2Fprod%2Fs3%5D%21consume'
+```
+
+The user listing includes anyone with `credential_consumer[backup/prod/s3]`, anyone with a matching prefix (e.g. `credential_consumer[backup/*]`), and anyone with the `*` wildcard.
 
 ## Guardrails
 

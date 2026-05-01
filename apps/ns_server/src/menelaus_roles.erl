@@ -1455,11 +1455,11 @@ filter_out_invalid_roles(Roles, Definitions, Snapshot) ->
                           {Name, Params}
                   end, Roles, Definitions, Snapshot).
 
-get_permission_params({[V | _], _}) ->
-    case is_data_vertex(V) of
+get_permission_params({[V | _], _}) when is_tuple(V) ->
+    case is_parameterized_vertex(element(1, V)) of
         true ->
             get_vertex_param_list(V);
-        _ ->
+        false ->
             []
     end;
 get_permission_params(_) ->
@@ -2740,7 +2740,20 @@ produce_roles_by_permission_test__() ->
                enum_roles([<<"bucket_full_access">>, <<"mobile_sync_gateway">>,
                            <<"query_list_index">>, <<"query_manage_index">>],
                           [[any]]),
-           {[{bucket, any}, n1ql, index], read})}].
+           {[{bucket, any}, n1ql, index], read})},
+     {"consume specific credential",
+      Test([<<"admin">>] ++
+               enum_roles([<<"credential_consumer">>],
+                          [[any], ["backup/prod/s3"]]),
+           {[{credentials, "backup/prod/s3"}], consume})},
+     {"consume nonexistent credential",
+      Test([<<"admin">>] ++
+               enum_roles([<<"credential_consumer">>], [[any]]),
+           {[{credentials, "no/such/id"}], consume})},
+     {"consume any credential",
+      Test([<<"admin">>] ++
+               enum_roles([<<"credential_consumer">>], [[any]]),
+           {[{credentials, any}], consume})}].
 
 
 params_version_get_snapshot(TestProps, _, SubKeys) ->

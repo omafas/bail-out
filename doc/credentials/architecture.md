@@ -48,6 +48,18 @@ Likewise for n2n encryption and `n2nEncryptionOverride`.
 
 **Resource model.** Each credential is an RBAC resource addressed as `credentials[<id>]`, analogous to `bucket[<name>]`.
 
+**Credential id patterns.** Wherever a `credential_id` is supplied — as the parameter on `credential_consumer[<id>]` (role grants) or as the bracket parameter on `cluster.credentials[<id>]!<op>` (permission strings) — three forms are accepted:
+
+| Form | Meaning | Existence check |
+|---|---|---|
+| `*` | Any credential — wildcard | None |
+| `prefix/*` | Any credential whose id starts with `prefix/` | At least one existing id must match the prefix |
+| `concrete/id` | Exactly that credential | The id must exist in the credential store |
+
+Credential ids are opaque strings; `/` may appear in an id but has no special meaning, and `prefix/*` does literal string-prefix matching.
+
+**Grant lifecycle.** When a credential is deleted, every `credential_consumer[<deleted-id>]` grant referencing it is removed from users and from service roles. Re-creating a credential with the same id does not restore prior grants; they must be re-issued.
+
 **Permissions on a credential resource:**
 
 | Permission | Description |
@@ -150,6 +162,7 @@ Ongoing work to narrow `service_admin` to an explicit allow-list of operations i
 | `ns_server/apps/ns_server/src/cb_credentials_store.erl` | Chronicle storage: `{credentials, Id}` keys, index, encryption |
 | `ns_server/apps/ns_server/src/cb_credential_types.erl` | Field specs, validators, sensitive field registry for each credential type |
 | `ns_server/apps/ns_server/include/credentials.hrl` | Type definitions, consumer service list |
-| `ns_server/apps/ns_server/src/menelaus_roles.erl` | `credential_consumer` role definition, `service_admin` internal role |
-| `ns_server/apps/ns_server/src/menelaus_web_rbac.erl` | `handle_put_service_roles` — endpoint to assign roles to services |
+| `ns_server/apps/ns_server/src/menelaus_roles.erl` | `credential_consumer` role definition, `service_admin` internal role, `credential_id` validation (`is_valid_credential_id/2`, `compile_param/3`) |
+| `ns_server/apps/ns_server/src/menelaus_web_rbac.erl` | `handle_put_service_roles` — endpoint to assign roles to services; permission-string parsing (`parse_vertex_params/2`) |
+| `ns_server/apps/ns_server/src/cb_credentials_store.erl` | Credential index (`get_index/1`, `fetch_index_snapshot/1`); cleanup of role grants on credential deletion |
 | `ns_server/apps/ns_server/src/misc.erl` | `service_definitions/0`, `identity_name_to_service/1`, `canonical_admin_identity/1` |
