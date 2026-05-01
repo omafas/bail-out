@@ -1647,8 +1647,18 @@ validate_roles(Roles, Scope, Snapshot) ->
 
 -spec get_security_roles(map()) -> [rbac_role()].
 get_security_roles(Snapshot) ->
-    pipes:run(produce_roles_by_permission({[admin, security], any}, Snapshot),
-              pipes:collect()).
+    %% A role is security-classified if it grants any operation on
+    %% [admin, security], or `read'/`write' on the credentials vertex.
+    %% credential CRUD is Security Admin's lane; `consume' is the User Admin
+    %% delegation capability (granted via `credential_consumer').
+    Collect = fun (Permission) ->
+                      pipes:run(produce_roles_by_permission(Permission,
+                                                            Snapshot),
+                                pipes:collect())
+              end,
+    lists:usort(Collect({[admin, security], any}) ++
+                Collect({[{credentials, any}], read}) ++
+                Collect({[{credentials, any}], write})).
 
 -spec get_user_admin_roles(map()) -> [rbac_role()].
 get_user_admin_roles(Snapshot) ->
@@ -2796,6 +2806,14 @@ produce_roles_by_permission_test__() ->
                enum_roles([<<"credential_consumer">>], [[any]]),
            {[{credentials, any}], consume})}].
 
+get_security_roles_test__() ->
+    Name = fun ({{N, _}, _}) when is_binary(N) -> N;
+               ({N, _})      when is_binary(N) -> N
+           end,
+    Names = [Name(R) || R <- get_security_roles(toy_buckets())],
+    ?assertListsEqual([<<"admin">>,
+                       <<"security_admin">>, <<"ro_security_admin">>],
+                      Names).
 
 params_version_get_snapshot(TestProps, _, SubKeys) ->
     PrunedProps = lists:flatmap(
@@ -3170,6 +3188,7 @@ default_profile_test_() ->
       fun bucket_full_access_test__/0,
       fun replication_admin_test__/0,
       {generator, fun produce_roles_by_permission_test__/0},
+      fun get_security_roles_test__/0,
       fun params_version_test__/0,
       fun validate_role_test__/0,
       fun roles_format_test__/0,
