@@ -44,7 +44,7 @@
 -type rbac_permission_pattern_raw() :: {rbac_permission_pattern_object_raw(),
                                         rbac_permission_pattern_operations()}.
 
--type rbac_permission_pattern_vertex_param() :: string() | any.
+-type rbac_permission_pattern_vertex_param() :: string() | any | all.
 -type rbac_permission_pattern_vertex() ::
         atom() | {bucket, rbac_permission_pattern_vertex_param()} |
         {collection, [rbac_permission_pattern_vertex_param()]}.
@@ -61,7 +61,7 @@
                           rbac_role_props(),
                           nonempty_list(rbac_permission_pattern_raw())}.
 
--type rbac_permission_vertex_param() :: string() | any.
+-type rbac_permission_vertex_param() :: string() | any | all.
 -type rbac_permission_vertex() ::
         atom() | {bucket, rbac_permission_vertex_param()} |
         {scope, [rbac_permission_vertex_param()]} |

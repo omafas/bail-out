@@ -1763,28 +1763,30 @@ parse_parameterized_vertex(Name, Params) ->
             {NameAtom, Res}
     end.
 
+-spec parse_vertex_param(string()) -> rbac_permission_vertex_param().
 parse_vertex_param(".") ->
     any;
 parse_vertex_param(Param) ->
     Param.
 
-params_length(scope) ->
-    2;
-params_length(collection) ->
-    3;
-params_length(_) ->
-    undefined.
-
-parse_vertex_params(bucket, Name) ->
-    parse_vertex_param(Name);
+-spec parse_vertex_params(atom(), string()) ->
+          rbac_permission_vertex_param() | [rbac_permission_vertex_param()] |
+          error.
 parse_vertex_params(VertexName, ParamsStr) ->
-    Params = string:split(ParamsStr, ":", all),
-    Length = params_length(VertexName),
-    case length(Params) of
-        Length ->
-            lists:map(fun parse_vertex_param/1, Params);
-        _ ->
-            error
+    case menelaus_roles:is_parameterized_vertex(VertexName) of
+        false ->
+            error;
+        true ->
+            case menelaus_roles:vertex_arity(VertexName) of
+                1 ->
+                    parse_vertex_param(ParamsStr);
+                N ->
+                    Params = string:split(ParamsStr, ":", all),
+                    case length(Params) of
+                        N -> lists:map(fun parse_vertex_param/1, Params);
+                        _ -> error
+                    end
+            end
     end.
 
 parse_permissions(Body) ->
@@ -1914,6 +1916,7 @@ maybe_audit_access_forbidden(Req, Params) ->
             ns_audit:access_forbidden(Req)
     end.
 
+-spec vertex_param_to_list(rbac_permission_vertex_param()) -> string().
 vertex_param_to_list(all) ->
     "*";
 vertex_param_to_list(any) ->
@@ -1921,17 +1924,16 @@ vertex_param_to_list(any) ->
 vertex_param_to_list(Param) ->
     Param.
 
+-spec vertex_to_iolist(rbac_permission_vertex()) -> iolist().
 vertex_to_iolist(Atom) when is_atom(Atom) ->
     atom_to_list(Atom);
-vertex_to_iolist({bucket, Param}) ->
-    vertex_to_iolist(bucket, [Param]);
-vertex_to_iolist({Atom, Params}) when Atom =:= collection;
-                                      Atom =:= scope ->
-    vertex_to_iolist(Atom, Params).
-
-vertex_to_iolist(Atom, Params) ->
+vertex_to_iolist({Name, Param}) when is_atom(Name) ->
+    Params = case menelaus_roles:vertex_arity(Name) of
+                 1 -> [Param];
+                 _ -> Param
+             end,
     ConvertedParams = lists:map(fun vertex_param_to_list/1, Params),
-    [atom_to_list(Atom), "[", lists:join(":", ConvertedParams), "]"].
+    [atom_to_list(Name), "[", lists:join(":", ConvertedParams), "]"].
 
 format_permission({Object, Operation}) ->
     FormattedVertices = ["cluster" | [vertex_to_iolist(Vertex) ||
@@ -3262,17 +3264,26 @@ parse_operations_test_() ->
                    parse_operations(<<"invalid_ops_format">>))].
 -endif.
 
-expand_vertex({bucket, B}) ->
-    expand_vertex({scope, [B, any]});
-expand_vertex({_, P}) ->
-    case lists:dropwhile(fun(O) -> O =:= any end, lists:reverse(P)) of
-        [] -> [];
-        [B] -> [{bucket, B}];
-        [S, B] -> [{bucket, B}, {scope, S}];
+-spec expand_vertex(rbac_permission_vertex()) -> [rbac_permission_vertex()].
+expand_vertex(V) ->
+    case menelaus_roles:is_data_vertex(V) of
+        true  -> expand_data_vertex(V);
+        false -> [V]
+    end.
+
+%% Data vertices unfold into the bucket/scope/collection specificity tree
+%% so most-specific match wins in compare_permission_objects/2.
+expand_data_vertex({bucket, B}) ->
+    %% Re-express as a scope so the multi-arity path below handles all
+    %% data vertices uniformly.
+    expand_data_vertex({scope, [B, any]});
+expand_data_vertex({_, P}) ->
+    case lists:dropwhile(fun (O) -> O =:= any end, lists:reverse(P)) of
+        []        -> [];
+        [B]       -> [{bucket, B}];
+        [S, B]    -> [{bucket, B}, {scope, S}];
         [C, S, B] -> [{bucket, B}, {scope, S}, {collection, C}]
-    end;
-expand_vertex(O) ->
-    [O].
+    end.
 
 compare_permission_objects(O1, O2) ->
     Specified1 = lists:flatmap(fun expand_vertex/1, O1),
@@ -3638,7 +3649,15 @@ format_permission_test() ->
 
     Test("scope[test:s]", {scope, ["test", "s"]}),
     Test("scope[test:.]", {scope, ["test", any]}),
-    Test("scope[.:.]", {scope, [any, any]}).
+    Test("scope[.:.]", {scope, [any, any]}),
+
+    ?assertEqual(<<"cluster.credentials[backup/prod/s3]!consume">>,
+                 format_permission(
+                   {[{credentials, "backup/prod/s3"}], consume})),
+    ?assertEqual(<<"cluster.credentials[.]!consume">>,
+                 format_permission({[{credentials, any}], consume})),
+    ?assertEqual(<<"cluster.credentials[*]!consume">>,
+                 format_permission({[{credentials, all}], consume})).
 
 toy_users(First, Last) ->
     [toy_user(U) || U <- lists:seq(First, Last)].

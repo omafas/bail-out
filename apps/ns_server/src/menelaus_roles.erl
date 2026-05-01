@@ -64,6 +64,8 @@
          params_version/1,
          filter_out_invalid_roles/3,
          is_data_vertex/1,
+         is_parameterized_vertex/1,
+         vertex_arity/1,
          produce_roles_by_permission/2,
          get_security_roles/1,
          get_user_admin_roles/1,
@@ -924,6 +926,21 @@ is_data_vertex({collection, _}) ->
 is_data_vertex(_) ->
     false.
 
+%% Number of colon-separated params each parameterized vertex carries
+%% in wire form (e.g. `bucket[name]' = 1, `collection[b:s:c]' = 3).
+-spec vertex_arity(atom()) -> pos_integer().
+vertex_arity(bucket)      -> 1;
+vertex_arity(credentials) -> 1;
+vertex_arity(scope)       -> 2;
+vertex_arity(collection)  -> 3.
+
+-spec is_parameterized_vertex(atom()) -> boolean().
+is_parameterized_vertex(bucket)      -> true;
+is_parameterized_vertex(credentials) -> true;
+is_parameterized_vertex(scope)       -> true;
+is_parameterized_vertex(collection)  -> true;
+is_parameterized_vertex(_)           -> false.
+
 is_credential_prefix(CredId) ->
     case lists:reverse(CredId) of
         "*" ++ Rest -> {true, lists:reverse(Rest)};
@@ -932,19 +949,29 @@ is_credential_prefix(CredId) ->
 
 get_vertex_param_list({bucket, B}) ->
     [B];
+get_vertex_param_list({credentials, C}) ->
+    [C];
 get_vertex_param_list({_, Params}) ->
     Params;
 get_vertex_param_list(_) ->
     [].
 
-expand_vertex({bucket, B}, Pad) ->
+expand_vertex(V, Pad) ->
+    case is_data_vertex(V) of
+        true  -> expand_data_vertex(V, Pad);
+        false -> [V]
+    end.
+
+%% Data vertices unfold into a [bucket, scope, collection] 3-tuple so that
+%% element-wise matching against role patterns lines up. Non-data vertices
+%% (atoms, parameterized non-data vertices like `{credentials, _}') have no
+%% bucket/scope/collection identity to expand and match by themselves.
+expand_data_vertex({bucket, B}, Pad) ->
     [{expanded_bucket, B}, {expanded_scope, Pad}, {expanded_collection, Pad}];
-expand_vertex({scope, [B, S]}, Pad) ->
+expand_data_vertex({scope, [B, S]}, Pad) ->
     [{expanded_bucket, B}, {expanded_scope, S}, {expanded_collection, Pad}];
-expand_vertex({collection, [B, S, C]}, _) ->
-    [{expanded_bucket, B}, {expanded_scope, S}, {expanded_collection, C}];
-expand_vertex(ExpandedVertex, _) ->
-    [ExpandedVertex].
+expand_data_vertex({collection, [B, S, C]}, _) ->
+    [{expanded_bucket, B}, {expanded_scope, S}, {expanded_collection, C}].
 
 vertex_match({credentials, PermId}, {credentials, FilterId}) ->
     credential_match(PermId, FilterId);
