@@ -147,6 +147,18 @@ remove_trailing_any([B, S, any]) ->
 remove_trailing_any([B, S, C]) ->
     [B, S, C].
 
+%% @doc Filter for permission objects that can yield memcached collection
+%% privileges. memcached's permission map is rooted exclusively at
+%% `{bucket,_}' / `{collection,_}' (see `memcached_permissions:bucket_'
+%% and `collection_permissions/0'); permissions rooted at non-data vertices
+%% (`{credentials,_}', atoms like `admin'/`external_catalog', etc.) cannot
+%% match anything in those tables and don't need to be walked.
+%%
+%% The empty list (`{[], all}' for full admin) is kept because it also
+%% applies across all collections.
+is_collection_relevant([])           -> true;
+is_collection_relevant([Head | _])   -> menelaus_roles:is_data_vertex(Head).
+
 get_params([] = Rest) ->
     {[any, any, any], Rest};
 get_params([{bucket, B} | Rest]) ->
@@ -154,21 +166,7 @@ get_params([{bucket, B} | Rest]) ->
 get_params([{scope, [B, S]} | Rest]) ->
     {[B, S, any], Rest};
 get_params([{collection, [B, S, C]} | Rest]) ->
-    {[B, S, C], Rest};
-get_params([Head | _] = Rest) ->
-    %% Non-collection-shaped vertex (atom like `external_catalog' or
-    %% parameterised non-data vertex like `{credentials, _}'): nothing to
-    %% expand for collection-permission purposes, so emit a fully-wildcard
-    %% collection tuple and leave the vertex in `Rest' for downstream
-    %% matching.
-    %%
-    %% A new parameterised data vertex MUST add an explicit clause above —
-    %% this catch-all is only correct because non-data vertices have no
-    %% bucket/scope/collection identity to expand.
-    case is_atom(Head) orelse not menelaus_roles:is_data_vertex(Head) of
-        true  -> {[any, any, any], Rest};
-        false -> erlang:error({unhandled_data_vertex, Head})
-    end.
+    {[B, S, C], Rest}.
 
 expand_collection_params({PermissionObject, Operations}, Snapshot) ->
     {CollectionParams, ObjRest} = get_params(PermissionObject),
@@ -254,9 +252,20 @@ check_collection_permissions(Snapshot, CompiledRoles, BucketPermissionsFun,
 
 check_permissions_for_role(Snapshot, CompiledRole, BucketPermissionsFun,
                            CollectionPermissionsFun, PrivObjFun) ->
+    %% Restrict to permissions whose root is bucket/scope/collection (or
+    %% empty). These are the only shapes memcached's collection-permission
+    %% table can match — non-data roots ({credentials,_}, atom-rooted like
+    %% [admin, internal, stats]) yield no collection privileges and walking
+    %% them through expand_collection_params would multiply by
+    %% buckets×scopes×collections for nothing.
+    %%
+    CollectionPerms = lists:filter(
+                        fun({Obj, _Ops}) -> is_collection_relevant(Obj) end,
+                        CompiledRole),
     ExpandedPerms = lists:reverse(
                       lists:flatmap(
-                        expand_collection_params(_, Snapshot), CompiledRole)),
+                        expand_collection_params(_, Snapshot),
+                        CollectionPerms)),
     FinalPartialRoles =
         %% TODO: memcached allows specifying a wildcard * for bucket_name but we
         %% don't use it. collection_permissions() doesn't handle bucket "any".
