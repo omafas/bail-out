@@ -1286,6 +1286,86 @@ class UsersTestSet(testlib.BaseTestSet):
             testlib.ensure_deleted(
                 self.cluster, f'/pools/default/buckets/{BUCKET_NAME}/scopes/s2')
 
+    def custom_role_with_credentials_vertex_test(self):
+        """Custom roles granting permissions on the credentials vertex
+        round-trip through the customRoles parser. The classifier in
+        menelaus_roles:get_security_roles/1 then splits them by lane:
+
+        - `consume' is the User Admin delegation lane (parity with the
+          built-in credential_consumer role): a custom role granting only
+          consume is User-Admin-assignable.
+        - `read' / `write' belong to Security Admin: a custom role
+          granting either is classified as a security role and can only
+          be assigned by a principal with both [admin, users], write and
+          [admin, security], write -- i.e. Full Admin.
+        """
+        consume_role_id = 'custom_cred_consume'
+        crud_role_id = 'custom_cred_crud'
+        consume_perms = {
+            'cluster.credentials[test/consume/long_id]': ['consume'],
+            'cluster.credentials[*]': ['consume'],
+        }
+        crud_perms = {
+            'cluster.credentials[x]': ['read'],
+            'cluster.credentials[*]': ['write'],
+        }
+        user_admin = 'localUserAdminCred'
+        target = 'credCustomRoleTarget'
+        ua_pwd = testlib.random_str(10)
+        try:
+            # Round-trip both custom role definitions.
+            testlib.put_succ(
+                self.cluster,
+                f'/settings/rbac/customRoles/{consume_role_id}',
+                json={'name': 'Custom Cred Consume',
+                      'description': 'consume-only custom role',
+                      'permissions': consume_perms})
+            testlib.put_succ(
+                self.cluster,
+                f'/settings/rbac/customRoles/{crud_role_id}',
+                json={'name': 'Custom Cred CRUD',
+                      'description': 'read/write custom role',
+                      'permissions': crud_perms})
+
+            # Set up a User Admin and a target user.
+            put_user(self.cluster, 'local', user_admin, password=ua_pwd,
+                     roles='user_admin_local',
+                     full_name=testlib.random_str(10), groups='')
+            put_user(self.cluster, 'local', target,
+                     password=testlib.random_str(10),
+                     roles='ro_admin', full_name=testlib.random_str(10),
+                     groups='')
+
+            # User Admin can assign the consume-only custom role
+            # (mirrors credential_consumer -- User Admin lane).
+            testlib.put_succ(
+                self.cluster,
+                f'/settings/rbac/users/local/{target}',
+                data=build_payload(roles=consume_role_id),
+                auth=(user_admin, ua_pwd))
+
+            # User Admin cannot assign the read/write custom role
+            # (Security Admin lane).
+            testlib.put_fail(
+                self.cluster,
+                f'/settings/rbac/users/local/{target}',
+                403, data=build_payload(roles=crud_role_id),
+                auth=(user_admin, ua_pwd))
+
+            # Full Admin can assign the read/write custom role.
+            testlib.put_succ(
+                self.cluster,
+                f'/settings/rbac/users/local/{target}',
+                data=build_payload(roles=crud_role_id))
+        finally:
+            delete_user(self.cluster, 'local', user_admin, expected_code=None)
+            delete_user(self.cluster, 'local', target, expected_code=None)
+            testlib.ensure_deleted(
+                self.cluster,
+                f'/settings/rbac/customRoles/{consume_role_id}')
+            testlib.ensure_deleted(
+                self.cluster, f'/settings/rbac/customRoles/{crud_role_id}')
+
 
 def build_payload(password=None, roles=None, full_name=None, groups=None,
                   locked=None, temporary_password=None):
