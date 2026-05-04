@@ -303,11 +303,16 @@ build_collections_manifest_id(Id, Snapshot) ->
     end.
 
 build_external_collections_manifest_id(Id, Snapshot) ->
-    case collections:external_uid(Id, Snapshot) of
-        undefined ->
-            [];
-        Uid ->
-            {externalCollectionsManifestUid, Uid}
+    case cluster_compat_mode:is_cluster_totoro() of
+        true ->
+            case collections:external_uid(Id, Snapshot) of
+                undefined ->
+                    [];
+                Uid ->
+                    {externalCollectionsManifestUid, Uid}
+            end;
+        false ->
+            []
     end.
 
 build_pools_uri(Tail) ->
@@ -657,6 +662,7 @@ verify_compatibility_test() ->
     config_profile:load_default_profile_for_test(),
     meck:expect(cluster_compat_mode, is_cluster_76, fun () -> true end),
     meck:expect(cluster_compat_mode, is_cluster_79, fun () -> true end),
+    meck:expect(cluster_compat_mode, is_cluster_totoro, fun () -> true end),
     meck:expect(cluster_compat_mode, is_enterprise, fun () -> true end),
     meck:expect(cluster_compat_mode, get_cluster_capabilities,
                 fun () -> [{n1ql, [costBasedOptimizer, indexAdvisor]}] end),
