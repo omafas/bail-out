@@ -288,7 +288,7 @@ extract_claims(TokenBin, Issuers) ->
         _:_ -> {error, <<"Invalid token format">>}
     end.
 
-%% These normalization functions are used to convert jiffy-encoded JSON values
+%% These normalization functions are used to convert decoded JSON values
 %% to proplists for auditing.
 
 %% Standard claims are atoms. Custom claims are strings.
@@ -299,7 +299,7 @@ normalize_claim(Claim) when is_list(Claim) -> list_to_binary(Claim).
 %% JSON keys must be strings (binaries).
 normalize_key(K) when is_binary(K) -> K.
 
-%% Normalize JSON values (as decoded by jiffy) for auditing (ejson encoding).
+%% Normalize decoded JSON values for auditing (ejson encoding).
 normalize_val(V) when is_number(V); is_boolean(V); is_binary(V) -> V;
 normalize_val(null) -> null;
 normalize_val(V) when is_list(V) ->

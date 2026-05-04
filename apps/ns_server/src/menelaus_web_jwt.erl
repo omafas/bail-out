@@ -302,11 +302,11 @@ sync_with_node() ->
     gen_server:call(jwt_cache, sync, ?SYNC_TIMEOUT).
 
 %% We store the JWT settings in Erlang map format in chronicle_kv. This is done
-%% so we can query them efficiently. We use jiffy to encode directly from
-%% Erlang maps. ejson does not support it.
+%% so we can query them efficiently. OTP's json module encodes directly from
+%% Erlang maps; ejson does not support it.
 encode_response(Value) ->
     try
-        jiffy:encode(Value)
+        iolist_to_binary(json:encode(Value))
     catch T:E:Stack ->
             ?log_debug("Error encoding response:~n~p", [Value]),
             erlang:raise(T, E, Stack)
@@ -1045,9 +1045,9 @@ proplist_to_map_test_() ->
 
 %% @doc Tests for format conversion functions.
 %% This includes verifying that validated camel case atoms are converted to
-%% snake case, and ensuring that in the response, the keys are converted back
-%% to their original form. Additionally, it checks that values containing
-%% lists are converted to binary format so that jiffy can encode them properly.
+%% snake case, and ensuring that in the response, the keys are converted back to
+%% their original form. Additionally, it checks that values containing lists are
+%% converted to binary format so that json:encode handles them properly.
 format_conversion_test_() ->
     BaseCb = "https://couchbase.example.com",
     OktaAuth = "https://example.okta.com/oauth2/v1/authorize",
