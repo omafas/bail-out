@@ -822,7 +822,7 @@ validated_to_storage_format_custom_claim(ClaimProps) ->
               Acc#{StorageKey => PropV}
       end, #{}, ClaimProps).
 
-format_jwks({EncodedValue, _JsonMap}) -> EncodedValue;
+format_jwks({EncodedValue, _JsonMap}) -> json:decode(EncodedValue);
 format_jwks(Value) -> Value.
 
 format_public_key({PemBin, _Key}) when is_binary(PemBin) -> PemBin;

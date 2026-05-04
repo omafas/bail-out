@@ -311,6 +311,7 @@ class JWTTests(testlib.BaseTestSet):
         r = testlib.get_succ(self.cluster, self.endpoint)
         assert len(r.json()["issuers"]) == 1
         assert r.json()["issuers"][0]["name"] == "iss1"
+        assert r.json()["issuers"][0]["jwks"] == jwks
 
         # Test adding second issuer
         payload["issuers"].append(
