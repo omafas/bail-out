@@ -39,6 +39,16 @@
 %%   }
 %% }
 %%
+%% Secret round-trip on PUT:
+%% sharedSecret and oidcSettings.clientSecret are returned masked on GET. If a
+%% PUT payload contains the masked placeholder for either field, the server
+%% keeps the currently stored value for that issuer (matched by name) instead
+%% of replacing it. This lets the UI re-PUT a GET response after editing
+%% unrelated fields, without re-prompting the user for secrets. Sending any
+%% other string sets the secret; sending an explicit value rotates it. This is
+%% the only deviation from full-replace PUT semantics and applies strictly to
+%% the two fields that are masked on GET.
+%%
 %% Sample REST request:
 %% curl -X PUT -u Administrator:password -H "Content-Type: application/json" \
 %%      -d '{
@@ -591,8 +601,16 @@ shared_secret_validators() ->
                end;
           (_) -> ok
        end, [sharedSecret, signingAlgorithm], _),
+     validator:validate(
+       fun(Secret) ->
+               case is_masked_placeholder(Secret) of
+                   true -> {value, keep_existing};
+                   false -> ok
+               end
+       end, sharedSecret, _),
      validator:validate_relative(
-       fun(Secret, Algorithm) ->
+       fun(keep_existing, _Algorithm) -> ok;
+          (Secret, Algorithm) ->
                case menelaus_web_jwt_key:validate_shared_secret(
                       Secret, Algorithm) of
                    {ok, {value, SecretBin}} -> {value, SecretBin};
@@ -675,22 +693,91 @@ jwks_uri_validators() ->
 
 validate_and_store_settings(Props, Req) ->
     Settings = validated_to_storage_format(Props),
-    Fun = fun (_) -> {commit, [{set, jwt_settings, Settings}]} end,
-    case chronicle_kv:transaction(kv, [], Fun, #{}) of
-        {ok, _} ->
-            RestFormat = storage_to_rest_format(Settings),
+    Fun =
+        fun (Snapshot) ->
+                OldSettings =
+                    case maps:find(jwt_settings, Snapshot) of
+                        {ok, {S, _Rev}} -> S;
+                        error -> #{}
+                    end,
+                case resolve_kept_secrets(Settings, OldSettings) of
+                    {ok, Resolved} ->
+                        {commit, [{set, jwt_settings, Resolved}], Resolved};
+                    {error, Reason} ->
+                        {abort, {bad_request, Reason}}
+                end
+        end,
+    case chronicle_kv:transaction(kv, [jwt_settings], Fun, #{}) of
+        {ok, _, FinalSettings} ->
+            RestFormat = storage_to_rest_format(FinalSettings),
             EncodedSettings = encode_response(RestFormat),
             ns_audit:settings(Req, modify_jwt, [{jwt_settings,
                                                  {json, EncodedSettings}}]),
             _ = sync_with_node(),
             menelaus_util:reply(Req, EncodedSettings, 200,
                                 [{"Content-Type", "application/json"}]);
+        {bad_request, Reason} ->
+            menelaus_util:reply_json(
+              Req, {[{error, iolist_to_binary(Reason)}]}, 400);
         {error, Error} ->
             ?log_error("Failed to store JWT settings: ~p", [Error]),
             menelaus_util:reply_json(Req,
                                      {[{error,
                                         <<"Failed to store settings">>}]},
                                      500)
+    end.
+
+%% Substitute keep_existing sentinels (left by the validators when the client
+%% PUT the masked placeholder) with the corresponding value from the currently
+%% stored settings, matched by issuer name. Errors if the client sent the
+%% placeholder for an issuer/oidcSettings that has no prior persisted secret.
+resolve_kept_secrets(#{issuers := NewIssuers} = Settings, OldSettings) ->
+    OldIssuers = maps:get(issuers, OldSettings, #{}),
+    try
+        Resolved =
+            maps:map(
+              fun(Name, IssuerProps) ->
+                      OldProps = maps:get(Name, OldIssuers, #{}),
+                      resolve_issuer_kept_secrets(Name, IssuerProps, OldProps)
+              end, NewIssuers),
+        {ok, Settings#{issuers => Resolved}}
+    catch
+        throw:{kept_secret_missing, Msg} -> {error, Msg}
+    end;
+resolve_kept_secrets(Settings, _OldSettings) ->
+    {ok, Settings}.
+
+resolve_issuer_kept_secrets(Name, IssuerProps, OldIssuerProps) ->
+    Props1 = resolve_kept_secret_field(
+               Name, shared_secret, "sharedSecret",
+               IssuerProps, OldIssuerProps),
+    case maps:get(oidc_settings, Props1, undefined) of
+        undefined ->
+            Props1;
+        OidcNew ->
+            OidcOld = maps:get(oidc_settings, OldIssuerProps, #{}),
+            ResolvedOidc = resolve_kept_secret_field(
+                             Name, client_secret,
+                             "oidcSettings.clientSecret",
+                             OidcNew, OidcOld),
+            Props1#{oidc_settings => ResolvedOidc}
+    end.
+
+resolve_kept_secret_field(IssuerName, Key, RestPath, NewProps, OldProps) ->
+    case maps:get(Key, NewProps, undefined) of
+        keep_existing ->
+            case maps:get(Key, OldProps, undefined) of
+                undefined ->
+                    Msg = io_lib:format(
+                            "~s must be supplied for issuer \"~s\" "
+                            "(no existing value to keep)",
+                            [RestPath, IssuerName]),
+                    throw({kept_secret_missing, Msg});
+                Existing ->
+                    NewProps#{Key => Existing}
+            end;
+        _ ->
+            NewProps
     end.
 
 %% @doc Converts storage format (map with snake_case atom keys) to REST format
@@ -829,7 +916,18 @@ format_public_key({PemBin, _Key}) when is_binary(PemBin) -> PemBin;
 format_public_key(Value) -> Value.
 
 format_secret(undefined) -> undefined;
-format_secret(_) -> <<"********">>.
+format_secret(_) -> chronicle_kv_log:masked().
+
+%% A client may PUT a payload that round-trips a masked field from a prior GET.
+%% In that case the value is the masked placeholder, not a real secret, and the
+%% intent is to keep whatever was already persisted. Only sharedSecret and
+%% oidcSettings.clientSecret participate in this — they are the only fields
+%% format_secret/1 masks on GET. Other fields use full-replace PUT semantics.
+is_masked_placeholder(Secret) when is_list(Secret) ->
+    iolist_to_binary(Secret) =:= chronicle_kv_log:masked();
+is_masked_placeholder(Secret) when is_binary(Secret) ->
+    Secret =:= chronicle_kv_log:masked();
+is_masked_placeholder(_) -> false.
 
 format_string(undefined) -> undefined;
 format_string(Value) ->
@@ -933,6 +1031,13 @@ oidc_provider_validators() ->
      %% both of which require a clientSecret.
      validator:required(clientSecret, _),
      validator:non_empty_string(clientSecret, _),
+     validator:validate(
+       fun(Secret) ->
+               case is_masked_placeholder(Secret) of
+                   true -> {value, keep_existing};
+                   false -> ok
+               end
+       end, clientSecret, _),
      validator:required(baseRedirectUris, _),
      validator:string_array(baseRedirectUris,
                             fun validate_redirect_uri/1, false, _),

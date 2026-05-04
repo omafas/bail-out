@@ -969,6 +969,81 @@ class JWTTests(testlib.BaseTestSet):
             )
             assert r.status_code == 401
 
+    def secret_round_trip_test(self):
+        """PUTing the masked placeholder for sharedSecret must keep the
+        currently stored secret rather than replace it. This lets the UI
+        re-PUT a GET response after editing unrelated fields without
+        re-prompting the user for secrets.
+        """
+        self.auth_setup()
+
+        alg = "HS256"
+        secret = self.load_hmac_secrets()[alg]["secret"]
+        issuer_name = f"hmac-issuer-{alg}"
+
+        def make_token(s):
+            claims = self.base_claims.copy()
+            claims["iss"] = issuer_name
+            claims["groups"] = ["jwt_bucket_admins"]
+            return jwt.encode(claims, s, algorithm=alg)
+
+        def auth_status(s):
+            headers = {"Authorization": f"Bearer {make_token(s)}"}
+            return testlib.get(
+                self.cluster, "/pools/default/buckets",
+                auth=None, headers=headers,
+            ).status_code
+
+        base_issuer = {
+            "name": issuer_name,
+            "audienceHandling": "any",
+            "subClaim": "sub",
+            "audClaim": "aud",
+            "audiences": ["test-audience"],
+            "signingAlgorithm": alg,
+            "sharedSecret": secret,
+            "jitProvisioning": True,
+        }
+        testlib.put_succ(self.cluster, self.endpoint, json={
+            "enabled": True,
+            "jwksUriRefreshIntervalS": 14400,
+            "issuers": [base_issuer],
+        })
+        assert auth_status(secret) == 200
+
+        # GET masks the secret.
+        roundtrip = testlib.get_succ(self.cluster, self.endpoint).json()
+        assert roundtrip["issuers"][0]["sharedSecret"] == "********"
+
+        # Re-PUT the GET response with an unrelated field changed; the
+        # placeholder must resolve back to the stored secret.
+        roundtrip["jwksUriRefreshIntervalS"] = 7200
+        testlib.put_succ(self.cluster, self.endpoint, json=roundtrip)
+        r = testlib.get_succ(self.cluster, self.endpoint).json()
+        assert r["jwksUriRefreshIntervalS"] == 7200
+        assert auth_status(secret) == 200
+
+        # Explicit rotation: a real new value replaces the secret.
+        new_secret = "a" * 64
+        rotation = json.loads(json.dumps(roundtrip))
+        rotation["issuers"][0]["sharedSecret"] = new_secret
+        testlib.put_succ(self.cluster, self.endpoint, json=rotation)
+        assert auth_status(secret) == 401
+        assert auth_status(new_secret) == 200
+
+        # Placeholder for an issuer without a prior stored secret (here, a
+        # brand-new issuer in the same payload) must be rejected.
+        bad = json.loads(json.dumps(rotation))
+        bad["issuers"][0]["sharedSecret"] = "********"
+        bad["issuers"].append({
+            **base_issuer,
+            "name": "brand-new-issuer",
+            "sharedSecret": "********",
+        })
+        testlib.put_fail(
+            self.cluster, self.endpoint, expected_code=400, json=bad,
+        )
+
     def jwks_uri_test(self):
         """Test JWT authentication with JWKS URI"""
         self.auth_setup()
