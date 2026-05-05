@@ -619,6 +619,44 @@ event_to_jsons({TS, backfill_phase_ended, BucketName, VBucket}, _Config) ->
                                   {bucket, BucketName},
                                   {vbucket, VBucket}])];
 
+event_to_jsons({TS, snapshot_deks_import_started, BucketName, VBucket},
+               _Config) ->
+    [format_simple_plist_as_json([{type, snapshotDeksImportStarted},
+                                  {ts, misc:time_to_epoch_float(TS)},
+                                  {bucket, BucketName},
+                                  {vbucket, VBucket}])];
+
+event_to_jsons({TS, snapshot_deks_import_ended, BucketName, VBucket},
+               _Config) ->
+    [format_simple_plist_as_json([{type, snapshotDeksImportEnded},
+                                  {ts, misc:time_to_epoch_float(TS)},
+                                  {bucket, BucketName},
+                                  {vbucket, VBucket}])];
+
+event_to_jsons({TS, snapshot_waiting_started, BucketName, VBucket}, _Config) ->
+    [format_simple_plist_as_json([{type, snapshotWaitingStarted},
+                                  {ts, misc:time_to_epoch_float(TS)},
+                                  {bucket, BucketName},
+                                  {vbucket, VBucket}])];
+
+event_to_jsons({TS, snapshot_waiting_ended, BucketName, VBucket}, _Config) ->
+    [format_simple_plist_as_json([{type, snapshotWaitingEnded},
+                                  {ts, misc:time_to_epoch_float(TS)},
+                                  {bucket, BucketName},
+                                  {vbucket, VBucket}])];
+
+event_to_jsons({TS, snapshot_download_started, BucketName, VBucket}, _Config) ->
+    [format_simple_plist_as_json([{type, snapshotDownloadStarted},
+                                  {ts, misc:time_to_epoch_float(TS)},
+                                  {bucket, BucketName},
+                                  {vbucket, VBucket}])];
+
+event_to_jsons({TS, snapshot_download_ended, BucketName, VBucket}, _Config) ->
+    [format_simple_plist_as_json([{type, snapshotDownloadEnded},
+                                  {ts, misc:time_to_epoch_float(TS)},
+                                  {bucket, BucketName},
+                                  {vbucket, VBucket}])];
+
 event_to_jsons({TS, wait_index_updated_started, BucketName, Node, VBucket},
                Config) ->
     [format_simple_plist_as_json([{type, waitIndexUpdatedStarted},
