@@ -71,6 +71,20 @@ get_event_and_attributes({create_collection, Scope, Collection, _}) ->
 get_event_and_attributes({drop_collection, Scope, Collection}) ->
     {collection_deleted, [{scope, Scope},
                           {collection, Collection}]};
+get_event_and_attributes(
+  {create_external_collection, Scope, Collection, _}) ->
+    {external_collection_created, [{scope, Scope},
+                                   {collection, Collection}]};
+get_event_and_attributes(
+  {modify_external_collection, Scope, Collection, _}) ->
+    {external_collection_modified,
+     [{scope, Scope},
+      {collection, Collection}]};
+get_event_and_attributes(
+  {drop_external_collection, Scope, Collection}) ->
+    {external_collection_deleted,
+     [{scope, Scope},
+      {collection, Collection}]};
 get_event_and_attributes(_) ->
     ok.
 

@@ -174,7 +174,14 @@ event_details(resume_bucket_completed) ->
 event_details(resume_bucket_failed) ->
     {8210, data, info, <<"Bucket resume failed">>};
 event_details(resume_bucket_stopped) ->
-    {8211, data, info, <<"Bucket resume stopped">>}.
+    {8211, data, info, <<"Bucket resume stopped">>};
+event_details(external_collection_created) ->
+    {8212, data, info, <<"External collection created">>};
+event_details(external_collection_modified) ->
+    {8213, data, info,
+     <<"External collection modified">>};
+event_details(external_collection_deleted) ->
+    {8214, data, info, <<"External collection deleted">>}.
 
 %% Event logs shouldn't contain any PII - redact_keys/2 replaces all the keys
 %% in Keys (= [Key1, ..., KeyN]) with
