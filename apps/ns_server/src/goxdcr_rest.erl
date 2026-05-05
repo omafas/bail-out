@@ -102,6 +102,12 @@ interesting_doc_key(<<"filterBinary">>) ->
     true;
 interesting_doc_key(<<"conflictLogging">>) ->
     true;
+interesting_doc_key(<<"filterDeletionsWithExpression">>) ->
+    true;
+interesting_doc_key(<<"filterExpirationsWithExpression">>) ->
+    true;
+interesting_doc_key(<<"forwardLocalOnly">>) ->
+    true;
 interesting_doc_key(_) ->
     false.
 
