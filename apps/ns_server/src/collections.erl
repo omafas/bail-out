@@ -654,8 +654,10 @@ do_update_with_manifest(Snapshot, Bucket, Manifest, Operation,
                     case check_limits(NewManifest, OtherBucketCounts,
                                       ScopeCollectionLimits, BucketConf) of
                         ok ->
-                            FinalManifest = advance_manifest_id(Operation,
-                                                                NewManifest),
+                            FinalManifest =
+                                advance_manifest_id(
+                                  Operation, NewManifest,
+                                  CompiledOperation),
                             case check_ids_limit(FinalManifest, LastSeenIds) of
                                 [] ->
                                     {commit,
@@ -677,15 +679,35 @@ do_update_with_manifest(Snapshot, Bucket, Manifest, Operation,
             {abort, {error, bucket_not_found, Bucket}}
     end.
 
-advance_manifest_id(bump_epoch, Manifest) ->
+advance_manifest_id(Operation, Manifest) ->
+    advance_manifest_id(Operation, Manifest, []).
+
+advance_manifest_id(bump_epoch, Manifest, _) ->
     Manifest;
-advance_manifest_id({Op, _, _, _}, Manifest)
+advance_manifest_id({Op, _, _, _}, Manifest, _)
     when Op =:= create_external_collection orelse
          Op =:= modify_external_collection orelse
          Op =:= drop_external_collection ->
     advance_external_collection_manifest_uid(Manifest);
-advance_manifest_id(_Operation, Manifest) ->
+advance_manifest_id({set_manifest, _, _, _}, Manifest,
+                    CompiledOps) ->
+    M1 = advance_collection_manifest_uid(
+           uid, next_uid, Manifest),
+    case has_external_collection_ops(CompiledOps) of
+        true ->
+            advance_external_collection_manifest_uid(M1);
+        false ->
+            M1
+    end;
+advance_manifest_id(_Operation, Manifest, _) ->
     advance_collection_manifest_uid(uid, next_uid, Manifest).
+
+has_external_collection_ops(Ops) ->
+    lists:any(
+      fun ({drop_external_collection, _, _}) -> true;
+          ({create_external_collection, _, _, _}) -> true;
+          (_) -> false
+      end, Ops).
 
 advance_external_collection_manifest_uid(Manifest) ->
     advance_collection_manifest_uid(external_coll_manifest_uid,
@@ -815,30 +837,64 @@ get_operations(Fun, Current, Required) ->
                 end
         end, DeleteOpers, MapRequired)).
 
+create_collection_op(ScopeName, CollectionName, Props) ->
+    case proplists:get_bool(external, Props) of
+        true ->
+            {create_external_collection, ScopeName,
+             CollectionName,
+             proplists:delete(external, Props)};
+        false ->
+            {create_collection, ScopeName,
+             CollectionName, Props}
+    end.
+
+drop_collection_op(ScopeName, CollectionName, Props) ->
+    case proplists:is_defined(external, Props) of
+        true ->
+            {drop_external_collection, ScopeName,
+             CollectionName};
+        false ->
+            {drop_collection, ScopeName,
+             CollectionName}
+    end.
+
 get_operations(CurrentScopes, RequiredScopes) ->
     get_operations(
       fun ({delete, ScopeName, _}) ->
               {drop_scope, ScopeName};
           ({add, ScopeName, ScopeProps}) ->
               [{create_scope, ScopeName} |
-               [{create_collection, ScopeName, CollectionName,
-                 CollectionProps} ||
+               [create_collection_op(
+                  ScopeName, CollectionName,
+                  CollectionProps) ||
                    {CollectionName, CollectionProps}
                        <- get_collections(ScopeProps)]];
-          ({modify, ScopeName, ScopeProps, CurrentScopeProps}) ->
+          ({modify, ScopeName, ScopeProps,
+            CurrentScopeProps}) ->
               get_operations(
-                fun ({delete, CollectionName, _}) ->
-                        {drop_collection, ScopeName, CollectionName};
-                    ({add, CollectionName, CollectionProps}) ->
-                        {create_collection, ScopeName, CollectionName,
-                         CollectionProps};
-                    ({modify, CollectionName, CollectionProps,
+                fun ({delete, CollectionName, Props}) ->
+                        drop_collection_op(
+                          ScopeName, CollectionName,
+                          Props);
+                    ({add, CollectionName,
+                      CollectionProps}) ->
+                        create_collection_op(
+                          ScopeName, CollectionName,
+                          CollectionProps);
+                    ({modify, CollectionName,
+                      CollectionProps,
                       CurrentCollectionProps}) ->
-                        case lists:sort(CollectionProps) =:=
-                             lists:sort(lists:keydelete(
-                                          uid, 1, CurrentCollectionProps)) of
+                        case lists:sort(CollectionProps)
+                             =:=
+                             lists:sort(
+                               lists:keydelete(
+                                 uid, 1,
+                                 CurrentCollectionProps))
+                        of
                             false ->
-                                {modify_collection, ScopeName, CollectionName,
+                                {modify_collection,
+                                 ScopeName,
+                                 CollectionName,
                                  CollectionProps};
                             true ->
                                 []
@@ -2557,6 +2613,72 @@ external_collection_filtering_t() ->
     ExtUid = external_uid(Manifest2),
     ?assertEqual(max(CouchbaseUid, ExtUid), AllUid).
 
+set_manifest_with_external_collections_t() ->
+    {ok, BucketConf} = get_bucket_config("bucket"),
+    Manifest = default_manifest(BucketConf),
+
+    %% Create a scope with a couchbase collection and an
+    %% external collection.
+    {commit, [{_, _, Manifest1}], _} =
+        update_manifest_test_create_scope(Manifest, "s1"),
+    {commit, [{_, _, Manifest2}], _} =
+        update_manifest_test_create_collection(
+          Manifest1, "s1", "c1", []),
+    {commit, [{_, _, Manifest3}], _} =
+        update_manifest_test_create_external_collection(
+          Manifest2, "s1", "ext1", [{foo, bar}]),
+
+    ExtUidBefore = get_external_uid(Manifest3),
+
+    %% set_manifest that does not include the external
+    %% collection should drop it.
+    {commit, [{_, _, Manifest4}], _} =
+        update_manifest_test_set_manifest(
+          Manifest3,
+          [{"_default",
+            [{collections, [{"_default", []}]}]},
+           {"s1",
+            [{collections, [{"c1", []},
+                            {"c2", []}]}]}]),
+    ?assertNotEqual(undefined,
+                    get_collection(
+                      "c2", get_scope("s1", Manifest4))),
+    ?assertEqual(undefined,
+                 get_collection(
+                   "ext1", get_scope("s1", Manifest4))),
+
+    %% External manifest uid should be bumped when an
+    %% external collection is dropped.
+    ?assert(get_external_uid(Manifest4) > ExtUidBefore),
+
+    %% set_manifest can create an external collection
+    %% by including {external, true} in the props.
+    ExtUidBefore2 = get_external_uid(Manifest4),
+    {commit, [{_, _, Manifest5}], _} =
+        update_manifest_test_set_manifest(
+          Manifest4,
+          [{"_default",
+            [{collections, [{"_default", []}]}]},
+           {"s1",
+            [{collections, [{"c1", []},
+                            {"c2", []},
+                            {"ext2",
+                             [{external, true}]}]}]}]),
+    ExtColl = get_collection(
+                "ext2", get_scope("s1", Manifest5)),
+    ?assertNotEqual(undefined, ExtColl),
+    ?assert(proplists:get_bool(external, ExtColl)),
+    ?assert(
+       get_external_uid(Manifest5) > ExtUidBefore2),
+
+    %% Couchbase collections should still exist.
+    ?assertNotEqual(undefined,
+                    get_collection(
+                      "c1", get_scope("s1", Manifest5))),
+    ?assertNotEqual(undefined,
+                    get_collection(
+                      "c2", get_scope("s1", Manifest5))).
+
 upgrade_to_totoro_t() ->
     ManifestIn = [{uid, 1},
                   {next_uid, 2},
@@ -2651,6 +2773,10 @@ basic_collections_manifest_test_() ->
       {"external collection filtering test",
        fun() ->
                external_collection_filtering_t()
+       end},
+      {"set manifest with external collections test",
+       fun() ->
+               set_manifest_with_external_collections_t()
        end},
       {"upgrade to totoro test",
        fun() -> upgrade_to_totoro_t() end}]}.

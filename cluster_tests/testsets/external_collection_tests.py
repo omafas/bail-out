@@ -832,3 +832,125 @@ class ExternalCollectionTests(testlib.BaseTestSet):
         testlib.assert_eq(
             max(couchbase_uid, external_uid),
             all_uid)
+
+    def put_manifest_drops_external_collections_test(
+            self):
+        bucket_name = "put-manifest-bucket"
+        scope_name = "put-scope"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+
+        # Create a couchbase collection
+        testlib.post_succ(
+            self.cluster,
+            collections_path(bucket_name, scope_name),
+            data={"name": "regular-col"})
+
+        # Create an external collection
+        testlib.post_succ(
+            self.cluster,
+            f"{collections_path(bucket_name, scope_name)}"
+            "?external=1",
+            data={"name": "ext-col"})
+
+        ext_uid_before = get_manifest_uid(
+            self.cluster, bucket_name, external=True)
+
+        # Verify external collection exists
+        col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, "ext-col", external=True)
+        testlib.assert_not_eq(None, col)
+
+        # PUT manifest without the external collection.
+        # It should be dropped.
+        manifest = get_manifest(
+            self.cluster, bucket_name)
+        uid = manifest["uid"]
+        testlib.put_succ(
+            self.cluster,
+            f"{manifest_path(bucket_name)}"
+            f"?validOnUid={uid}",
+            json={
+                "scopes": [
+                    {"name": "_default",
+                     "collections": [
+                         {"name": "_default"}]},
+                    {"name": scope_name,
+                     "collections": [
+                         {"name": "regular-col"},
+                         {"name": "new-col"}]}]})
+
+        # New couchbase collection should exist
+        new_col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, "new-col")
+        testlib.assert_not_eq(None, new_col)
+
+        # External collection should be gone
+        ext_col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, "ext-col", external=True)
+        testlib.assert_eq(None, ext_col)
+
+        # External manifest uid should be bumped
+        ext_uid_after = get_manifest_uid(
+            self.cluster, bucket_name, external=True)
+        testlib.assert_not_eq(ext_uid_before,
+                              ext_uid_after)
+
+    def put_manifest_creates_external_collection_test(
+            self):
+        bucket_name = "put-create-ext-bucket"
+        scope_name = "put-create-ext-scope"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+
+        # Create a couchbase collection
+        testlib.post_succ(
+            self.cluster,
+            collections_path(bucket_name, scope_name),
+            data={"name": "regular-col"})
+
+        ext_uid_before = get_manifest_uid(
+            self.cluster, bucket_name, external=True)
+
+        # PUT manifest that creates an external
+        # collection via external: true
+        manifest = get_manifest(
+            self.cluster, bucket_name)
+        uid = manifest["uid"]
+        testlib.put_succ(
+            self.cluster,
+            f"{manifest_path(bucket_name)}"
+            f"?validOnUid={uid}",
+            json={
+                "scopes": [
+                    {"name": "_default",
+                     "collections": [
+                         {"name": "_default"}]},
+                    {"name": scope_name,
+                     "collections": [
+                         {"name": "regular-col"},
+                         {"name": "ext-col",
+                          "external": True}]}]})
+
+        # External collection should exist
+        ext_col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, "ext-col", external=True)
+        testlib.assert_not_eq(None, ext_col)
+
+        # Couchbase collection should still exist
+        reg_col = get_collection_from_manifest(
+            self.cluster, bucket_name,
+            scope_name, "regular-col")
+        testlib.assert_not_eq(None, reg_col)
+
+        # External manifest uid should be bumped
+        ext_uid_after = get_manifest_uid(
+            self.cluster, bucket_name, external=True)
+        testlib.assert_not_eq(ext_uid_before,
+                              ext_uid_after)

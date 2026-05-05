@@ -165,6 +165,11 @@ collection_validators(DefaultAllowed, BucketConfig) ->
     collection_modifiable_validators(BucketConfig) ++
         scope_validators(DefaultAllowed).
 
+set_manifest_collection_validators(BucketConfig) ->
+    collection_modifiable_validators(BucketConfig) ++
+        [validator:boolean(external, _)] ++
+        scope_validators(special_allowed).
+
 external_collection_validators() ->
     [validator:no_duplicate_keys(_),
      validator:prohibited(rev, _)]
@@ -403,9 +408,10 @@ validate_scopes(Name, BucketConfig, State) ->
       State).
 
 validate_collections(Name, BucketConfig, State) ->
-    validator:json_array(Name,
-                         collection_validators(special_allowed, BucketConfig),
-                         State).
+    validator:json_array(
+      Name,
+      set_manifest_collection_validators(BucketConfig),
+      State).
 
 handle_ensure_manifest(Bucket, Uid, Req) ->
     assert_api_available(Bucket),
