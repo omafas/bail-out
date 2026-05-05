@@ -42,7 +42,9 @@ def get_scope_from_manifest(cluster, bucket_name, scope_name, external=False):
 def get_manifest(cluster, bucket_name,
                  external=False):
     path = manifest_path(bucket_name)
-    if external:
+    if external == "all":
+        path += "?external=all"
+    elif external:
         path += "?external=1"
     r = testlib.get_succ(cluster, path)
     return r.json()
@@ -783,3 +785,50 @@ class ExternalCollectionTests(testlib.BaseTestSet):
             "rev should change after second patch"
         testlib.assert_eq("value1", col["param1"])
         testlib.assert_eq("value2", col["param2"])
+
+    def get_all_collections_test(self):
+        bucket_name = "all-colls-bucket"
+        scope_name = "all-colls-scope"
+
+        self.create_bucket(bucket_name)
+        self.create_scope(bucket_name, scope_name)
+
+        # Create a regular collection
+        testlib.post_succ(
+            self.cluster,
+            collections_path(bucket_name, scope_name),
+            data={"name": "regular-col"})
+
+        # Create an external collection
+        testlib.post_succ(
+            self.cluster,
+            f"{collections_path(bucket_name, scope_name)}"
+            "?external=1",
+            data={"name": "external-col"})
+
+        # Fetch with ?external=all to get both
+        manifest = get_manifest(
+            self.cluster, bucket_name,
+            external="all")
+        scope = None
+        for s in manifest.get("scopes", []):
+            if s["name"] == scope_name:
+                scope = s
+                break
+        testlib.assert_not_eq(None, scope)
+        names = [c["name"]
+                 for c in scope.get("collections", [])]
+        testlib.assert_in("regular-col", names)
+        testlib.assert_in("external-col", names)
+
+        # uid should be the greater of the couchbase
+        # and external manifest uids
+        all_uid = int(manifest["uid"], 16)
+        couchbase_uid = get_manifest_uid(
+            self.cluster, bucket_name)
+        external_uid = get_manifest_uid(
+            self.cluster, bucket_name,
+            external=True)
+        testlib.assert_eq(
+            max(couchbase_uid, external_uid),
+            all_uid)

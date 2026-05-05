@@ -34,10 +34,11 @@
 -define(PATCH_RETRIES, ?get_param(patch_retries, 5)).
 
 handle_get(Bucket, Req) ->
-    External = is_req_external(Req),
+    CollectionFilter = get_collection_filter(Req),
     menelaus_util:reply_json(
       Req, collections:manifest_json_for_rest_response(
-             menelaus_auth:get_authn_res(Req), Bucket, direct, External)).
+             menelaus_auth:get_authn_res(Req), Bucket,
+             direct, CollectionFilter)).
 
 handle_post_scope(Bucket, Req) ->
     assert_api_available(Bucket),
@@ -597,7 +598,16 @@ reply_global_error(Req, Msg, Code) ->
       Req, {[{errors, {[{<<"_">>, iolist_to_binary(Msg)}]}}]}, Code).
 
 is_req_external(Req) ->
-    proplists:get_value("external", mochiweb_request:parse_qs(Req)) =:= "1".
+    proplists:get_value("external",
+                        mochiweb_request:parse_qs(Req)) =:= "1".
+
+get_collection_filter(Req) ->
+    case proplists:get_value("external",
+                             mochiweb_request:parse_qs(Req)) of
+        "1" -> external;
+        "all" -> all;
+        _ -> couchbase
+    end.
 
 %% External collection validation
 

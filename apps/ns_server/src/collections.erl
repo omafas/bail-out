@@ -463,11 +463,12 @@ filter_collections_with_roles(Bucket, Scopes, Roles) ->
 %% to memcached.
 manifest_json_for_memcached(Bucket, Snapshot) ->
     Manifest = get_manifest(Bucket, Snapshot),
-    jsonify_manifest(Manifest, false, false).
+    jsonify_manifest(Manifest, false, couchbase).
 
 %% Build the manifest with possible inferred values to return in REST
 %% results.
-manifest_json_for_rest_response(AuthnRes, Bucket, Snapshot, IncludeExternal) ->
+manifest_json_for_rest_response(AuthnRes, Bucket, Snapshot,
+                                CollectionFilter) ->
     Roles = menelaus_roles:get_compiled_roles(AuthnRes),
     {ok, BucketConfig} = ns_bucket:get_bucket(Bucket, Snapshot),
     DefaultManifest = default_manifest(BucketConfig),
@@ -475,30 +476,41 @@ manifest_json_for_rest_response(AuthnRes, Bucket, Snapshot, IncludeExternal) ->
     FilteredManifest = on_scopes(
                          filter_collections_with_roles(Bucket, _, Roles),
                          Manifest),
-    jsonify_manifest(FilteredManifest, true, IncludeExternal).
+    jsonify_manifest(FilteredManifest, true, CollectionFilter).
 
 %% If 'ForRestResponse' is true then certain values are inferred. This was
 %% done in releases prior to 7.6 to save space in the manifest (see
 %% default_collection_props()). But the inferred values lead to confusion
 %% and bugs. Note: Until the cluster compat mode is 7.6 we continue
 %% to support the inferred values.
-jsonify_manifest(Manifest, ForRestResponse, IncludeExternal) ->
+jsonify_manifest(Manifest, ForRestResponse, CollectionFilter) ->
     ScopesJson =
         lists:map(
           fun ({ScopeName, Scope}) ->
                   {[{name, list_to_binary(ScopeName)},
                     {uid, uid(Scope)},
                     {collections,
-                     [maybe_modify_props(CollName, Coll, ForRestResponse) ||
-                         {CollName, Coll} <- get_collections(Scope),
-                          proplists:is_defined(external, Coll) =:=
-                              IncludeExternal]}]}
+                     [maybe_modify_props(
+                        CollName, Coll, ForRestResponse) ||
+                         {CollName, Coll} <-
+                             get_collections(Scope),
+                         include_collection(
+                           Coll, CollectionFilter)]}]}
           end, get_scopes(Manifest)),
-    Uid = case IncludeExternal of
-              false -> uid(Manifest);
-              true -> external_uid(Manifest)
+    Uid = case CollectionFilter of
+              external -> external_uid(Manifest);
+              all -> max(uid(Manifest),
+                         external_uid(Manifest));
+              couchbase -> uid(Manifest)
           end,
     {[{uid, Uid}, {scopes, ScopesJson}]}.
+
+include_collection(_Coll, all) ->
+    true;
+include_collection(Coll, external) ->
+    proplists:is_defined(external, Coll);
+include_collection(Coll, couchbase) ->
+    not proplists:is_defined(external, Coll).
 
 get_max_supported(num_scopes) ->
     MaxSupported = case cluster_compat_mode:is_cluster_totoro() of
@@ -2484,9 +2496,9 @@ external_collection_filtering_t() ->
         update_manifest_test_create_external_collection(
           Manifest1, "_default", "ext1", []),
 
-    %% jsonify with IncludeExternal=false should exclude
+    %% jsonify with couchbase filter should exclude
     %% external collections.
-    {JsonProps} = jsonify_manifest(Manifest2, true, false),
+    {JsonProps} = jsonify_manifest(Manifest2, true, couchbase),
     [{ScopeJson}] =
         [S || S <- proplists:get_value(scopes, JsonProps),
               proplists:get_value(
@@ -2500,10 +2512,10 @@ external_collection_filtering_t() ->
     ?assert(lists:member(<<"_default">>, DefaultCollNames)),
     ?assertNot(lists:member(<<"ext1">>, DefaultCollNames)),
 
-    %% jsonify with IncludeExternal=true should include
+    %% jsonify with external filter should include
     %% only external collections.
     {ExtJsonProps} = jsonify_manifest(
-                       Manifest2, true, true),
+                       Manifest2, true, external),
     [{ExtScopeJson}] =
         [S || S <- proplists:get_value(
                      scopes, ExtJsonProps),
@@ -2517,7 +2529,33 @@ external_collection_filtering_t() ->
     ?assert(lists:member(<<"ext1">>, ExtCollNames)),
     ?assertNot(lists:member(<<"c1">>, ExtCollNames)),
     ?assertNot(lists:member(
-                 <<"_default">>, ExtCollNames)).
+                 <<"_default">>, ExtCollNames)),
+
+    %% jsonify with all filter should include both
+    %% couchbase and external collections.
+    {AllJsonProps} = jsonify_manifest(
+                       Manifest2, true, all),
+    [{AllScopeJson}] =
+        [S || S <- proplists:get_value(
+                     scopes, AllJsonProps),
+              proplists:get_value(
+                name, element(1, S)) =:= <<"_default">>],
+    AllColls = proplists:get_value(
+                 collections, AllScopeJson),
+    AllCollNames =
+        [proplists:get_value(name, element(1, C))
+         || C <- AllColls],
+    ?assert(lists:member(<<"c1">>, AllCollNames)),
+    ?assert(lists:member(<<"ext1">>, AllCollNames)),
+    ?assert(lists:member(
+              <<"_default">>, AllCollNames)),
+
+    %% uid for all should be the greater of the
+    %% couchbase and external uids.
+    AllUid = proplists:get_value(uid, AllJsonProps),
+    CouchbaseUid = uid(Manifest2),
+    ExtUid = external_uid(Manifest2),
+    ?assertEqual(max(CouchbaseUid, ExtUid), AllUid).
 
 upgrade_to_totoro_t() ->
     ManifestIn = [{uid, 1},
