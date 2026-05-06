@@ -38,7 +38,6 @@ class HardResetTests(testlib.BaseTestSet):
         assert_cluster_size(self.cluster, 2)
         self.cluster.wait_nodes_up()
 
-    @tag(Tag.Disabled)
     def hard_reset_test_base(self, add_node_fun):
         for i, node in enumerate(self.cluster.connected_nodes):
             other_node = self.cluster.connected_nodes[i ^ 1]
@@ -113,7 +112,6 @@ class HardResetTests(testlib.BaseTestSet):
             assert_cluster_size(node, 2)
             assert_cluster_size(other_node, 2)
 
-    @tag(Tag.Disabled)
     def hard_reset_timeout_before_failover_testbase(self, add_node_fun):
         node = self.cluster.connected_nodes[0]
         other_node = self.cluster.connected_nodes[1]
@@ -165,22 +163,18 @@ class HardResetTests(testlib.BaseTestSet):
         assert_cluster_size(other_node, 2)
 
     @tag(Tag.LowUrgency)
-    @tag(Tag.Disabled)
     def hard_reset_add_node_test(self):
         self.hard_reset_test_base(self.cluster.add_node)
 
     @tag(Tag.LowUrgency)
-    @tag(Tag.Disabled)
     def hard_reset_join_cluster_test(self):
         self.hard_reset_test_base(self.cluster.do_join_cluster)
 
     @tag(Tag.LowUrgency)
-    @tag(Tag.Disabled)
     def hard_reset_timeout_before_failover_add_node_test(self):
         self.hard_reset_timeout_before_failover_testbase(self.cluster.add_node)
 
     @tag(Tag.LowUrgency)
-    @tag(Tag.Disabled)
     def hard_reset_timeout_before_failover_join_cluster_test(self):
         self.hard_reset_timeout_before_failover_testbase(
             self.cluster.do_join_cluster)

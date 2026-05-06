@@ -57,7 +57,6 @@ class BucketDirsCleanupTests(testlib.BaseTestSet):
                 file.unlink(missing_ok=True)
 
     @tag(Tag.LowUrgency)
-    @tag(Tag.Disabled)
     def cleanup_during_rebalance_test(self):
         assert_cluster_size(self.cluster, 1)
         cluster_node = self.cluster.connected_nodes[0]
