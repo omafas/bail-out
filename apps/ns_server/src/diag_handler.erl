@@ -551,6 +551,8 @@ get_other_node_processes(Key, PerNodeDiag) ->
             [Processes]
     end.
 
+write_processes(Resp, Node, Key, undefined) ->
+    write_chunk_format(Resp, "per_node_~p(~p) unavailable~n", [Key, Node]);
 write_processes(Resp, Node, Key, Processes) ->
     misc:executing_on_new_process(
       fun () ->
@@ -566,6 +568,7 @@ do_handle_per_node_processes(Resp, Node, PerNodeDiag) ->
     erlang:garbage_collect(),
     trace_memory("Starting pretty printing processes for ~p", [Node]),
 
+    %% Can be 'undefined' if we weren't able to get info for processes
     Processes = proplists:get_value(processes, PerNodeDiag),
 
     BabysitterProcesses = get_other_node_processes(babysitter_processes, PerNodeDiag),
