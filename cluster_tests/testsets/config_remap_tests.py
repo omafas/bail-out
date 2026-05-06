@@ -18,15 +18,11 @@ import testlib
 
 import run
 import shutil
-import sys
+import subprocess
 
 from pathlib import Path
 
-sys.path.append(testlib.get_scripts_dir())
-
 from testlib.test_tag_decorator import tag, Tag
-
-import node_remap
 
 class ConfigRemapTest(testlib.BaseTestSet):
 
@@ -59,22 +55,27 @@ class ConfigRemapTest(testlib.BaseTestSet):
         testlib.post_succ(self.cluster, '/settings/autoFailover',
                           data={"enabled": "true", "timeout": 120})
 
-    def run_config_remap(self, old_cluster, extra_args):
+    def run_config_remap(self, old_cluster, wrapper_args):
         old_start_index = old_cluster.first_node_index
 
         cluster_path = Path(old_cluster.get_cluster_path())
 
+        node_remap_path = testlib.get_utility_path('node_remap')
+
         for i in range(len(old_cluster._nodes)):
             old_node_index = old_start_index + i
 
+            initargs_path = (
+                f'{cluster_path}/data/n_{old_node_index}/initargs')
+            output_path = f'{cluster_path}/data/tmp'
 
-            node_remap.run_config_remap(
-                root_dir=testlib.get_install_dir(),
-                initargs=[f'{cluster_path}/data/n_{old_node_index}/initargs'],
-                output_path=f'{cluster_path}/data/tmp',
+            cmd = [node_remap_path,
+                   '--initargs', initargs_path,
+                   '--output-path', output_path] + wrapper_args
+            subprocess.run(
+                cmd,
                 capture_output=testlib.config['intercept_output'],
-                extra_args=extra_args
-            )
+                check=True)
 
             shutil.copytree(cluster_path/'data'/f'tmp',
                             cluster_path/'data'/f'n_{old_node_index}',
@@ -99,11 +100,12 @@ class ConfigRemapTest(testlib.BaseTestSet):
         print(f"Shut down original cluster at node index "
               f"{self.cluster.first_node_index}")
 
-        extra_args = ['--disable-auto-failover',
-                      '--rewrite-key-value', 'log_store_uri', '"local://002"',
-                      '--rewrite-key-value', 'enable_sync_threshold_mb', '1000']
+        wrapper_args = [
+            '--just-disable-auto-failover',
+            '--rewrite-key-values', 'log_store_uri', '"local://002"',
+            '--rewrite-key-values', 'enable_sync_threshold_mb', '1000']
 
-        self.run_config_remap(self.cluster, extra_args)
+        self.run_config_remap(self.cluster, wrapper_args)
 
         print(f"Starting original cluster at node index "
               f"{self.cluster.first_node_index}")

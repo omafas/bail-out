@@ -30,10 +30,6 @@ import sys
 from pathlib import Path
 from copy import deepcopy
 
-sys.path.append(testlib.get_scripts_dir())
-
-import node_remap
-
 REMAP_OFFSET = 10
 CLUSTER_INDEX_OFFSET = 10000
 
@@ -166,13 +162,20 @@ class NodeRemapTest(testlib.BaseTestSet, SampleBucketTasksBase):
             assert os.path.isfile(initargs_path)
 
             # And now we remap the config in the new (remapped) node directory
-            node_remap.run_config_remap_via_escript_wrapper(
-                root_dir=testlib.get_install_dir(),
-                initargs=[initargs_path],
-                output_path=new_cluster_path/'data'/f'n_{new_node_index}',
-                remap=remap_args,
-                capture_output=testlib.config['intercept_output']
-            )
+            # by invoking the installed node_remap wrapper script. This
+            # exercises the same entry point that users run, so issues with
+            # the wrapper are caught by these tests.
+            node_remap_path = testlib.get_utility_path('node_remap')
+            cmd = [node_remap_path,
+                   '--initargs', str(initargs_path),
+                   '--output-path',
+                   str(new_cluster_path/'data'/f'n_{new_node_index}')]
+            for remap_arg in remap_args:
+                cmd += ['--remap'] + remap_arg
+            subprocess.run(
+                cmd,
+                capture_output=testlib.config['intercept_output'],
+                check=True)
 
     def check_nodefile(self, old_cluster):
         # nodefile is a cluster_run only file containing the node name. Check
