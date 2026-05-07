@@ -89,10 +89,13 @@ update_deks({bucketDek, BucketUUID} = Kind, Snapshot) ->
         %% Push keys to backup first to avoid a theoretical
         %% race when memcached already knows a new key, but
         %% backup haven't received it yet.
+        %% In the case where kv has the key but continuous backup does
+        %% not it will be handled via retries.
         ok ?= case ns_ports_setup:should_run(cont_backup, Snapshot) of
                   true ->
                       cb_deks_cbauth:call_update_keys_db(Kind,
-                                                         ["cbcontbk-cbauth"]);
+                                                         ["cbcontbk-cbauth"],
+                                                         true);
                   false ->
                       ok
               end,

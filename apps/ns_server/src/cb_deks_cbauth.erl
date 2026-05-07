@@ -33,7 +33,8 @@
 
 -export([cbauth_key_type_to_dek_kind/2,
          get_kinds_for_label/1,
-         call_update_keys_db/2]).
+         call_update_keys_db/2,
+         call_update_keys_db/3]).
 
 -define(CBAUTH_RPC_TIMEOUT, ?get_timeout(cbauth_rpc_timeout, 60000)).
 
