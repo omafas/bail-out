@@ -355,6 +355,8 @@ INSTALL (DIRECTORY _build/default/lib/jose/ebin DESTINATION
         "${INST_LIBDIR}/jose")
 INSTALL (DIRECTORY _build/default/lib/oidcc/ebin DESTINATION
         "${INST_LIBDIR}/oidcc")
+INSTALL (DIRECTORY _build/default/lib/telemetry/ebin DESTINATION
+        "${INST_LIBDIR}/telemetry")
 
 INSTALL (DIRECTORY _build/default/lib/ale/ebin DESTINATION
          "${INST_LIBDIR}/ale")
