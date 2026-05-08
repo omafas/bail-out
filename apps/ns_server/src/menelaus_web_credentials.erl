@@ -703,12 +703,19 @@ cred_validators() ->
      %% and dispatch to the type-specific field validators.
      validator:validate(
        fun (Fields, State) ->
-               Type = validator:get_value(type, State),
-               FieldValidators = cb_credential_types:fields_validators(Type),
-               case validator:validate_decoded_object(Fields,
-                                                      FieldValidators) of
-                   {value, Validated} -> {value, Validated, State};
-                   {error, Err}      -> {error, Err, State}
+               case validator:get_value(type, State) of
+                   undefined ->
+                       %% `type' is missing or invalid; the request will already
+                       %% fail on the type error. Skip field validation.
+                       {ok, State};
+                   Type ->
+                       FieldValidators =
+                           cb_credential_types:fields_validators(Type),
+                       case validator:validate_decoded_object(
+                              Fields, FieldValidators) of
+                           {value, Validated} -> {value, Validated, State};
+                           {error, Err} -> {error, Err, State}
+                       end
                end
        end, fields, _),
      validator:non_empty_string(description, _),
