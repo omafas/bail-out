@@ -26,7 +26,10 @@
 %%      GET    /settings/credentials           -> list all (optional ?prefix=)
 %%      GET    /settings/credentials/:id       -> get one
 %%      POST   /settings/credentials/:id       -> create
-%%      PUT    /settings/credentials/:id       -> update (full field replace)
+%%      PUT    /settings/credentials/:id       -> full replace (rotate material)
+%%      PATCH  /settings/credentials/:id       -> partial metadata update
+%%                                                (description, expiresAt,
+%%                                                 guardrails)
 %%      DELETE /settings/credentials/:id       -> delete
 %%
 %% JSON wire format for create/update body:
@@ -73,6 +76,7 @@
          handle_get/2,
          handle_post/2,
          handle_put/2,
+         handle_patch/2,
          handle_delete/2,
          handle_get_credential_for_cbauth/2]).
 
@@ -459,25 +463,57 @@ handle_put(IdStr, Req) ->
               Fields    = validated_fields_to_store(
                             Type, proplists:get_value(fields, Props)),
               MetaExtra = validated_meta_extra(Props),
-              case cb_credentials_store:update(IdStr, Type, Fields,
-                                               MetaExtra, Author) of
-                  {ok, Cred} ->
-                      audit_credential(Req, update_credential, {IdStr, Cred},
-                                       ok),
-                      reply_json_ok(Req,
-                                    encode_response(export_credential(Cred)),
-                                    200);
-                  {error, not_found} ->
-                      audit_credential(Req, update_credential,
-                                       {IdStr, undefined}, not_found),
-                      menelaus_util:reply_not_found(Req);
-                  {error, Reason} ->
-                      audit_credential(Req, update_credential,
-                                       {IdStr, undefined}, Reason),
-                      reply_store_error(Req, Reason)
-              end
+              reply_update_result(
+                IdStr,
+                cb_credentials_store:update(IdStr, Type, Fields,
+                                            MetaExtra, Author),
+                Req)
       end,
       Req, json, cred_validators()).
+
+%% @doc Partial update of an existing credential's metadata.
+%% Accepts only description, expiresAt, and guardrails — never type or fields.
+%% Omitted keys are preserved; an empty body is rejected with 400.
+%% To rotate credential material, use PUT.
+handle_patch(IdStr, Req) ->
+    Author = get_author(Req),
+    validator:handle(
+      fun (Props) ->
+              MetaExtra = validated_meta_extra(Props),
+              case maps:size(MetaExtra) of
+                  0 ->
+                      menelaus_util:reply_json(
+                        Req,
+                        {[{error,
+                           <<"At least one of description, expiresAt, "
+                             "guardrails must be provided">>}]}, 400);
+                  _ ->
+                      reply_update_result(
+                        IdStr,
+                        cb_credentials_store:update_meta(
+                          IdStr, MetaExtra, Author),
+                        Req)
+              end
+      end,
+      Req, json, patch_validators()).
+
+%% @doc Shared response handling for the update_credential audit event,
+%% used by both PUT (full replace) and PATCH (partial metadata update).
+reply_update_result(IdStr, Result, Req) ->
+    case Result of
+        {ok, Cred} ->
+            audit_credential(Req, update_credential, {IdStr, Cred}, ok),
+            reply_json_ok(Req, encode_response(export_credential(Cred)),
+                          200);
+        {error, not_found} ->
+            audit_credential(Req, update_credential, {IdStr, undefined},
+                             not_found),
+            menelaus_util:reply_not_found(Req);
+        {error, Reason} ->
+            audit_credential(Req, update_credential, {IdStr, undefined},
+                             Reason),
+            reply_store_error(Req, Reason)
+    end.
 
 handle_delete(IdStr, Req) ->
     case cb_credentials_store:delete(IdStr) of
@@ -717,12 +753,53 @@ cred_validators() ->
                            {error, Err} -> {error, Err, State}
                        end
                end
-       end, fields, _),
-     validator:non_empty_string(description, _),
-     validator:integer(expiresAt, 0, max_uint64, _),
-     validate_expiry_in_future(expiresAt, _),
-     validator:decoded_json(guardrails, guardrails_validators(), _),
-     validator:unsupported(_)].
+       end, fields, _)]
+        ++ [V || {_, V} <- meta_field_validators()]
+        ++ [validator:unsupported(_)].
+
+%% @doc Per-field validators for the optional meta fields, shared by
+%% cred_validators/0 (POST/PUT) and patch_validators/0 (PATCH). Adding a new
+%% constraint here covers all three endpoints automatically.
+meta_field_validators() ->
+    [{description, validator:non_empty_string(description, _)},
+     {expiresAt,   validator:integer(expiresAt, 0, max_uint64, _)},
+     {expiresAt,   validate_expiry_in_future(expiresAt, _)},
+     {guardrails,  validator:decoded_json(guardrails,
+                                          guardrails_validators(), _)}].
+
+%% @doc Validators for PATCH — meta-only.  Type and fields are not
+%% accepted.  All keys are optional; the handler rejects empty bodies
+%% separately.
+%%
+%% JSON null on description/expiresAt/guardrails means "clear this field":
+%% the `clear` atom flows through to the store, which removes the key
+%% from the stored meta map.  Non-null values are validated by the same
+%% validators POST/PUT use via meta_field_validators/0.
+patch_validators() ->
+    NullableKeys = [description, expiresAt, guardrails],
+    [accept_null_as_clear(NullableKeys, _)]
+        ++ [skip_if_clear(K, V, _) || {K, V} <- meta_field_validators()]
+        ++ [validator:unsupported(_)].
+
+%% @doc For each named key, replace JSON null with the `clear` sentinel.
+%% Non-null values pass through unchanged; missing keys remain missing.
+accept_null_as_clear(Keys, State) ->
+    lists:foldl(
+      fun (K, S) ->
+              validator:validate(
+                fun (null) -> {value, clear};
+                    (_)    -> ok
+                end, K, S)
+      end, State, Keys).
+
+%% @doc Run the wrapped validator only if the named key is not the
+%% `clear` sentinel.  Lets PATCH reuse the standard validators without
+%% them choking on `clear`.
+skip_if_clear(Name, Validator, State) ->
+    case validator:get_value(Name, State) of
+        clear -> State;
+        _     -> Validator(State)
+    end.
 
 validate_expiry_in_future(Name, State) ->
     validator:validate(
@@ -736,10 +813,17 @@ validate_expiry_in_future(Name, State) ->
               end
       end, Name, State).
 
+%% Shared by POST, PUT, and PATCH.  The `clear` atom only ever arrives on
+%% the PATCH path (patch_validators/0 emits it for explicit JSON null);
+%% cred_validators/0 rejects null, so POST and PUT never produce `clear`
+%% here.  Downstream, only build_patched_meta/4 in the store knows how to
+%% drop `clear` keys — create_impl and build_updated_meta/4 must therefore
+%% never receive it.
 validated_meta_extra(Props) ->
     lists:foldl(
       fun ({expiresAt, V}, Acc) -> Acc#{expires_at => V};
           ({description, V}, Acc) -> Acc#{description => V};
+          ({guardrails, clear}, Acc) -> Acc#{guardrails => clear};
           ({guardrails, V}, Acc) ->
               Acc#{guardrails => validated_guardrails_to_store(V)};
           (_, Acc) -> Acc

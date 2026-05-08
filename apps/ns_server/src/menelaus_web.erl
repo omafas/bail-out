@@ -1569,6 +1569,10 @@ get_action(Req, {AppRoot, IsSSL, Plugins}, Path, PathTokens) ->
                     {{[admin, catalogs], write},
                      fun menelaus_web_external_catalogs:handle_patch_catalog/2,
                      [Name]};
+                ["settings", "credentials" | IdTokens] when IdTokens =/= [] ->
+                    IdStr = lists:flatten(lists:join("/", IdTokens)),
+                    {{[admin, security], write},
+                     fun menelaus_web_credentials:handle_patch/2, [IdStr]};
                 _ ->
                     {done, reply_text(Req, "Object Not Found", 404)}
             end;

@@ -38,6 +38,7 @@
          get/1,
          list/1,
          update/5,
+         update_meta/3,
          delete/1,
          consume_credential/1,
          get_credential_warnings/1,
@@ -122,6 +123,20 @@ update(Id, Type, Fields, MetaExtra, Author) ->
     case ensure_prerequisites(Snapshot) of
         ok ->
             update_impl(Id, Type, Fields, MetaExtra, Author);
+        {error, _} = Err ->
+            Err
+    end.
+
+%% @doc Update only the user-supplied meta fields of an existing credential.
+%% Leaves type and fields untouched.  Keys present in MetaExtra overwrite the
+%% corresponding stored values; absent keys are preserved.
+-spec update_meta(credential_id(), user_meta_map(), credential_author()) ->
+          {ok, credential_public_view()} | {error, credential_error_reason()}.
+update_meta(Id, MetaExtra, Author) ->
+    {ok, {Snapshot, _}} = chronicle_kv:get_snapshot(kv, ?PREREQ_KEYS),
+    case ensure_prerequisites(Snapshot) of
+        ok ->
+            update_meta_impl(Id, MetaExtra, Author);
         {error, _} = Err ->
             Err
     end.
@@ -347,6 +362,36 @@ list_impl(Prefix, Snapshot) ->
     end.
 
 update_impl(Id, Type, Fields, MetaExtra, Author) ->
+    update_existing(
+      Id,
+      fun (#{type := CurrentType, meta := ExistingMeta} = Current, Now) ->
+              case CurrentType =:= Type of
+                  true ->
+                      UpdatedMeta = build_updated_meta(ExistingMeta, MetaExtra,
+                                                       Author, Now),
+                      {commit, Current#{fields => Fields, meta => UpdatedMeta}};
+                  false ->
+                      {abort, invalid_type}
+              end
+      end).
+
+update_meta_impl(Id, MetaExtra, Author) ->
+    update_existing(
+      Id,
+      fun (#{meta := ExistingMeta} = Current, Now) ->
+              NewMeta = build_patched_meta(ExistingMeta, MetaExtra, Author,
+                                           Now),
+              {commit, Current#{meta => NewMeta}}
+      end).
+
+%% @doc Shared txn scaffolding for "update an existing credential":
+%% check prereqs, load the current value, hand it to the caller-supplied
+%% update fn, commit or abort based on what it returns.
+%%
+%% The update fn is `fun(Current, Now) -> {commit, Updated} | {abort, Reason}`.
+%% Aborts are propagated as txn results: `not_found`, `invalid_type`,
+%% `{prereq_failed, _}`, etc.
+update_existing(Id, Update) ->
     Key = build_key(Id),
     Now = os:system_time(millisecond),
     Fun = fun (Snapshot) ->
@@ -356,8 +401,13 @@ update_impl(Id, Type, Fields, MetaExtra, Author) ->
                               error ->
                                   {abort, not_found};
                               {ok, {Current, _Rev}} ->
-                                  do_update(Key, Current, Type, Fields,
-                                            MetaExtra, Author, Now)
+                                  case Update(Current, Now) of
+                                      {commit, Updated} ->
+                                          {commit, [{set, Key, Updated}],
+                                           Updated};
+                                      {abort, _} = Abort ->
+                                          Abort
+                                  end
                           end;
                       {error, Reason} ->
                           {abort, {prereq_failed, Reason}}
@@ -366,34 +416,49 @@ update_impl(Id, Type, Fields, MetaExtra, Author) ->
     case chronicle_kv:transaction(kv, [Key | ?PREREQ_KEYS], Fun, #{}) of
         {ok, Rev, Updated} ->
             {ok, redact_credential(with_version(Updated, Rev))};
-        not_found ->
-            {error, not_found};
-        invalid_type ->
-            {error, invalid_type};
-        {prereq_failed, Reason} ->
-            {error, Reason};
-        {error, Reason} ->
-            {error, {txn_failed, Reason}}
+        not_found               -> {error, not_found};
+        invalid_type            -> {error, invalid_type};
+        {prereq_failed, Reason} -> {error, Reason};
+        {error, Reason}         -> {error, {txn_failed, Reason}}
     end.
-
-do_update(Key, #{type := Type, meta := ExistingMeta} = Current,
-          Type, Fields, MetaExtra, Author, Now) ->
-    UpdatedMeta = build_updated_meta(ExistingMeta, MetaExtra, Author, Now),
-    Updated = Current#{fields => Fields, meta  => UpdatedMeta},
-    {commit, [{set, Key, Updated}], Updated};
-do_update(_Key, _Current, _Type, _Fields, _MetaExtra, _Author, _Now) ->
-    {abort, invalid_type}.
 
 %% @doc Build the meta map for an update operation.
 %%
 %% Keeps immutable fields (created_at, created_by) from the existing
 %% meta, merges in user-supplied optional fields (?USER_META_FIELDS),
 %% and stamps the update timestamp and author.
+%% Used by PUT (update/5) only.  PUT semantics are full replace: omitted
+%% user-supplied keys are dropped from meta.  The `clear` sentinel never
+%% reaches this function because cred_validators/0 (POST/PUT) rejects
+%% JSON null — only build_patched_meta/4 handles `clear`.
 build_updated_meta(ExistingMeta, MetaExtra, Author, Now) ->
     Immutable = maps:with([created_at, created_by], ExistingMeta),
     UserSupplied = maps:with(?USER_META_FIELDS, MetaExtra),
     ServerStamped = #{updated_at => Now, updated_by => Author},
     maps:merge(Immutable, maps:merge(UserSupplied, ServerStamped)).
+
+%% @doc Build the meta map for a PATCH (partial update).
+%%
+%% Unlike build_updated_meta/4, which is full-replace semantics (omitted
+%% user-supplied keys are dropped, suitable for PUT), this preserves all
+%% existing meta and only overwrites the keys present in MetaExtra.  Server
+%% timestamps are always re-stamped.
+%%
+%% A value of the atom `clear` for any user-supplied key signals "remove
+%% this key from the stored meta" (the REST layer maps JSON `null` to that
+%% sentinel).  Cleared keys are dropped from the final merged map.
+build_patched_meta(ExistingMeta, MetaExtra, Author, Now) ->
+    {ToClear, ToSet} = partition_clears(MetaExtra),
+    UserSupplied = maps:with(?USER_META_FIELDS, ToSet),
+    ServerStamped = #{updated_at => Now, updated_by => Author},
+    Merged = maps:merge(maps:merge(ExistingMeta, UserSupplied), ServerStamped),
+    maps:without(ToClear, Merged).
+
+partition_clears(MetaExtra) ->
+    maps:fold(
+      fun (K, clear, {Clear, Set}) -> {[K | Clear], Set};
+          (K, V, {Clear, Set}) -> {Clear, Set#{K => V}}
+      end, {[], #{}}, MetaExtra).
 
 delete_impl(Id) ->
     Key = build_key(Id),

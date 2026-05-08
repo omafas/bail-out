@@ -13,7 +13,8 @@ These are the endpoints an administrator uses to create, read, update, and delet
 | GET | `/settings/credentials` | Security Admin, RO Security Admin, Full Admin | List all credentials (+ warnings, optional `?prefix=`) |
 | GET | `/settings/credentials/:id` | Security Admin, RO Security Admin, Full Admin | Get one credential (secrets redacted) |
 | POST | `/settings/credentials/:id` | Security Admin, Full Admin | Create a credential |
-| PUT | `/settings/credentials/:id` | Security Admin, Full Admin | Full-replace update (`type` field is immutable) |
+| PUT | `/settings/credentials/:id` | Security Admin, Full Admin | Full replace — used to rotate credential material; `type` is immutable. For metadata-only edits use PATCH. |
+| PATCH | `/settings/credentials/:id` | Security Admin, Full Admin | Partial metadata update — accepts only `description`, `expiresAt`, `guardrails`. Omitted keys are preserved; explicit JSON `null` clears the field. Never changes `type` or `fields`. Empty bodies are rejected. |
 | DELETE | `/settings/credentials/:id` | Security Admin, Full Admin | Delete a credential (also removes all `credential_consumer[<id>]` grants referencing it from users and service roles) |
 
 **Credential ID constraints:**
