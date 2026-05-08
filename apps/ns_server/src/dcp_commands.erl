@@ -158,12 +158,10 @@ command_2_atom(?DCP_SEQNO_ADVANCED) ->
     dcp_seqno_advanced;
 command_2_atom(?DCP_OSO_SNAPSHOT) ->
     dcp_oso_snapshot;
-command_2_atom(?DCP_CACHED_VALUE) ->
-    dcp_cached_value;
-command_2_atom(?DCP_CACHED_KEY_META) ->
-    dcp_cached_key_meta;
 command_2_atom(?DCP_CACHE_TRANSFER) ->
     dcp_cache_transfer;
+command_2_atom(?DCP_CACHE_TRANSFER_END) ->
+    dcp_cache_transfer_end;
 command_2_atom(?CMD_GET_ERROR_MAP) ->
     cmd_get_error_map;
 command_2_atom(?CMD_HELLO) ->
