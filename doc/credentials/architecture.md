@@ -46,9 +46,12 @@ Likewise for n2n encryption and `n2nEncryptionOverride`.
 
 ## RBAC Model
 
-**Resource model.** Each credential is an RBAC resource addressed as `credentials[<id>]`, analogous to `bucket[<name>]`.
+**Resource model.** Credential RBAC has two lanes:
 
-**Credential id patterns.** Wherever a `credential_id` is supplied — as the parameter on `credential_consumer[<id>]` (role grants) or as the bracket parameter on `cluster.credentials[<id>]!<op>` (permission strings) — three forms are accepted:
+- **Consume lane** — each credential is a per-id resource addressed as `cluster.credentials[<id>]!consume`. This is the user-delegation lane, granted via `credential_consumer[<id>]`.
+- **Management lane** — credential CRUD and credential store settings are gated by `cluster.admin.security!read` and `!write`. Credential management is part of Security Admin's surface; only Security Admin (or Full Admin) can manage credentials.
+
+**Credential id patterns.** Wherever a `credential_id` is supplied — as the parameter on `credential_consumer[<id>]` (role grants) or as the bracket parameter on `cluster.credentials[<id>]!consume` (permission strings) — three forms are accepted:
 
 | Form | Meaning | Existence check |
 |---|---|---|
@@ -60,13 +63,13 @@ Credential ids are opaque strings; `/` may appear in an id but has no special me
 
 **Grant lifecycle.** When a credential is deleted, every `credential_consumer[<deleted-id>]` grant referencing it is removed from users and from service roles. Re-creating a credential with the same id does not restore prior grants; they must be re-issued.
 
-**Permissions on a credential resource:**
+**Permissions:**
 
-| Permission | Description |
+| Permission string | Description |
 |---|---|
-| `read` | Read credential metadata (secrets redacted) |
-| `write` | Create, update, or delete a credential |
-| `consume` | Decrypt and retrieve the credential's secret fields |
+| `cluster.admin.security!read` | Read credential metadata (secrets redacted), list credentials, read credential store settings (alongside other security settings) |
+| `cluster.admin.security!write` | Create, update, or delete a credential; write credential store settings (alongside other security settings) |
+| `cluster.credentials[<id>]!consume` | Decrypt and retrieve the credential's secret fields for `<id>` |
 
 **Access control summary:**
 

@@ -153,7 +153,7 @@ default_roles_totoro() ->
        {[{bucket, any}, analytics], none},
        {[{bucket, any}], [read]},
        {[{catalog, any}], none},
-       {[{credentials, any}], [read, write]},
+       {[{credentials, any}], none},
        {[analytics], none},
        {[backup], none},
        {[eventing], none},
@@ -184,7 +184,7 @@ default_roles_totoro() ->
        {[{bucket, any}, analytics], none},
        {[{bucket, any}], [read]},
        {[{catalog, any}], none},
-       {[{credentials, any}], [read]},
+       {[{credentials, any}], none},
        {[analytics], none},
        {[backup], none},
        {[eventing], none},
@@ -1725,17 +1725,11 @@ validate_roles(Roles, Scope, Snapshot) ->
 -spec get_security_roles(map()) -> [rbac_role()].
 get_security_roles(Snapshot) ->
     %% A role is security-classified if it grants any operation on
-    %% [admin, security], or `read'/`write' on the credentials vertex.
-    %% credential CRUD is Security Admin's lane; `consume' is the User Admin
-    %% delegation capability (granted via `credential_consumer').
-    Collect = fun (Permission) ->
-                      pipes:run(produce_roles_by_permission(Permission,
-                                                            Snapshot),
-                                pipes:collect())
-              end,
-    lists:usort(Collect({[admin, security], any}) ++
-                Collect({[{credentials, any}], read}) ++
-                Collect({[{credentials, any}], write})).
+    %% [admin, security]. Credential CRUD is gated by [admin, security];
+    %% the credentials vertex carries `consume' only, which is the User
+    %% Admin delegation lane (granted via `credential_consumer').
+    pipes:run(produce_roles_by_permission({[admin, security], any}, Snapshot),
+              pipes:collect()).
 
 -spec get_user_admin_roles(map()) -> [rbac_role()].
 get_user_admin_roles(Snapshot) ->
@@ -2131,9 +2125,6 @@ admin_test__() ->
     ?assertEqual(true, is_allowed({[admin, security], write}, Roles)),
     ?assertEqual(true, is_allowed({[admin, users], read}, Roles)),
     ?assertEqual(true, is_allowed({[admin, users], write}, Roles)),
-    ?assertEqual(true, is_allowed({[{credentials, "test"}], read}, Roles)),
-    ?assertEqual(true, is_allowed({[{credentials, "test"}], write}, Roles)),
-    ?assertEqual(true, is_allowed({[{credentials, "test"}], list}, Roles)),
     ?assertEqual(true, is_allowed({[{credentials, "test"}], consume}, Roles)).
 
 service_admin_test__() ->
@@ -2147,9 +2138,6 @@ service_admin_test__() ->
     %% Required for cb-on-behalf-of callbacks from services.
     ?assertEqual(true,  is_allowed({[admin, security, admin], impersonate},
                                    Roles)),
-    ?assertEqual(false, is_allowed({[{credentials, "test"}], read}, Roles)),
-    ?assertEqual(false, is_allowed({[{credentials, "test"}], write}, Roles)),
-    ?assertEqual(false, is_allowed({[{credentials, "test"}], list}, Roles)),
     ?assertEqual(false, is_allowed({[{credentials, "test"}], consume}, Roles)).
 
 service_admin_with_credential_consumer_test__() ->
@@ -2161,14 +2149,19 @@ service_admin_with_credential_consumer_test__() ->
     ?assertEqual(false,
                  is_allowed({[{credentials, "other"}], consume}, Roles)).
 
-%% This guards against future drift: a new role that forgets to exclude the
-%% credentials vertex (typically `{[{credentials, any}], none}' before a
-%% `{[], _}' catch-all) will fail here with the offending role and op.
+%% Credential CRUD is gated on [admin, security], read/write; the
+%% {credentials, _} vertex carries `consume' only. This guards against
+%% future drift: a new role with {[], all} that forgets to deny consume
+%% on {credentials, _} (or grants security write unintentionally) will
+%% fail here with the offending role and op.
 credentials_access_matrix_test__() ->
     Defs = roles() ++ internal_roles(),
-    %% {Read, Write, Consume}; missing roles default to all-false.
+    %% {SecurityRead, SecurityWrite, Consume}; missing roles default to
+    %% all-false. service_admin is allowed [admin, security], read so it
+    %% can read credential metadata; write is denied.
     Exceptions =
         #{<<"admin">>               => {true, true,  true},
+          <<"service_admin">>       => {true, false, false},
           <<"security_admin">>      => {true, true,  false},
           <<"ro_security_admin">>   => {true, false, false},
           <<"credential_consumer">> => {false, false, true}},
@@ -2182,15 +2175,14 @@ credentials_access_matrix_test__() ->
               {ER, EW, EC} =
                   maps:get(Name, Exceptions, {false, false, false}),
               Check =
-                  fun (Op, Expected) ->
-                          Actual = is_allowed(
-                                     {[{credentials, "test"}], Op}, Compiled),
+                  fun (Permission, Op, Expected) ->
+                          Actual = is_allowed({Permission, Op}, Compiled),
                           ?assertEqual({Name, Op, Expected},
                                        {Name, Op, Actual})
                   end,
-              Check(read, ER),
-              Check(write, EW),
-              Check(consume, EC)
+              Check([admin, security], read, ER),
+              Check([admin, security], write, EW),
+              Check([{credentials, "test"}], consume, EC)
       end, Defs).
 
 catalog_admin_access_matrix_test__() ->
