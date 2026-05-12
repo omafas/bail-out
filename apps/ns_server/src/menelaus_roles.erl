@@ -917,9 +917,17 @@ internal_roles() ->
      {<<"metakv2_access">>, [], [], [{[admin, internal, metakv2], all}]},
      %% service_admin is an internal-only role implicitly assigned to service
      %% users (e.g. @backup, @cbq-engine) from totoro onwards. It has all Full
-     %% Admin permissions except any credential permissions.
+     %% Admin permissions except security and user administration writes and
+     %% credential consume.
+     %% [admin, security, admin] impersonate is required so service users can
+     %% issue cb-on-behalf-of callbacks (e.g. /_p/<svc> proxy paths). The more
+     %% specific pattern must precede the [admin, security] filter so the
+     %% strict match there does not deny it.
      {<<"service_admin">>, [], [],
-      [{[{credentials, any}], none},
+      [{[admin, security, admin], [impersonate]},
+       {[admin, security], [read]},
+       {[admin, users], [read]},
+       {[{credentials, any}], none},
        {[], all}]}].
 
 maybe_add_developer_preview_roles() ->
@@ -2119,6 +2127,10 @@ assert_admin_permissions(Roles) ->
 admin_test__() ->
     Roles = compile_roles([<<"admin">>], roles()),
     assert_admin_permissions(Roles),
+    ?assertEqual(true, is_allowed({[admin, security], read}, Roles)),
+    ?assertEqual(true, is_allowed({[admin, security], write}, Roles)),
+    ?assertEqual(true, is_allowed({[admin, users], read}, Roles)),
+    ?assertEqual(true, is_allowed({[admin, users], write}, Roles)),
     ?assertEqual(true, is_allowed({[{credentials, "test"}], read}, Roles)),
     ?assertEqual(true, is_allowed({[{credentials, "test"}], write}, Roles)),
     ?assertEqual(true, is_allowed({[{credentials, "test"}], list}, Roles)),
@@ -2128,6 +2140,13 @@ service_admin_test__() ->
     Roles = compile_roles([<<"service_admin">>],
                           roles() ++ internal_roles()),
     assert_admin_permissions(Roles),
+    ?assertEqual(true,  is_allowed({[admin, security], read}, Roles)),
+    ?assertEqual(false, is_allowed({[admin, security], write}, Roles)),
+    ?assertEqual(true,  is_allowed({[admin, users], read}, Roles)),
+    ?assertEqual(false, is_allowed({[admin, users], write}, Roles)),
+    %% Required for cb-on-behalf-of callbacks from services.
+    ?assertEqual(true,  is_allowed({[admin, security, admin], impersonate},
+                                   Roles)),
     ?assertEqual(false, is_allowed({[{credentials, "test"}], read}, Roles)),
     ?assertEqual(false, is_allowed({[{credentials, "test"}], write}, Roles)),
     ?assertEqual(false, is_allowed({[{credentials, "test"}], list}, Roles)),

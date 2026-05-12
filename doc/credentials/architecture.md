@@ -146,9 +146,7 @@ flowchart TD
 ## `service_admin`
 
 Prior to Totoro, all `@`-prefixed service identities (e.g. `@backup`, `@cbq-engine`) received the implicit `admin` role — effectively Full Admin.
-In Totoro, they receive `service_admin` instead, which removes credential access so that a service cannot read, list, write, or consume credentials unless a Full Admin explicitly grants `credential_consumer[<pattern>]` to that service via `PUT /settings/rbac/services/:service/roles`.
-
-The service-roles endpoint additionally rejects service identities as callers (`reject_service_caller` in `menelaus_web_rbac.erl`) so that a service cannot use the endpoint to grant itself or another service a role.
+In Totoro, they receive `service_admin` instead, which denies `cluster.admin.security!write` and `cluster.admin.users!write` (so a service cannot grant itself or another service any role, modify security settings, or write credentials) and denies `consume` on every credential (so a service cannot use any credential unless a Full Admin explicitly grants `credential_consumer[<pattern>]` to it via `PUT /settings/rbac/services/:service/roles`).
 
 Ongoing work to narrow `service_admin` to an explicit allow-list of operations is tracked in [MB-71508](https://jira.issues.couchbase.com/browse/MB-71508).
 

@@ -585,22 +585,6 @@ reply_unknown_service_error(Req) ->
     menelaus_util:reply_json(
       Req, <<"Unknown service.">>, 404).
 
-%% Prevent service identities from modifying service roles so that a service
-%% cannot grant itself or another service any role. May be revisited once
-%% service_admin is narrowed to an explicit allow-list (MB-71508).
-reject_service_caller(Req) ->
-    case menelaus_auth:get_identity(Req) of
-        {[$@ | _], admin} ->
-            maybe_audit_access_forbidden(Req, []),
-            menelaus_util:web_json_exception(
-              403,
-              {[{message,
-                 <<"Service identities are not permitted to manage service "
-                   "roles">>}]});
-        _ ->
-            ok
-    end.
-
 filter_by_roles(all) ->
     pipes:filter(fun (_) -> true end);
 filter_by_roles(Roles) ->
@@ -1293,7 +1277,6 @@ handle_put_service_roles(ServiceName, Req) ->
     end.
 
 do_put_service_roles(ServiceName, Req) ->
-    reject_service_caller(Req),
     case misc:service_name_to_identity(ServiceName) of
         error ->
             menelaus_util:reply_global_error(
@@ -1486,7 +1469,6 @@ handle_delete_service_roles(ServiceName, Req) ->
     end.
 
 do_delete_service_roles(ServiceName, Req) ->
-    reject_service_caller(Req),
     case misc:service_name_to_identity(ServiceName) of
         error ->
             reply_unknown_service_error(Req);

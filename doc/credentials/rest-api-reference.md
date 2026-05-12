@@ -63,9 +63,7 @@ See [architecture.md — Storage](architecture.md#storage) for full details on t
 | DELETE | `/settings/rbac/services/:name/roles` | **Full Admin only** | Delete all service roles |
 
 > Security Admin **cannot** read, write, or delete service roles — this is by design to prevent privilege escalation.
->
-> **Service identity restriction.** Additionally, the PUT and DELETE handlers reject requests from internal users (`@`-prefixed callers in the admin domain) with a 403.
-> Services may still read their own roles via GET.
+> Service identities (`@`-prefixed callers in the admin domain) hold `service_admin`, which denies `cluster.admin.security!write`, so the RBAC layer rejects PUT and DELETE before the handler. Services may still read their own roles via GET.
 
 ## Granting Consume Permissions
 
