@@ -116,9 +116,16 @@ params_without_extras(membase, BucketName, BucketConfig, MemQuota, UUID,
         case cluster_compat_mode:is_cluster_79() of
             false -> [];
             true ->
+                DcpBackfillProtectionEnabled =
+                    case ns_bucket:is_persistent(BucketConfig) of
+                        true ->
+                            ns_bucket:get_dcp_backfill_idle_protection_enabled(
+                              BucketConfig);
+                        false ->
+                            undefined
+                    end,
                 [{"dcp_backfill_idle_protection_enabled", [{reload, dcp}],
-                  ns_bucket:get_dcp_backfill_idle_protection_enabled(
-                    BucketConfig)},
+                  DcpBackfillProtectionEnabled},
                  {"dcp_backfill_idle_limit_seconds", [{reload, dcp}],
                   ns_bucket:get_dcp_backfill_idle_limit_seconds(BucketConfig)},
                  {"dcp_backfill_idle_disk_threshold", [{reload, dcp}],
